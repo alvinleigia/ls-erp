@@ -92,7 +92,7 @@ const tenantDomainHelpText =
   "Leave this blank to use the default tenant subdomain. Add a custom domain only after its DNS is pointed to this app."
 
 const tenantDomainDnsHelpText =
-  "For a custom domain, point that hostname to Vercel first. Use a CNAME for subdomains like app.client.com, or Vercel's apex-domain setup for root domains like client.com."
+  "For a custom domain, the app can add it to Vercel automatically when VERCEL_API_TOKEN and VERCEL_PROJECT_ID or VERCEL_PROJECT_NAME are configured. The client still needs to update DNS: CNAME for subdomains like app.client.com, or Vercel's apex-domain setup for root domains like client.com."
 
 const getTenantAccessUrl = (tenant: TenantRow, rootDomain: string) => {
   if (tenant.customDomain) {

@@ -13,6 +13,7 @@ import { prisma } from "@/lib/prisma"
 import { isManagedTenantHostname, normalizeHostname } from "@/lib/tenancy"
 import { updateTenantStatusSchema } from "@/lib/validation"
 import { recordDomainAuditEventSafe } from "@/lib/domain-audit"
+import { ensureVercelProjectDomain } from "@/lib/vercel-domains"
 
 const PLATFORM_TENANT_SLUG = (
   process.env.PLATFORM_ADMIN_TENANT_SLUG?.trim().toLowerCase() || "platform"
@@ -139,7 +140,6 @@ export async function PATCH(
       return withRequestId(response, logContext.requestId)
     }
 
-    let nextOrganizationName = currentOrganizationName
     if (hasOrganizationChange) {
       if (authorized.context.mode !== "SUPER_ADMIN") {
         const response = NextResponse.json(
@@ -162,9 +162,6 @@ export async function PATCH(
           logApiRequestSuccess(logContext, 404, { reason: "organization_not_found", tenantId: id })
           return withRequestId(response, logContext.requestId)
         }
-        nextOrganizationName = organization.name
-      } else {
-        nextOrganizationName = null
       }
     }
 
@@ -176,6 +173,27 @@ export async function PATCH(
       if (existingDomain && existingDomain.tenantId !== tenant.id) {
         const response = NextResponse.json({ error: "Custom domain already exists." }, { status: 409 })
         logApiRequestSuccess(logContext, 409, { reason: "duplicate_custom_domain", tenantId: id })
+        return withRequestId(response, logContext.requestId)
+      }
+    }
+
+    let vercelDomainResult = null
+    if (hasCustomDomainChange && normalizedCustomDomain) {
+      try {
+        vercelDomainResult = await ensureVercelProjectDomain(normalizedCustomDomain)
+      } catch (error) {
+        const response = NextResponse.json(
+          {
+            error: error instanceof Error
+              ? error.message
+              : "Unable to add custom domain to Vercel project.",
+          },
+          { status: 502 }
+        )
+        logApiRequestSuccess(logContext, 502, {
+          reason: "vercel_domain_add_failed",
+          tenantId: id,
+        })
         return withRequestId(response, logContext.requestId)
       }
     }
@@ -281,6 +299,9 @@ export async function PATCH(
         },
         after: {
           customDomain: updated.domains[0]?.hostname ?? null,
+        },
+        metadata: {
+          vercelDomain: vercelDomainResult,
         },
       })
     }

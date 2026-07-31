@@ -15,6 +15,7 @@ import { prisma } from "@/lib/prisma"
 import { isManagedTenantHostname, normalizeHostname } from "@/lib/tenancy"
 import { createTenantSchema } from "@/lib/validation"
 import { recordDomainAuditEventSafe } from "@/lib/domain-audit"
+import { ensureVercelProjectDomain } from "@/lib/vercel-domains"
 import type { ListResponse } from "@/types/api"
 
 const PLATFORM_TENANT_SLUG = (
@@ -238,6 +239,24 @@ export async function POST(request: Request) {
       return withRequestId(response, logContext.requestId)
     }
 
+    let vercelDomainResult = null
+    if (normalizedCustomDomain) {
+      try {
+        vercelDomainResult = await ensureVercelProjectDomain(normalizedCustomDomain)
+      } catch (error) {
+        const response = NextResponse.json(
+          {
+            error: error instanceof Error
+              ? error.message
+              : "Unable to add custom domain to Vercel project.",
+          },
+          { status: 502 }
+        )
+        logApiRequestSuccess(logContext, 502, { reason: "vercel_domain_add_failed" })
+        return withRequestId(response, logContext.requestId)
+      }
+    }
+
     const adminPasswordHash = await bcrypt.hash(data.adminPassword, 10)
 
     const created = await prisma.$transaction(async (tx) => {
@@ -306,6 +325,7 @@ export async function POST(request: Request) {
         organizationId: normalizedOrganizationId,
         organizationName: organization?.name ?? null,
         customDomain: normalizedCustomDomain,
+        vercelDomain: vercelDomainResult,
       },
       after: {
         name: created.tenant.name,

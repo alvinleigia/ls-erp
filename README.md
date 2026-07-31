@@ -10,7 +10,11 @@ Multi-tenant salon SaaS built with Next.js, Prisma, Postgres, and tenant-scoped 
 npm install
 ```
 
-2. Create your local env file from `.env.example`.
+2. Create your local env file from `.env.example`:
+
+```bash
+cp .env.example .env.local
+```
 
 Recommended local values:
 - `DATABASE_URL` should point to a local Postgres database you create first.
@@ -74,6 +78,23 @@ Optional:
 - `INVOICE_FONT_PATH`
 - `INVOICE_HEADER_LINES`
 - `NEXT_PUBLIC_SYNCFUSION_LICENSE_KEY`
+- `VERCEL_API_TOKEN` to automatically add tenant custom domains to the Vercel project
+- `VERCEL_PROJECT_ID` or `VERCEL_PROJECT_NAME` for the Vercel project that serves tenant domains
+- `VERCEL_TEAM_ID` when the Vercel project belongs to a team account
+
+For local development, put these values in `.env.local` after copying `.env.example`. For the deployed app, add the same variables in Vercel under Project Settings > Environment Variables for the Production environment.
+
+## Tenant custom domains on Vercel
+
+When `VERCEL_API_TOKEN` and `VERCEL_PROJECT_ID`/`VERCEL_PROJECT_NAME` are configured, tenant creation and tenant-domain edits automatically add the custom hostname to the Vercel project before saving it in the database. This removes the manual Vercel dashboard step.
+
+Where to configure the Vercel integration values:
+- Local development: copy `.env.example` to `.env.local`, then set `VERCEL_API_TOKEN` plus either `VERCEL_PROJECT_ID` or `VERCEL_PROJECT_NAME`. Use `VERCEL_TEAM_ID` only if the project is owned by a Vercel team.
+- Production: add the same variables in the Vercel project dashboard under Project Settings > Environment Variables. Redeploy after changing them.
+
+Clients still need to point DNS at Vercel:
+- Subdomains such as `booking.client.com`: create a `CNAME` record for `booking` pointing to `cname.vercel-dns.com`.
+- Apex/root domains such as `client.com`: use Vercel's apex-domain setup, typically an `A` record for `@` pointing to `76.76.21.21`.
 
 ## Notes for this repo
 
