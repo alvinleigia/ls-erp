@@ -14,6 +14,7 @@ import { selectClass } from "./record-list"
 import { WorkScheduleFields, emptyWork, workForm, workPayload, type WorkFormValues } from "./work-schedule-fields"
 import { ContactInteractions } from "./contact-interactions"
 import { WorkHistory } from "./work-history"
+import { FollowUpReview, useFollowUpReview } from "./follow-up-review"
 import { workOutcomes } from "../work-validation"
 import { wallTime, wallTimeToInstant } from "../work-time"
 import type { CrmWorkRow, WorkType } from "@/types/crm-work"
@@ -54,6 +55,7 @@ export function WorkEditor({ id, initial = {} }: { id?: string; initial?: Initia
   const [cancelOpen, setCancelOpen] = React.useState(false)
   const [cancelReason, setCancelReason] = React.useState("")
   const { errors, setErrorsFromResponse, clearErrors } = useFormErrors()
+  const review = useFollowUpReview(record?.canEdit && ["OPEN", "IN_PROGRESS"].includes(record.status) ? id : undefined, record?.version, completion.outcome, revision)
   React.useEffect(() => {
     const controller = new AbortController()
     const get = async (url: string) => { const response = await fetch(url, { signal: controller.signal, cache: "no-store" }); const data = await response.json(); if (!response.ok) throw new Error(data.error || "Unable to load activity."); return data }
@@ -107,7 +109,7 @@ export function WorkEditor({ id, initial = {} }: { id?: string; initial?: Initia
   }
   async function finish(event: React.FormEvent) {
     event.preventDefault(); setSaving(true); setError("")
-    try { await request(`/api/crm/work/${id}/complete`, "POST", { ...completionPayload(), version: record?.version, ...(scheduleNext ? { followUp: workPayload(next, timeZone) } : {}) }); await reload(); toast.success(scheduleNext ? "Completed and next follow-up scheduled." : "Activity completed.") }
+    try { await request(`/api/crm/work/${id}/complete`, "POST", { ...completionPayload(), version: record?.version, ...(review.decision ? { ruleDecision: review.decision } : {}), ...(scheduleNext && !review.applying ? { followUp: workPayload(next, timeZone) } : {}) }); await reload(); toast.success(scheduleNext || review.applying ? "Completed and next follow-up scheduled." : "Activity completed.") }
     catch (error) { setError((error as Error).message) } finally { setSaving(false) }
   }
   async function reminder(action: "SNOOZE" | "DISMISS", minutes?: number) {
@@ -137,10 +139,11 @@ export function WorkEditor({ id, initial = {} }: { id?: string; initial?: Initia
     </fieldset>{editable && <div className="flex gap-3"><Button type="submit" loading={saving} disabled={!contactId || !relatedReady}>{!id && logOnly ? "Save interaction" : "Save activity"}</Button>{id && <Button type="button" variant="outline" disabled={saving} onClick={() => setCancelOpen(true)}>Cancel activity</Button>}</div>}</form>
     {record?.summary && <section className="space-y-2 rounded-xl border p-5"><h2 className="font-semibold">Recorded outcome: {record.outcome?.replaceAll("_", " ")}</h2><p className="whitespace-pre-wrap break-words">{record.summary}</p></section>}
     {record?.cancellationReason && <p>Cancellation reason: {record.cancellationReason}</p>}
+    {record?.followUpRuleName && <p className="text-sm">Created by {record.followUpRuleName}, version {record.followUpRuleVersion}. Follow-up {record.automationDepth} in this chain.</p>}
     {record?.planLaunch && <p className="text-sm">From {record.planLaunch.planName}, version {record.planLaunch.planVersion}, step {(record.planPosition ?? 0) + 1}. <Link className="underline" href={`/crm/activities?scope=visible&state=all&planLaunchId=${record.planLaunchId}`}>View plan activities</Link></p>}
     {record && open && record.canEdit && <>
       {record.reminderAt && record.assignedUserId === session?.user?.id && <section className="space-y-3 rounded-xl border p-5"><h2 className="font-semibold">Reminder</h2><p className="text-sm">{record.reminderDismissedAt ? "Dismissed" : record.snoozedUntil ? `Snoozed until ${wallTime(record.snoozedUntil, timeZone).replace("T", " ")}` : `Scheduled for ${wallTime(record.reminderAt, timeZone).replace("T", " ")}`} ({timeZone}). The activity stays open until completed or cancelled.</p><div className="flex flex-wrap gap-2">{[15, 60, 1440].map(minutes => <Button key={minutes} variant="outline" disabled={saving} onClick={() => void reminder("SNOOZE", minutes)}>Snooze {minutes === 1440 ? "1 day" : minutes === 60 ? "1 hour" : "15 min"}</Button>)}<Button variant="outline" disabled={saving} onClick={() => void reminder("DISMISS")}>Dismiss reminder</Button></div></section>}
-      <form onSubmit={finish} className="space-y-5 rounded-xl border p-5"><h2 className="text-lg font-semibold">Record outcome and next step</h2><fieldset disabled={saving} className="space-y-5"><CompletionFields type={record.type} value={completion} onChange={setCompletion} timeZone={timeZone} /><label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={scheduleNext} onChange={event => setScheduleNext(event.target.checked)} />Schedule the next follow-up</label>{scheduleNext && <WorkScheduleFields prefix="next" values={next} onChange={setNext} canAssign={canAssign} assignee={person} timeZone={timeZone} />}</fieldset><Button type="submit" loading={saving}>{scheduleNext ? "Complete and schedule next" : "Complete activity"}</Button></form>
+      <form onSubmit={finish} className="space-y-5 rounded-xl border p-5"><h2 className="text-lg font-semibold">Record outcome and next step</h2><fieldset disabled={saving} className="space-y-5"><CompletionFields type={record.type} value={completion} onChange={setCompletion} timeZone={timeZone} /><FollowUpReview review={review} />{!review.applying && <><label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={scheduleNext} onChange={event => setScheduleNext(event.target.checked)} />Schedule a manual follow-up</label>{scheduleNext && <WorkScheduleFields prefix="next" values={next} onChange={setNext} canAssign={canAssign} assignee={person} timeZone={timeZone} />}</>}</fieldset><Button type="submit" loading={saving} disabled={!review.ready}>{review.applying ? "Complete and create suggested follow-up" : scheduleNext ? "Complete and schedule next" : "Complete activity"}</Button></form>
     </>}
     {contactId && <ContactInteractions contactId={contactId} revision={revision} />}
     {record && <WorkHistory id={record.id} revision={revision} canEdit={record.canEdit} />}

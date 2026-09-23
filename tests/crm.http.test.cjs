@@ -159,11 +159,38 @@ test("real HTTP authentication, module access and complete CRM workflow", async 
     assert.equal(page.status, 200, `Page failed: ${path}`)
     assert.ok(!(await page.text()).includes("NEXT_HTTP_ERROR_FALLBACK;500"), `Server rendering failed: ${path}`)
   }
+  const ruleInput = { name: "HTTP retry rule", sourceType: "CALL", outcome: "NO_ANSWER", maxDepth: 2, nextStep: { title: "Retry unanswered call", type: "CALL", callDirection: "OUTBOUND", dayOffset: 1, reminderTime: "09:30" } }
+  assert.equal((await session()("/api/crm/follow-up-rules")).status, 401)
+  assert.equal((await salesperson("/api/crm/follow-up-rules", json("POST", ruleInput))).status, 403)
+  const ruleResponse = await admin("/api/crm/follow-up-rules", json("POST", ruleInput))
+  assert.equal(ruleResponse.status, 201)
+  const rule = await ruleResponse.json()
+  assert.equal((await (await salesperson(`/api/crm/follow-up-rules/${rule.id}`)).json()).canManage, false)
+  const ruleWorkResponse = await admin("/api/crm/work", json("POST", { ...workInput, opportunityId: "", reminderAt: null }))
+  assert.equal(ruleWorkResponse.status, 201)
+  const ruleWork = await ruleWorkResponse.json()
+  const rulePreviewResponse = await salesperson(`/api/crm/work/${ruleWork.id}/follow-up?version=1&outcome=NO_ANSWER`)
+  assert.equal(rulePreviewResponse.status, 200)
+  const rulePreview = await rulePreviewResponse.json()
+  assert.equal(rulePreview.rule.id, rule.id)
+  const ruleCompletion = { version: 1, summary: "No answer; retry tomorrow", outcome: "NO_ANSWER", occurredAt: new Date().toISOString() }
+  assert.equal((await salesperson(`/api/crm/work/${ruleWork.id}/complete`, json("POST", ruleCompletion))).status, 409)
+  const ruleDecision = { id: rule.id, version: rule.version, action: "APPLY", dueOn: rulePreview.schedule.dueOn, reminderAt: rulePreview.schedule.reminderAt }
+  assert.equal((await salesperson(`/api/crm/work/${ruleWork.id}/complete`, json("POST", { ...ruleCompletion, ruleDecision }))).status, 200)
+  assert.equal((await salesperson(`/api/crm/work/${ruleWork.id}/complete`, json("POST", { ...ruleCompletion, ruleDecision }))).status, 409)
+  const generated = (await (await salesperson(`/api/crm/work?contactId=${contact.id}`)).json()).items.filter(item => item.followUpOfId === ruleWork.id)
+  assert.equal(generated.length, 1); assert.equal(generated[0].followUpRuleName, rule.name); assert.equal(generated[0].automationDepth, 1)
+  for (const path of ["/crm/follow-up-rules", "/crm/follow-up-rules/new", `/crm/follow-up-rules/${rule.id}`, `/crm/activities/${generated[0].id}`]) {
+    const page = await admin(path)
+    assert.equal(page.status, 200, path)
+    assert.ok(!(await page.text()).includes("NEXT_HTTP_ERROR_FALLBACK;500"), path)
+  }
   assert.equal((await admin("/api/modules", json("PATCH", { key: "crm", enabled: false }))).status, 200)
   assert.equal((await salesperson("/api/crm/opportunities")).status, 403)
   assert.equal((await salesperson("/api/crm/work")).status, 403)
   assert.equal((await salesperson("/api/crm/reports/activities")).status, 403)
   assert.equal((await salesperson("/api/crm/activity-plans")).status, 403)
+  assert.equal((await salesperson("/api/crm/follow-up-rules")).status, 403)
   assert.equal((await admin("/api/modules", json("PATCH", { key: "crm", enabled: true }))).status, 200)
   for (const path of ["/crm/pipelines", "/crm/pipelines/new", `/crm/pipelines/${pipeline.id}`, "/crm/opportunities", "/crm/opportunities/new", `/crm/opportunities/${deal.id}`, `/crm/opportunities/new?enquiryId=${source.id}`, "/crm/accounts", "/crm/accounts/new", `/crm/accounts/${account.id}`, "/crm/contacts", "/crm/contacts/new", `/crm/contacts/${contact.id}`, "/crm/enquiries", "/crm/enquiries/new", `/crm/enquiries/${enquiry.id}`, "/crm/tasks", "/settings/modules", "/appointments"]) {
     const page = await admin(path)
