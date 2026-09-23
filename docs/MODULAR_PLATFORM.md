@@ -209,3 +209,11 @@ workflow test passed against the production build, covering account creation,
 linking, inherited visibility, unauthorized unlinking, and account page responses.
 Prisma validation/client generation, TypeScript and targeted ESLint also passed.
 Visual browser testing remains deferred.
+
+On 2026-09-23, `prisma migrate deploy` applied the business-account migration to
+the configured Supabase database. All four read-only deployment checks passed
+against both CRM migrations, seven RLS-protected tables and ten composite foreign
+keys. Migration status is up to date and schema diff reports no differences.
+No test fixtures were inserted into Supabase; CRM enablement remains a per-business
+administrator action. Application hosting deployment is separate from this schema
+rollout and has not been performed.
