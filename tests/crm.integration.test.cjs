@@ -662,3 +662,103 @@ test("a failed relationship audit rolls back the association", async () => {
     assert.equal(await root.auditLog.count({ where: { tenantId: a, entityId: company.id, event: "crm.account.contact.linked" } }), 0)
   } finally { await root.$executeRawUnsafe('ALTER TABLE "AuditLog" DROP CONSTRAINT "crm_test_reject_link_audit"') }
 })
+
+const planInput = (name = "Standard follow-up") => ({ name, steps: [
+  { title: "Initial call", type: "CALL", callDirection: "OUTBOUND", dayOffset: 0, reminderTime: "09:30" },
+  { title: "Send details", type: "EMAIL", dayOffset: 2 },
+  { title: "Follow-up call", type: "CALL", callDirection: "OUTBOUND", dayOffset: 7 },
+] })
+const planUpdate = plan => ({ name: plan.name, description: plan.description || "", steps: plan.steps, version: plan.version, archived: plan.archived })
+const planApplication = (plan, contact, owner, extra = {}) => ({ version: plan.version, requestKey: randomUUID(), contactId: contact.id, assignedUserId: owner.id, startOn: "2026-10-01", ...extra })
+
+test("activity plans are manager configured, versioned, tenant scoped and archivable", async () => {
+  await assert.rejects(staff.createActivityPlan(planInput()), expectStatus(403))
+  const plan = await manager.createActivityPlan(planInput("Configurable plan"))
+  assert.equal((await staff.getActivityPlan(plan.id)).canManage, false)
+  await assert.rejects(second.getActivityPlan(plan.id), expectStatus(404))
+  await assert.rejects(staff.updateActivityPlan(plan.id, planUpdate(plan)), expectStatus(403))
+  await manager.updateActivityPlan(plan.id, { ...planUpdate(plan), archived: true })
+  await assert.rejects(manager.updateActivityPlan(plan.id, planUpdate(plan)), expectStatus(409))
+  assert.equal((await manager.listActivityPlans({ q: plan.name })).total, 0)
+  assert.equal((await manager.listActivityPlans({ q: plan.name, archived: "true" })).total, 1)
+  const contact = await staff.createContact({ name: "Plan configuration contact" })
+  await assert.rejects(staff.applyActivityPlan(plan.id, planApplication({ ...plan, version: 2 }, contact, staffA)), expectStatus(409))
+})
+
+test("plan preview and launch preserve dates, reminders, immutable snapshots and idempotent retry", async () => {
+  const plan = await manager.createActivityPlan(planInput("Snapshot plan"))
+  const contact = await staff.createContact({ name: "Plan snapshot contact" })
+  const input = planApplication(plan, contact, staffA)
+  const preview = await staff.previewActivityPlan(plan.id, input)
+  assert.deepEqual(preview.steps.map(step => step.dueOn), ["2026-10-01", "2026-10-03", "2026-10-08"])
+  assert.equal(preview.steps[0].reminderAt, "2026-10-01T04:00:00.000Z")
+  assert.equal(await root.crmPlanLaunch.count({ where: { tenantId: a, planId: plan.id } }), 0)
+  const results = await Promise.all([staff.applyActivityPlan(plan.id, input), staff.applyActivityPlan(plan.id, input)])
+  assert.equal(results[0].id, results[1].id)
+  const tasks = await staff.listWork({ planLaunchId: results[0].id })
+  assert.equal(tasks.total, 3)
+  assert.ok(tasks.items.every(task => task.assignedUserId === staffA.id && task.contactId === contact.id))
+  await manager.updateActivityPlan(plan.id, { ...planUpdate(plan), name: "Changed template", steps: [plan.steps[0]] })
+  const launch = await root.crmPlanLaunch.findUnique({ where: { id: results[0].id } })
+  assert.equal(launch.planName, plan.name); assert.equal(launch.steps.length, 3)
+  assert.equal((await staff.applyActivityPlan(plan.id, input)).id, launch.id)
+  await assert.rejects(staff.applyActivityPlan(plan.id, { ...input, startOn: "2026-11-01" }), expectStatus(409))
+  assert.equal(await root.auditLog.count({ where: { tenantId: a, entityId: plan.id, event: "crm.plan.applied" } }), 1)
+})
+
+test("different simultaneous requests cannot duplicate an active plan and all-closed plans can run again", async () => {
+  const plan = await manager.createActivityPlan(planInput("Duplicate protection"))
+  const contact = await staff.createContact({ name: "Plan duplicate contact" })
+  const input = planApplication(plan, contact, staffA)
+  const results = await Promise.allSettled([staff.applyActivityPlan(plan.id, input), staff.applyActivityPlan(plan.id, { ...input, requestKey: randomUUID() })])
+  assert.equal(results.filter(result => result.status === "fulfilled").length, 1)
+  assert.equal(results.find(result => result.status === "rejected").reason.status, 409)
+  const launch = results.find(result => result.status === "fulfilled").value
+  for (const task of (await staff.listWork({ planLaunchId: launch.id })).items) await staff.cancelWork(task.id, { version: task.version, reason: "Plan no longer needed" })
+  const rerun = await staff.applyActivityPlan(plan.id, { ...input, requestKey: randomUUID() })
+  assert.notEqual(rerun.id, launch.id)
+  assert.equal((await staff.listWork({ planLaunchId: launch.id, state: "cancelled" })).total, 3)
+})
+
+test("plan launch rejects hidden or mismatched parents, stale plans and unauthorized assignment", async () => {
+  const plan = await manager.createActivityPlan(planInput("Plan permissions"))
+  const contact = await manager.createContact({ name: "Plan private contact" })
+  await assert.rejects(staff.applyActivityPlan(plan.id, planApplication(plan, contact, staffA)), expectStatus(404))
+  const own = await staff.createContact({ name: "Plan own contact" })
+  await assert.rejects(staff.applyActivityPlan(plan.id, planApplication(plan, own, otherA)), expectStatus(403))
+  await assert.rejects(manager.applyActivityPlan(plan.id, planApplication(plan, own, adminB)), expectStatus(400))
+  await assert.rejects(staff.applyActivityPlan(plan.id, planApplication(plan, own, staffA, { version: 99 })), expectStatus(409))
+  const enquiry = await manager.createEnquiry({ ...enquiryInput(contact.id, staffA.id), title: "Plan restricted enquiry" })
+  await assert.rejects(staff.applyActivityPlan(plan.id, planApplication(plan, own, staffA, { enquiryId: enquiry.id })), expectStatus(404))
+  const applied = await staff.applyActivityPlan(plan.id, planApplication(plan, contact, staffA, { enquiryId: enquiry.id }))
+  assert.equal((await other.listWork({ scope: "visible", planLaunchId: applied.id })).total, 0)
+  assert.equal((await second.listWork({ scope: "visible", planLaunchId: applied.id })).total, 0)
+  assert.equal(await unscoped.crmActivityPlan.count(), 0); assert.equal(await unscoped.crmPlanLaunch.count(), 0)
+  assert.equal(await dbB.crmActivityPlan.findUnique({ where: { id: plan.id } }), null)
+  await assert.rejects(root.crmPlanLaunch.create({ data: { tenantId: b, planId: plan.id, actorUserId: adminB.id, requestKey: randomUUID(), targetKey: "contact:x", planName: "Foreign", planVersion: 1, input: {}, steps: [{}] } }))
+})
+
+test("plan application rolls back every activity when required audit fails", async () => {
+  const plan = await manager.createActivityPlan(planInput("Rollback plan"))
+  const contact = await staff.createContact({ name: "Plan rollback contact" })
+  const input = planApplication(plan, contact, staffA)
+  await root.$executeRawUnsafe('ALTER TABLE "AuditLog" ADD CONSTRAINT "crm_test_plan_audit" CHECK (event <> \'crm.plan.applied\') NOT VALID')
+  try {
+    await assert.rejects(staff.applyActivityPlan(plan.id, input))
+    assert.equal(await root.crmPlanLaunch.count({ where: { tenantId: a, requestKey: input.requestKey } }), 0)
+    assert.equal(await root.crmTask.count({ where: { tenantId: a, contactId: contact.id } }), 0)
+  } finally { await root.$executeRawUnsafe('ALTER TABLE "AuditLog" DROP CONSTRAINT "crm_test_plan_audit"') }
+})
+
+test("maximum-size plans launch atomically and invalid daylight-saving reminders create nothing", async () => {
+  const plan = await manager.createActivityPlan({ name: "Twelve-step plan", steps: Array.from({ length: 12 }, (_, index) => ({ title: `Step ${index + 1}`, type: "TASK", dayOffset: index })) })
+  const contact = await staff.createContact({ name: "Plan maximum contact" })
+  const result = await staff.applyActivityPlan(plan.id, planApplication(plan, contact, staffA))
+  assert.equal((await staff.listWork({ planLaunchId: result.id })).total, 12)
+  const invalid = await manager.createActivityPlan({ name: "DST plan", steps: [{ title: "DST reminder", type: "TASK", dayOffset: 0, reminderTime: "02:30" }] })
+  await root.appSetting.update({ where: { tenantId: a }, data: { timeZone: "America/New_York" } })
+  try {
+    await assert.rejects(staff.applyActivityPlan(invalid.id, planApplication(invalid, contact, staffA, { startOn: "2026-03-08" })), expectStatus(400))
+    assert.equal(await root.crmPlanLaunch.count({ where: { tenantId: a, planId: invalid.id } }), 0)
+  } finally { await root.appSetting.update({ where: { tenantId: a }, data: { timeZone: "Asia/Kolkata" } }) }
+})

@@ -36,6 +36,43 @@ enum CrmWorkStatus {
   CANCELLED
 }
 
+model CrmActivityPlan {
+  id String @id @default(cuid())
+  tenantId String
+  name String
+  description String?
+  steps Json
+  version Int @default(1)
+  archived Boolean @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  launches CrmPlanLaunch[]
+  @@unique([tenantId, id])
+  @@index([tenantId, archived, name])
+}
+
+model CrmPlanLaunch {
+  id String @id @default(cuid())
+  tenantId String
+  planId String
+  actorUserId String
+  requestKey String
+  targetKey String
+  planName String
+  planVersion Int
+  input Json
+  steps Json
+  createdAt DateTime @default(now())
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  plan CrmActivityPlan @relation(fields: [tenantId, planId], references: [tenantId, id], onDelete: Restrict)
+  actor User @relation(fields: [tenantId, actorUserId], references: [tenantId, id], onDelete: Restrict)
+  workItems CrmTask[]
+  @@unique([tenantId, id])
+  @@unique([tenantId, requestKey])
+  @@index([tenantId, planId, targetKey])
+}
+
 model CrmPipeline {
   id        String @id @default(cuid())
   tenantId  String
@@ -236,6 +273,8 @@ model CrmTask {
   completedByUserId String?
   followParentAssignment Boolean @default(false)
   followUpOfId String?
+  planLaunchId String?
+  planPosition Int?
   type        CrmWorkType @default(TASK)
   status      CrmWorkStatus @default(OPEN)
   priority    Int @default(2)
@@ -267,9 +306,11 @@ model CrmTask {
   previous    CrmTask? @relation("CrmWorkFollowUp", fields: [tenantId, followUpOfId], references: [tenantId, id], onDelete: Restrict)
   next        CrmTask[] @relation("CrmWorkFollowUp")
   events      CrmTaskEvent[]
+  planLaunch CrmPlanLaunch? @relation(fields: [tenantId, planLaunchId], references: [tenantId, id], onDelete: Restrict)
 
   @@unique([tenantId, id])
   @@unique([tenantId, followUpOfId])
+  @@unique([tenantId, planLaunchId, planPosition])
   @@index([tenantId, enquiryId])
   @@index([tenantId, completedAt, dueOn])
   @@index([tenantId, opportunityId, status, dueOn])
@@ -565,6 +606,7 @@ model User {
   crmCreatedWork        CrmTask[] @relation("CrmWorkCreator")
   crmCompletedWork      CrmTask[] @relation("CrmWorkCompletedBy")
   crmWorkEvents         CrmTaskEvent[]
+  crmPlanLaunches       CrmPlanLaunch[]
   passwordResetTokens   PasswordResetToken[]
   eligibleServices      StaffServiceEligibility[]
   staffProfile          StaffProfile?
@@ -636,6 +678,8 @@ model Tenant {
   crmEnquiries   CrmEnquiry[]
   crmTasks       CrmTask[]
   crmWorkEvents  CrmTaskEvent[]
+  crmActivityPlans CrmActivityPlan[]
+  crmPlanLaunches CrmPlanLaunch[]
   crmActivities  CrmActivity[]
   users          User[]
   invitations    Invitation[]

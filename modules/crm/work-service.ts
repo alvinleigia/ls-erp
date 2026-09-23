@@ -3,6 +3,7 @@ import { CrmError, canManageCrm, contactScope, enquiryScope, type CrmActor } fro
 import { crmListSchema, crmNoteSchema } from "./validation"
 import { workCreateSchema, workUpdateSchema, workCompleteSchema, workCancelSchema, workReminderSchema, workListSchema, workOutcomes, type WorkScheduleInput, type WorkCreateInput } from "./work-validation"
 import { businessDate, startOfBusinessDate } from "./work-time"
+import { createPlanService } from "./plan-service"
 
 type Tx = Prisma.TransactionClient
 type Context = {
@@ -13,7 +14,7 @@ type Context = {
 const openStatuses = ["OPEN", "IN_PROGRESS"] as const
 const page = <T>(items: T[], total: number, page: number, pageSize: number) => ({ items, total, page, pageSize, totalPages: Math.max(1, Math.ceil(total / pageSize)) })
 const snapshot = (value: unknown): Prisma.InputJsonValue => JSON.parse(JSON.stringify(value))
-const include = { contact: { select: { id: true, name: true, email: true, phone: true } }, assignee: { select: { id: true, name: true } }, enquiry: { select: { id: true, title: true, assignedUserId: true } }, opportunity: { select: { id: true, title: true, assignedUserId: true } } } as const
+const include = { contact: { select: { id: true, name: true, email: true, phone: true } }, assignee: { select: { id: true, name: true } }, enquiry: { select: { id: true, title: true, assignedUserId: true } }, opportunity: { select: { id: true, title: true, assignedUserId: true } }, planLaunch: { select: { planName: true, planVersion: true } } } as const
 type Loaded = Prisma.CrmTaskGetPayload<{ include: typeof include }>
 export function workScope(actor: CrmActor): Prisma.CrmTaskWhereInput {
   return { tenantId: actor.tenantId, ...(!canManageCrm(actor.role) ? { OR: [
@@ -52,7 +53,7 @@ export function createWorkService({ run, audit, checkAssignee }: Context) {
     if (data.startsAt && businessDate(new Date(data.startsAt), timeZone) !== data.dueOn) throw new CrmError(400, "The due date must match the start date in the business time zone.")
     return { ...data, dueOn: new Date(`${data.dueOn}T00:00:00Z`), startsAt: data.startsAt ? new Date(data.startsAt) : null, endsAt: data.endsAt ? new Date(data.endsAt) : null, reminderAt: data.reminderAt ? new Date(data.reminderAt) : null }
   }
-  async function create(tx: Tx, actor: CrmActor, data: WorkCreateInput, previous?: Loaded) {
+  async function create(tx: Tx, actor: CrmActor, data: WorkCreateInput, previous?: Loaded, origin?: { planLaunchId: string; planPosition: number }) {
     const { contactId, enquiryId, opportunityId, completion, ...fields } = data
     const contact = await tx.crmContact.findFirst({ where: { ...contactScope(actor), id: contactId, archived: false } })
     if (!contact) throw new CrmError(404, "Active contact not found.")
@@ -61,7 +62,7 @@ export function createWorkService({ run, audit, checkAssignee }: Context) {
       if (opportunityId && !await tx.crmOpportunity.findFirst({ where: { ...enquiryScope(actor), id: opportunityId, contactId } })) throw new CrmError(404, "Matching opportunity not found.")
     }
     const prepared = await schedule(tx, actor, fields)
-    const record = await tx.crmTask.create({ data: { ...prepared, tenantId: actor.tenantId, contactId, enquiryId: enquiryId || null, opportunityId: opportunityId || null, createdByUserId: actor.userId, followUpOfId: previous?.id }, include })
+    const record = await tx.crmTask.create({ data: { ...prepared, ...origin, tenantId: actor.tenantId, contactId, enquiryId: enquiryId || null, opportunityId: opportunityId || null, createdByUserId: actor.userId, followUpOfId: previous?.id }, include })
     await log(tx, actor, record.id, "crm.work.created", previous ? "Next follow-up scheduled." : "Activity scheduled.", undefined, record)
     if (completion) return complete(tx, actor, record, { ...completion, version: record.version })
     return record
@@ -83,12 +84,13 @@ export function createWorkService({ run, audit, checkAssignee }: Context) {
     return after
   }
   return {
+    ...createPlanService({ run, audit, checkAssignee, createWork: (tx, actor, data, origin) => create(tx, actor, data, undefined, origin) }),
     listWork(input: unknown) {
       const query = workListSchema.parse(input)
       return run(async (tx, actor) => {
         const timeZone = await zone(tx, actor), now = new Date(), today = businessDate(now, timeZone)
         const filter: Prisma.CrmTaskWhereInput = {
-          contactId: query.contactId, enquiryId: query.enquiryId, opportunityId: query.opportunityId, type: query.type,
+          contactId: query.contactId, enquiryId: query.enquiryId, opportunityId: query.opportunityId, type: query.type, planLaunchId: query.planLaunchId,
           title: { contains: query.q, mode: "insensitive" },
           ...(query.state === "open" ? { status: { in: [...openStatuses] } } : query.state === "completed" ? { status: "COMPLETED" } : query.state === "cancelled" ? { status: "CANCELLED" } : {}),
         }

@@ -10,6 +10,15 @@ const { workCreateSchema, workCompleteSchema, workListSchema } = require("../mod
 const { wallTimeToInstant, wallTime } = require("../modules/crm/work-time.ts")
 const { startOfBusinessDate } = require("../modules/crm/work-time.ts")
 const { activityReportSchema, activityReportPageSchema } = require("../modules/crm/report-validation.ts")
+const { activityPlanSchema, applyPlanSchema } = require("../modules/crm/plan-validation.ts")
+
+test("activity plans bound their steps, calendar offsets and reminder times", () => {
+  const step = { title: "Call", type: "CALL", callDirection: "OUTBOUND", dayOffset: 0, reminderTime: "09:30" }
+  assert.equal(activityPlanSchema.safeParse({ name: "Follow up", steps: [step] }).success, true)
+  for (const steps of [[], Array(13).fill(step), [{ ...step, callDirection: null }], [{ ...step, reminderTime: "25:00" }], [{ ...step, dayOffset: -1 }], [{ ...step, dayOffset: 366 }], [{ ...step, dayOffset: 2 }, step]]) assert.equal(activityPlanSchema.safeParse({ name: "Plan", steps }).success, false)
+  assert.equal(activityPlanSchema.safeParse({ name: "Plan", steps: [step], tenantId: "other" }).success, false)
+  assert.equal(applyPlanSchema.safeParse({ version: 1, requestKey: "not-a-uuid", startOn: "2026-01-01", contactId: "c", assignedUserId: "u" }).success, false)
+})
 
 test("activity reporting bounds periods, validates filters and rejects client-controlled scope fields", () => {
   assert.equal(activityReportSchema.parse({}).scope, "mine")

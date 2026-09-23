@@ -29,6 +29,7 @@ export const workCancelSchema = z.object({ version: z.number().int().positive(),
 export const workReminderSchema = z.object({ version: z.number().int().positive(), action: z.enum(["SNOOZE", "DISMISS"]), minutes: z.union([z.literal(15), z.literal(60), z.literal(1440)]).optional() }).strict().refine(value => value.action !== "SNOOZE" || !!value.minutes, { path: ["minutes"], message: "Choose a snooze interval." })
 export const workListSchema = crmListSchema.omit({ status: true, due: true, archived: true, sort: true }).extend({
   contactId: id.optional(), enquiryId: id.optional(), opportunityId: id.optional(), assignedUserId: id.optional(),
+  planLaunchId: id.optional(),
   scope: z.enum(["mine", "visible"]).default("mine"), type: z.enum(workTypes).optional(),
   state: z.enum(["open", "all", "completed", "cancelled"]).default("open"),
   due: z.enum(["overdue", "today", "upcoming", "reminders"]).optional(),
