@@ -446,3 +446,71 @@ includes report access restrictions, totals, call outcomes, follow-up gaps,
 completion-period drill-through and overview page rendering. All 74 database
 migrations remain applied, with no Prisma schema differences. The isolated test
 server and disposable database were stopped after verification.
+
+## Milestone 6: reusable activity plans
+
+Activity plans use the launch-date scheduling pattern described in
+[Odoo's activity-plan documentation](https://www.odoo.com/documentation/19.0/applications/sales/crm/optimize/utilize_activities.html).
+The implementation schedules a reviewed set of activities up front; it is not a
+conditional workflow engine or background message sender.
+
+- `/crm/activity-plans` provides searchable, paginated active/archived plans.
+  Managers create and edit templates; staff can read and apply them. Templates
+  support 1–12 ordered steps with title, type, calendar-day offset (0–365 days),
+  priority, instructions, call direction and optional local reminder time.
+  Templates are shared configuration visible to CRM staff, so their instructions
+  should be reusable guidance rather than private information about a customer.
+- Apply a plan from My Work, a contact/enquiry/opportunity's activity list, or the
+  plan list. Select the target, start date and responsible staff member, then
+  preview all deadlines and reminder times before scheduling. Staff can assign
+  only themselves; managers can choose another active member of the business.
+  Parent/customer matching and current access are checked again on the server.
+  Closed enquiries and won/lost or archived opportunities cannot receive new plans.
+- All steps become independent all-day activities at launch, including later-due
+  steps. Offsets include weekends and holidays. A reminder, when configured, uses
+  the business time zone on that step's due date. Ambiguous/nonexistent DST times
+  reject the launch with an explanation. Staff may subsequently schedule a
+  specific activity time through the usual activity editor and calendar.
+- Generated work uses the existing activity permissions, outcomes, reminders,
+  customer history and required audit trail. My Work shows the original plan name
+  and step number, supports a launch filter, and activity detail links to the
+  accessible activities from the same launch. The filter does not widen access.
+- Applying a plan creates its snapshot and all activities atomically. Retries with
+  the same request key and payload by the same actor return the same launch.
+  Changing a payload with a used key returns a conflict. Separate concurrent
+  requests cannot apply the same plan twice to the same target while its prior
+  launch still has open/in-progress activities. A plan may be deliberately applied
+  again after every prior activity is complete or cancelled.
+- Each launch preserves its name, version, input and resolved schedule. Editing
+  or archiving a template affects future launches only. Activities remain editable
+  through normal staff permissions; completing one does not automatically cancel,
+  reschedule or trigger the other steps. Stop unwanted work by cancelling the
+  relevant activities, retaining each cancellation reason and history.
+- Email steps are manual work items; reminders use the existing in-app delivery.
+  There are no outbound messages, telephony actions, automatic stage triggers,
+  conditional branches, business-day calendars or per-step assignee overrides.
+  Completion-triggered sequences, escalation rules and background notifications
+  remain later work.
+
+The additive migration `20260924120000_crm_activity_plans` creates
+`CrmActivityPlan` and `CrmPlanLaunch`, plus nullable activity-origin fields.
+Existing activities remain unchanged. Both new tables force tenant RLS, composite
+foreign keys enforce tenant ownership, and unique keys protect request/step
+identity. Template definitions and launch snapshots are bounded JSON validated by
+Zod; tasks remain relational records in the existing activity service. HTTP routes
+are thin adapters. The bounded multi-step transaction has a 20-second timeout to
+allow audited launches over the hosted database connection.
+
+Verification on 2026-09-23: all 66 tests/checks passed (14 unit, 46 database
+integration, one authenticated HTTP workflow and five read-only deployment checks).
+Coverage includes maximum-size launches, same-key retries, competing requests,
+template snapshots, archive/stale-write handling, authorization, tenant RLS,
+foreign-key rejection, DST validation and required-audit rollback. The production
+build, TypeScript, Prisma validation and targeted ESLint passed.
+
+The plan migration was applied to the configured Supabase database with
+`prisma migrate deploy`. All 75 migrations are current and the Prisma schema diff
+is empty. Deployment verification covers five CRM migration checksums, fourteen
+forced-RLS tables and thirty validated composite foreign keys. No templates or
+test fixtures were added to Supabase. The isolated test server and database were
+stopped. Application hosting deployment and visual browser testing remain deferred.
