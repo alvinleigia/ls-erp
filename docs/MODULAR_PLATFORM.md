@@ -391,3 +391,58 @@ are current, the Prisma schema diff is empty, and the deployment checks verify
 four CRM migration checksums, twelve forced-RLS tables, twenty-seven validated
 composite foreign keys and both invoker compatibility triggers. No test fixtures
 were added to Supabase. Application hosting deployment has not been performed.
+
+## Milestone 5: activity overview and follow-up coverage
+
+`/crm` now opens `/crm/overview`, with an Overview link in CRM navigation and the
+sidebar. This follows the activity reporting pattern documented in
+[Salesforce Activity Reports](https://help.salesforce.com/s/articleView?id=analytics.reports_activity.htm&language=en_US&type=5)
+and [Odoo's Activities Analysis view](https://github.com/odoo/odoo/blob/19.0/addons/crm/report/crm_activity_report_views.xml).
+
+- Staff see their assigned work. Managers can switch between their own work and
+  team reporting, then filter by assignee and activity type. Team reporting is
+  checked on the server; owning a deal with delegated activities does not grant
+  team-report access. All aggregate and detail queries remain tenant-scoped.
+- Current workload includes open, overdue and due-today counts. Completed work
+  uses a separate inclusive date period, defaulting to the last 30 business
+  calendar dates. The maximum period is 366 dates. Changing the completion period
+  does not hide current backlog. Overdue and due-today counts can overlap for timed
+  work; they are not additive categories.
+- Completions are counted by `completedAt`, the date work was marked complete or
+  logged, in the business time zone. They are credited to the activity assignee,
+  not the user who clicked Complete. A backdated interaction's `occurredAt` does
+  not change when it was recorded in this operational report. Activity-type and
+  call-outcome breakdowns use the same selection. Legacy completed tasks count
+  without inventing missing outcomes or customer summaries.
+- Managers have a paginated staff workload table including zero-work staff and
+  inactive assignees with outstanding work. Counts use server aggregates, not
+  sums of the first page. Cards and workload counts link to filtered My Work lists;
+  completion links preserve the report's business-date period.
+- The follow-up gap list shows open opportunities in active pipelines/stages with
+  active contacts and **no directly linked open activity**, regardless of activity
+  type, date or assignee. A delegated or overdue open activity still provides
+  coverage. Completed and cancelled activities do not. Source-enquiry tasks and
+  contact-only work do not count as opportunity-specific coverage. The list uses
+  the selected deal owner, is paginated by earliest expected close, and offers
+  Schedule follow-up. Activity type and completion-period filters do not affect
+  this list, as its explanatory text states.
+- Read-only APIs are `/api/crm/reports/activities`, `/staff` and `/follow-up-gaps`.
+  `report-service.ts` uses the existing CRM membership/module checks and transaction
+  boundary. No external messages, automatic reassignment or scheduled jobs run.
+- Business-date boundaries handle daylight-saving transitions that skip midnight
+  and skipped calendar dates. Calendar date-window queries share the same boundary
+  helper; explicit appointment/activity time entry continues to reject ambiguous
+  or nonexistent local times.
+
+This milestone uses the existing schema and indexes; no migration is required.
+Browser interaction/visual QA and application hosting deployment remain deferred.
+Automatic activity plans, escalation rules and background notification delivery
+remain separate next milestones.
+
+Verification on 2026-09-23: 59 tests/checks passed (13 unit, 40 disposable-database
+integration, one authenticated HTTP workflow and five read-only configured-database
+checks). The production build, TypeScript and targeted ESLint passed. HTTP coverage
+includes report access restrictions, totals, call outcomes, follow-up gaps,
+completion-period drill-through and overview page rendering. All 74 database
+migrations remain applied, with no Prisma schema differences. The isolated test
+server and disposable database were stopped after verification.

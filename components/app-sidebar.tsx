@@ -135,8 +135,9 @@ export function AppSidebar() {
   const sections = React.useMemo<NavSection[]>(() => {
     const list: NavSection[] = []
     if (!isPlatformConsoleUser && canUseCrm(role) && crmEnabled) {
-      list.push({ key: "crm", title: "CRM", href: "/crm/enquiries", icon: UsersIcon,
+      list.push({ key: "crm", title: "CRM", href: "/crm/overview", icon: UsersIcon,
         isActive: current => current.startsWith("/crm"), items: [
+          { title: "Overview", href: "/crm/overview", icon: BarChart3Icon, isActive: current => current.startsWith("/crm/overview") },
           { title: "Enquiries", href: "/crm/enquiries", icon: MailIcon, isActive: current => current.startsWith("/crm/enquiries") },
           { title: "Contacts", href: "/crm/contacts", icon: UsersIcon, isActive: current => current.startsWith("/crm/contacts") },
           { title: "Business accounts", href: "/crm/accounts", icon: Building2Icon, isActive: current => current.startsWith("/crm/accounts") },

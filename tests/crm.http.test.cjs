@@ -37,6 +37,7 @@ const json = (method, data) => ({ method, headers: { "Content-Type": "applicatio
 
 test("real HTTP authentication, module access and complete CRM workflow", async () => {
   assert.equal((await session()("/api/crm/contacts")).status, 401)
+  assert.equal((await session()("/api/crm/reports/activities")).status, 401)
   const admin = await login("admin@crm-demo.test")
   const salesperson = await login("sales@crm-demo.test")
   assert.equal((await salesperson("/api/modules", json("PATCH", { key: "crm", enabled: true }))).status, 403)
@@ -84,6 +85,7 @@ test("real HTTP authentication, module access and complete CRM workflow", async 
   const opportunityResponse = await salesperson("/api/crm/opportunities", json("POST", dealInput))
   assert.equal(opportunityResponse.status, 201)
   const deal = await opportunityResponse.json()
+  assert.equal((await (await salesperson("/api/crm/reports/follow-up-gaps")).json()).items[0].id, deal.id)
   assert.equal(deal.amount, "123456.7891")
   assert.equal((await (await salesperson("/api/crm/opportunities", json("POST", dealInput))).json()).id, deal.id)
   assert.equal((await (await salesperson(`/api/crm/enquiries/${source.id}`)).json()).opportunity.id, deal.id)
@@ -121,7 +123,17 @@ test("real HTTP authentication, module access and complete CRM workflow", async 
   assert.equal(calendar.items.filter(item => item.followUpOfId === work.id).length, 1)
   assert.equal((await (await salesperson(`/api/crm/opportunities?pipelineId=${pipeline.id}`)).json()).items[0].overdueActivityCount, 0)
   assert.ok((await (await salesperson(`/api/crm/work/${work.id}/history`)).json()).total >= 4)
-  for (const path of ["/crm/activities", "/crm/activities/new", `/crm/activities/${work.id}`, "/crm/calendar"]) {
+  const overview = await (await salesperson("/api/crm/reports/activities?type=CALL")).json()
+  assert.equal(overview.totals.open, 1); assert.equal(overview.totals.completed, 1)
+  assert.equal(overview.totals.withoutActivity, 0)
+  assert.deepEqual(overview.callOutcomes, [{ outcome: "CONNECTED", count: 1 }])
+  assert.equal((await salesperson("/api/crm/reports/activities?scope=team")).status, 403)
+  assert.equal((await salesperson("/api/crm/reports/staff?scope=team")).status, 403)
+  assert.equal((await salesperson("/api/crm/reports/activities?from=2026-01-01")).status, 400)
+  const reportDetail = await (await salesperson(`/api/crm/work?state=completed&type=CALL&completedFrom=${overview.from}&completedThrough=${overview.through}`)).json()
+  assert.equal(reportDetail.total, overview.totals.completed)
+  assert.equal((await (await admin(`/api/crm/reports/staff?scope=team&assignedUserId=${salespersonId}&type=CALL`)).json()).items[0].completed, 1)
+  for (const path of ["/crm/overview", "/crm/activities", `/crm/activities?state=completed&completedFrom=${overview.from}&completedThrough=${overview.through}`, "/crm/activities/new", `/crm/activities/${work.id}`, "/crm/calendar"]) {
     const page = await salesperson(path)
     assert.equal(page.status, 200, `Page failed: ${path}`)
     assert.ok(!(await page.text()).includes("NEXT_HTTP_ERROR_FALLBACK;500"), `Server rendering failed: ${path}`)
@@ -129,6 +141,7 @@ test("real HTTP authentication, module access and complete CRM workflow", async 
   assert.equal((await admin("/api/modules", json("PATCH", { key: "crm", enabled: false }))).status, 200)
   assert.equal((await salesperson("/api/crm/opportunities")).status, 403)
   assert.equal((await salesperson("/api/crm/work")).status, 403)
+  assert.equal((await salesperson("/api/crm/reports/activities")).status, 403)
   assert.equal((await admin("/api/modules", json("PATCH", { key: "crm", enabled: true }))).status, 200)
   for (const path of ["/crm/pipelines", "/crm/pipelines/new", `/crm/pipelines/${pipeline.id}`, "/crm/opportunities", "/crm/opportunities/new", `/crm/opportunities/${deal.id}`, `/crm/opportunities/new?enquiryId=${source.id}`, "/crm/accounts", "/crm/accounts/new", `/crm/accounts/${account.id}`, "/crm/contacts", "/crm/contacts/new", `/crm/contacts/${contact.id}`, "/crm/enquiries", "/crm/enquiries/new", `/crm/enquiries/${enquiry.id}`, "/crm/tasks", "/settings/modules", "/appointments"]) {
     const page = await admin(path)
