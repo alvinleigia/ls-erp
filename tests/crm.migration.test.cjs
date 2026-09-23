@@ -11,8 +11,8 @@ if (process.env.CRM_VERIFY_CONFIGURED_DATABASE !== "1" || !process.env.DATABASE_
   throw new Error("Set CRM_VERIFY_CONFIGURED_DATABASE=1 and load DATABASE_URL to run read-only deployment checks.")
 }
 const db = new Client({ connectionString: process.env.DATABASE_URL, connectionTimeoutMillis: 15000 })
-const migrationNames = ["20260923090000_crm_foundation", "20260923120000_crm_business_accounts"]
-const tables = ["TenantModule", "CrmContact", "CrmEnquiry", "CrmTask", "CrmActivity", "CrmAccount", "CrmAccountContact"]
+const migrationNames = ["20260923090000_crm_foundation", "20260923120000_crm_business_accounts", "20260923160000_crm_sales_pipelines"]
+const tables = ["TenantModule", "CrmContact", "CrmEnquiry", "CrmTask", "CrmActivity", "CrmAccount", "CrmAccountContact", "CrmPipeline", "CrmStage", "CrmOpportunity", "CrmOpportunityActivity"]
 
 before(async () => {
   await db.connect()
@@ -49,9 +49,9 @@ test("all CRM tables force RLS and use tenant checks on reads and writes", async
   }
 })
 
-test("tenant-safe relationships are backed by ten validated composite foreign keys", async () => {
-  const constraints = await db.query("SELECT c.conname, c.convalidated FROM pg_constraint c JOIN pg_class t ON t.oid=c.conrelid WHERE t.relnamespace='public'::regnamespace AND t.relname=ANY($1::text[]) AND c.contype='f' AND cardinality(c.conkey)=2 AND cardinality(c.confkey)=2", [tables])
-  assert.equal(constraints.rowCount, 10)
+test("tenant-safe relationships are backed by nineteen validated composite foreign keys", async () => {
+  const constraints = await db.query("SELECT c.conname, c.convalidated FROM pg_constraint c JOIN pg_class t ON t.oid=c.conrelid WHERE t.relnamespace='public'::regnamespace AND t.relname=ANY($1::text[]) AND c.contype='f' AND cardinality(c.conkey) IN (2,3) AND cardinality(c.confkey)=cardinality(c.conkey)", [tables])
+  assert.equal(constraints.rowCount, 19)
   for (const row of constraints.rows) assert.equal(row.convalidated, true, row.conname)
 })
 

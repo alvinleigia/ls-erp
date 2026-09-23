@@ -5,6 +5,23 @@ const { crmContactSchema, crmEnquiryUpdateSchema, crmEnquiryCreateSchema, crmTas
 const { contactScope, enquiryScope, canUseCrm } = require("../modules/crm/policy.ts")
 const pricing = require("../lib/appointments/order-pricing.ts")
 const { crmAccountSchema, crmAccountLinkSchema } = require("../modules/crm/validation.ts")
+const { pipelineSchema, opportunitySchema, opportunityMoveSchema } = require("../modules/crm/sales-validation.ts")
+
+test("configurable stages validate outcomes, unique names and required active stages", () => {
+  const stages = [{ name: "Open", kind: "OPEN", probability: 25, color: "#123456" }, { name: "Won", kind: "WON", probability: 100, color: "#123456" }, { name: "Lost", kind: "LOST", probability: 0, color: "#123456" }]
+  assert.equal(pipelineSchema.safeParse({ name: "Custom process", stages }).success, true)
+  for (const bad of [stages.slice(0, 2), stages.map(s => ({ ...s, name: "Same" })), stages.map(s => ({ ...s, probability: 50 })), stages.map(s => ({ ...s, archived: true })), stages.map(s => ({ ...s, color: "url(evil)" }))]) {
+    assert.equal(pipelineSchema.safeParse({ name: "Pipeline", stages: bad }).success, false)
+  }
+})
+
+test("opportunities validate exact money, currency, date and server-owned fields", () => {
+  const input = { title: "Deal", pipelineId: "p", stageId: "s", contactId: "c", assignedUserId: "u", amount: "99999999999999.9999", currency: "inr", expectedCloseOn: "2026-10-01" }
+  assert.equal(opportunitySchema.parse(input).currency, "INR")
+  for (const amount of ["-1", "1e3", "1.12345", "100000000000000", 10]) assert.equal(opportunitySchema.safeParse({ ...input, amount }).success, false)
+  for (const extra of [{ currency: "XYZ" }, { expectedCloseOn: "2026-02-30" }, { tenantId: "other" }, { closedAt: "2026-01-01" }]) assert.equal(opportunitySchema.safeParse({ ...input, ...extra }).success, false)
+  assert.equal(opportunityMoveSchema.safeParse({ pipelineId: "p", stageId: "s", version: 0 }).success, false)
+})
 
 test("contacts need no login and normalize identifiers before duplicate checks", () => {
   assert.deepEqual(crmContactSchema.parse({ name: " A Buyer ", email: " BUYER@EXAMPLE.COM ", phone: "+91 (98765) 43210" }), { name: "A Buyer", email: "buyer@example.com", phone: "+919876543210" })

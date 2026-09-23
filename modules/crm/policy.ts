@@ -32,6 +32,7 @@ export function contactScope(actor: CrmActor) {
       OR: [
         { ownerUserId: actor.userId },
         { enquiries: { some: { tenantId: actor.tenantId, assignedUserId: actor.userId } } },
+        { opportunities: { some: { tenantId: actor.tenantId, assignedUserId: actor.userId } } },
       ],
     } : {}),
   }
@@ -45,6 +46,7 @@ export function accountScope(actor: CrmActor) {
       OR: [
         { ownerUserId: actor.userId },
         { contacts: { some: { tenantId: actor.tenantId, contact: contactScope(actor) } } },
+        { opportunities: { some: { tenantId: actor.tenantId, assignedUserId: actor.userId } } },
       ],
     } : {}),
   }

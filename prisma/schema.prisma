@@ -16,6 +16,98 @@ enum CrmEnquiryStatus {
   CLOSED
 }
 
+enum CrmStageKind {
+  OPEN
+  WON
+  LOST
+}
+
+model CrmPipeline {
+  id        String @id @default(cuid())
+  tenantId  String
+  name      String
+  archived  Boolean @default(false)
+  version   Int @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  tenant    Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  stages    CrmStage[]
+  opportunities CrmOpportunity[]
+
+  @@unique([tenantId, id])
+  @@index([tenantId, archived, name])
+}
+
+model CrmStage {
+  id          String @id @default(cuid())
+  tenantId    String
+  pipelineId  String
+  name        String
+  kind        CrmStageKind @default(OPEN)
+  probability Int
+  color       String
+  position    Int
+  archived    Boolean @default(false)
+  tenant      Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  pipeline    CrmPipeline @relation(fields: [tenantId, pipelineId], references: [tenantId, id], onDelete: Restrict)
+  opportunities CrmOpportunity[]
+
+  @@unique([tenantId, pipelineId, id])
+  @@index([tenantId, pipelineId, position])
+}
+
+model CrmOpportunity {
+  id             String @id @default(cuid())
+  tenantId       String
+  title          String
+  pipelineId     String
+  stageId        String
+  contactId      String
+  accountId      String?
+  enquiryId      String?
+  assignedUserId String
+  amount         Decimal @db.Decimal(18, 4)
+  currency       String @db.VarChar(3)
+  probability    Int
+  expectedCloseOn DateTime @db.Date
+  closedAt       DateTime?
+  lossReason     String?
+  description    String?
+  version        Int @default(1)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  tenant         Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  pipeline       CrmPipeline @relation(fields: [tenantId, pipelineId], references: [tenantId, id], onDelete: Restrict)
+  stage          CrmStage @relation(fields: [tenantId, pipelineId, stageId], references: [tenantId, pipelineId, id], onDelete: Restrict)
+  contact        CrmContact @relation(fields: [tenantId, contactId], references: [tenantId, id], onDelete: Restrict)
+  account        CrmAccount? @relation(fields: [tenantId, accountId], references: [tenantId, id], onDelete: Restrict)
+  enquiry        CrmEnquiry? @relation(fields: [tenantId, enquiryId], references: [tenantId, id], onDelete: Restrict)
+  assignee       User @relation(fields: [tenantId, assignedUserId], references: [tenantId, id], onDelete: Restrict)
+  activities     CrmOpportunityActivity[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, enquiryId])
+  @@index([tenantId, pipelineId, stageId, updatedAt])
+  @@index([tenantId, assignedUserId, expectedCloseOn])
+  @@index([tenantId, contactId])
+  @@index([tenantId, accountId])
+}
+
+model CrmOpportunityActivity {
+  id            String @id @default(cuid())
+  tenantId      String
+  opportunityId String
+  actorUserId   String
+  event         String
+  message       String
+  createdAt     DateTime @default(now())
+  tenant        Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  opportunity   CrmOpportunity @relation(fields: [tenantId, opportunityId], references: [tenantId, id], onDelete: Restrict)
+  actor         User @relation(fields: [tenantId, actorUserId], references: [tenantId, id], onDelete: Restrict)
+
+  @@index([tenantId, opportunityId, createdAt])
+}
+
 model TenantModule {
   tenantId String
   key      String
@@ -43,6 +135,7 @@ model CrmContact {
   legacyUser   User? @relation("CrmLegacyUser", fields: [tenantId, legacyUserId], references: [tenantId, id], onDelete: Restrict)
   enquiries    CrmEnquiry[]
   accounts     CrmAccountContact[]
+  opportunities CrmOpportunity[]
 
   @@unique([tenantId, id])
   @@unique([tenantId, email])
@@ -68,6 +161,7 @@ model CrmAccount {
   tenant      Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   owner       User @relation(fields: [tenantId, ownerUserId], references: [tenantId, id], onDelete: Restrict)
   contacts    CrmAccountContact[]
+  opportunities CrmOpportunity[]
 
   @@unique([tenantId, id])
   @@index([tenantId, ownerUserId])
@@ -105,6 +199,7 @@ model CrmEnquiry {
   assignee       User @relation(fields: [tenantId, assignedUserId], references: [tenantId, id], onDelete: Restrict)
   tasks          CrmTask[]
   activities     CrmActivity[]
+  opportunities  CrmOpportunity[]
 
   @@unique([tenantId, id])
   @@index([tenantId, assignedUserId, status])
@@ -390,6 +485,8 @@ model User {
   organizationMemberships OrganizationMembership[]
   crmContacts           CrmContact[] @relation("CrmContactOwner")
   crmAccounts           CrmAccount[]
+  crmOpportunities      CrmOpportunity[]
+  crmOpportunityActivities CrmOpportunityActivity[]
   crmLegacyContacts     CrmContact[] @relation("CrmLegacyUser")
   crmEnquiries          CrmEnquiry[]
   crmActivities         CrmActivity[]
@@ -457,6 +554,10 @@ model Tenant {
   crmContacts    CrmContact[]
   crmAccounts    CrmAccount[]
   crmAccountContacts CrmAccountContact[]
+  crmPipelines   CrmPipeline[]
+  crmStages      CrmStage[]
+  crmOpportunities CrmOpportunity[]
+  crmOpportunityActivities CrmOpportunityActivity[]
   crmEnquiries   CrmEnquiry[]
   crmTasks       CrmTask[]
   crmActivities  CrmActivity[]

@@ -34,6 +34,17 @@ let adminA, staffA, otherA, customerA, adminB
 let manager, staff, other, second
 const enquiryInput = (contactId, assignedUserId) => ({ contactId, assignedUserId, title: "Two bedroom home", source: "Referral", requirements: "Near a school" })
 const expectStatus = status => error => error.status === status
+const pipelineInput = name => ({ name, stages: [
+  { name: "Discovery", kind: "OPEN", probability: 20, color: "#123456", archived: false },
+  { name: "Proposal", kind: "OPEN", probability: 60, color: "#345678", archived: false },
+  { name: "Won", kind: "WON", probability: 100, color: "#16a34a", archived: false },
+  { name: "Lost", kind: "LOST", probability: 0, color: "#dc2626", archived: false },
+] })
+const pipelineUpdate = pipeline => ({ name: pipeline.name, archived: pipeline.archived, version: pipeline.version,
+  stages: pipeline.stages.map(({ id, name, kind, probability, color, archived }) => ({ id, name, kind, probability, color, archived })),
+})
+const dealInput = (pipeline, contact, owner) => ({ title: "Test opportunity", pipelineId: pipeline.id, stageId: pipeline.stages[0].id, contactId: contact.id, assignedUserId: owner.id, amount: "12345.6789", currency: "INR", expectedCloseOn: "2026-12-01" })
+const dealUpdate = deal => ({ title: deal.title, pipelineId: deal.pipelineId, stageId: deal.stageId, contactId: deal.contactId, accountId: deal.accountId || "", assignedUserId: deal.assignedUserId, amount: String(deal.amount), currency: deal.currency, expectedCloseOn: deal.expectedCloseOn.toISOString().slice(0, 10), probability: deal.probability, lossReason: deal.lossReason || "", description: deal.description || "", version: deal.version })
 
 before(async () => {
   await root.tenant.createMany({ data: [{ id: a, slug: a, name: "CRM test A" }, { id: b, slug: b, name: "CRM test B" }] })
@@ -53,6 +64,164 @@ before(async () => {
   second = createCrmService(dbB, { tenantId: b, userId: adminB.id })
 })
 after(async () => { await Promise.all(clients.map(db => db.$disconnect())) })
+
+test("pipelines are configurable, tenant scoped and manager controlled with versioned updates", async () => {
+  await assert.rejects(staff.createPipeline(pipelineInput("Unauthorized")), expectStatus(403))
+  const pipeline = await manager.createPipeline(pipelineInput("Property sales"))
+  assert.equal((await staff.getPipeline(pipeline.id)).canManage, false)
+  await assert.rejects(second.getPipeline(pipeline.id), expectStatus(404))
+  await assert.rejects(staff.updatePipeline(pipeline.id, pipelineUpdate(pipeline)), expectStatus(403))
+  const input = pipelineUpdate(pipeline)
+  input.stages.reverse(); input.stages[0].name = "Not proceeding"
+  const updated = await manager.updatePipeline(pipeline.id, input)
+  assert.equal(updated.stages[0].name, "Not proceeding")
+  assert.equal(updated.version, 2)
+  await assert.rejects(manager.updatePipeline(pipeline.id, input), expectStatus(409))
+  const foreign = await second.createPipeline(pipelineInput("Foreign stages"))
+  await assert.rejects(manager.updatePipeline(pipeline.id, { ...pipelineUpdate(updated), stages: [...pipelineUpdate(updated).stages, { ...pipelineUpdate(foreign).stages[0], name: "Foreign stage" }] }), expectStatus(400))
+})
+
+test("opportunities preserve exact values, use stage probabilities, and require loss reasons", async () => {
+  const pipeline = await manager.createPipeline(pipelineInput("Close flow"))
+  const contact = await manager.createContact({ name: "Close flow buyer" })
+  const deal = await manager.createOpportunity(dealInput(pipeline, contact, staffA))
+  assert.equal(deal.amount.toString(), "12345.6789")
+  assert.equal(deal.probability, 20)
+  assert.equal(deal.closedAt, null)
+  const moved = await staff.moveOpportunity(deal.id, { pipelineId: pipeline.id, stageId: pipeline.stages[1].id, version: 1 })
+  assert.equal(moved.probability, 60)
+  await assert.rejects(staff.moveOpportunity(deal.id, { pipelineId: pipeline.id, stageId: pipeline.stages[3].id, version: 2 }), expectStatus(400))
+  const lost = await staff.moveOpportunity(deal.id, { pipelineId: pipeline.id, stageId: pipeline.stages[3].id, version: 2, lossReason: "Budget changed" })
+  assert.equal(lost.probability, 0); assert.ok(lost.closedAt); assert.equal(lost.lossReason, "Budget changed")
+  const reopened = await staff.moveOpportunity(deal.id, { pipelineId: pipeline.id, stageId: pipeline.stages[0].id, version: 3 })
+  assert.equal(reopened.closedAt, null); assert.equal(reopened.lossReason, null)
+  const won = await staff.updateOpportunity(deal.id, { ...dealUpdate(reopened), stageId: pipeline.stages[2].id, probability: 20 })
+  assert.equal(won.probability, 100); assert.ok(won.closedAt)
+  await staff.addOpportunityNote(deal.id, { message: "Contract signed" })
+  const activity = await staff.listOpportunityActivity(deal.id, { pageSize: 2 })
+  assert.equal(activity.total, 6); assert.equal(activity.items.length, 2)
+  assert.ok((await staff.listOpportunityActivity(deal.id, {})).items.some(item => item.message.includes("Budget changed")))
+  assert.equal(await root.auditLog.count({ where: { tenantId: a, entityId: deal.id } }), 6)
+})
+
+test("opportunity assignment grants only required contact and account access and revokes it on reassignment", async () => {
+  const pipeline = await manager.createPipeline(pipelineInput("Assignment"))
+  const contact = await manager.createContact({ name: "Deal assigned contact" })
+  const company = await manager.createAccount({ name: "Deal assigned company" })
+  const privateContact = await manager.createContact({ name: "Unrelated company person" })
+  await manager.linkContactAccount(privateContact.id, { accountId: company.id })
+  const deal = await manager.createOpportunity({ ...dealInput(pipeline, contact, staffA), accountId: company.id })
+  assert.equal((await staff.getContact(contact.id)).canEdit, false)
+  assert.equal((await staff.getAccount(company.id)).canEdit, false)
+  assert.equal((await staff.listAccountContacts(company.id, {})).total, 0)
+  await assert.rejects(other.getOpportunity(deal.id), expectStatus(404))
+  await assert.rejects(other.listOpportunityActivity(deal.id, {}), expectStatus(404))
+  assert.equal((await other.listOpportunities({ pipelineId: pipeline.id })).total, 0)
+  assert.equal((await staff.listOpportunities({ pipelineId: pipeline.id, assignedUserId: otherA.id })).total, 0)
+  await assert.rejects(staff.updateOpportunity(deal.id, { ...dealUpdate(deal), assignedUserId: otherA.id }), expectStatus(403))
+  await manager.updateOpportunity(deal.id, { ...dealUpdate(deal), assignedUserId: otherA.id })
+  await assert.rejects(staff.getOpportunity(deal.id), expectStatus(404))
+  await assert.rejects(staff.getContact(contact.id), expectStatus(404))
+  await assert.rejects(staff.getAccount(company.id), expectStatus(404))
+  assert.equal((await other.getOpportunity(deal.id)).id, deal.id)
+  await assert.rejects(staff.createOpportunity(dealInput(pipeline, contact, staffA)), expectStatus(404))
+})
+
+test("enquiry conversion is idempotent under concurrent requests and preserves history and follow-ups", async () => {
+  const pipeline = await manager.createPipeline(pipelineInput("Conversion"))
+  const contact = await manager.createContact({ name: "Convert buyer" })
+  const enquiry = await manager.createEnquiry(enquiryInput(contact.id, staffA.id))
+  await staff.createTask(enquiry.id, { title: "Existing follow-up", dueOn: "2026-10-01" })
+  const data = { ...dealInput(pipeline, contact, staffA), enquiryId: enquiry.id }
+  const results = await Promise.all([staff.createOpportunity(data), staff.createOpportunity(data)])
+  assert.equal(results[0].id, results[1].id)
+  assert.equal((await staff.getEnquiry(enquiry.id)).opportunity.id, results[0].id)
+  assert.equal((await staff.listTasks({}, enquiry.id)).total, 1)
+  assert.equal(await root.crmActivity.count({ where: { enquiryId: enquiry.id, event: "crm.enquiry.converted" } }), 1)
+  assert.equal((await staff.getEnquiry(enquiry.id)).status, "NEW")
+  await assert.rejects(other.createOpportunity(data), expectStatus(404))
+  const own = await staff.createContact({ name: "Another contact" })
+  await assert.rejects(staff.updateOpportunity(results[0].id, { ...dealUpdate(results[0]), contactId: own.id }), expectStatus(409))
+})
+
+test("pipeline/stage archiving preserves deals, prevents new entries, and allows moving out", async () => {
+  const pipeline = await manager.createPipeline(pipelineInput("Archive stages"))
+  const contact = await manager.createContact({ name: "Archive stage buyer" })
+  const deal = await manager.createOpportunity(dealInput(pipeline, contact, staffA))
+  const invalid = pipelineUpdate(pipeline); invalid.stages[0].kind = "WON"; invalid.stages[0].probability = 100
+  await assert.rejects(manager.updatePipeline(pipeline.id, invalid), expectStatus(409))
+  const archive = pipelineUpdate(pipeline); archive.stages[0].archived = true
+  const archived = await manager.updatePipeline(pipeline.id, archive)
+  assert.equal((await manager.getOpportunity(deal.id)).stage.archived, true)
+  await assert.rejects(manager.createOpportunity(dealInput(archived, contact, staffA)), expectStatus(409))
+  const withoutStage = pipelineUpdate(archived); withoutStage.stages.shift()
+  await assert.rejects(manager.updatePipeline(pipeline.id, withoutStage), expectStatus(409))
+  const otherPipeline = await manager.createPipeline(pipelineInput("Move destination"))
+  const moved = await staff.moveOpportunity(deal.id, { pipelineId: otherPipeline.id, stageId: otherPipeline.stages[0].id, version: 1 })
+  assert.equal(moved.pipelineId, otherPipeline.id)
+  await manager.updatePipeline(pipeline.id, { ...pipelineUpdate(archived), archived: true })
+  await assert.rejects(staff.moveOpportunity(deal.id, { pipelineId: pipeline.id, stageId: pipeline.stages[1].id, version: 2 }), expectStatus(409))
+  assert.equal((await manager.listPipelines({ q: "Archive stages", archived: "true" })).total, 1)
+})
+
+test("concurrent moves and stale edits cannot overwrite another salesperson change", async () => {
+  const pipeline = await manager.createPipeline(pipelineInput("Concurrent moves"))
+  const contact = await manager.createContact({ name: "Concurrent deal buyer" })
+  const deal = await manager.createOpportunity(dealInput(pipeline, contact, staffA))
+  const results = await Promise.allSettled([1, 2].map(index => staff.moveOpportunity(deal.id, { pipelineId: pipeline.id, stageId: pipeline.stages[index].id, version: 1 })))
+  assert.equal(results.filter(result => result.status === "fulfilled").length, 1)
+  assert.equal(results.find(result => result.status === "rejected").reason.status, 409)
+  await assert.rejects(staff.updateOpportunity(deal.id, { ...dealUpdate(deal), title: "Stale title" }), expectStatus(409))
+  assert.equal(await root.crmOpportunityActivity.count({ where: { opportunityId: deal.id } }), 2)
+})
+
+test("sales tables enforce RLS, tenant composite foreign keys and stage/pipeline integrity", async () => {
+  const pipeline = await manager.createPipeline(pipelineInput("FK local"))
+  const foreign = await second.createPipeline(pipelineInput("FK foreign"))
+  const contact = await manager.createContact({ name: "FK buyer" })
+  const otherContact = await second.createContact({ name: "Foreign buyer" })
+  const localDeal = await manager.createOpportunity(dealInput(pipeline, contact, staffA))
+  const foreignDeal = await second.createOpportunity(dealInput(foreign, otherContact, adminB))
+  for (const table of ["crmPipeline", "crmStage", "crmOpportunity", "crmOpportunityActivity"]) {
+    assert.equal(await unscoped[table].count(), 0)
+    assert.equal(await dbA[table].count({ where: { tenantId: b } }), 0)
+  }
+  await assert.rejects(manager.moveOpportunity(localDeal.id, { pipelineId: pipeline.id, stageId: foreign.stages[0].id, version: 1 }), expectStatus(404))
+  await assert.rejects(root.crmOpportunity.update({ where: { id: localDeal.id }, data: { stageId: foreign.stages[0].id } }))
+  await assert.rejects(root.crmOpportunity.update({ where: { id: localDeal.id }, data: { contactId: otherContact.id } }))
+  await assert.rejects(root.crmOpportunity.update({ where: { id: localDeal.id }, data: { assignedUserId: adminB.id } }))
+  await assert.rejects(dbA.crmOpportunity.updateMany({ where: { id: localDeal.id }, data: { tenantId: b } }))
+  await assert.rejects(root.crmOpportunityActivity.create({ data: { tenantId: a, opportunityId: foreignDeal.id, actorUserId: adminA.id, event: "bad", message: "bad" } }))
+  await assert.rejects(root.crmOpportunity.update({ where: { id: localDeal.id }, data: { amount: "-1" } }))
+  const another = await manager.createPipeline(pipelineInput("FK same tenant"))
+  await assert.rejects(root.crmOpportunity.update({ where: { id: localDeal.id }, data: { stageId: another.stages[0].id } }))
+})
+
+test("sales audit failure rolls back the move and its history", async () => {
+  const pipeline = await manager.createPipeline(pipelineInput("Audit rollback"))
+  const contact = await manager.createContact({ name: "Audit deal buyer" })
+  const deal = await manager.createOpportunity(dealInput(pipeline, contact, staffA))
+  await root.$executeRawUnsafe('ALTER TABLE "AuditLog" ADD CONSTRAINT "crm_test_reject_move_audit" CHECK (event <> \'crm.opportunity.stage.changed\') NOT VALID')
+  try {
+    await assert.rejects(staff.moveOpportunity(deal.id, { pipelineId: pipeline.id, stageId: pipeline.stages[1].id, version: 1 }))
+    const unchanged = await staff.getOpportunity(deal.id)
+    assert.equal(unchanged.version, 1); assert.equal(unchanged.stageId, deal.stageId)
+    assert.equal((await staff.listOpportunityActivity(deal.id, {})).total, 1)
+  } finally { await root.$executeRawUnsafe('ALTER TABLE "AuditLog" DROP CONSTRAINT "crm_test_reject_move_audit"') }
+})
+
+test("opportunity filters and pagination cover the full dataset and never mix currencies", async () => {
+  const pipeline = await manager.createPipeline(pipelineInput("Paged board"))
+  const contact = await manager.createContact({ name: "Paged buyer" })
+  for (let i = 0; i < 4; i++) await manager.createOpportunity({ ...dealInput(pipeline, contact, staffA), title: `Paged ${i}`, currency: i % 2 ? "USD" : "INR" })
+  const first = await staff.listOpportunities({ pipelineId: pipeline.id, stageId: pipeline.stages[0].id, pageSize: 2, sort: "title", order: "asc" })
+  const next = await staff.listOpportunities({ pipelineId: pipeline.id, stageId: pipeline.stages[0].id, pageSize: 2, page: 2, sort: "title", order: "asc" })
+  assert.equal(first.total, 4); assert.equal(first.totalPages, 2)
+  assert.equal(new Set([...first.items, ...next.items].map(item => item.id)).size, 4)
+  assert.deepEqual(first.items.map(item => item.currency), ["INR", "USD"])
+  assert.equal((await staff.listOpportunities({ pipelineId: pipeline.id, kind: "WON" })).total, 0)
+  assert.equal((await staff.listOpportunities({ pipelineId: pipeline.id, q: "Paged 2" })).total, 1)
+})
 
 test("complete contact, enquiry, note, follow-up and outcome workflow persists audit", async () => {
   const contact = await manager.createContact({ name: "Workflow buyer" })
