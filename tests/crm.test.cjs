@@ -4,6 +4,7 @@ const assert = require("node:assert/strict")
 const { crmContactSchema, crmEnquiryUpdateSchema, crmEnquiryCreateSchema, crmTaskSchema, crmListSchema } = require("../modules/crm/validation.ts")
 const { contactScope, enquiryScope, canUseCrm } = require("../modules/crm/policy.ts")
 const pricing = require("../lib/appointments/order-pricing.ts")
+const { crmAccountSchema, crmAccountLinkSchema } = require("../modules/crm/validation.ts")
 
 test("contacts need no login and normalize identifiers before duplicate checks", () => {
   assert.deepEqual(crmContactSchema.parse({ name: " A Buyer ", email: " BUYER@EXAMPLE.COM ", phone: "+91 (98765) 43210" }), { name: "A Buyer", email: "buyer@example.com", phone: "+919876543210" })
@@ -36,4 +37,15 @@ test("existing salon pricing keeps discount caps and tax calculation", () => {
   assert.deepEqual(pricing.calculateLineAmounts({ quantity: 2, unitPriceCents: 10000, discountType: "PERCENT", discountValue: 10 }), { lineSubtotalCents: 20000, lineDiscountCents: 2000, lineTotalCents: 18000 })
   assert.equal(pricing.calculateDiscountCents("AMOUNT", 500, 10000), 10000)
   assert.equal(pricing.calculateTaxBreakdown(18000, [{ id: "tax", name: "GST", percent: 18 }])[0].taxCents, 3240)
+})
+test("business accounts normalize contact details and allow only safe website protocols", () => {
+  const account = crmAccountSchema.parse({ name: " Example Ltd ", email: " OFFICE@EXAMPLE.COM ", website: " https://example.com " })
+  assert.equal(account.name, "Example Ltd")
+  assert.equal(account.email, "office@example.com")
+  assert.equal(account.website, "https://example.com")
+  for (const website of ["javascript:alert(1)", "file:///tmp/test", "https://user:password@example.com", "invalid"]) {
+    assert.equal(crmAccountSchema.safeParse({ name: "Company", website }).success, false)
+  }
+  assert.equal(crmAccountSchema.safeParse({ name: "Company", ownerUserId: "other" }).success, false)
+  assert.equal(crmAccountLinkSchema.safeParse({ accountId: "account", tenantId: "other" }).success, false)
 })

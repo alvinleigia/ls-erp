@@ -4,6 +4,7 @@ export type CrmContactRow = {
   id: string; name: string; email: string | null; phone: string | null;
   archived: boolean; version: number; canEdit?: boolean;
 }
+export type CrmAccountRow = CrmContactRow & { website: string | null; notes: string | null }
 export type CrmEnquiryRow = {
   id: string; title: string; source: string | null; requirements: string | null;
   status: CrmStatus; outcome: string | null; version: number; assignedUserId: string;

@@ -36,3 +36,16 @@ export function contactScope(actor: CrmActor) {
     } : {}),
   }
 }
+
+export function accountScope(actor: CrmActor) {
+  assertCrmActor(actor)
+  return {
+    tenantId: actor.tenantId,
+    ...(!canManageCrm(actor.role) ? {
+      OR: [
+        { ownerUserId: actor.userId },
+        { contacts: { some: { tenantId: actor.tenantId, contact: contactScope(actor) } } },
+      ],
+    } : {}),
+  }
+}

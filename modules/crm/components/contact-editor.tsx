@@ -9,6 +9,7 @@ import { FormField } from "@/components/form-field"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
 import { useFormErrors } from "@/hooks/use-form-errors"
 import type { CrmContactRow } from "@/types/crm"
+import { ContactAccounts } from "./contact-accounts"
 
 export function ContactEditor({ id }: { id?: string }) {
   const router = useRouter()
@@ -49,7 +50,7 @@ export function ContactEditor({ id }: { id?: string }) {
   }
   if (loading) return <p>Loading contact…</p>
   const canEdit = !id || !!contact?.canEdit
-  return <form onSubmit={save} className="mx-auto max-w-3xl space-y-6">
+  return <div className="mx-auto max-w-3xl space-y-8"><form onSubmit={save} className="space-y-6">
     <div className="flex flex-wrap items-center justify-between gap-3"><h1 className="text-2xl font-semibold">{id ? "Contact" : "New contact"}</h1><div className="flex gap-2"><Button type="button" variant="outline" asChild><Link href="/crm/contacts">Back</Link></Button>{canEdit && <Button loading={saving} loadingText="Saving…" type="submit">Save contact</Button>}</div></div>
     {error && <p role="alert" className="text-destructive">{error}</p>}
     <fieldset disabled={!canEdit || saving} className="space-y-5 rounded-xl border p-5">
@@ -62,4 +63,6 @@ export function ContactEditor({ id }: { id?: string }) {
     {contact && !canEdit && <p className="text-sm text-muted-foreground">You can view this contact through an assigned enquiry. Ask its owner or a manager to edit it.</p>}
     <Dialog open={confirmArchive} onOpenChange={open => { if (!saving) setConfirmArchive(open) }}><DialogContent><DialogHeader><DialogTitle>Archive this contact?</DialogTitle><DialogDescription>Existing enquiries and history will be kept. New enquiries cannot be created until the contact is restored.</DialogDescription></DialogHeader><DialogFooter><Button type="button" variant="outline" disabled={saving} onClick={() => setConfirmArchive(false)}>Cancel</Button><Button type="button" loading={saving} onClick={() => void persist()}>Archive contact</Button></DialogFooter></DialogContent></Dialog>
   </form>
+    {contact && <ContactAccounts contactId={contact.id} canEdit={!!contact.canEdit} archived={contact.archived} />}
+  </div>
 }

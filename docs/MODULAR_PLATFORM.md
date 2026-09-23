@@ -1,4 +1,4 @@
-# Modular business platform — CRM milestone 1
+# Modular business platform — CRM milestones 1–2
 
 ## Architecture decision
 
@@ -8,7 +8,8 @@ not grant implicit access to tenant CRM records. A property development is a
 business record, not a tenant. Property renters are unrelated to SaaS tenants.
 
 `platform/` owns business request context, module metadata and shared errors.
-`modules/crm/` owns contacts, enquiries, tasks, activity, validation and operations.
+`modules/crm/` owns contacts, business accounts, their relationships, enquiries,
+tasks, activity, validation and operations.
 `app/` contains thin API entry points and pages. Existing UI primitives are reused.
 CRM operations recheck the current active user and enabled module, enforce record
 scope and run changes and required audit entries in one transaction. Serializable
@@ -82,9 +83,9 @@ CRM data; reset/import tools need a separate CRM-aware design before broader use
 
 ## Identity and industry extension roadmap
 
-1. Add business accounts and contact/account relationships. CRM owns these
-   identities; purchasing can later link supplier profiles to them. The existing
-   authentication model named `Account` must not be reused for CRM companies.
+1. Business accounts and contact/account relationships are implemented in milestone
+   2 below. Purchasing can later link supplier profiles to them. Authentication
+   `Account` and platform `Organization` remain separate from CRM companies.
 2. Add opportunities and configurable pipelines, then deliberate contact merging
    with relation reassignment, permission checks and history. Shared phone/email
    exceptions require an explicit duplicate policy before relaxing uniqueness.
@@ -131,7 +132,9 @@ The setup refuses non-local, differently named or non-empty databases. It create
 the current schema, existing/new RLS policies and a non-superuser, non-BYPASSRLS
 application role. An optional `CRM_TEST_BASE_SQL` file containing the pre-change
 schema tests the full incremental CRM migration instead of generating the current
-schema. This setup expects a disposable database with a local trusted test role;
+schema. To test an upgrade from a schema that already includes the first CRM
+migration, also set `CRM_TEST_FROM_MIGRATION=20260923120000_crm_business_accounts`.
+This setup expects a disposable database with a local trusted test role;
 it is not production provisioning guidance.
 
 Database tests cover the complete workflow; raw RLS reads/writes; cross-tenant
@@ -159,7 +162,7 @@ The test verifies actual sign-in, unauthorized access, module enablement, malfor
 JSON, CRM writes, staff access, activity and server rendering for CRM and existing
 appointment pages. It does not provide visual or browser interaction coverage.
 
-Verified for this milestone: Prisma schema/client generation; the additive
+Verified for milestone 1: Prisma schema/client generation; the additive
 migration on a pre-CRM schema; 5 unit/regression tests; 10 PostgreSQL integration
 tests; 1 real HTTP workflow test; TypeScript; targeted ESLint; and a production
 build. Build required network access for the application's existing Google Fonts.
@@ -169,8 +172,40 @@ Visual browser QA is explicitly deferred at the user's request.
 
 Set `CRM_VERIFY_CONFIGURED_DATABASE=1` and run `npm run test:crm:migration` to
 verify the database configured by `DATABASE_URL`. These checks run inside a
-read-only transaction and add no fixtures. They verify the deployed migration
-checksum/history, all five forced RLS policies, seven validated composite foreign
+read-only transaction and add no fixtures. They verify both deployed migration
+checksums/history, all seven forced RLS policies, ten validated composite foreign
 keys and the runtime database role's lack of superuser/RLS-bypass privileges.
 All four deployment tests passed on the configured Supabase database after rollout.
 Unit tests and TypeScript checks also passed again during deployment.
+
+## Milestone 2 — business accounts and contact relationships
+
+- `/crm/accounts` supports paginated search, create, edit, archive and restore.
+  Accounts store company name, email, international phone, website and notes.
+- `CrmAccount` is independent of login accounts, platform organizations and
+  suppliers. Identical company names or shared email/phone values are allowed;
+  they are not automatically treated as the same legal/business entity.
+- Contacts can link to multiple accounts, and accounts can have multiple contacts.
+  Manage these relationships on the contact page; inspect permitted contacts on
+  the account page. Removal requires confirmation, retains both records, and is
+  recorded in audit history. Repeated link/unlink requests do not duplicate audits.
+- Administrators/managers can access tenant accounts. Staff can see accounts they
+  own or accounts linked to contacts they can already access; only account owners
+  and managers can edit account fields. Account visibility or ownership never
+  grants access to an otherwise private contact.
+- Linking requires an editable contact and an already-visible account. A guessed
+  account ID cannot grant access. Archived accounts/contacts reject new links;
+  existing relationships remain visible and can be removed by the contact owner
+  or a manager. List totals and pagination respect contact-level permissions.
+- Account edits use version checks. Account and relationship changes require
+  transactional audit entries. The two new tables force tenant RLS; composite
+  foreign keys prevent cross-tenant owners and relationships.
+
+The additive migration is `20260923120000_crm_business_accounts`. It creates two
+tables with indexes, foreign keys and policies, without altering existing data.
+The full upgrade from the previous CRM schema passed in disposable PostgreSQL,
+along with 6 unit/regression and 16 database integration tests. The real HTTP
+workflow test passed against the production build, covering account creation,
+linking, inherited visibility, unauthorized unlinking, and account page responses.
+Prisma validation/client generation, TypeScript and targeted ESLint also passed.
+Visual browser testing remains deferred.

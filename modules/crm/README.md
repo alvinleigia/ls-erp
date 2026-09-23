@@ -1,6 +1,7 @@
-# CRM milestone 1
+# CRM module
 
-CRM owns contacts, enquiries, follow-up tasks and enquiry activity. Contacts do
+CRM owns contacts, business accounts, contact/account relationships, enquiries,
+follow-up tasks and enquiry activity. Contacts do
 not need login accounts. Existing salon records and authentication are preserved.
 See `docs/MODULAR_PLATFORM.md` for boundaries, migration and deferred work.
 

@@ -42,6 +42,7 @@ model CrmContact {
   owner        User @relation("CrmContactOwner", fields: [tenantId, ownerUserId], references: [tenantId, id], onDelete: Restrict)
   legacyUser   User? @relation("CrmLegacyUser", fields: [tenantId, legacyUserId], references: [tenantId, id], onDelete: Restrict)
   enquiries    CrmEnquiry[]
+  accounts     CrmAccountContact[]
 
   @@unique([tenantId, id])
   @@unique([tenantId, email])
@@ -49,6 +50,41 @@ model CrmContact {
   @@unique([tenantId, legacyUserId])
   @@index([tenantId, ownerUserId])
   @@index([tenantId, name])
+}
+
+model CrmAccount {
+  id          String @id @default(cuid())
+  tenantId    String
+  name        String
+  email       String?
+  phone       String?
+  website     String?
+  notes       String?
+  ownerUserId String
+  archived    Boolean @default(false)
+  version     Int @default(1)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  tenant      Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  owner       User @relation(fields: [tenantId, ownerUserId], references: [tenantId, id], onDelete: Restrict)
+  contacts    CrmAccountContact[]
+
+  @@unique([tenantId, id])
+  @@index([tenantId, ownerUserId])
+  @@index([tenantId, name])
+}
+
+model CrmAccountContact {
+  tenantId  String
+  accountId String
+  contactId String
+  createdAt DateTime @default(now())
+  tenant    Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  account   CrmAccount @relation(fields: [tenantId, accountId], references: [tenantId, id], onDelete: Restrict)
+  contact   CrmContact @relation(fields: [tenantId, contactId], references: [tenantId, id], onDelete: Restrict)
+
+  @@id([tenantId, accountId, contactId])
+  @@index([tenantId, contactId])
 }
 
 model CrmEnquiry {
@@ -353,6 +389,7 @@ model User {
   invitations           Invitation[]              @relation("UserInvitations")
   organizationMemberships OrganizationMembership[]
   crmContacts           CrmContact[] @relation("CrmContactOwner")
+  crmAccounts           CrmAccount[]
   crmLegacyContacts     CrmContact[] @relation("CrmLegacyUser")
   crmEnquiries          CrmEnquiry[]
   crmActivities         CrmActivity[]
@@ -418,6 +455,8 @@ model Tenant {
   domains        TenantDomain[]
   modules        TenantModule[]
   crmContacts    CrmContact[]
+  crmAccounts    CrmAccount[]
+  crmAccountContacts CrmAccountContact[]
   crmEnquiries   CrmEnquiry[]
   crmTasks       CrmTask[]
   crmActivities  CrmActivity[]

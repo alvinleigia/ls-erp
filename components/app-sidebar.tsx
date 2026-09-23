@@ -139,6 +139,7 @@ export function AppSidebar() {
         isActive: current => current.startsWith("/crm"), items: [
           { title: "Enquiries", href: "/crm/enquiries", icon: MailIcon, isActive: current => current.startsWith("/crm/enquiries") },
           { title: "Contacts", href: "/crm/contacts", icon: UsersIcon, isActive: current => current.startsWith("/crm/contacts") },
+          { title: "Business accounts", href: "/crm/accounts", icon: Building2Icon, isActive: current => current.startsWith("/crm/accounts") },
           { title: "Follow-ups", href: "/crm/tasks", icon: CalendarClockIcon, isActive: current => current.startsWith("/crm/tasks") },
         ],
       })

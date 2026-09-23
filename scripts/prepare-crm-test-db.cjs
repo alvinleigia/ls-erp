@@ -16,7 +16,9 @@ async function main() {
   try {
     const tables = await db.query("SELECT 1 FROM pg_tables WHERE schemaname = 'public' LIMIT 1")
     if (tables.rowCount) throw new Error("Database is not empty. Refusing to modify it; use a fresh disposable instance.")
-    const migration = fs.readFileSync("prisma/migrations/20260923090000_crm_foundation/migration.sql", "utf8")
+    const migrationNames = ["20260923090000_crm_foundation", "20260923120000_crm_business_accounts"]
+    const firstPending = process.env.CRM_TEST_FROM_MIGRATION || migrationNames[0]
+    if (!migrationNames.includes(firstPending)) throw new Error("Unknown CRM_TEST_FROM_MIGRATION.")
     const basePath = process.env.CRM_TEST_BASE_SQL
     if (basePath) {
       // Optional pre-CRM schema allows verification of the real incremental migration.
@@ -32,7 +34,12 @@ async function main() {
       } finally { if (fs.existsSync(output)) fs.unlinkSync(output) }
     }
     await db.query(fs.readFileSync("prisma/migrations/20260623160000_enable_tenant_rls/migration.sql", "utf8"))
-    await db.query(basePath ? migration : migration.slice(migration.indexOf("-- Match the existing tenant RLS contract.")))
+    for (const name of migrationNames) {
+      const migration = fs.readFileSync(`prisma/migrations/${name}/migration.sql`, "utf8")
+      const policyStart = migration.indexOf("-- Match the existing tenant RLS contract.")
+      if (policyStart < 0) throw new Error(`Missing tenant policy section: ${name}`)
+      await db.query(basePath && name >= firstPending ? migration : migration.slice(policyStart))
+    }
     await db.query("CREATE ROLE crm_test_runtime LOGIN NOSUPERUSER NOBYPASSRLS; GRANT USAGE ON SCHEMA public, app TO crm_test_runtime; GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO crm_test_runtime")
     console.log("Prepared disposable CRM test database with tenant RLS and a non-bypass application role.")
   } finally { await db.end() }

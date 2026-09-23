@@ -13,6 +13,15 @@ export const crmContactSchema = z.object({
   ),
 }).strict()
 export const crmContactUpdateSchema = crmContactSchema.extend({ version: z.number().int().positive(), archived: z.boolean() })
+export const crmAccountSchema = crmContactSchema.extend({
+  website: text(500).refine(value => {
+    if (!value) return true
+    try { const url = new URL(value); return ["https:", "http:"].includes(url.protocol) && !url.username && !url.password } catch { return false }
+  }, "Enter an http or https website address without credentials."),
+  notes: text(5000),
+})
+export const crmAccountUpdateSchema = crmAccountSchema.extend({ version: z.number().int().positive(), archived: z.boolean() })
+export const crmAccountLinkSchema = z.object({ accountId: id }).strict()
 export const crmEnquiryCreateSchema = z.object({
   contactId: id,
   title: z.string().trim().min(1).max(200),
@@ -44,5 +53,6 @@ export const crmListSchema = z.object({
   order: z.enum(["asc", "desc"]).default("desc"),
 })
 export type CrmContactInput = z.infer<typeof crmContactSchema>
+export type CrmAccountInput = z.infer<typeof crmAccountSchema>
 export type CrmEnquiryInput = z.infer<typeof crmEnquiryCreateSchema>
 export type CrmListInput = z.infer<typeof crmListSchema>

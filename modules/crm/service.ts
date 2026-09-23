@@ -1,9 +1,10 @@
 import type { Prisma, PrismaClient, Role } from "@prisma/client"
 import { recordDomainAuditEvent } from "@/lib/domain-audit"
-import { CrmError, canManageCrm, canUseCrm, contactScope, enquiryScope, type CrmActor } from "./policy"
+import { CrmError, canManageCrm, canUseCrm, contactScope, accountScope, enquiryScope, type CrmActor } from "./policy"
 import {
   crmContactSchema, crmContactUpdateSchema, crmEnquiryCreateSchema,
   crmEnquiryUpdateSchema, crmListSchema, crmNoteSchema, crmTaskSchema,
+  crmAccountSchema, crmAccountUpdateSchema, crmAccountLinkSchema,
 } from "./validation"
 
 const personSelect = { id: true, name: true } as const
@@ -49,7 +50,7 @@ export function createCrmService(db: PrismaClient, identity: Pick<CrmActor, "ten
   async function audit(tx: Tx, actor: CrmActor, event: string, entityId: string, before?: Prisma.InputJsonValue, after?: Prisma.InputJsonValue) {
     await recordDomainAuditEvent(tx, {
       tenantId: actor.tenantId, actorUserId: actor.userId, actorRole: actor.role as Role,
-      requestId: actor.requestId, event, entityType: event.startsWith("crm.contact") ? "CrmContact" : "CrmEnquiry",
+      requestId: actor.requestId, event, entityType: event.startsWith("crm.account") ? "CrmAccount" : event.startsWith("crm.contact") ? "CrmContact" : "CrmEnquiry",
       entityId, before, after,
     })
   }
@@ -74,6 +75,107 @@ export function createCrmService(db: PrismaClient, identity: Pick<CrmActor, "ten
   }
 
   return {
+    listAccounts(input: unknown) {
+      const query = crmListSchema.parse(input)
+      return run(async (tx, actor) => {
+        const where: Prisma.CrmAccountWhereInput = { AND: [accountScope(actor), {
+          archived: query.archived === "true",
+          ...(query.q ? { OR: ["name", "email", "phone"].map(field => ({ [field]: { contains: query.q, mode: "insensitive" } })) } : {}),
+        }] }
+        const sort = ["name", "createdAt", "updatedAt"].includes(query.sort) ? query.sort : "updatedAt"
+        const [items, total] = await Promise.all([
+          tx.crmAccount.findMany({ where, orderBy: [{ [sort]: query.order }, { id: "asc" }], skip: (query.page - 1) * query.pageSize, take: query.pageSize }),
+          tx.crmAccount.count({ where }),
+        ])
+        return pageResult(items, total, query.page, query.pageSize)
+      })
+    },
+    getAccount(id: string) {
+      return run(async (tx, actor) => {
+        const account = await tx.crmAccount.findFirst({ where: { ...accountScope(actor), id } })
+        if (!account) throw new CrmError(404, "Business account not found.")
+        return { ...account, canEdit: canManageCrm(actor.role) || account.ownerUserId === actor.userId }
+      })
+    },
+    createAccount(input: unknown) {
+      const data = crmAccountSchema.parse(input)
+      return run(async (tx, actor) => {
+        const account = await tx.crmAccount.create({ data: { ...data, email: data.email || null, phone: data.phone || null, website: data.website || null, notes: data.notes || null, tenantId: actor.tenantId, ownerUserId: actor.userId } })
+        await audit(tx, actor, "crm.account.created", account.id, undefined, data)
+        return account
+      })
+    },
+    updateAccount(id: string, input: unknown) {
+      const { version, ...data } = crmAccountUpdateSchema.parse(input)
+      return run(async (tx, actor) => {
+        const where = { tenantId: actor.tenantId, id, ...(!canManageCrm(actor.role) ? { ownerUserId: actor.userId } : {}) }
+        const before = await tx.crmAccount.findFirst({ where })
+        if (!before) throw new CrmError(404, "Editable business account not found.")
+        const changed = await tx.crmAccount.updateMany({ where: { ...where, version }, data: { ...data, email: data.email || null, phone: data.phone || null, website: data.website || null, notes: data.notes || null, version: { increment: 1 } } })
+        if (!changed.count) throw new CrmError(409, "This account changed. Refresh before saving.")
+        await audit(tx, actor, "crm.account.updated", id, { name: before.name, email: before.email, phone: before.phone, website: before.website, notes: before.notes, archived: before.archived }, data)
+        return tx.crmAccount.findFirstOrThrow({ where })
+      })
+    },
+    listAccountContacts(accountId: string, input: unknown) {
+      const query = crmListSchema.parse(input)
+      return run(async (tx, actor) => {
+        const account = await tx.crmAccount.findFirst({ where: { ...accountScope(actor), id: accountId }, select: { id: true } })
+        if (!account) throw new CrmError(404, "Business account not found.")
+        // Account visibility must never grant access to unrelated contacts.
+        const where: Prisma.CrmContactWhereInput = { AND: [contactScope(actor), {
+          accounts: { some: { tenantId: actor.tenantId, accountId } }, archived: query.archived === "true",
+          ...(query.q ? { name: { contains: query.q, mode: "insensitive" } } : {}),
+        }] }
+        const [items, total] = await Promise.all([
+          tx.crmContact.findMany({ where, orderBy: [{ name: "asc" }, { id: "asc" }], skip: (query.page - 1) * query.pageSize, take: query.pageSize }),
+          tx.crmContact.count({ where }),
+        ])
+        return pageResult(items, total, query.page, query.pageSize)
+      })
+    },
+    listContactAccounts(contactId: string, input: unknown) {
+      const query = crmListSchema.parse(input)
+      return run(async (tx, actor) => {
+        const contact = await tx.crmContact.findFirst({ where: { ...contactScope(actor), id: contactId }, select: { id: true } })
+        if (!contact) throw new CrmError(404, "Contact not found.")
+        const where: Prisma.CrmAccountWhereInput = { AND: [accountScope(actor), { contacts: { some: { tenantId: actor.tenantId, contactId } } }] }
+        const [items, total] = await Promise.all([
+          tx.crmAccount.findMany({ where, orderBy: [{ name: "asc" }, { id: "asc" }], skip: (query.page - 1) * query.pageSize, take: query.pageSize }),
+          tx.crmAccount.count({ where }),
+        ])
+        return pageResult(items, total, query.page, query.pageSize)
+      })
+    },
+    linkContactAccount(contactId: string, input: unknown) {
+      const { accountId } = crmAccountLinkSchema.parse(input)
+      return run(async (tx, actor) => {
+        const contact = await tx.crmContact.findFirst({ where: { tenantId: actor.tenantId, id: contactId, ...(!canManageCrm(actor.role) ? { ownerUserId: actor.userId } : {}) } })
+        if (!contact) throw new CrmError(404, "Editable contact not found.")
+        const account = await tx.crmAccount.findFirst({ where: { ...accountScope(actor), id: accountId } })
+        if (!account) throw new CrmError(404, "Business account not found.")
+        if (contact.archived || account.archived) throw new CrmError(409, "Restore the contact and account before adding a relationship.")
+        const link = { tenantId: actor.tenantId, contactId, accountId }
+        const created = await tx.crmAccountContact.createMany({ data: [link], skipDuplicates: true })
+        if (created.count) {
+          await audit(tx, actor, "crm.account.contact.linked", accountId, undefined, { contactId })
+          await audit(tx, actor, "crm.contact.account.linked", contactId, undefined, { accountId })
+        }
+        return { success: true }
+      })
+    },
+    unlinkContactAccount(contactId: string, accountId: string) {
+      return run(async (tx, actor) => {
+        const contact = await tx.crmContact.findFirst({ where: { tenantId: actor.tenantId, id: contactId, ...(!canManageCrm(actor.role) ? { ownerUserId: actor.userId } : {}) } })
+        if (!contact) throw new CrmError(404, "Editable contact not found.")
+        const removed = await tx.crmAccountContact.deleteMany({ where: { tenantId: actor.tenantId, contactId, accountId } })
+        if (removed.count) {
+          await audit(tx, actor, "crm.account.contact.unlinked", accountId, { contactId })
+          await audit(tx, actor, "crm.contact.account.unlinked", contactId, { accountId })
+        }
+        return { success: true }
+      })
+    },
     listContacts(input: unknown) {
       const query = crmListSchema.parse(input)
       return run(async (tx, actor) => {
