@@ -284,7 +284,110 @@ diff reports no differences. No fixtures or pipelines were added to Supabase.
 An administrator enables CRM, then a manager creates a pipeline to start using
 opportunities. Application hosting deployment has not been performed.
 
-Calendar/forecast dashboards, opportunity-specific tasks/reminders, bulk changes,
-automated stage actions, custom fields and a forecasting ledger remain later work.
-Existing enquiry follow-ups remain available through the source enquiry.
+Forecast dashboards, bulk changes, automated stage actions, custom fields and a
+forecasting ledger remain later work. Activities and calendar are covered below.
 Visual browser/drag interaction QA is explicitly deferred by the user.
+
+## Milestone 4: staff activities, customer interactions and calendar
+
+The workflow draws on [SugarCRM call management](https://support.sugarai.com/documentation/sugar_versions/25.1/sell/application_guide/calls/),
+[Salesforce call logging](https://help.salesforce.com/s/articleView?id=sf.copilot_actions_ref_log_a_call.htm&language=en_US&type=5)
+and [Odoo's complete-and-schedule-next pattern](https://www.odoo.com/documentation/14.0/applications/productivity/discuss/overview/plan_activities.html).
+It implements an operational staff workspace; it does not claim feature parity
+with those products.
+
+- **My Work** (`/crm/activities`) contains tasks, calls, meetings and manually
+  logged emails. Filter by personal/accessible work, staff, type, status,
+  due date or due reminders. Lists and histories are paginated. Activities have
+  their own assignee, priority and instructions, independent of deal ownership.
+  Contact, enquiry and opportunity pages embed the relevant activities.
+- Schedule all-day work or a timed activity, log something that already happened,
+  mark work in progress, cancel with a reason, or complete with an outcome and
+  summary. Calls capture direction, actual time and optional duration. The next
+  callback can be scheduled in the same transaction as completion; stale or
+  concurrent requests cannot create duplicate next follow-ups.
+- Staff assigned an open activity can read the customer context and previous
+  shared summaries without acquiring access to another salesperson's private
+  opportunity fields or notes. Completing/cancelling their last assignment removes
+  that derived customer access. They retain their own completed activity record.
+  Contact master-data editing still requires contact ownership or management access.
+- Completed interaction summaries are shared with staff who currently have access
+  to that customer, across the customer's activities. Preparation instructions,
+  internal activity notes and deal notes retain their narrower permissions.
+  The form labels this distinction. Completed outcomes are retained; corrections
+  can be appended as internal notes. Do not place private preparation in a shared
+  customer summary.
+- Managers can delegate and reassign activities; only the assignee or a manager
+  can change one. A deal owner can read delegated work on their deal but cannot
+  change another assignee's work unless they are a manager. Reminder snooze/dismiss
+  belongs to the assignee. Reassignment and rescheduling reset reminder dismissal.
+- **In-app reminders** appear in the CRM banner and My Work. The banner refreshes
+  every 60 seconds while visible and when the window regains focus. Snooze for
+  15 minutes, one hour or one day, or dismiss without completing the activity.
+  There is no background delivery, email, push notification or outbound calling
+  in this milestone. Email is an interaction log, not an email-sending feature.
+- **Activity calendar** (`/crm/calendar`) reuses installed Syncfusion EJ2 through
+  `components/business-calendar.tsx`: day, week, month and agenda, filtered staff
+  work, open-activity drag rescheduling and click-to-schedule/detail. The business
+  time zone and week-start settings apply; all-day dates remain dates. Timed
+  values are stored as instants. Nonexistent or ambiguous daylight-saving local
+  times are rejected rather than guessed. Calendar queries are bounded to 62
+  days and load at most 500 matching activities, with an explicit truncation
+  message directing users to narrow filters or page through My Work.
+- Opportunity Kanban cards and list rows show overdue activity counts calculated
+  by the server within the user's access scope. Timed work becomes overdue after
+  its start; all-day work becomes overdue after its business due date.
+- The API lives under `/api/crm/work`, with completion, cancellation, reminder and
+  history operations, plus `/api/crm/contacts/:id/interactions`. `work-service.ts`
+  reuses the CRM authorization, serializable transaction/retry and required audit
+  boundary. Validation, time conversion and UI are separate from persistence.
+  The shared calendar component has no CRM or salon persistence dependency.
+
+### Activity upgrade and compatibility
+
+`20260924090000_crm_activity_workspace` extends `CrmTask` so existing follow-ups
+remain the same records. It adds an immutable activity-event table, statuses,
+assignment, optional opportunity linkage, schedules, summaries and reminders.
+The migration runs transactionally and backfills existing contacts, assignees,
+completion states and timestamps. Unknown historical authors and summaries stay
+unknown. It does not invent calls or import fixtures into the configured database.
+Composite foreign keys enforce tenant and parent/customer consistency. A deal
+with activities cannot change its contact and move past interactions to another
+customer. All new tables force tenant RLS.
+
+Legacy enquiry follow-ups inherit subsequent enquiry assignment until explicitly
+edited through the new workspace. New activities keep their explicit staff
+assignment when the parent deal/enquiry is reassigned. Database invoker triggers
+preserve old application insert/completion/reassignment writes during rollout;
+they do not bypass tenant RLS. The legacy task API remains compatible for inherited
+follow-ups, and `/crm/tasks` opens My Work.
+
+The upgrade fixture in `tests/fixtures/crm-before-activities.sql` runs only in the
+guarded disposable test database. To exercise the upgrade, prepare a schema dump
+from the previous milestone, set `CRM_TEST_BASE_SQL` to that dump,
+`CRM_TEST_BASE_DATA_SQL` to the fixture, and `CRM_TEST_FROM_MIGRATION` to the activity
+migration before running `scripts/prepare-crm-test-db.cjs`. Set
+`CRM_TEST_EXPECT_UPGRADE_FIXTURE=1` when running the integration suite.
+
+Next candidates are automatic activity sequences/escalations, background reminder
+delivery, recurring meetings/attendees, email/telephony integration, external
+calendar sync and activity reporting. Those should extend this activity boundary
+with adapters and explicit delivery state, rather than add salon-specific fields
+or make opportunity stages perform accounting/inventory operations.
+
+### Verification and rollout
+
+On 2026-09-23, all 53 checks passed: 11 unit tests, 36 disposable-database
+integration tests (including a populated legacy upgrade), one authenticated HTTP
+workflow, and five read-only checks on the configured Supabase database. The
+production build, TypeScript and targeted ESLint also passed. HTTP verification
+covers staff call completion, atomic next callbacks, reminders, shared history,
+overdue opportunity counts, module access and new page responses. It does not
+exercise browser hydration, calendar drag gestures or visual layouts; that QA
+remains deferred at the user's request.
+
+The activity migration was applied with `prisma migrate deploy`. All 74 migrations
+are current, the Prisma schema diff is empty, and the deployment checks verify
+four CRM migration checksums, twelve forced-RLS tables, twenty-seven validated
+composite foreign keys and both invoker compatibility triggers. No test fixtures
+were added to Supabase. Application hosting deployment has not been performed.
