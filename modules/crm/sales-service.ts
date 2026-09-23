@@ -2,6 +2,8 @@ import type { Prisma, CrmOpportunity } from "@prisma/client"
 import { CrmError, canManageCrm, contactScope, accountScope, enquiryScope, type CrmActor } from "./policy"
 import { crmListSchema, crmNoteSchema } from "./validation"
 import { pipelineSchema, pipelineUpdateSchema, opportunitySchema, opportunityUpdateSchema, opportunityMoveSchema, opportunityListSchema } from "./sales-validation"
+import { workScope } from "./work-service"
+import { businessDate } from "./work-time"
 
 type Tx = Prisma.TransactionClient
 type Context = {
@@ -111,7 +113,14 @@ export function createSalesService({ run, audit, checkAssignee }: Context) {
         const [items, total] = await Promise.all([
           tx.crmOpportunity.findMany({ where, include, orderBy: [{ [query.sort]: query.order }, { id: "asc" }], skip: (query.page - 1) * query.pageSize, take: query.pageSize }), tx.crmOpportunity.count({ where }),
         ])
-        return page(items, total, query.page, query.pageSize)
+        const timeZone = (await tx.appSetting.findUnique({ where: { tenantId: actor.tenantId }, select: { timeZone: true } }))?.timeZone || "UTC"
+        const now = new Date()
+        const overdue = items.length ? await tx.crmTask.groupBy({ by: ["opportunityId"], where: { AND: [workScope(actor), {
+          opportunityId: { in: items.map(item => item.id) }, status: { in: ["OPEN", "IN_PROGRESS"] },
+          OR: [{ startsAt: { lt: now } }, { startsAt: null, dueOn: { lt: new Date(`${businessDate(now, timeZone)}T00:00:00Z`) } }],
+        }] }, _count: { _all: true } }) : []
+        const counts = new Map(overdue.map(item => [item.opportunityId, item._count._all]))
+        return page(items.map(item => ({ ...item, overdueActivityCount: counts.get(item.id) || 0 })), total, query.page, query.pageSize)
       })
     },
     getOpportunity(id: string) { return run((tx, actor) => find(tx, actor, id)) },
@@ -147,6 +156,7 @@ export function createSalesService({ run, audit, checkAssignee }: Context) {
       return run(async (tx, actor) => {
         const before = await find(tx, actor, id)
         if (before.enquiryId && before.contactId !== data.contactId) throw new CrmError(409, "A converted opportunity keeps the enquiry's contact.")
+        if (before.contactId !== data.contactId && await tx.crmTask.count({ where: { tenantId: actor.tenantId, opportunityId: id } })) throw new CrmError(409, "This opportunity has activities. Keep its contact to preserve interaction history.")
         await checkAssignee(tx, actor, data.assignedUserId)
         await relations(tx, actor, data.contactId, data.accountId, before)
         const changedStage = data.stageId !== before.stageId

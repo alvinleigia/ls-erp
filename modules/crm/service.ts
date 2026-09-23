@@ -1,6 +1,7 @@
 import type { Prisma, PrismaClient, Role } from "@prisma/client"
 import { recordDomainAuditEvent } from "@/lib/domain-audit"
 import { createSalesService } from "./sales-service"
+import { createWorkService } from "./work-service"
 import { CrmError, canManageCrm, canUseCrm, contactScope, accountScope, enquiryScope, type CrmActor } from "./policy"
 import {
   crmContactSchema, crmContactUpdateSchema, crmEnquiryCreateSchema,
@@ -43,6 +44,7 @@ export function createCrmService(db: PrismaClient, identity: Pick<CrmActor, "ten
         if (code === "P2034" && attempt < 2) continue
         if (code === "P2002") {
           const target = String((error as { meta?: { target?: unknown } }).meta?.target || "")
+          if (target.includes("followUpOfId")) throw new CrmError(409, "A next follow-up was already scheduled. Refresh to see it.")
           throw new CrmError(409, target.includes("enquiryId") ? "This enquiry already has an opportunity. Refresh to open it." : "A contact with this email or phone already exists in this business. Ask your manager if you cannot find it.")
         }
         if (code === "P2034") throw new CrmError(409, "This record changed. Refresh and try again.")
@@ -54,7 +56,7 @@ export function createCrmService(db: PrismaClient, identity: Pick<CrmActor, "ten
   async function audit(tx: Tx, actor: CrmActor, event: string, entityId: string, before?: Prisma.InputJsonValue, after?: Prisma.InputJsonValue) {
     await recordDomainAuditEvent(tx, {
       tenantId: actor.tenantId, actorUserId: actor.userId, actorRole: actor.role as Role,
-      requestId: actor.requestId, event, entityType: event.startsWith("crm.opportunity") ? "CrmOpportunity" : event.startsWith("crm.pipeline") ? "CrmPipeline" : event.startsWith("crm.account") ? "CrmAccount" : event.startsWith("crm.contact") ? "CrmContact" : "CrmEnquiry",
+      requestId: actor.requestId, event, entityType: event.startsWith("crm.work") ? "CrmTask" : event.startsWith("crm.opportunity") ? "CrmOpportunity" : event.startsWith("crm.pipeline") ? "CrmPipeline" : event.startsWith("crm.account") ? "CrmAccount" : event.startsWith("crm.contact") ? "CrmContact" : "CrmEnquiry",
       entityId, before, after,
     })
   }
@@ -80,6 +82,7 @@ export function createCrmService(db: PrismaClient, identity: Pick<CrmActor, "ten
 
   return {
     ...createSalesService({ run, audit, checkAssignee }),
+    ...createWorkService({ run, audit, checkAssignee }),
     listAccounts(input: unknown) {
       const query = crmListSchema.parse(input)
       return run(async (tx, actor) => {
@@ -260,6 +263,12 @@ export function createCrmService(db: PrismaClient, identity: Pick<CrmActor, "ten
         await checkAssignee(tx, actor, data.assignedUserId)
         const changed = await tx.crmEnquiry.updateMany({ where: { ...enquiryScope(actor), id, version }, data: { ...data, version: { increment: 1 } } })
         if (!changed.count) throw new CrmError(409, "This enquiry changed. Refresh before saving.")
+        if (before.assignedUserId !== data.assignedUserId) {
+          const inherited = await tx.crmTask.findMany({ where: { tenantId: actor.tenantId, enquiryId: id, followParentAssignment: true, status: { in: ["OPEN", "IN_PROGRESS"] } }, select: { id: true } })
+          // The database bridge transfers inherited assignments for old and new clients.
+          // New clients additionally record who performed the handoff in activity history.
+          if (inherited.length) await tx.crmTaskEvent.createMany({ data: inherited.map(item => ({ tenantId: actor.tenantId, taskId: item.id, actorUserId: actor.userId, event: "crm.work.assignment.inherited", message: "Activity reassigned with its enquiry." })) })
+        }
         await activity(tx, actor, id, "updated", `Enquiry updated. Status: ${data.status}.${data.assignedUserId !== before.assignedUserId ? " Salesperson changed." : ""}`)
         await audit(tx, actor, "crm.enquiry.updated", id, { title: before.title, source: before.source, requirements: before.requirements, status: before.status, assignedUserId: before.assignedUserId, outcome: before.outcome }, data)
         return tx.crmEnquiry.findFirstOrThrow({ where: { tenantId: actor.tenantId, id }, include: enquiryInclude })
@@ -272,7 +281,7 @@ export function createCrmService(db: PrismaClient, identity: Pick<CrmActor, "ten
         const settings = await tx.appSetting.findUnique({ where: { tenantId: actor.tenantId }, select: { timeZone: true } })
         const today = new Intl.DateTimeFormat("en-CA", { timeZone: settings?.timeZone || "UTC", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date())
         const where: Prisma.CrmTaskWhereInput = {
-          tenantId: actor.tenantId, enquiry: enquiryScope(actor), ...(enquiryId ? { enquiryId } : {}),
+          tenantId: actor.tenantId, followParentAssignment: true, status: { not: "CANCELLED" }, enquiry: enquiryScope(actor), ...(enquiryId ? { enquiryId } : {}),
           ...(query.due === "completed" ? { completedAt: { not: null } } : { completedAt: null }),
           ...(query.due === "overdue" ? { dueOn: { lt: new Date(`${today}T00:00:00Z`) } } : {}),
           ...(query.q ? { title: { contains: query.q, mode: "insensitive" } } : {}),
@@ -289,7 +298,7 @@ export function createCrmService(db: PrismaClient, identity: Pick<CrmActor, "ten
       return run(async (tx, actor) => {
         const enquiry = await findEnquiry(tx, actor, enquiryId)
         if (enquiry.status === "CLOSED") throw new CrmError(409, "Reopen the enquiry before adding follow-ups.")
-        const task = await tx.crmTask.create({ data: { ...data, dueOn: new Date(`${data.dueOn}T00:00:00Z`), tenantId: actor.tenantId, enquiryId } })
+        const task = await tx.crmTask.create({ data: { ...data, dueOn: new Date(`${data.dueOn}T00:00:00Z`), tenantId: actor.tenantId, enquiryId, contactId: enquiry.contactId, assignedUserId: enquiry.assignedUserId, createdByUserId: actor.userId, followParentAssignment: true } })
         await activity(tx, actor, enquiryId, "task.created", `Follow-up: ${data.title} (due ${data.dueOn}).`)
         await audit(tx, actor, "crm.task.created", enquiryId, undefined, { taskId: task.id, ...data })
         return task
@@ -297,10 +306,11 @@ export function createCrmService(db: PrismaClient, identity: Pick<CrmActor, "ten
     },
     completeTask(id: string) {
       return run(async (tx, actor) => {
-        const task = await tx.crmTask.findFirst({ where: { id, tenantId: actor.tenantId, enquiry: enquiryScope(actor) } })
-        if (!task) throw new CrmError(404, "Follow-up not found.")
+        const task = await tx.crmTask.findFirst({ where: { id, tenantId: actor.tenantId, followParentAssignment: true, enquiry: enquiryScope(actor) } })
+        if (!task || !task.enquiryId) throw new CrmError(404, "Follow-up not found.")
         if (task.completedAt) return task
-        const updated = await tx.crmTask.update({ where: { id: task.id, tenantId: actor.tenantId }, data: { completedAt: new Date() } })
+        if (task.status === "CANCELLED") throw new CrmError(409, "This follow-up was cancelled.")
+        const updated = await tx.crmTask.update({ where: { id: task.id, tenantId: actor.tenantId }, data: { status: "COMPLETED", completedAt: new Date(), completedByUserId: actor.userId, version: { increment: 1 } } })
         await activity(tx, actor, task.enquiryId, "task.completed", `Completed: ${task.title}.`)
         await audit(tx, actor, "crm.task.completed", task.enquiryId, undefined, { taskId: task.id })
         return updated

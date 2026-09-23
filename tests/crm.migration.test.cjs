@@ -11,8 +11,8 @@ if (process.env.CRM_VERIFY_CONFIGURED_DATABASE !== "1" || !process.env.DATABASE_
   throw new Error("Set CRM_VERIFY_CONFIGURED_DATABASE=1 and load DATABASE_URL to run read-only deployment checks.")
 }
 const db = new Client({ connectionString: process.env.DATABASE_URL, connectionTimeoutMillis: 15000 })
-const migrationNames = ["20260923090000_crm_foundation", "20260923120000_crm_business_accounts", "20260923160000_crm_sales_pipelines"]
-const tables = ["TenantModule", "CrmContact", "CrmEnquiry", "CrmTask", "CrmActivity", "CrmAccount", "CrmAccountContact", "CrmPipeline", "CrmStage", "CrmOpportunity", "CrmOpportunityActivity"]
+const migrationNames = ["20260923090000_crm_foundation", "20260923120000_crm_business_accounts", "20260923160000_crm_sales_pipelines", "20260924090000_crm_activity_workspace"]
+const tables = ["TenantModule", "CrmContact", "CrmEnquiry", "CrmTask", "CrmActivity", "CrmAccount", "CrmAccountContact", "CrmPipeline", "CrmStage", "CrmOpportunity", "CrmOpportunityActivity", "CrmTaskEvent"]
 
 before(async () => {
   await db.connect()
@@ -49,9 +49,9 @@ test("all CRM tables force RLS and use tenant checks on reads and writes", async
   }
 })
 
-test("tenant-safe relationships are backed by nineteen validated composite foreign keys", async () => {
+test("tenant-safe relationships are backed by twenty-seven validated composite foreign keys", async () => {
   const constraints = await db.query("SELECT c.conname, c.convalidated FROM pg_constraint c JOIN pg_class t ON t.oid=c.conrelid WHERE t.relnamespace='public'::regnamespace AND t.relname=ANY($1::text[]) AND c.contype='f' AND cardinality(c.conkey) IN (2,3) AND cardinality(c.confkey)=cardinality(c.conkey)", [tables])
-  assert.equal(constraints.rowCount, 19)
+  assert.equal(constraints.rowCount, 27)
   for (const row of constraints.rows) assert.equal(row.convalidated, true, row.conname)
 })
 
@@ -64,4 +64,10 @@ test("the runtime database role has no RLS bypass and unscoped queries return no
     const count = await db.query(`SELECT count(*)::int AS count FROM "${table}"`)
     assert.equal(count.rows[0].count, 0, table)
   }
+})
+
+test("activity rollout bridges are enabled and run with caller permissions", async () => {
+  const triggers = await db.query("SELECT t.tgname, t.tgenabled, p.prosecdef FROM pg_trigger t JOIN pg_proc p ON p.oid=t.tgfoid WHERE t.tgrelid IN ('public.\"CrmTask\"'::regclass, 'public.\"CrmEnquiry\"'::regclass) AND t.tgname=ANY($1::text[])", [["crm_task_legacy_bridge", "crm_inherit_enquiry_assignment"]])
+  assert.equal(triggers.rowCount, 2)
+  for (const trigger of triggers.rows) { assert.equal(trigger.tgenabled, "O"); assert.equal(trigger.prosecdef, false) }
 })

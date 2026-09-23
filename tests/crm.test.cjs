@@ -6,6 +6,23 @@ const { contactScope, enquiryScope, canUseCrm } = require("../modules/crm/policy
 const pricing = require("../lib/appointments/order-pricing.ts")
 const { crmAccountSchema, crmAccountLinkSchema } = require("../modules/crm/validation.ts")
 const { pipelineSchema, opportunitySchema, opportunityMoveSchema } = require("../modules/crm/sales-validation.ts")
+const { workCreateSchema, workCompleteSchema, workListSchema } = require("../modules/crm/work-validation.ts")
+const { wallTimeToInstant, wallTime } = require("../modules/crm/work-time.ts")
+
+test("activity schedules validate timed windows, call direction, reminders and strict tenancy", () => {
+  const data = { title: "Call", type: "CALL", assignedUserId: "u", contactId: "c", dueOn: "2026-10-01", callDirection: "OUTBOUND", startsAt: "2026-10-01T10:00:00Z", endsAt: "2026-10-01T10:30:00Z", reminderAt: "2026-10-01T09:45:00Z" }
+  assert.equal(workCreateSchema.safeParse(data).success, true)
+  for (const extra of [{ callDirection: null }, { endsAt: null }, { endsAt: data.startsAt }, { endsAt: "2026-10-03T10:00:00Z" }, { reminderAt: data.endsAt }, { tenantId: "other" }, { enquiryId: "e", opportunityId: "o" }]) assert.equal(workCreateSchema.safeParse({ ...data, ...extra }).success, false)
+  assert.equal(workCompleteSchema.safeParse({ version: 1, summary: " ", outcome: "DONE", occurredAt: new Date().toISOString() }).success, false)
+  assert.equal(workListSchema.safeParse({ from: "2026-01-01", to: "2026-12-31" }).success, false)
+})
+test("calendar conversions respect business time zone and reject daylight-saving gaps and ambiguous hours", () => {
+  assert.equal(wallTimeToInstant("2026-10-01T09:30", "Asia/Kolkata"), "2026-10-01T04:00:00.000Z")
+  assert.equal(wallTime("2026-10-01T04:00:00Z", "Asia/Kolkata"), "2026-10-01T09:30")
+  assert.throws(() => wallTimeToInstant("2026-03-08T02:30", "America/New_York"), /does not exist/)
+  assert.throws(() => wallTimeToInstant("2026-11-01T01:30", "America/New_York"), /occurs twice/)
+  assert.equal(wallTimeToInstant("2026-11-01T03:30", "America/New_York"), "2026-11-01T08:30:00.000Z")
+})
 
 test("opportunity money formatting respects business settings without losing precision", () => {
   const { formatDecimalCurrency } = require("../lib/formatting.ts")

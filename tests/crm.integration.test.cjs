@@ -45,6 +45,9 @@ const pipelineUpdate = pipeline => ({ name: pipeline.name, archived: pipeline.ar
 })
 const dealInput = (pipeline, contact, owner) => ({ title: "Test opportunity", pipelineId: pipeline.id, stageId: pipeline.stages[0].id, contactId: contact.id, assignedUserId: owner.id, amount: "12345.6789", currency: "INR", expectedCloseOn: "2026-12-01" })
 const dealUpdate = deal => ({ title: deal.title, pipelineId: deal.pipelineId, stageId: deal.stageId, contactId: deal.contactId, accountId: deal.accountId || "", assignedUserId: deal.assignedUserId, amount: String(deal.amount), currency: deal.currency, expectedCloseOn: deal.expectedCloseOn.toISOString().slice(0, 10), probability: deal.probability, lossReason: deal.lossReason || "", description: deal.description || "", version: deal.version })
+const workInput = (contactId, assignedUserId, extra = {}) => ({ title: "Customer callback", type: "CALL", callDirection: "OUTBOUND", contactId, assignedUserId, dueOn: "2026-10-01", ...extra })
+const workUpdate = record => ({ title: record.title, type: record.type, callDirection: record.callDirection, assignedUserId: record.assignedUserId, priority: record.priority, description: record.description || "", dueOn: record.dueOn.toISOString().slice(0, 10), startsAt: record.startsAt?.toISOString() || null, endsAt: record.endsAt?.toISOString() || null, reminderAt: record.reminderAt?.toISOString() || null, status: record.status, version: record.version })
+const completionInput = (record, extra = {}) => ({ version: record.version, outcome: "CONNECTED", summary: "Discussed requirements; customer asked for a callback.", occurredAt: new Date(Date.now() - 60000).toISOString(), durationMinutes: 5, ...extra })
 
 before(async () => {
   await root.tenant.createMany({ data: [{ id: a, slug: a, name: "CRM test A" }, { id: b, slug: b, name: "CRM test B" }] })
@@ -64,6 +67,153 @@ before(async () => {
   second = createCrmService(dbB, { tenantId: b, userId: adminB.id })
 })
 after(async () => { await Promise.all(clients.map(db => db.$disconnect())) })
+
+test("activity upgrade preserves existing follow-up IDs, dates, completion and inherited ownership", { skip: process.env.CRM_TEST_EXPECT_UPGRADE_FIXTURE !== "1" }, async () => {
+  const rows = await root.crmTask.findMany({ where: { tenantId: "crm_upgrade" }, orderBy: { id: "asc" } })
+  assert.deepEqual(rows.map(row => row.id), ["crm_upgrade_done", "crm_upgrade_open"])
+  assert.equal(rows[0].status, "COMPLETED"); assert.equal(rows[0].completedAt.toISOString(), "2026-09-21T10:00:00.000Z")
+  assert.equal(rows[1].status, "OPEN"); assert.equal(rows[1].dueOn.toISOString().slice(0, 10), "2026-09-25")
+  for (const row of rows) { assert.equal(row.contactId, "crm_upgrade_contact"); assert.equal(row.assignedUserId, "crm_upgrade_user"); assert.equal(row.followParentAssignment, true); assert.equal(row.createdByUserId, null) }
+})
+
+test("delegated activities grant contact context without exposing private opportunity fields", async () => {
+  const contact = await manager.createContact({ name: "Delegated customer" })
+  const pipeline = await manager.createPipeline(pipelineInput("Delegation sales"))
+  const deal = await manager.createOpportunity(dealInput(pipeline, contact, adminA))
+  const task = await manager.createWork(workInput(contact.id, staffA.id, { opportunityId: deal.id, description: "Ask about requirements" }))
+  const visible = await staff.getWork(task.id)
+  assert.equal(visible.canEdit, true); assert.equal(visible.parent, null); assert.equal(visible.opportunityId, null)
+  assert.equal((await staff.getContact(contact.id)).canEdit, false)
+  await assert.rejects(staff.getOpportunity(deal.id), expectStatus(404))
+  await assert.rejects(other.getWork(task.id), expectStatus(404))
+  await assert.rejects(staff.updateContact(contact.id, { name: "Forbidden", version: 1, archived: false }), expectStatus(404))
+  await manager.updateWork(task.id, { ...workUpdate(task), assignedUserId: otherA.id })
+  await assert.rejects(staff.getWork(task.id), expectStatus(404))
+  await assert.rejects(staff.getContact(contact.id), expectStatus(404))
+  assert.equal((await other.getWork(task.id)).canEdit, true)
+})
+
+test("legacy application writes remain valid during the activity rollout", async () => {
+  const contact = await manager.createContact({ name: "Rolling upgrade customer" })
+  const enquiry = await manager.createEnquiry({ ...enquiryInput(contact.id, staffA.id), title: "Rolling upgrade enquiry" })
+  const id = `old_client_${suffix}`
+  await dbA.$executeRawUnsafe('INSERT INTO "CrmTask" (id,"tenantId","enquiryId",title,"dueOn") VALUES ($1,$2,$3,$4,$5::date)', id, a, enquiry.id, "Old client task", "2026-10-01")
+  const task = await root.crmTask.findUniqueOrThrow({ where: { id } })
+  assert.equal(task.contactId, contact.id); assert.equal(task.assignedUserId, staffA.id); assert.equal(task.followParentAssignment, true)
+  await dbA.$executeRawUnsafe('UPDATE "CrmEnquiry" SET "assignedUserId"=$1 WHERE id=$2 AND "tenantId"=$3', otherA.id, enquiry.id, a)
+  assert.equal((await other.getWork(id)).assignedUserId, otherA.id)
+  await dbA.$executeRawUnsafe('UPDATE "CrmTask" SET "completedAt"=NOW() WHERE id=$1 AND "tenantId"=$2', id, a)
+  assert.equal((await other.getWork(id)).status, "COMPLETED")
+})
+
+test("contact interaction history shares summaries while keeping private instructions and deal notes scoped", async () => {
+  const contact = await manager.createContact({ name: "Interaction handoff" })
+  const pipeline = await manager.createPipeline(pipelineInput("Private history"))
+  const deal = await manager.createOpportunity(dealInput(pipeline, contact, adminA))
+  await manager.addOpportunityNote(deal.id, { message: "Private negotiation note" })
+  const past = await manager.createWork(workInput(contact.id, adminA.id, { opportunityId: deal.id, description: "Private instructions", completion: { summary: "Customer prefers afternoon calls.", outcome: "NO_ANSWER", occurredAt: new Date().toISOString() } }))
+  const task = await manager.createWork(workInput(contact.id, staffA.id))
+  const feed = await staff.listContactInteractions(contact.id, {})
+  assert.equal(feed.total, 1); assert.equal(feed.items[0].summary, "Customer prefers afternoon calls.")
+  assert.equal(feed.items[0].description, undefined); assert.equal(feed.items[0].opportunityId, undefined)
+  await assert.rejects(staff.getWork(past.id), expectStatus(404))
+  await assert.rejects(staff.listOpportunityActivity(deal.id, {}), expectStatus(404))
+  await staff.completeWork(task.id, completionInput(task))
+  await assert.rejects(staff.listContactInteractions(contact.id, {}), expectStatus(404))
+  assert.equal((await staff.getWork(task.id)).summary, completionInput(task).summary)
+})
+
+test("completion and scheduling the next callback are atomic and concurrent requests create one follow-up", async () => {
+  const contact = await manager.createContact({ name: "Next callback buyer" })
+  const task = await manager.createWork(workInput(contact.id, staffA.id))
+  const followUp = { title: "Try again tomorrow", type: "CALL", callDirection: "OUTBOUND", assignedUserId: staffA.id, dueOn: "2026-10-02" }
+  const results = await Promise.allSettled([staff.completeWork(task.id, completionInput(task, { outcome: "NO_ANSWER", followUp })), staff.completeWork(task.id, completionInput(task, { outcome: "NO_ANSWER", followUp }))])
+  assert.equal(results.filter(result => result.status === "fulfilled").length, 1)
+  assert.equal(await root.crmTask.count({ where: { tenantId: a, followUpOfId: task.id } }), 1)
+  assert.equal((await staff.listWork({ contactId: contact.id })).total, 1)
+  assert.equal((await staff.listContactInteractions(contact.id, {})).items[0].outcome, "NO_ANSWER")
+  await assert.rejects(staff.completeTask(task.id), expectStatus(404))
+  await assert.rejects(staff.updateWork(task.id, workUpdate(task)), expectStatus(409))
+})
+
+test("in-app reminders support snooze, dismiss, reschedule reset and assignee-only actions", async () => {
+  const contact = await manager.createContact({ name: "Reminder contact" })
+  const task = await manager.createWork(workInput(contact.id, staffA.id, { reminderAt: new Date(Date.now() - 60000).toISOString() }))
+  assert.equal((await staff.listWork({ due: "reminders", contactId: contact.id })).total, 1)
+  await assert.rejects(manager.updateWorkReminder(task.id, { version: 1, action: "DISMISS" }), expectStatus(403))
+  await staff.updateWorkReminder(task.id, { version: 1, action: "SNOOZE", minutes: 15 })
+  assert.equal((await staff.listWork({ due: "reminders", contactId: contact.id })).total, 0)
+  const snoozed = await staff.getWork(task.id)
+  await staff.updateWork(task.id, { ...workUpdate(snoozed), dueOn: "2026-10-03" })
+  assert.equal((await staff.listWork({ due: "reminders", contactId: contact.id })).total, 1)
+  const reset = await staff.getWork(task.id)
+  await staff.updateWorkReminder(task.id, { version: reset.version, action: "DISMISS" })
+  assert.equal((await staff.listWork({ due: "reminders", contactId: contact.id })).total, 0)
+  assert.equal((await staff.listWork({ contactId: contact.id })).total, 1)
+})
+
+test("calendar date ranges and business dates correctly include timed and all-day work", async () => {
+  const contact = await manager.createContact({ name: "Calendar contact" })
+  await manager.createWork(workInput(contact.id, staffA.id, { startsAt: "2026-10-01T18:00:00Z", endsAt: "2026-10-01T20:00:00Z" }))
+  await manager.createWork(workInput(contact.id, staffA.id, { dueOn: "2026-10-02" }))
+  const nextDay = await staff.listWork({ contactId: contact.id, from: "2026-10-02", to: "2026-10-03" })
+  assert.equal(nextDay.total, 2); assert.equal(nextDay.timeZone, "Asia/Kolkata")
+  await assert.rejects(manager.createWork(workInput(contact.id, staffA.id, { startsAt: "2026-10-01T20:00:00Z", endsAt: "2026-10-01T21:00:00Z" })), expectStatus(400))
+})
+
+test("cancellation retains history, removes reminders, and requires editable ownership", async () => {
+  const contact = await staff.createContact({ name: "Cancel contact" })
+  const task = await manager.createWork(workInput(contact.id, otherA.id, { reminderAt: new Date().toISOString() }))
+  assert.equal((await staff.getWork(task.id)).canEdit, false)
+  await assert.rejects(staff.cancelWork(task.id, { version: 1, reason: "Unauthorized" }), expectStatus(403))
+  await other.cancelWork(task.id, { version: 1, reason: "Customer cancelled" })
+  assert.equal((await other.listWork({ contactId: contact.id })).total, 0)
+  assert.equal((await other.listWork({ contactId: contact.id, state: "cancelled" })).total, 1)
+  await other.addWorkNote(task.id, { message: "Will reconnect next month." })
+  assert.equal((await other.listWorkHistory(task.id, {})).total, 3)
+})
+
+test("activity audit failures roll back completion, summary and its next follow-up", async () => {
+  const contact = await manager.createContact({ name: "Work rollback" })
+  const task = await manager.createWork(workInput(contact.id, staffA.id))
+  await root.$executeRawUnsafe('ALTER TABLE "AuditLog" ADD CONSTRAINT "crm_test_reject_work_audit" CHECK (event <> \'crm.work.completed\') NOT VALID')
+  try {
+    await assert.rejects(staff.completeWork(task.id, completionInput(task, { followUp: { title: "Next", type: "TASK", assignedUserId: staffA.id, dueOn: "2026-10-02" } })))
+    assert.equal((await staff.getWork(task.id)).status, "OPEN")
+    assert.equal(await root.crmTask.count({ where: { followUpOfId: task.id } }), 0)
+    assert.equal((await staff.listContactInteractions(contact.id, {})).total, 0)
+    assert.equal((await staff.listWorkHistory(task.id, {})).total, 1)
+  } finally { await root.$executeRawUnsafe('ALTER TABLE "AuditLog" DROP CONSTRAINT "crm_test_reject_work_audit"') }
+})
+
+test("activity relations prevent mismatched contacts, foreign assignees and cross-tenant raw writes", async () => {
+  const contact = await manager.createContact({ name: "Work FK contact" })
+  const wrong = await manager.createContact({ name: "Wrong customer" })
+  const foreign = await second.createContact({ name: "Foreign work customer" })
+  const pipeline = await manager.createPipeline(pipelineInput("Work FK"))
+  const deal = await manager.createOpportunity(dealInput(pipeline, contact, adminA))
+  const task = await manager.createWork(workInput(contact.id, staffA.id, { opportunityId: deal.id }))
+  await assert.rejects(manager.createWork(workInput(wrong.id, staffA.id, { opportunityId: deal.id })), expectStatus(404))
+  await assert.rejects(manager.createWork(workInput(contact.id, adminB.id)), expectStatus(400))
+  await assert.rejects(root.crmTask.update({ where: { id: task.id }, data: { contactId: wrong.id } }))
+  await assert.rejects(root.crmTask.update({ where: { id: task.id }, data: { assignedUserId: adminB.id } }))
+  await assert.rejects(dbA.crmTask.create({ data: { title: "Bad", tenantId: b, contactId: foreign.id, assignedUserId: adminB.id, dueOn: new Date() } }))
+  await assert.rejects(root.crmTaskEvent.create({ data: { tenantId: b, taskId: task.id, actorUserId: adminB.id, event: "Bad", message: "Bad" } }))
+  assert.equal(await unscoped.crmTask.count(), 0); assert.equal(await unscoped.crmTaskEvent.count(), 0)
+  await assert.rejects(manager.updateOpportunity(deal.id, { ...dealUpdate(deal), contactId: wrong.id }), expectStatus(409))
+  await assert.rejects(root.crmOpportunity.update({ where: { id: deal.id }, data: { contactId: wrong.id } }))
+})
+
+test("legacy follow-ups retain inherited ownership while explicit staff activities keep their assignee", async () => {
+  const contact = await manager.createContact({ name: "Inherited follow-up" })
+  const enquiry = await manager.createEnquiry({ ...enquiryInput(contact.id, staffA.id), title: "Inherited ownership enquiry" })
+  const legacy = await staff.createTask(enquiry.id, { title: "Legacy task", dueOn: "2026-10-01" })
+  const explicit = await manager.createWork(workInput(contact.id, staffA.id, { enquiryId: enquiry.id }))
+  await manager.updateEnquiry(enquiry.id, { title: enquiry.title, assignedUserId: otherA.id, version: 1, status: "NEW" })
+  assert.equal((await other.getWork(legacy.id)).assignedUserId, otherA.id)
+  assert.equal((await staff.getWork(explicit.id)).assignedUserId, staffA.id)
+  await assert.rejects(other.completeWork(explicit.id, completionInput(explicit)), expectStatus(403))
+})
 
 test("pipelines are configurable, tenant scoped and manager controlled with versioned updates", async () => {
   await assert.rejects(staff.createPipeline(pipelineInput("Unauthorized")), expectStatus(403))

@@ -33,6 +33,7 @@ export function contactScope(actor: CrmActor) {
         { ownerUserId: actor.userId },
         { enquiries: { some: { tenantId: actor.tenantId, assignedUserId: actor.userId } } },
         { opportunities: { some: { tenantId: actor.tenantId, assignedUserId: actor.userId } } },
+        { workItems: { some: { tenantId: actor.tenantId, assignedUserId: actor.userId, status: { in: ["OPEN", "IN_PROGRESS"] as ("OPEN" | "IN_PROGRESS")[] } } } },
       ],
     } : {}),
   }

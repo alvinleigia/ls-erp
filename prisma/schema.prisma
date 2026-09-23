@@ -22,6 +22,20 @@ enum CrmStageKind {
   LOST
 }
 
+enum CrmWorkType {
+  TASK
+  CALL
+  MEETING
+  EMAIL
+}
+
+enum CrmWorkStatus {
+  OPEN
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
 model CrmPipeline {
   id        String @id @default(cuid())
   tenantId  String
@@ -84,9 +98,11 @@ model CrmOpportunity {
   enquiry        CrmEnquiry? @relation(fields: [tenantId, enquiryId], references: [tenantId, id], onDelete: Restrict)
   assignee       User @relation(fields: [tenantId, assignedUserId], references: [tenantId, id], onDelete: Restrict)
   activities     CrmOpportunityActivity[]
+  workItems      CrmTask[]
 
   @@unique([tenantId, id])
   @@unique([tenantId, enquiryId])
+  @@unique([tenantId, id, contactId])
   @@index([tenantId, pipelineId, stageId, updatedAt])
   @@index([tenantId, assignedUserId, expectedCloseOn])
   @@index([tenantId, contactId])
@@ -136,6 +152,7 @@ model CrmContact {
   enquiries    CrmEnquiry[]
   accounts     CrmAccountContact[]
   opportunities CrmOpportunity[]
+  workItems    CrmTask[]
 
   @@unique([tenantId, id])
   @@unique([tenantId, email])
@@ -202,6 +219,7 @@ model CrmEnquiry {
   opportunities  CrmOpportunity[]
 
   @@unique([tenantId, id])
+  @@unique([tenantId, id, contactId])
   @@index([tenantId, assignedUserId, status])
   @@index([tenantId, contactId])
   @@index([tenantId, updatedAt])
@@ -210,16 +228,69 @@ model CrmEnquiry {
 model CrmTask {
   id          String @id @default(cuid())
   tenantId    String
-  enquiryId   String
+  enquiryId   String?
+  opportunityId String?
+  contactId   String
+  assignedUserId String
+  createdByUserId String?
+  completedByUserId String?
+  followParentAssignment Boolean @default(false)
+  followUpOfId String?
+  type        CrmWorkType @default(TASK)
+  status      CrmWorkStatus @default(OPEN)
+  priority    Int @default(2)
+  version     Int @default(1)
   title       String
+  description String?
   dueOn       DateTime @db.Date
+  startsAt    DateTime? @db.Timestamptz(3)
+  endsAt      DateTime? @db.Timestamptz(3)
+  reminderAt  DateTime? @db.Timestamptz(3)
+  snoozedUntil DateTime? @db.Timestamptz(3)
+  reminderDismissedAt DateTime? @db.Timestamptz(3)
+  callDirection String?
+  outcome     String?
+  summary     String?
+  occurredAt  DateTime? @db.Timestamptz(3)
+  durationMinutes Int?
+  cancellationReason String?
   completedAt DateTime?
   createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
   tenant      Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  enquiry     CrmEnquiry @relation(fields: [tenantId, enquiryId], references: [tenantId, id], onDelete: Restrict)
+  enquiry     CrmEnquiry? @relation(fields: [tenantId, enquiryId, contactId], references: [tenantId, id, contactId], onDelete: Restrict, onUpdate: Restrict)
+  opportunity CrmOpportunity? @relation(fields: [tenantId, opportunityId, contactId], references: [tenantId, id, contactId], onDelete: Restrict, onUpdate: Restrict)
+  contact     CrmContact @relation(fields: [tenantId, contactId], references: [tenantId, id], onDelete: Restrict)
+  assignee    User @relation("CrmWorkAssignee", fields: [tenantId, assignedUserId], references: [tenantId, id], onDelete: Restrict)
+  creator     User? @relation("CrmWorkCreator", fields: [tenantId, createdByUserId], references: [tenantId, id], onDelete: Restrict)
+  completedBy User? @relation("CrmWorkCompletedBy", fields: [tenantId, completedByUserId], references: [tenantId, id], onDelete: Restrict)
+  previous    CrmTask? @relation("CrmWorkFollowUp", fields: [tenantId, followUpOfId], references: [tenantId, id], onDelete: Restrict)
+  next        CrmTask[] @relation("CrmWorkFollowUp")
+  events      CrmTaskEvent[]
 
+  @@unique([tenantId, id])
+  @@unique([tenantId, followUpOfId])
   @@index([tenantId, enquiryId])
   @@index([tenantId, completedAt, dueOn])
+  @@index([tenantId, opportunityId, status, dueOn])
+  @@index([tenantId, assignedUserId, status, dueOn])
+  @@index([tenantId, contactId, occurredAt])
+  @@index([tenantId, assignedUserId, reminderAt])
+}
+
+model CrmTaskEvent {
+  id          String @id @default(cuid())
+  tenantId    String
+  taskId      String
+  actorUserId String
+  event       String
+  message     String
+  createdAt   DateTime @default(now())
+  tenant      Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  task        CrmTask @relation(fields: [tenantId, taskId], references: [tenantId, id], onDelete: Restrict)
+  actor       User @relation(fields: [tenantId, actorUserId], references: [tenantId, id], onDelete: Restrict)
+
+  @@index([tenantId, taskId, createdAt])
 }
 
 model CrmActivity {
@@ -490,6 +561,10 @@ model User {
   crmLegacyContacts     CrmContact[] @relation("CrmLegacyUser")
   crmEnquiries          CrmEnquiry[]
   crmActivities         CrmActivity[]
+  crmAssignedWork       CrmTask[] @relation("CrmWorkAssignee")
+  crmCreatedWork        CrmTask[] @relation("CrmWorkCreator")
+  crmCompletedWork      CrmTask[] @relation("CrmWorkCompletedBy")
+  crmWorkEvents         CrmTaskEvent[]
   passwordResetTokens   PasswordResetToken[]
   eligibleServices      StaffServiceEligibility[]
   staffProfile          StaffProfile?
@@ -560,6 +635,7 @@ model Tenant {
   crmOpportunityActivities CrmOpportunityActivity[]
   crmEnquiries   CrmEnquiry[]
   crmTasks       CrmTask[]
+  crmWorkEvents  CrmTaskEvent[]
   crmActivities  CrmActivity[]
   users          User[]
   invitations    Invitation[]
