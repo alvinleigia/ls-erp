@@ -11,6 +11,19 @@ const { wallTimeToInstant, wallTime } = require("../modules/crm/work-time.ts")
 const { startOfBusinessDate } = require("../modules/crm/work-time.ts")
 const { activityReportSchema, activityReportPageSchema } = require("../modules/crm/report-validation.ts")
 const { activityPlanSchema, applyPlanSchema } = require("../modules/crm/plan-validation.ts")
+const { followUpRuleSchema } = require("../modules/crm/follow-up-validation.ts")
+
+test("follow-up rules validate matching outcomes, bounded chains and server-owned origins", () => {
+  const rule = { name: "Retry", sourceType: "CALL", outcome: "NO_ANSWER", nextStep: { title: "Retry call", type: "CALL", callDirection: "OUTBOUND", dayOffset: 1 } }
+  assert.equal(followUpRuleSchema.parse(rule).maxDepth, 3)
+  for (const extra of [{ outcome: "DONE" }, { maxDepth: 0 }, { maxDepth: 11 }, { tenantId: "other" }, { version: 1 }, { nextStep: { ...rule.nextStep, dayOffset: 366 } }]) assert.equal(followUpRuleSchema.safeParse({ ...rule, ...extra }).success, false)
+  const work = { title: "Call", type: "CALL", callDirection: "OUTBOUND", contactId: "c", assignedUserId: "u", dueOn: "2026-10-01" }
+  for (const extra of [{ automationDepth: 0 }, { followUpRuleId: "r" }, { followUpRuleVersion: 1 }]) assert.equal(workCreateSchema.safeParse({ ...work, ...extra }).success, false)
+  const completion = { version: 1, summary: "No answer", outcome: "NO_ANSWER", occurredAt: new Date().toISOString() }
+  assert.equal(workCompleteSchema.safeParse({ ...completion, ruleDecision: { id: "r", version: 1, action: "APPLY", dueOn: "2026-10-02", reminderAt: null } }).success, true)
+  assert.equal(workCompleteSchema.safeParse({ ...completion, ruleDecision: { id: "r", version: 0, action: "APPLY" } }).success, false)
+  assert.equal(workCreateSchema.safeParse({ ...work, completion: { ...completion, ruleDecision: { id: "r", version: 1, action: "SKIP", reason: "Past log" } } }).success, false)
+})
 
 test("activity plans bound their steps, calendar offsets and reminder times", () => {
   const step = { title: "Call", type: "CALL", callDirection: "OUTBOUND", dayOffset: 0, reminderTime: "09:30" }

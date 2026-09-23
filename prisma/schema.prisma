@@ -36,6 +36,25 @@ enum CrmWorkStatus {
   CANCELLED
 }
 
+model CrmFollowUpRule {
+  id String @id @default(cuid())
+  tenantId String
+  name String
+  sourceType CrmWorkType
+  outcome String
+  nextStep Json
+  maxDepth Int @default(3)
+  archived Boolean @default(false)
+  version Int @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  generatedWork CrmTask[]
+  @@unique([tenantId, id])
+  @@unique([tenantId, sourceType, outcome])
+  @@index([tenantId, archived, name])
+}
+
 model CrmActivityPlan {
   id String @id @default(cuid())
   tenantId String
@@ -275,6 +294,10 @@ model CrmTask {
   followUpOfId String?
   planLaunchId String?
   planPosition Int?
+  followUpRuleId String?
+  followUpRuleName String?
+  followUpRuleVersion Int?
+  automationDepth Int @default(0)
   type        CrmWorkType @default(TASK)
   status      CrmWorkStatus @default(OPEN)
   priority    Int @default(2)
@@ -307,6 +330,7 @@ model CrmTask {
   next        CrmTask[] @relation("CrmWorkFollowUp")
   events      CrmTaskEvent[]
   planLaunch CrmPlanLaunch? @relation(fields: [tenantId, planLaunchId], references: [tenantId, id], onDelete: Restrict)
+  followUpRule CrmFollowUpRule? @relation(fields: [tenantId, followUpRuleId], references: [tenantId, id], onDelete: Restrict)
 
   @@unique([tenantId, id])
   @@unique([tenantId, followUpOfId])
@@ -679,6 +703,7 @@ model Tenant {
   crmTasks       CrmTask[]
   crmWorkEvents  CrmTaskEvent[]
   crmActivityPlans CrmActivityPlan[]
+  crmFollowUpRules CrmFollowUpRule[]
   crmPlanLaunches CrmPlanLaunch[]
   crmActivities  CrmActivity[]
   users          User[]

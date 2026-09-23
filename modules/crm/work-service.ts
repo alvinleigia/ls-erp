@@ -4,6 +4,8 @@ import { crmListSchema, crmNoteSchema } from "./validation"
 import { workCreateSchema, workUpdateSchema, workCompleteSchema, workCancelSchema, workReminderSchema, workListSchema, workOutcomes, type WorkScheduleInput, type WorkCreateInput } from "./work-validation"
 import { businessDate, startOfBusinessDate } from "./work-time"
 import { createPlanService } from "./plan-service"
+import { prepareRuleFollowUp } from "./follow-up-service"
+import { workRulePreviewSchema } from "./work-validation"
 
 type Tx = Prisma.TransactionClient
 type Context = {
@@ -53,7 +55,7 @@ export function createWorkService({ run, audit, checkAssignee }: Context) {
     if (data.startsAt && businessDate(new Date(data.startsAt), timeZone) !== data.dueOn) throw new CrmError(400, "The due date must match the start date in the business time zone.")
     return { ...data, dueOn: new Date(`${data.dueOn}T00:00:00Z`), startsAt: data.startsAt ? new Date(data.startsAt) : null, endsAt: data.endsAt ? new Date(data.endsAt) : null, reminderAt: data.reminderAt ? new Date(data.reminderAt) : null }
   }
-  async function create(tx: Tx, actor: CrmActor, data: WorkCreateInput, previous?: Loaded, origin?: { planLaunchId: string; planPosition: number }) {
+  async function create(tx: Tx, actor: CrmActor, data: WorkCreateInput, previous?: Loaded, origin?: { planLaunchId: string; planPosition: number } | { followUpRuleId: string; followUpRuleName: string; followUpRuleVersion: number; automationDepth: number }) {
     const { contactId, enquiryId, opportunityId, completion, ...fields } = data
     const contact = await tx.crmContact.findFirst({ where: { ...contactScope(actor), id: contactId, archived: false } })
     if (!contact) throw new CrmError(404, "Active contact not found.")
@@ -64,14 +66,32 @@ export function createWorkService({ run, audit, checkAssignee }: Context) {
     const prepared = await schedule(tx, actor, fields)
     const record = await tx.crmTask.create({ data: { ...prepared, ...origin, tenantId: actor.tenantId, contactId, enquiryId: enquiryId || null, opportunityId: opportunityId || null, createdByUserId: actor.userId, followUpOfId: previous?.id }, include })
     await log(tx, actor, record.id, "crm.work.created", previous ? "Next follow-up scheduled." : "Activity scheduled.", undefined, record)
-    if (completion) return complete(tx, actor, record, { ...completion, version: record.version })
+    if (completion) return complete(tx, actor, record, { ...completion, version: record.version }, false)
     return record
   }
-  async function complete(tx: Tx, actor: CrmActor, before: Loaded, data: ReturnType<typeof workCompleteSchema.parse>) {
+  async function complete(tx: Tx, actor: CrmActor, before: Loaded, data: ReturnType<typeof workCompleteSchema.parse>, useRules = true) {
     requireOpen(before)
+    if (before.version !== data.version) throw new CrmError(409, "This activity changed. Refresh before completing it.")
     if (!canManageCrm(actor.role) && before.assignedUserId !== actor.userId) throw new CrmError(403, "Only the assignee or a manager can complete this activity.")
     if (!(workOutcomes[before.type] as readonly string[]).includes(data.outcome)) throw new CrmError(400, "Choose an outcome appropriate for this activity type.")
     if (Date.parse(data.occurredAt) > Date.now() + 60000) throw new CrmError(400, "An interaction cannot be logged in the future.")
+    const preparedRule = useRules ? await prepareRuleFollowUp(tx, actor, before, data.outcome) : { rule: null, schedule: null, blockedReason: null }
+    const decision = data.ruleDecision
+    if (preparedRule.rule) {
+      const { rule, schedule: next } = preparedRule
+      if (!decision || decision.id !== rule.id || decision.version !== rule.version) throw new CrmError(409, "Review the current follow-up rule before completing this activity.")
+      if (decision.action === "APPLY") {
+        if (data.followUp) throw new CrmError(400, "Choose the rule or a manual follow-up, not both.")
+        if (!next) throw new CrmError(409, preparedRule.blockedReason || "This rule cannot create a follow-up.")
+        if (decision.dueOn !== next.dueOn || decision.reminderAt !== next.reminderAt) throw new CrmError(409, "The follow-up schedule changed. Review it again before completing.")
+        await create(tx, actor, { ...next, contactId: before.contactId, enquiryId: before.enquiryId || "", opportunityId: before.opportunityId || "" }, before,
+          { followUpRuleId: rule.id, followUpRuleName: rule.name, followUpRuleVersion: rule.version, automationDepth: before.automationDepth + 1 })
+        await log(tx, actor, before.id, "crm.work.rule.applied", `Follow-up rule applied: ${rule.name}.`, undefined, { ruleId: rule.id, version: rule.version, dueOn: next.dueOn })
+      } else {
+        if (!decision.reason) throw new CrmError(400, "Record why the suggested follow-up is being skipped.")
+        await log(tx, actor, before.id, "crm.work.rule.skipped", `Follow-up rule skipped (${rule.name}): ${decision.reason}`, undefined, snapshot(decision))
+      }
+    } else if (decision) throw new CrmError(409, "The follow-up rule no longer applies. Refresh before completing.")
     // Validate/create the next activity before closing so assigned staff retain contact access.
     if (data.followUp) await create(tx, actor, { ...data.followUp, contactId: before.contactId, enquiryId: before.enquiryId || "", opportunityId: before.opportunityId || "" }, before)
     const updated = await tx.crmTask.updateMany({ where: { tenantId: actor.tenantId, id: before.id, version: data.version, status: { in: [...openStatuses] } }, data: {
@@ -85,6 +105,15 @@ export function createWorkService({ run, audit, checkAssignee }: Context) {
   }
   return {
     ...createPlanService({ run, audit, checkAssignee, createWork: (tx, actor, data, origin) => create(tx, actor, data, undefined, origin) }),
+    previewWorkFollowUp(id: string, input: unknown) {
+      const query = workRulePreviewSchema.parse(input)
+      return run(async (tx, actor) => {
+        const record = await find(tx, actor, id, true); requireOpen(record)
+        if (record.version !== query.version) throw new CrmError(409, "This activity changed. Refresh before reviewing its next step.")
+        if (!(workOutcomes[record.type] as readonly string[]).includes(query.outcome)) throw new CrmError(400, "Choose an outcome appropriate for this activity type.")
+        return prepareRuleFollowUp(tx, actor, record, query.outcome)
+      })
+    },
     listWork(input: unknown) {
       const query = workListSchema.parse(input)
       return run(async (tx, actor) => {

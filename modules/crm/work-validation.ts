@@ -24,7 +24,11 @@ export const workScheduleSchema = z.object({
 const completion = z.object({ summary: z.string().trim().min(1, "Record a summary for the next staff member.").max(5000), outcome: z.string().min(1).max(40), occurredAt: instant, durationMinutes: z.number().int().min(0).max(1440).nullable().default(null) }).strict()
 export const workCreateSchema = workScheduleSchema.safeExtend({ contactId: id, enquiryId: text(100), opportunityId: text(100), completion: completion.optional() }).refine(value => !(value.enquiryId && value.opportunityId), { path: ["opportunityId"], message: "Link either an enquiry or an opportunity." })
 export const workUpdateSchema = workScheduleSchema.safeExtend({ version: z.number().int().positive(), status: z.enum(["OPEN", "IN_PROGRESS"]) })
-export const workCompleteSchema = completion.extend({ version: z.number().int().positive(), followUp: workScheduleSchema.optional() })
+export const workCompleteSchema = completion.extend({ version: z.number().int().positive(), followUp: workScheduleSchema.optional(), ruleDecision: z.object({
+  id, version: z.number().int().positive(), action: z.enum(["APPLY", "SKIP"]), reason: text(2000),
+  dueOn: z.iso.date().optional(), reminderAt: instant.nullable().optional(),
+}).strict().optional() })
+export const workRulePreviewSchema = z.object({ version: z.coerce.number().int().positive(), outcome: z.string().trim().min(1).max(40) }).strict()
 export const workCancelSchema = z.object({ version: z.number().int().positive(), reason: z.string().trim().min(1).max(2000) }).strict()
 export const workReminderSchema = z.object({ version: z.number().int().positive(), action: z.enum(["SNOOZE", "DISMISS"]), minutes: z.union([z.literal(15), z.literal(60), z.literal(1440)]).optional() }).strict().refine(value => value.action !== "SNOOZE" || !!value.minutes, { path: ["minutes"], message: "Choose a snooze interval." })
 export const workListSchema = crmListSchema.omit({ status: true, due: true, archived: true, sort: true }).extend({

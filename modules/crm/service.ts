@@ -3,6 +3,7 @@ import { recordDomainAuditEvent } from "@/lib/domain-audit"
 import { createSalesService } from "./sales-service"
 import { createWorkService } from "./work-service"
 import { createReportService } from "./report-service"
+import { createFollowUpService } from "./follow-up-service"
 import { CrmError, canManageCrm, canUseCrm, contactScope, accountScope, enquiryScope, type CrmActor } from "./policy"
 import {
   crmContactSchema, crmContactUpdateSchema, crmEnquiryCreateSchema,
@@ -45,6 +46,7 @@ export function createCrmService(db: PrismaClient, identity: Pick<CrmActor, "ten
         if (code === "P2034" && attempt < 2) continue
         if (code === "P2002") {
           const target = String((error as { meta?: { target?: unknown } }).meta?.target || "")
+          if (target.includes("sourceType") && target.includes("outcome")) throw new CrmError(409, "A rule for this activity type and outcome already exists. Edit or restore that rule.")
           if (target.includes("requestKey")) { if (attempt < 2) continue; throw new CrmError(409, "This plan application is being processed. Retry to see its activities.") }
           if (target.includes("followUpOfId")) throw new CrmError(409, "A next follow-up was already scheduled. Refresh to see it.")
           throw new CrmError(409, target.includes("enquiryId") ? "This enquiry already has an opportunity. Refresh to open it." : "A contact with this email or phone already exists in this business. Ask your manager if you cannot find it.")
@@ -58,7 +60,7 @@ export function createCrmService(db: PrismaClient, identity: Pick<CrmActor, "ten
   async function audit(tx: Tx, actor: CrmActor, event: string, entityId: string, before?: Prisma.InputJsonValue, after?: Prisma.InputJsonValue) {
     await recordDomainAuditEvent(tx, {
       tenantId: actor.tenantId, actorUserId: actor.userId, actorRole: actor.role as Role,
-      requestId: actor.requestId, event, entityType: event.startsWith("crm.plan.") ? "CrmActivityPlan" : event.startsWith("crm.work") ? "CrmTask" : event.startsWith("crm.opportunity") ? "CrmOpportunity" : event.startsWith("crm.pipeline") ? "CrmPipeline" : event.startsWith("crm.account") ? "CrmAccount" : event.startsWith("crm.contact") ? "CrmContact" : "CrmEnquiry",
+      requestId: actor.requestId, event, entityType: event.startsWith("crm.rule.") ? "CrmFollowUpRule" : event.startsWith("crm.plan.") ? "CrmActivityPlan" : event.startsWith("crm.work") ? "CrmTask" : event.startsWith("crm.opportunity") ? "CrmOpportunity" : event.startsWith("crm.pipeline") ? "CrmPipeline" : event.startsWith("crm.account") ? "CrmAccount" : event.startsWith("crm.contact") ? "CrmContact" : "CrmEnquiry",
       entityId, before, after,
     })
   }
@@ -86,6 +88,7 @@ export function createCrmService(db: PrismaClient, identity: Pick<CrmActor, "ten
     ...createSalesService({ run, audit, checkAssignee }),
     ...createWorkService({ run, audit, checkAssignee }),
     ...createReportService({ run }),
+    ...createFollowUpService({ run, audit }),
     listAccounts(input: unknown) {
       const query = crmListSchema.parse(input)
       return run(async (tx, actor) => {
