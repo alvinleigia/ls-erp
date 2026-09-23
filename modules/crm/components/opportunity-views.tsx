@@ -59,6 +59,7 @@ function BoardColumn({ stage, params, revision, onDrag, onDrop, formatMoney, ...
         <p className="font-medium tabular-nums">{formatMoney(record.amount, record.currency)}</p>
         <p className="text-xs text-muted-foreground">{record.probability}% · {formatDate(record.expectedCloseOn.slice(0, 10))}<br />{record.assignee.name || "Unnamed salesperson"}</p>
         <StageSelect record={record} {...moves} />
+        {!!record.overdueActivityCount && <Link className="block text-sm text-destructive underline" href={`/crm/opportunities/${record.id}`}>{record.overdueActivityCount} overdue {record.overdueActivityCount === 1 ? "activity" : "activities"}</Link>}
       </article>)}
       <div className="flex items-center justify-between gap-2 text-xs"><Button variant="outline" size="sm" disabled={loading || page <= 1} onClick={() => setPage(value => value - 1)}>Previous</Button><span>{page} / {data?.totalPages ?? 1}</span><Button variant="outline" size="sm" disabled={loading || !data || page >= data.totalPages} onClick={() => setPage(value => value + 1)}>Next</Button></div>
     </div>
@@ -76,6 +77,7 @@ function OpportunityTable({ params, revision, formatMoney, ...moves }: Moves & M
     { accessorKey: "probability", header: "Probability", cell: ({ row }) => `${row.original.probability}%` },
     { accessorKey: "expectedCloseOn", header: "Expected close", cell: ({ row }) => formatDate(row.original.expectedCloseOn.slice(0, 10)) },
     { id: "owner", header: "Salesperson", cell: ({ row }) => row.original.assignee.name },
+    { id: "overdue", header: "Overdue activities", cell: ({ row }) => row.original.overdueActivityCount || "—" },
     { id: "stage", header: "Stage", cell: ({ row }) => <StageSelect record={row.original} stages={stages} busy={busy} move={move} /> },
   ], [formatDate, formatMoney, stages, busy, move])
   // eslint-disable-next-line react-hooks/incompatible-library

@@ -10,6 +10,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { useFormErrors } from "@/hooks/use-form-errors"
 import type { CrmContactRow } from "@/types/crm"
 import { ContactAccounts } from "./contact-accounts"
+import { WorkList } from "./work-list"
+import { ContactInteractions } from "./contact-interactions"
 
 export function ContactEditor({ id }: { id?: string }) {
   const router = useRouter()
@@ -60,9 +62,10 @@ export function ContactEditor({ id }: { id?: string }) {
       {id && <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={values.archived} onChange={event => setValues({ ...values, archived: event.target.checked })} />Archived — keep history and stop new enquiries</label>}
     </fieldset>
     {contact && !contact.archived && <Button type="button" asChild><Link href={`/crm/enquiries/new?contactId=${contact.id}`}>Create enquiry</Link></Button>}
-    {contact && !canEdit && <p className="text-sm text-muted-foreground">You can view this contact through an assigned enquiry. Ask its owner or a manager to edit it.</p>}
+    {contact && !canEdit && <p className="text-sm text-muted-foreground">You can view this contact through assigned CRM work. Ask its owner or a manager to edit it.</p>}
     <Dialog open={confirmArchive} onOpenChange={open => { if (!saving) setConfirmArchive(open) }}><DialogContent><DialogHeader><DialogTitle>Archive this contact?</DialogTitle><DialogDescription>Existing enquiries and history will be kept. New enquiries cannot be created until the contact is restored.</DialogDescription></DialogHeader><DialogFooter><Button type="button" variant="outline" disabled={saving} onClick={() => setConfirmArchive(false)}>Cancel</Button><Button type="button" loading={saving} onClick={() => void persist()}>Archive contact</Button></DialogFooter></DialogContent></Dialog>
   </form>
     {contact && <ContactAccounts contactId={contact.id} canEdit={!!contact.canEdit} archived={contact.archived} />}
+    {contact && <><WorkList contactId={contact.id} /><ContactInteractions contactId={contact.id} /></>}
   </div>
 }

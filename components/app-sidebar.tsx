@@ -142,7 +142,8 @@ export function AppSidebar() {
           { title: "Business accounts", href: "/crm/accounts", icon: Building2Icon, isActive: current => current.startsWith("/crm/accounts") },
           { title: "Opportunities", href: "/crm/opportunities", icon: Building2Icon, isActive: current => current.startsWith("/crm/opportunities") },
           { title: "Pipelines", href: "/crm/pipelines", icon: Building2Icon, isActive: current => current.startsWith("/crm/pipelines") },
-          { title: "Follow-ups", href: "/crm/tasks", icon: CalendarClockIcon, isActive: current => current.startsWith("/crm/tasks") },
+          { title: "My Work", href: "/crm/activities", icon: CalendarClockIcon, isActive: current => current.startsWith("/crm/activities") || current.startsWith("/crm/tasks") },
+          { title: "Calendar", href: "/crm/calendar", icon: CalendarClockIcon, isActive: current => current.startsWith("/crm/calendar") },
         ],
       })
     }

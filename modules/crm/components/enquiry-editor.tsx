@@ -88,6 +88,6 @@ export function EnquiryEditor({ id, initialContactId }: { id?: string; initialCo
         {id && <FormField id="outcome" label="Outcome (required when closed)" error={errors.outcome} className="sm:col-span-2"><textarea id="outcome" className={textareaClass} maxLength={2000} value={values.outcome} onChange={event => setValues({ ...values, outcome: event.target.value })} /></FormField>}
       </fieldset>
     </form>
-    {enquiry && <>{enquiry.opportunity ? <Button variant="outline" asChild><Link href={`/crm/opportunities/${enquiry.opportunity.id}`}>Open opportunity</Link></Button> : enquiry.status !== "CLOSED" && <Button variant="outline" asChild><Link href={`/crm/opportunities/new?enquiryId=${enquiry.id}`}>Convert to opportunity</Link></Button>}<EnquiryTimeline enquiryId={enquiry.id} closed={enquiry.status === "CLOSED"} revision={revision} /></>}
+    {enquiry && <>{enquiry.opportunity ? <Button variant="outline" asChild><Link href={`/crm/opportunities/${enquiry.opportunity.id}`}>Open opportunity</Link></Button> : enquiry.status !== "CLOSED" && <Button variant="outline" asChild><Link href={`/crm/opportunities/new?enquiryId=${enquiry.id}`}>Convert to opportunity</Link></Button>}<EnquiryTimeline enquiryId={enquiry.id} contactId={enquiry.contact.id} revision={revision} /></>}
   </div>
 }

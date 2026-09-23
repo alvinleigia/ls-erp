@@ -22,6 +22,7 @@ export type CrmOpportunityRow = {
   id: string; title: string; pipelineId: string; stageId: string; contactId: string; accountId: string | null; enquiryId: string | null;
   assignedUserId: string; amount: string; currency: string; probability: number; expectedCloseOn: string; closedAt: string | null;
   lossReason: string | null; description: string | null; version: number;
+  overdueActivityCount?: number;
   pipeline: CrmPipelineRow; stage: CrmStageRow; contact: { id: string; name: string }; account: { id: string; name: string } | null;
   assignee: { id: string; name: string | null };
 }

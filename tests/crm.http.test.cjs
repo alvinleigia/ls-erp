@@ -95,8 +95,40 @@ test("real HTTP authentication, module access and complete CRM workflow", async 
   assert.equal(board.total, 1); assert.equal(board.items[0].probability, 0)
   assert.equal((await salesperson(`/api/crm/opportunities/${deal.id}/activity`, json("POST", { message: "Follow up next quarter." }))).status, 201)
   assert.equal((await (await salesperson(`/api/crm/opportunities/${deal.id}/activity`)).json()).total, 3)
+  assert.equal((await session()("/api/crm/work")).status, 401)
+  const workInput = { title: "Discuss next quarter", type: "CALL", callDirection: "OUTBOUND", contactId: contact.id, opportunityId: deal.id,
+    assignedUserId: salespersonId, dueOn: "2020-01-01", reminderAt: "2020-01-01T08:00:00Z", description: "Review pricing before calling." }
+  const workResponse = await admin("/api/crm/work", json("POST", workInput))
+  assert.equal(workResponse.status, 201)
+  const work = await workResponse.json()
+  const overdueBoard = await (await salesperson(`/api/crm/opportunities?pipelineId=${pipeline.id}`)).json()
+  assert.equal(overdueBoard.items[0].overdueActivityCount, 1)
+  const reminders = await (await salesperson("/api/crm/work?due=reminders")).json()
+  assert.ok(reminders.items.some(item => item.id === work.id))
+  assert.equal((await admin(`/api/crm/work/${work.id}/reminder`, json("POST", { version: 1, action: "DISMISS" }))).status, 403)
+  assert.equal((await salesperson(`/api/crm/work/${work.id}/reminder`, json("POST", { version: 1, action: "SNOOZE", minutes: 15 }))).status, 200)
+  assert.equal((await (await salesperson("/api/crm/work?due=reminders")).json()).total, 0)
+  assert.equal((await salesperson(`/api/crm/work/${work.id}/history`, json("POST", { message: "Reviewed the pricing." }))).status, 201)
+  const completion = { version: 2, summary: "Customer requested a callback next week.", outcome: "CONNECTED", occurredAt: new Date().toISOString(), durationMinutes: 6,
+    followUp: { title: "Callback next week", type: "CALL", callDirection: "OUTBOUND", assignedUserId: salespersonId, dueOn: "2030-01-10" } }
+  assert.equal((await salesperson(`/api/crm/work/${work.id}/complete`, json("POST", { ...completion, summary: "" }))).status, 400)
+  assert.equal((await salesperson(`/api/crm/work/${work.id}/complete`, json("POST", completion))).status, 200)
+  assert.equal((await salesperson(`/api/crm/work/${work.id}/complete`, json("POST", completion))).status, 409)
+  const interactions = await (await salesperson(`/api/crm/contacts/${contact.id}/interactions`)).json()
+  assert.ok(interactions.items.some(item => item.summary === completion.summary))
+  assert.ok(interactions.items.every(item => !("description" in item)))
+  const calendar = await (await salesperson("/api/crm/work?from=2030-01-01&to=2030-02-01")).json()
+  assert.equal(calendar.items.filter(item => item.followUpOfId === work.id).length, 1)
+  assert.equal((await (await salesperson(`/api/crm/opportunities?pipelineId=${pipeline.id}`)).json()).items[0].overdueActivityCount, 0)
+  assert.ok((await (await salesperson(`/api/crm/work/${work.id}/history`)).json()).total >= 4)
+  for (const path of ["/crm/activities", "/crm/activities/new", `/crm/activities/${work.id}`, "/crm/calendar"]) {
+    const page = await salesperson(path)
+    assert.equal(page.status, 200, `Page failed: ${path}`)
+    assert.ok(!(await page.text()).includes("NEXT_HTTP_ERROR_FALLBACK;500"), `Server rendering failed: ${path}`)
+  }
   assert.equal((await admin("/api/modules", json("PATCH", { key: "crm", enabled: false }))).status, 200)
   assert.equal((await salesperson("/api/crm/opportunities")).status, 403)
+  assert.equal((await salesperson("/api/crm/work")).status, 403)
   assert.equal((await admin("/api/modules", json("PATCH", { key: "crm", enabled: true }))).status, 200)
   for (const path of ["/crm/pipelines", "/crm/pipelines/new", `/crm/pipelines/${pipeline.id}`, "/crm/opportunities", "/crm/opportunities/new", `/crm/opportunities/${deal.id}`, `/crm/opportunities/new?enquiryId=${source.id}`, "/crm/accounts", "/crm/accounts/new", `/crm/accounts/${account.id}`, "/crm/contacts", "/crm/contacts/new", `/crm/contacts/${contact.id}`, "/crm/enquiries", "/crm/enquiries/new", `/crm/enquiries/${enquiry.id}`, "/crm/tasks", "/settings/modules", "/appointments"]) {
     const page = await admin(path)

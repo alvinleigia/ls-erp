@@ -13,6 +13,7 @@ import type { CrmOpportunityRow, CrmPipelineRow } from "@/types/crm"
 import { RecordSelect } from "./record-select"
 import { selectClass } from "./record-list"
 import { OpportunityTimeline } from "./opportunity-timeline"
+import { WorkList } from "./work-list"
 
 const empty = { title: "", pipelineId: "", stageId: "", contactId: "", accountId: "", assignedUserId: "", amount: "0", currency: "", expectedCloseOn: "", description: "", lossReason: "", probability: 10 }
 function fields(record: CrmOpportunityRow) {
@@ -94,5 +95,5 @@ export function OpportunityEditor({ id, enquiryId }: { id?: string; enquiryId?: 
       <FormField id="description" label="Description" error={errors.description} className="sm:col-span-2"><textarea id="description" maxLength={5000} className="min-h-24 w-full rounded border p-3" value={values.description} onChange={event => setValues({ ...values, description: event.target.value })} /></FormField>
     </fieldset>
     {(record?.enquiryId || enquiryId) && <p className="text-sm">Source: <Link className="underline" href={`/crm/enquiries/${record?.enquiryId || enquiryId}`}>original enquiry and follow-ups</Link>. Its records and history are preserved.</p>}
-  </form>{record && <OpportunityTimeline id={record.id} revision={revision} />}</div>
+  </form>{record && <><WorkList contactId={record.contactId} opportunityId={record.id} /><OpportunityTimeline id={record.id} revision={revision} /></>}</div>
 }
