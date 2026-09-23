@@ -1,4 +1,4 @@
-# Modular business platform — CRM milestones 1–3
+# Modular business platform — CRM milestones 1–7
 
 ## Architecture decision
 
@@ -489,8 +489,8 @@ conditional workflow engine or background message sender.
 - Email steps are manual work items; reminders use the existing in-app delivery.
   There are no outbound messages, telephony actions, automatic stage triggers,
   conditional branches, business-day calendars or per-step assignee overrides.
-  Completion-triggered sequences, escalation rules and background notifications
-  remain later work.
+  Completion-triggered suggestions are added in milestone 7 below. Escalation
+  rules and background notifications remain later work.
 
 The additive migration `20260924120000_crm_activity_plans` creates
 `CrmActivityPlan` and `CrmPlanLaunch`, plus nullable activity-origin fields.
@@ -514,3 +514,74 @@ is empty. Deployment verification covers five CRM migration checksums, fourteen
 forced-RLS tables and thirty validated composite foreign keys. No templates or
 test fixtures were added to Supabase. The isolated test server and database were
 stopped. Application hosting deployment and visual browser testing remain deferred.
+
+## Milestone 7 — reviewed, outcome-based follow-up rules
+
+Managers configure rules at `/crm/follow-up-rules`: completing a particular
+activity type with a particular outcome suggests one next activity. For example,
+an unanswered call can suggest another call tomorrow with a morning reminder.
+This builds on the suggested/triggered next-activity pattern described in
+[Odoo's activity documentation](https://www.odoo.com/documentation/19.0/applications/sales/crm/optimize/utilize_activities.html).
+
+- Each business has at most one rule per type/outcome, including archived rules.
+  Edit or restore the existing rule to change its trigger. Managers configure;
+  CRM staff can read definitions. Configuration is shared guidance and should
+  not contain private customer details.
+- Rules reuse activity-plan step validation and editor fields: title, activity
+  type, priority, instructions, call direction, 0–365 calendar days after
+  completion, and optional local reminder time. The next activity keeps the
+  current customer, parent record and assignee. Days include weekends and
+  holidays. Dates use the business's current local date when completion is
+  saved, independently of the recorded interaction's occurrence date.
+- The completion form previews the suggestion. Staff choose to create it or
+  skip it with a required reason; skipping also permits a manual follow-up.
+  A rule and a manual follow-up cannot both run from the same completion.
+  Rules create normal all-day work items, including manual email tasks.
+  Staff can subsequently edit their times, reminders and other details normally.
+- Generated activities record the rule ID, name, version and chain depth.
+  Limits of 1–10 consecutive generated activities prevent indefinite retries;
+  depth carries across different rules in the same chain. An explicit manual
+  activity starts a new chain. Updating or archiving a rule affects future
+  completions, including work already open, but does not alter generated work.
+- The server rechecks permissions, activity/rule versions, outcome, schedule
+  and current related records. Missing or stale reviews return a conflict so
+  staff refresh before completing. Closed enquiries, won/lost opportunities,
+  archived pipelines/stages/customers and inactive assignees block generation.
+  Reaching the chain limit or an ambiguous/nonexistent daylight-saving reminder
+  time also blocks generation. Staff may still complete with an audited skip.
+  A same-day reminder whose time has passed becomes due immediately.
+- Completion, generated work, activity history and required audit entries share
+  one transaction. Concurrent requests cannot create duplicate follow-ups.
+  Delegated staff retain the customer access needed to continue work without
+  gaining access to private parent details. Existing tenant and assignment
+  boundaries apply to every generated activity.
+- Upfront activity-plan steps do not trigger these rules, avoiding duplicate
+  sequences. Logging a past interaction, cancelling work and the legacy quick
+  task-completion API also do not trigger them. Legacy completion has no outcome;
+  use the activity workspace for reviewed outcome-based follow-ups.
+
+The additive migration `20260924150000_crm_follow_up_rules` adds one forced-RLS
+configuration table and four activity-origin fields. Existing activities start
+with no rule origin and depth zero. A composite foreign key prevents cross-tenant
+origins; database checks enforce complete origin metadata and bounded depth.
+No background worker, outbound messaging, stage trigger or escalation engine is
+introduced. Background delivery and escalation remain separate future work.
+
+Verification on 2026-09-23: all 75 tests/checks passed (15 unit, 54 database
+integration, one authenticated HTTP workflow and five read-only deployment
+checks). Coverage includes reviewed completion, concurrent duplicate prevention,
+chain limits, manual overrides and skip audits, stale reviews, archived/closed
+records, inactive assignees, delegated permissions, tenant RLS, composite foreign
+keys, plan/past-log exclusions and complete rollback on required-audit failure.
+The incremental migration was exercised over the pre-activity schema and legacy
+fixture. Production build, TypeScript, Prisma validation and targeted ESLint passed.
+
+The rule migration was applied to the configured Supabase database using
+`prisma migrate deploy`. All 76 migrations are current and the Prisma schema diff
+is empty. Read-only verification covers six CRM migration checksums, fifteen
+forced-RLS tables and thirty-one validated composite foreign keys. No rules or
+test fixtures were added to Supabase. The isolated test server and database were
+stopped. Application hosting deployment and visual browser testing remain deferred.
+
+Implementation checkpoints: `a50e1fe` (backend, migration and database tests) and
+`1ab763c` (configuration UI, completion review and authenticated HTTP coverage).
