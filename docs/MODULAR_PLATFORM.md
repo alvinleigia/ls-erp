@@ -276,6 +276,14 @@ workflow also passed. HTTP checks cover pipeline permissions, conversion,
 loss-reason validation, optimistic conflicts, filtered lists, notes, disabled CRM,
 new page responses and existing appointment page rendering.
 
+On 2026-09-23, the sales-pipeline migration was applied to the configured Supabase
+database using `prisma migrate deploy`. All four read-only deployment checks
+passed across three CRM migrations, eleven forced-RLS tables and nineteen
+validated composite foreign keys. Migration status is up to date and the schema
+diff reports no differences. No fixtures or pipelines were added to Supabase.
+An administrator enables CRM, then a manager creates a pipeline to start using
+opportunities. Application hosting deployment has not been performed.
+
 Calendar/forecast dashboards, opportunity-specific tasks/reminders, bulk changes,
 automated stage actions, custom fields and a forecasting ledger remain later work.
 Existing enquiry follow-ups remain available through the source enquiry.
