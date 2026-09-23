@@ -10,6 +10,7 @@ export type CrmWorkRow = {
   completedAt: string | null; cancellationReason: string | null; canEdit: boolean; timeZone?: string;
   contact: { id: string; name: string; email: string | null; phone: string | null }; assignee: { id: string; name: string | null };
   parent: { id: string; title: string; kind: "enquiry" | "opportunity" } | null;
+  planLaunchId: string | null; planPosition: number | null; planLaunch: { planName: string; planVersion: number } | null;
 }
 export type WorkListResponse = ListResponse<CrmWorkRow> & { timeZone: string; currentUserId: string; canManage: boolean; serverTime: string }
 export type InteractionRow = { id: string; type: WorkType; summary: string; outcome: string; occurredAt: string; callDirection: string | null; durationMinutes: number | null; completedBy: { name: string | null } | null }

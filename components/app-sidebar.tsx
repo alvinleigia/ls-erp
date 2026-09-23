@@ -145,6 +145,7 @@ export function AppSidebar() {
           { title: "Pipelines", href: "/crm/pipelines", icon: Building2Icon, isActive: current => current.startsWith("/crm/pipelines") },
           { title: "My Work", href: "/crm/activities", icon: CalendarClockIcon, isActive: current => current.startsWith("/crm/activities") || current.startsWith("/crm/tasks") },
           { title: "Calendar", href: "/crm/calendar", icon: CalendarClockIcon, isActive: current => current.startsWith("/crm/calendar") },
+          { title: "Activity plans", href: "/crm/activity-plans", icon: CalendarClockIcon, isActive: current => current.startsWith("/crm/activity-plans") },
         ],
       })
     }

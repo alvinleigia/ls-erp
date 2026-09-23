@@ -38,6 +38,7 @@ const json = (method, data) => ({ method, headers: { "Content-Type": "applicatio
 test("real HTTP authentication, module access and complete CRM workflow", async () => {
   assert.equal((await session()("/api/crm/contacts")).status, 401)
   assert.equal((await session()("/api/crm/reports/activities")).status, 401)
+  assert.equal((await session()("/api/crm/activity-plans")).status, 401)
   const admin = await login("admin@crm-demo.test")
   const salesperson = await login("sales@crm-demo.test")
   assert.equal((await salesperson("/api/modules", json("PATCH", { key: "crm", enabled: true }))).status, 403)
@@ -133,6 +134,26 @@ test("real HTTP authentication, module access and complete CRM workflow", async 
   const reportDetail = await (await salesperson(`/api/crm/work?state=completed&type=CALL&completedFrom=${overview.from}&completedThrough=${overview.through}`)).json()
   assert.equal(reportDetail.total, overview.totals.completed)
   assert.equal((await (await admin(`/api/crm/reports/staff?scope=team&assignedUserId=${salespersonId}&type=CALL`)).json()).items[0].completed, 1)
+  const planInput = { name: "HTTP follow-up plan", steps: [{ title: "Plan callback", type: "CALL", callDirection: "OUTBOUND", dayOffset: 0, reminderTime: "09:30" }, { title: "Plan email", type: "EMAIL", dayOffset: 2 }] }
+  assert.equal((await salesperson("/api/crm/activity-plans", json("POST", planInput))).status, 403)
+  const planResponse = await admin("/api/crm/activity-plans", json("POST", planInput))
+  assert.equal(planResponse.status, 201)
+  const activityPlan = await planResponse.json()
+  const application = { version: activityPlan.version, requestKey: require("node:crypto").randomUUID(), contactId: contact.id, enquiryId: source.id, assignedUserId: salespersonId, startOn: "2030-02-01" }
+  const preview = await salesperson(`/api/crm/activity-plans/${activityPlan.id}/preview`, json("POST", application))
+  assert.equal(preview.status, 200)
+  assert.equal((await preview.json()).steps[1].dueOn, "2030-02-03")
+  const launchResponse = await salesperson(`/api/crm/activity-plans/${activityPlan.id}/apply`, json("POST", application))
+  assert.equal(launchResponse.status, 201)
+  const launch = await launchResponse.json()
+  assert.equal((await (await salesperson(`/api/crm/activity-plans/${activityPlan.id}/apply`, json("POST", application))).json()).id, launch.id)
+  const launchedTasks = await (await salesperson(`/api/crm/work?planLaunchId=${launch.id}`)).json()
+  assert.equal(launchedTasks.total, 2)
+  assert.equal(launchedTasks.items[0].planLaunch.planName, activityPlan.name)
+  assert.equal((await salesperson(`/api/crm/activity-plans/${activityPlan.id}/apply`, json("POST", { ...application, requestKey: require("node:crypto").randomUUID() }))).status, 409)
+  assert.equal((await admin(`/api/crm/activity-plans/${activityPlan.id}`, json("PATCH", { ...planInput, version: 1, archived: true }))).status, 200)
+  assert.equal((await salesperson(`/api/crm/activity-plans/${activityPlan.id}/preview`, json("POST", { ...application, version: 2 }))).status, 409)
+  for (const path of ["/crm/activity-plans", "/crm/activity-plans/new", `/crm/activity-plans/${activityPlan.id}`, `/crm/activity-plans/apply?enquiryId=${source.id}`, `/crm/activities?scope=visible&state=all&planLaunchId=${launch.id}`]) assert.equal((await admin(path)).status, 200, path)
   for (const path of ["/crm/overview", "/crm/activities", `/crm/activities?state=completed&completedFrom=${overview.from}&completedThrough=${overview.through}`, "/crm/activities/new", `/crm/activities/${work.id}`, "/crm/calendar"]) {
     const page = await salesperson(path)
     assert.equal(page.status, 200, `Page failed: ${path}`)
@@ -142,6 +163,7 @@ test("real HTTP authentication, module access and complete CRM workflow", async 
   assert.equal((await salesperson("/api/crm/opportunities")).status, 403)
   assert.equal((await salesperson("/api/crm/work")).status, 403)
   assert.equal((await salesperson("/api/crm/reports/activities")).status, 403)
+  assert.equal((await salesperson("/api/crm/activity-plans")).status, 403)
   assert.equal((await admin("/api/modules", json("PATCH", { key: "crm", enabled: true }))).status, 200)
   for (const path of ["/crm/pipelines", "/crm/pipelines/new", `/crm/pipelines/${pipeline.id}`, "/crm/opportunities", "/crm/opportunities/new", `/crm/opportunities/${deal.id}`, `/crm/opportunities/new?enquiryId=${source.id}`, "/crm/accounts", "/crm/accounts/new", `/crm/accounts/${account.id}`, "/crm/contacts", "/crm/contacts/new", `/crm/contacts/${contact.id}`, "/crm/enquiries", "/crm/enquiries/new", `/crm/enquiries/${enquiry.id}`, "/crm/tasks", "/settings/modules", "/appointments"]) {
     const page = await admin(path)
