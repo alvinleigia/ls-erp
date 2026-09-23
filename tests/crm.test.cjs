@@ -7,6 +7,14 @@ const pricing = require("../lib/appointments/order-pricing.ts")
 const { crmAccountSchema, crmAccountLinkSchema } = require("../modules/crm/validation.ts")
 const { pipelineSchema, opportunitySchema, opportunityMoveSchema } = require("../modules/crm/sales-validation.ts")
 
+test("opportunity money formatting respects business settings without losing precision", () => {
+  const { formatDecimalCurrency } = require("../lib/formatting.ts")
+  assert.equal(formatDecimalCurrency("99999999999999.9999", "INR"), "INR 99,999,999,999,999.9999")
+  assert.equal(formatDecimalCurrency("1234.5678", "EUR", { numberFormat: "EUROPEAN", currencySymbolPlacement: "AFTER" }), "1.234,5678 EUR")
+  assert.equal(formatDecimalCurrency("1000", "JPY"), "JPY 1,000")
+  assert.equal(formatDecimalCurrency("1", "KWD"), "KWD 1.000")
+})
+
 test("configurable stages validate outcomes, unique names and required active stages", () => {
   const stages = [{ name: "Open", kind: "OPEN", probability: 25, color: "#123456" }, { name: "Won", kind: "WON", probability: 100, color: "#123456" }, { name: "Lost", kind: "LOST", probability: 0, color: "#123456" }]
   assert.equal(pipelineSchema.safeParse({ name: "Custom process", stages }).success, true)

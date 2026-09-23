@@ -69,7 +69,36 @@ test("real HTTP authentication, module access and complete CRM workflow", async 
   assert.equal((await salesperson(`/api/crm/enquiries/${enquiry.id}`, json("PATCH", { title: enquiry.title, assignedUserId: salespersonId, status: "CLOSED", outcome: "Visit arranged", version: enquiry.version }))).status, 200)
   const history = await (await salesperson(`/api/crm/enquiries/${enquiry.id}/activity`)).json()
   assert.equal(history.total, 5)
-  for (const path of ["/crm/accounts", "/crm/accounts/new", `/crm/accounts/${account.id}`, "/crm/contacts", "/crm/contacts/new", `/crm/contacts/${contact.id}`, "/crm/enquiries", "/crm/enquiries/new", `/crm/enquiries/${enquiry.id}`, "/crm/tasks", "/settings/modules", "/appointments"]) {
+  const pipelineInput = { name: "HTTP Sales", stages: [
+    { name: "Qualify", kind: "OPEN", probability: 20, color: "#123456" },
+    { name: "Won", kind: "WON", probability: 100, color: "#16a34a" },
+    { name: "Lost", kind: "LOST", probability: 0, color: "#dc2626" },
+  ] }
+  assert.equal((await session()("/api/crm/opportunities")).status, 401)
+  assert.equal((await salesperson("/api/crm/pipelines", json("POST", pipelineInput))).status, 403)
+  const pipelineResponse = await admin("/api/crm/pipelines", json("POST", pipelineInput))
+  assert.equal(pipelineResponse.status, 201)
+  const pipeline = await pipelineResponse.json()
+  const source = await (await admin("/api/crm/enquiries", json("POST", { contactId: contact.id, title: "Conversion enquiry", assignedUserId: salespersonId }))).json()
+  const dealInput = { title: "HTTP Opportunity", contactId: contact.id, enquiryId: source.id, assignedUserId: salespersonId, pipelineId: pipeline.id, stageId: pipeline.stages[0].id, amount: "123456.7891", currency: "INR", expectedCloseOn: "2026-12-01" }
+  const opportunityResponse = await salesperson("/api/crm/opportunities", json("POST", dealInput))
+  assert.equal(opportunityResponse.status, 201)
+  const deal = await opportunityResponse.json()
+  assert.equal(deal.amount, "123456.7891")
+  assert.equal((await (await salesperson("/api/crm/opportunities", json("POST", dealInput))).json()).id, deal.id)
+  assert.equal((await (await salesperson(`/api/crm/enquiries/${source.id}`)).json()).opportunity.id, deal.id)
+  const loss = { pipelineId: pipeline.id, stageId: pipeline.stages[2].id, version: 1 }
+  assert.equal((await salesperson(`/api/crm/opportunities/${deal.id}/move`, json("PATCH", loss))).status, 400)
+  assert.equal((await salesperson(`/api/crm/opportunities/${deal.id}/move`, json("PATCH", { ...loss, lossReason: "Budget postponed" }))).status, 200)
+  assert.equal((await salesperson(`/api/crm/opportunities/${deal.id}/move`, json("PATCH", { ...loss, stageId: pipeline.stages[1].id }))).status, 409)
+  const board = await (await salesperson(`/api/crm/opportunities?pipelineId=${pipeline.id}&stageId=${pipeline.stages[2].id}&kind=LOST&pageSize=1`)).json()
+  assert.equal(board.total, 1); assert.equal(board.items[0].probability, 0)
+  assert.equal((await salesperson(`/api/crm/opportunities/${deal.id}/activity`, json("POST", { message: "Follow up next quarter." }))).status, 201)
+  assert.equal((await (await salesperson(`/api/crm/opportunities/${deal.id}/activity`)).json()).total, 3)
+  assert.equal((await admin("/api/modules", json("PATCH", { key: "crm", enabled: false }))).status, 200)
+  assert.equal((await salesperson("/api/crm/opportunities")).status, 403)
+  assert.equal((await admin("/api/modules", json("PATCH", { key: "crm", enabled: true }))).status, 200)
+  for (const path of ["/crm/pipelines", "/crm/pipelines/new", `/crm/pipelines/${pipeline.id}`, "/crm/opportunities", "/crm/opportunities/new", `/crm/opportunities/${deal.id}`, `/crm/opportunities/new?enquiryId=${source.id}`, "/crm/accounts", "/crm/accounts/new", `/crm/accounts/${account.id}`, "/crm/contacts", "/crm/contacts/new", `/crm/contacts/${contact.id}`, "/crm/enquiries", "/crm/enquiries/new", `/crm/enquiries/${enquiry.id}`, "/crm/tasks", "/settings/modules", "/appointments"]) {
     const page = await admin(path)
     assert.equal(page.status, 200, `Page failed: ${path}`)
     const html = await page.text()

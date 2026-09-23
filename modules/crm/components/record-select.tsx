@@ -15,7 +15,7 @@ export function RecordSelect({ endpoint, value, selected, onChange, id, disabled
     const controller = new AbortController()
     const timer = setTimeout(async () => {
       try {
-        const response = await fetch(`${endpoint}?pageSize=20&q=${encodeURIComponent(q)}`, { signal: controller.signal, cache: "no-store" })
+        const response = await fetch(`${endpoint}${endpoint.includes("?") ? "&" : "?"}pageSize=20&q=${encodeURIComponent(q)}`, { signal: controller.signal, cache: "no-store" })
         if (!response.ok) throw new Error("Unable to load choices.")
         const data: ListResponse<{ id: string; name: string | null }> = await response.json()
         setOptions(data.items.map(row => ({ value: row.id, label: row.name || "Unnamed user" })))

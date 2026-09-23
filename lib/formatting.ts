@@ -29,6 +29,22 @@ const NUMBER_SEPARATORS: Record<
 const addGrouping = (value: string, separator: string) =>
   value.replace(/\B(?=(\d{3})+(?!\d))/g, separator)
 
+// Decimal strings preserve CRM values beyond JavaScript's safe numeric precision.
+// Currency codes keep different currencies unambiguous in the same sales view.
+export const formatDecimalCurrency = (
+  value: string,
+  currency: string,
+  settings?: Pick<AppSettingsPayload, "numberFormat" | "currencySymbolPlacement">
+) => {
+  const [integerPart, decimalPart = ""] = value.split(".")
+  const separators = NUMBER_SEPARATORS[settings?.numberFormat ?? DEFAULTS.numberFormat]
+  const integer = separators.grouped ? addGrouping(integerPart, separators.thousands) : integerPart
+  const minimumDigits = new Intl.NumberFormat("en", { style: "currency", currency }).resolvedOptions().minimumFractionDigits ?? 2
+  const fraction = decimalPart.padEnd(minimumDigits, "0")
+  const number = fraction ? `${integer}${separators.decimal}${fraction}` : integer
+  return settings?.currencySymbolPlacement === "AFTER" ? `${number} ${currency}` : `${currency} ${number}`
+}
+
 export const formatNumberValue = (
   value: number,
   style: NumberFormatStyle = DEFAULTS.numberFormat,
