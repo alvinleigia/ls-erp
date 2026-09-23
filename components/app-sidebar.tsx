@@ -51,7 +51,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { canInvite, canManageUsers, type Role } from "@/lib/permissions"
+import { canInvite, canManageUsers, canUseCrm, type Role } from "@/lib/permissions"
 import { cn } from "@/lib/utils"
 
 type SubNavItem = {
@@ -109,6 +109,20 @@ export function AppSidebar() {
     platformAccessMode === "SUPER_ADMIN"
   const [openSections, setOpenSections] = React.useState<Record<string, boolean>>({})
   const [logoLoadFailed, setLogoLoadFailed] = React.useState(false)
+  const [crmEnabled, setCrmEnabled] = React.useState(false)
+  React.useEffect(() => {
+    if (isPlatformConsoleUser || !canUseCrm(role)) return
+    const controller = new AbortController()
+    const load = () => {
+      void fetch("/api/modules", { cache: "no-store", signal: controller.signal })
+        .then(async response => response.ok ? response.json() : null)
+        .then(data => { if (!controller.signal.aborted) setCrmEnabled(!!data?.modules?.some((module: { key: string; enabled: boolean }) => module.key === "crm" && module.enabled)) })
+        .catch(() => { if (!controller.signal.aborted) setCrmEnabled(false) })
+    }
+    load()
+    window.addEventListener("business-modules-changed", load)
+    return () => { controller.abort(); window.removeEventListener("business-modules-changed", load) }
+  }, [role, isPlatformConsoleUser])
 
   const name = user?.name?.trim() || user?.email?.trim() || "Guest"
   const initials = name
@@ -120,6 +134,15 @@ export function AppSidebar() {
 
   const sections = React.useMemo<NavSection[]>(() => {
     const list: NavSection[] = []
+    if (!isPlatformConsoleUser && canUseCrm(role) && crmEnabled) {
+      list.push({ key: "crm", title: "CRM", href: "/crm/enquiries", icon: UsersIcon,
+        isActive: current => current.startsWith("/crm"), items: [
+          { title: "Enquiries", href: "/crm/enquiries", icon: MailIcon, isActive: current => current.startsWith("/crm/enquiries") },
+          { title: "Contacts", href: "/crm/contacts", icon: UsersIcon, isActive: current => current.startsWith("/crm/contacts") },
+          { title: "Follow-ups", href: "/crm/tasks", icon: CalendarClockIcon, isActive: current => current.startsWith("/crm/tasks") },
+        ],
+      })
+    }
 
     if (!isPlatformSuperAdmin && (canManage || role === "STAFF")) {
       const leavesItems: SubNavItem[] = []
@@ -327,6 +350,7 @@ export function AppSidebar() {
               ]
           : [
               { title: "General", href: "/settings", icon: SettingsIcon, isActive: (current) => current === "/settings" },
+              { title: "Modules", href: "/settings/modules", icon: PackageIcon, isActive: (current) => current === "/settings/modules" },
               { title: "Taxes", href: "/settings/taxes", icon: TagIcon, isActive: (current) => current === "/settings/taxes" },
               { title: "Seeds", href: "/settings/seeds", icon: PackageIcon, isActive: (current) => current === "/settings/seeds" },
             ],
@@ -334,7 +358,7 @@ export function AppSidebar() {
     }
 
     return list
-  }, [canManage, isPlatformConsoleUser, role])
+  }, [canManage, isPlatformConsoleUser, isPlatformSuperAdmin, role, crmEnabled])
 
   const menuButtonClass = (active: boolean) =>
     cn("transition-colors", active && "bg-sidebar-primary/20 text-sidebar-primary font-semibold")

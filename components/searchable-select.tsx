@@ -29,6 +29,7 @@ type SearchableSelectProps = {
   emptyLabel?: string
   disabled?: boolean
   id?: string
+  onSearchChange?: (value: string) => void
 }
 
 export function SearchableSelect({
@@ -40,6 +41,7 @@ export function SearchableSelect({
   emptyLabel = "No results found.",
   disabled = false,
   id,
+  onSearchChange,
 }: SearchableSelectProps) {
   const [open, setOpen] = React.useState(false)
 
@@ -67,8 +69,8 @@ export function SearchableSelect({
         </Button>
       </PopoverTrigger>
       <PopoverContent align="start" className="w-[var(--radix-popover-trigger-width)] p-0">
-        <Command>
-          <CommandInput placeholder={searchPlaceholder} />
+        <Command shouldFilter={!onSearchChange}>
+          <CommandInput placeholder={searchPlaceholder} onValueChange={onSearchChange} />
           <CommandList>
             <CommandEmpty>{emptyLabel}</CommandEmpty>
             <CommandGroup>

@@ -1,0 +1,238 @@
+import type { Prisma, PrismaClient, Role } from "@prisma/client"
+import { recordDomainAuditEvent } from "@/lib/domain-audit"
+import { CrmError, canManageCrm, canUseCrm, contactScope, enquiryScope, type CrmActor } from "./policy"
+import {
+  crmContactSchema, crmContactUpdateSchema, crmEnquiryCreateSchema,
+  crmEnquiryUpdateSchema, crmListSchema, crmNoteSchema, crmTaskSchema,
+} from "./validation"
+
+const personSelect = { id: true, name: true } as const
+const contactSelect = { id: true, name: true, email: true, phone: true, archived: true } as const
+const enquiryInclude = { contact: { select: contactSelect }, assignee: { select: personSelect } } as const
+type Tx = Prisma.TransactionClient
+
+function pageResult<T>(items: T[], total: number, page: number, pageSize: number) {
+  return { items, total, page, pageSize, totalPages: Math.max(1, Math.ceil(total / pageSize)) }
+}
+
+// No HTTP or Lia dependencies. Every operation checks current membership and
+// module access, then runs in a transaction. Caller must establish DB tenant context.
+export function createCrmService(db: PrismaClient, identity: Pick<CrmActor, "tenantId" | "userId" | "requestId">) {
+  async function run<T>(operation: (tx: Tx, actor: CrmActor) => Promise<T>): Promise<T> {
+    for (let attempt = 0; ; attempt++) {
+      try {
+        return await db.$transaction(async tx => {
+          const user = await tx.user.findFirst({
+            where: { id: identity.userId, tenantId: identity.tenantId, status: "ACTIVE" },
+            select: { role: true, tenant: { select: { status: true, slug: true } } },
+          })
+          const platformSlug = process.env.PLATFORM_ADMIN_TENANT_SLUG?.trim().toLowerCase() || "platform"
+          if (!user || !canUseCrm(user.role) || user.tenant?.status !== "ACTIVE" || user.tenant.slug === platformSlug) {
+            throw new CrmError(403, "CRM access is not permitted.")
+          }
+          const enabledModule = await tx.tenantModule.findUnique({
+            where: { tenantId_key: { tenantId: identity.tenantId, key: "crm" } },
+          })
+          if (!enabledModule?.enabled) throw new CrmError(403, "CRM is not enabled for this business.")
+          return operation(tx, { ...identity, role: user.role })
+        }, { isolationLevel: "Serializable" })
+      } catch (error) {
+        const code = (error as { code?: string })?.code
+        if (code === "P2034" && attempt < 2) continue
+        if (code === "P2002") throw new CrmError(409, "A contact with this email or phone already exists in this business. Ask your manager if you cannot find it.")
+        if (code === "P2034") throw new CrmError(409, "This record changed. Refresh and try again.")
+        throw error
+      }
+    }
+  }
+
+  async function audit(tx: Tx, actor: CrmActor, event: string, entityId: string, before?: Prisma.InputJsonValue, after?: Prisma.InputJsonValue) {
+    await recordDomainAuditEvent(tx, {
+      tenantId: actor.tenantId, actorUserId: actor.userId, actorRole: actor.role as Role,
+      requestId: actor.requestId, event, entityType: event.startsWith("crm.contact") ? "CrmContact" : "CrmEnquiry",
+      entityId, before, after,
+    })
+  }
+
+  async function activity(tx: Tx, actor: CrmActor, enquiryId: string, event: string, message: string) {
+    await tx.crmActivity.create({ data: { tenantId: actor.tenantId, enquiryId, actorUserId: actor.userId, event, message } })
+  }
+
+  async function findEnquiry(tx: Tx, actor: CrmActor, id: string) {
+    const enquiry = await tx.crmEnquiry.findFirst({ where: { ...enquiryScope(actor), id }, include: enquiryInclude })
+    if (!enquiry) throw new CrmError(404, "Enquiry not found.")
+    return enquiry
+  }
+
+  async function checkAssignee(tx: Tx, actor: CrmActor, assignedUserId: string) {
+    if (!canManageCrm(actor.role) && assignedUserId !== actor.userId) throw new CrmError(403, "Only a manager can assign another salesperson.")
+    const assignee = await tx.user.findFirst({
+      where: { id: assignedUserId, tenantId: actor.tenantId, status: "ACTIVE", role: { in: ["ADMIN", "MANAGER", "STAFF"] } },
+      select: { id: true },
+    })
+    if (!assignee) throw new CrmError(400, "Choose an active salesperson in this business.")
+  }
+
+  return {
+    listContacts(input: unknown) {
+      const query = crmListSchema.parse(input)
+      return run(async (tx, actor) => {
+        const where: Prisma.CrmContactWhereInput = { AND: [contactScope(actor), {
+          archived: query.archived === "true",
+          ...(query.q ? { OR: ["name", "email", "phone"].map(field => ({ [field]: { contains: query.q, mode: "insensitive" } })) } : {}),
+        }] }
+        const sort = ["name", "createdAt", "updatedAt"].includes(query.sort) ? query.sort : "updatedAt"
+        const [items, total] = await Promise.all([
+          tx.crmContact.findMany({ where, orderBy: [{ [sort]: query.order }, { id: "asc" }], skip: (query.page - 1) * query.pageSize, take: query.pageSize }),
+          tx.crmContact.count({ where }),
+        ])
+        return pageResult(items, total, query.page, query.pageSize)
+      })
+    },
+    getContact(id: string) {
+      return run(async (tx, actor) => {
+        const contact = await tx.crmContact.findFirst({ where: { ...contactScope(actor), id } })
+        if (!contact) throw new CrmError(404, "Contact not found.")
+        return { ...contact, canEdit: canManageCrm(actor.role) || contact.ownerUserId === actor.userId }
+      })
+    },
+    createContact(input: unknown) {
+      const data = crmContactSchema.parse(input)
+      return run(async (tx, actor) => {
+        const contact = await tx.crmContact.create({ data: { ...data, email: data.email || null, phone: data.phone || null, tenantId: actor.tenantId, ownerUserId: actor.userId } })
+        await audit(tx, actor, "crm.contact.created", contact.id, undefined, data)
+        return contact
+      })
+    },
+    updateContact(id: string, input: unknown) {
+      const { version, ...data } = crmContactUpdateSchema.parse(input)
+      return run(async (tx, actor) => {
+        const where = { tenantId: actor.tenantId, id, ...(!canManageCrm(actor.role) ? { ownerUserId: actor.userId } : {}) }
+        const before = await tx.crmContact.findFirst({ where })
+        if (!before) throw new CrmError(404, "Editable contact not found.")
+        const changed = await tx.crmContact.updateMany({ where: { ...where, version }, data: { ...data, email: data.email || null, phone: data.phone || null, version: { increment: 1 } } })
+        if (!changed.count) throw new CrmError(409, "This contact changed. Refresh before saving.")
+        await audit(tx, actor, "crm.contact.updated", id, { name: before.name, email: before.email, phone: before.phone, archived: before.archived }, data)
+        return tx.crmContact.findFirstOrThrow({ where })
+      })
+    },
+    listEnquiries(input: unknown) {
+      const query = crmListSchema.parse(input)
+      return run(async (tx, actor) => {
+        const where: Prisma.CrmEnquiryWhereInput = { ...enquiryScope(actor),
+          ...(query.status ? { status: query.status } : {}),
+          ...(query.q ? { OR: [{ title: { contains: query.q, mode: "insensitive" } }, { contact: { name: { contains: query.q, mode: "insensitive" } } }] } : {}),
+        }
+        const sort = ["title", "createdAt", "updatedAt"].includes(query.sort) ? query.sort : "updatedAt"
+        const [items, total] = await Promise.all([
+          tx.crmEnquiry.findMany({ where, include: enquiryInclude, orderBy: [{ [sort]: query.order }, { id: "asc" }], skip: (query.page - 1) * query.pageSize, take: query.pageSize }),
+          tx.crmEnquiry.count({ where }),
+        ])
+        return pageResult(items, total, query.page, query.pageSize)
+      })
+    },
+    getEnquiry(id: string) {
+      return run(async (tx, actor) => ({ ...await findEnquiry(tx, actor, id), canAssign: canManageCrm(actor.role) }))
+    },
+    createEnquiry(input: unknown) {
+      const data = crmEnquiryCreateSchema.parse(input)
+      return run(async (tx, actor) => {
+        const contact = await tx.crmContact.findFirst({ where: { ...contactScope(actor), id: data.contactId, archived: false } })
+        if (!contact) throw new CrmError(404, "Active contact not found.")
+        await checkAssignee(tx, actor, data.assignedUserId)
+        const enquiry = await tx.crmEnquiry.create({ data: { ...data, tenantId: actor.tenantId }, include: enquiryInclude })
+        await activity(tx, actor, enquiry.id, "created", "Enquiry created.")
+        await audit(tx, actor, "crm.enquiry.created", enquiry.id, undefined, data)
+        return enquiry
+      })
+    },
+    updateEnquiry(id: string, input: unknown) {
+      const { version, ...data } = crmEnquiryUpdateSchema.parse(input)
+      return run(async (tx, actor) => {
+        const before = await findEnquiry(tx, actor, id)
+        await checkAssignee(tx, actor, data.assignedUserId)
+        const changed = await tx.crmEnquiry.updateMany({ where: { ...enquiryScope(actor), id, version }, data: { ...data, version: { increment: 1 } } })
+        if (!changed.count) throw new CrmError(409, "This enquiry changed. Refresh before saving.")
+        await activity(tx, actor, id, "updated", `Enquiry updated. Status: ${data.status}.${data.assignedUserId !== before.assignedUserId ? " Salesperson changed." : ""}`)
+        await audit(tx, actor, "crm.enquiry.updated", id, { title: before.title, source: before.source, requirements: before.requirements, status: before.status, assignedUserId: before.assignedUserId, outcome: before.outcome }, data)
+        return tx.crmEnquiry.findFirstOrThrow({ where: { tenantId: actor.tenantId, id }, include: enquiryInclude })
+      })
+    },
+    listTasks(input: unknown, enquiryId?: string) {
+      const query = crmListSchema.parse(input)
+      return run(async (tx, actor) => {
+        if (enquiryId) await findEnquiry(tx, actor, enquiryId)
+        const settings = await tx.appSetting.findUnique({ where: { tenantId: actor.tenantId }, select: { timeZone: true } })
+        const today = new Intl.DateTimeFormat("en-CA", { timeZone: settings?.timeZone || "UTC", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date())
+        const where: Prisma.CrmTaskWhereInput = {
+          tenantId: actor.tenantId, enquiry: enquiryScope(actor), ...(enquiryId ? { enquiryId } : {}),
+          ...(query.due === "completed" ? { completedAt: { not: null } } : { completedAt: null }),
+          ...(query.due === "overdue" ? { dueOn: { lt: new Date(`${today}T00:00:00Z`) } } : {}),
+          ...(query.q ? { title: { contains: query.q, mode: "insensitive" } } : {}),
+        }
+        const [items, total] = await Promise.all([
+          tx.crmTask.findMany({ where, include: { enquiry: { select: { id: true, title: true } } }, orderBy: [{ dueOn: "asc" }, { id: "asc" }], skip: (query.page - 1) * query.pageSize, take: query.pageSize }),
+          tx.crmTask.count({ where }),
+        ])
+        return pageResult(items, total, query.page, query.pageSize)
+      })
+    },
+    createTask(enquiryId: string, input: unknown) {
+      const data = crmTaskSchema.parse(input)
+      return run(async (tx, actor) => {
+        const enquiry = await findEnquiry(tx, actor, enquiryId)
+        if (enquiry.status === "CLOSED") throw new CrmError(409, "Reopen the enquiry before adding follow-ups.")
+        const task = await tx.crmTask.create({ data: { ...data, dueOn: new Date(`${data.dueOn}T00:00:00Z`), tenantId: actor.tenantId, enquiryId } })
+        await activity(tx, actor, enquiryId, "task.created", `Follow-up: ${data.title} (due ${data.dueOn}).`)
+        await audit(tx, actor, "crm.task.created", enquiryId, undefined, { taskId: task.id, ...data })
+        return task
+      })
+    },
+    completeTask(id: string) {
+      return run(async (tx, actor) => {
+        const task = await tx.crmTask.findFirst({ where: { id, tenantId: actor.tenantId, enquiry: enquiryScope(actor) } })
+        if (!task) throw new CrmError(404, "Follow-up not found.")
+        if (task.completedAt) return task
+        const updated = await tx.crmTask.update({ where: { id: task.id, tenantId: actor.tenantId }, data: { completedAt: new Date() } })
+        await activity(tx, actor, task.enquiryId, "task.completed", `Completed: ${task.title}.`)
+        await audit(tx, actor, "crm.task.completed", task.enquiryId, undefined, { taskId: task.id })
+        return updated
+      })
+    },
+    addNote(enquiryId: string, input: unknown) {
+      const { message } = crmNoteSchema.parse(input)
+      return run(async (tx, actor) => {
+        await findEnquiry(tx, actor, enquiryId)
+        await activity(tx, actor, enquiryId, "note", message)
+        await audit(tx, actor, "crm.note.created", enquiryId)
+        return { success: true }
+      })
+    },
+    listActivity(enquiryId: string, input: unknown) {
+      const query = crmListSchema.parse(input)
+      return run(async (tx, actor) => {
+        await findEnquiry(tx, actor, enquiryId)
+        const where = { tenantId: actor.tenantId, enquiryId }
+        const [items, total] = await Promise.all([
+          tx.crmActivity.findMany({ where, include: { actor: { select: personSelect } }, orderBy: [{ createdAt: "desc" }, { id: "asc" }], skip: (query.page - 1) * query.pageSize, take: query.pageSize }),
+          tx.crmActivity.count({ where }),
+        ])
+        return pageResult(items, total, query.page, query.pageSize)
+      })
+    },
+    listAssignees(input: unknown) {
+      const query = crmListSchema.parse(input)
+      return run(async (tx, actor) => {
+        const where: Prisma.UserWhereInput = { tenantId: actor.tenantId, status: "ACTIVE", role: { in: ["ADMIN", "MANAGER", "STAFF"] },
+          ...(!canManageCrm(actor.role) ? { id: actor.userId } : {}),
+          ...(query.q ? { name: { contains: query.q, mode: "insensitive" } } : {}),
+        }
+        const [items, total] = await Promise.all([
+          tx.user.findMany({ where, select: personSelect, orderBy: [{ name: "asc" }, { id: "asc" }], skip: (query.page - 1) * query.pageSize, take: query.pageSize }),
+          tx.user.count({ where }),
+        ])
+        return { ...pageResult(items, total, query.page, query.pageSize), currentUserId: actor.userId, canAssign: canManageCrm(actor.role) }
+      })
+    },
+  }
+}

@@ -9,6 +9,103 @@ generator client {
   engineType = "client"
 }
 
+enum CrmEnquiryStatus {
+  NEW
+  CONTACTED
+  QUALIFIED
+  CLOSED
+}
+
+model TenantModule {
+  tenantId String
+  key      String
+  enabled  Boolean @default(false)
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  updatedAt DateTime @updatedAt
+
+  @@id([tenantId, key])
+}
+
+model CrmContact {
+  id           String @id @default(cuid())
+  tenantId     String
+  name         String
+  email        String?
+  phone        String?
+  ownerUserId  String
+  legacyUserId String?
+  archived     Boolean @default(false)
+  version      Int @default(1)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  tenant       Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  owner        User @relation("CrmContactOwner", fields: [tenantId, ownerUserId], references: [tenantId, id], onDelete: Restrict)
+  legacyUser   User? @relation("CrmLegacyUser", fields: [tenantId, legacyUserId], references: [tenantId, id], onDelete: Restrict)
+  enquiries    CrmEnquiry[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, email])
+  @@unique([tenantId, phone])
+  @@unique([tenantId, legacyUserId])
+  @@index([tenantId, ownerUserId])
+  @@index([tenantId, name])
+}
+
+model CrmEnquiry {
+  id             String @id @default(cuid())
+  tenantId       String
+  contactId      String
+  title          String
+  source         String?
+  requirements   String?
+  assignedUserId String
+  status         CrmEnquiryStatus @default(NEW)
+  outcome        String?
+  version        Int @default(1)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  tenant         Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  contact        CrmContact @relation(fields: [tenantId, contactId], references: [tenantId, id], onDelete: Restrict)
+  assignee       User @relation(fields: [tenantId, assignedUserId], references: [tenantId, id], onDelete: Restrict)
+  tasks          CrmTask[]
+  activities     CrmActivity[]
+
+  @@unique([tenantId, id])
+  @@index([tenantId, assignedUserId, status])
+  @@index([tenantId, contactId])
+  @@index([tenantId, updatedAt])
+}
+
+model CrmTask {
+  id          String @id @default(cuid())
+  tenantId    String
+  enquiryId   String
+  title       String
+  dueOn       DateTime @db.Date
+  completedAt DateTime?
+  createdAt   DateTime @default(now())
+  tenant      Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  enquiry     CrmEnquiry @relation(fields: [tenantId, enquiryId], references: [tenantId, id], onDelete: Restrict)
+
+  @@index([tenantId, enquiryId])
+  @@index([tenantId, completedAt, dueOn])
+}
+
+model CrmActivity {
+  id          String @id @default(cuid())
+  tenantId    String
+  enquiryId   String
+  actorUserId String
+  event       String
+  message     String
+  createdAt   DateTime @default(now())
+  tenant      Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  enquiry     CrmEnquiry @relation(fields: [tenantId, enquiryId], references: [tenantId, id], onDelete: Restrict)
+  actor       User @relation(fields: [tenantId, actorUserId], references: [tenantId, id], onDelete: Restrict)
+
+  @@index([tenantId, enquiryId, createdAt])
+}
+
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
@@ -255,6 +352,10 @@ model User {
   sessions              Session[]
   invitations           Invitation[]              @relation("UserInvitations")
   organizationMemberships OrganizationMembership[]
+  crmContacts           CrmContact[] @relation("CrmContactOwner")
+  crmLegacyContacts     CrmContact[] @relation("CrmLegacyUser")
+  crmEnquiries          CrmEnquiry[]
+  crmActivities         CrmActivity[]
   passwordResetTokens   PasswordResetToken[]
   eligibleServices      StaffServiceEligibility[]
   staffProfile          StaffProfile?
@@ -269,6 +370,7 @@ model User {
   tenant                Tenant?                   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@unique([tenantId, email])
+  @@unique([tenantId, id])
   @@index([tenantId])
 }
 
@@ -314,6 +416,11 @@ model Tenant {
   status         TenantStatus  @default(ACTIVE)
   organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
   domains        TenantDomain[]
+  modules        TenantModule[]
+  crmContacts    CrmContact[]
+  crmEnquiries   CrmEnquiry[]
+  crmTasks       CrmTask[]
+  crmActivities  CrmActivity[]
   users          User[]
   invitations    Invitation[]
   settings       AppSetting[]

@@ -1,4 +1,6 @@
 import { z } from "zod"
+// Module-owned schemas are re-exported here for the existing validation convention.
+export * from "@/modules/crm/validation"
 import { INVENTORY_UNIT_OPTIONS } from "@/lib/constants/inventory"
 import { getStateOptionsByCountry } from "@/lib/constants/countries"
 
