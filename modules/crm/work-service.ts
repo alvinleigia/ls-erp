@@ -2,7 +2,7 @@ import type { Prisma, CrmTask } from "@prisma/client"
 import { CrmError, canManageCrm, contactScope, enquiryScope, type CrmActor } from "./policy"
 import { crmListSchema, crmNoteSchema } from "./validation"
 import { workCreateSchema, workUpdateSchema, workCompleteSchema, workCancelSchema, workReminderSchema, workListSchema, workOutcomes, type WorkScheduleInput, type WorkCreateInput } from "./work-validation"
-import { businessDate, wallTimeToInstant } from "./work-time"
+import { businessDate, startOfBusinessDate } from "./work-time"
 
 type Tx = Prisma.TransactionClient
 type Context = {
@@ -95,13 +95,17 @@ export function createWorkService({ run, audit, checkAssignee }: Context) {
         const clauses: Prisma.CrmTaskWhereInput[] = [workScope(actor), filter]
         if (query.scope === "mine" || query.due === "reminders") clauses.push({ assignedUserId: actor.userId })
         if (query.assignedUserId) clauses.push({ assignedUserId: query.assignedUserId })
+        if (query.completedFrom && query.completedThrough) clauses.push({ status: "COMPLETED", completedAt: {
+          gte: startOfBusinessDate(query.completedFrom, timeZone),
+          lt: startOfBusinessDate(new Date(Date.parse(`${query.completedThrough}T00:00:00Z`) + 86400000).toISOString().slice(0, 10), timeZone),
+        } })
         if (query.due === "overdue") clauses.push({ status: { in: [...openStatuses] }, OR: [{ startsAt: { lt: now } }, { startsAt: null, dueOn: { lt: new Date(`${today}T00:00:00Z`) } }] })
         if (query.due === "today") clauses.push({ dueOn: new Date(`${today}T00:00:00Z`) })
         if (query.due === "upcoming") clauses.push({ dueOn: { gt: new Date(`${today}T00:00:00Z`) } })
         if (query.due === "reminders") clauses.push({ status: { in: [...openStatuses] }, reminderAt: { lte: now }, reminderDismissedAt: null, OR: [{ snoozedUntil: null }, { snoozedUntil: { lte: now } }] })
         if (query.from && query.to) clauses.push({ OR: [
           { startsAt: null, dueOn: { gte: new Date(`${query.from}T00:00:00Z`), lt: new Date(`${query.to}T00:00:00Z`) } },
-          { startsAt: { lt: new Date(wallTimeToInstant(`${query.to}T00:00`, timeZone)) }, endsAt: { gt: new Date(wallTimeToInstant(`${query.from}T00:00`, timeZone)) } },
+          { startsAt: { lt: startOfBusinessDate(query.to, timeZone) }, endsAt: { gt: startOfBusinessDate(query.from, timeZone) } },
         ] })
         const where = { AND: clauses }
         const [items, total] = await Promise.all([

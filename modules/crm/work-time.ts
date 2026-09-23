@@ -18,3 +18,16 @@ export function wallTimeToInstant(value: string, timeZone: string) {
   return candidates[0].toISOString()
 }
 export const businessDate = (instant: Date, timeZone: string) => wallTime(instant, timeZone).slice(0, 10)
+
+// First instant of a local date, including zones whose DST transition skips midnight.
+// A skipped calendar date has an empty interval ending at the next date's start.
+export function startOfBusinessDate(date: string, timeZone: string) {
+  const nominal = Date.parse(`${date}T00:00:00Z`)
+  let low = nominal - 36 * 3600000, high = nominal + 36 * 3600000
+  while (low < high) {
+    const middle = Math.floor((low + high) / 2)
+    if (businessDate(new Date(middle), timeZone) < date) low = middle + 1
+    else high = middle
+  }
+  return new Date(low)
+}

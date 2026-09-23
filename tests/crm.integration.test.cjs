@@ -68,6 +68,90 @@ before(async () => {
 })
 after(async () => { await Promise.all(clients.map(db => db.$disconnect())) })
 
+test("activity reports enforce personal scope, team permissions and tenant isolation", async () => {
+  const contact = await manager.createContact({ name: "Reporting scope contact" })
+  const pipeline = await manager.createPipeline(pipelineInput("Reporting scope"))
+  const deal = await manager.createOpportunity(dealInput(pipeline, contact, staffA))
+  await manager.createWork(workInput(contact.id, otherA.id, { opportunityId: deal.id }))
+  // Owning a deal makes delegated tasks readable, but does not grant team reporting.
+  assert.equal((await staff.activityOverview({})).totals.open, 0)
+  assert.equal((await manager.activityOverview({ scope: "team" })).totals.open, 1)
+  for (const method of ["activityOverview", "staffActivityReport", "opportunitiesWithoutActivity"]) {
+    await assert.rejects(staff[method]({ scope: "team" }), expectStatus(403))
+    await assert.rejects(staff[method]({ assignedUserId: otherA.id }), expectStatus(403))
+  }
+  assert.equal((await second.activityOverview({ scope: "team", assignedUserId: otherA.id })).totals.open, 0)
+  assert.equal((await second.staffActivityReport({ scope: "team", assignedUserId: otherA.id })).total, 0)
+  await assert.rejects(manager.activityOverview({ scope: "mine", assignedUserId: staffA.id }), expectStatus(400))
+})
+
+test("activity report completions and drill-through use inclusive business dates, not occurrence dates", async () => {
+  const contact = await manager.createContact({ name: "Reporting boundary contact" })
+  const dates = ["2026-01-09T18:29:59.999Z", "2026-01-09T18:30:00.000Z", "2026-01-10T18:29:59.999Z", "2026-01-10T18:30:00.000Z"]
+  for (const date of dates) {
+    const work = await manager.createWork(workInput(contact.id, staffA.id))
+    await staff.completeWork(work.id, completionInput(work, { occurredAt: "2020-01-01T09:00:00Z", outcome: "NO_ANSWER" }))
+    await root.crmTask.update({ where: { id: work.id }, data: { completedAt: new Date(date) } })
+  }
+  const report = await staff.activityOverview({ from: "2026-01-10", through: "2026-01-10" })
+  assert.equal(report.totals.completed, 2)
+  assert.deepEqual(report.callOutcomes, [{ outcome: "NO_ANSWER", count: 2 }])
+  assert.equal(report.byType.find(row => row.type === "CALL").completed, 2)
+  const detail = await staff.listWork({ state: "completed", completedFrom: report.from, completedThrough: report.through })
+  assert.equal(detail.total, report.totals.completed)
+  assert.equal((await staff.activityOverview({ from: report.from, through: report.through, type: "TASK" })).totals.completed, 0)
+  const workload = await manager.staffActivityReport({ scope: "team", assignedUserId: staffA.id, from: report.from, through: report.through })
+  assert.equal(workload.items[0].completed, 2)
+})
+
+test("workload reports count current overdue work regardless of completion period and retain inactive assignees", async () => {
+  const { businessDate } = require("../modules/crm/work-time.ts")
+  const contact = await manager.createContact({ name: "Reporting backlog contact" })
+  const today = businessDate(new Date(), "Asia/Kolkata")
+  const before = await staff.activityOverview({ from: "2020-01-01", through: "2020-01-01" })
+  await manager.createWork(workInput(contact.id, staffA.id, { dueOn: "2020-01-01" }))
+  const task = await manager.createWork(workInput(contact.id, staffA.id, { dueOn: today, type: "TASK", callDirection: null }))
+  const cancelled = await manager.createWork(workInput(contact.id, staffA.id, { dueOn: "2020-01-01" }))
+  await manager.cancelWork(cancelled.id, { version: 1, reason: "No longer needed" })
+  const after = await staff.activityOverview({ from: "2020-01-01", through: "2020-01-01" })
+  assert.equal(after.totals.open, before.totals.open + 2)
+  assert.equal(after.totals.overdue, before.totals.overdue + 1)
+  assert.equal(after.totals.dueToday, before.totals.dueToday + 1)
+  assert.equal(after.totals.completed, 0)
+  await root.user.update({ where: { id: staffA.id }, data: { status: "SUSPENDED" } })
+  try {
+    const people = await manager.staffActivityReport({ scope: "team", assignedUserId: staffA.id, type: "TASK" })
+    assert.equal(people.items[0].status, "SUSPENDED"); assert.equal(people.items[0].open, 1)
+    await assert.rejects(staff.activityOverview({}), expectStatus(403))
+  } finally { await root.user.update({ where: { id: staffA.id }, data: { status: "ACTIVE" } }) }
+  const page = await manager.staffActivityReport({ scope: "team", pageSize: 1 })
+  const next = await manager.staffActivityReport({ scope: "team", pageSize: 1, page: 2 })
+  assert.equal(page.total, 3); assert.equal(page.items.length, 1); assert.notEqual(page.items[0].id, next.items[0].id)
+  assert.ok((await staff.listWork({ due: "today", type: "TASK" })).items.some(item => item.id === task.id))
+})
+
+test("follow-up gaps respect open activity coverage, owner scope, pagination and archive state", async () => {
+  const contact = await manager.createContact({ name: "Reporting coverage contact" })
+  const pipeline = await manager.createPipeline(pipelineInput("Reporting coverage"))
+  const first = await manager.createOpportunity(dealInput(pipeline, contact, staffA))
+  const secondDeal = await manager.createOpportunity(dealInput(pipeline, contact, staffA))
+  const privateDeal = await manager.createOpportunity(dealInput(pipeline, contact, otherA))
+  let gaps = await staff.opportunitiesWithoutActivity({ pageSize: 1 })
+  assert.equal(gaps.total, 2); assert.equal(gaps.totalPages, 2)
+  assert.notEqual(gaps.items[0].id, (await staff.opportunitiesWithoutActivity({ pageSize: 1, page: 2 })).items[0].id)
+  const delegated = await manager.createWork(workInput(contact.id, otherA.id, { opportunityId: first.id, dueOn: "2020-01-01" }))
+  gaps = await staff.opportunitiesWithoutActivity({ type: "TASK", from: "2020-01-01", through: "2020-01-01" })
+  assert.equal(gaps.total, 1); assert.equal(gaps.items[0].id, secondDeal.id)
+  assert.ok(!gaps.items.some(row => row.id === privateDeal.id))
+  await manager.cancelWork(delegated.id, { version: 1, reason: "Customer rescheduled" })
+  assert.equal((await staff.opportunitiesWithoutActivity({})).total, 2)
+  await manager.moveOpportunity(secondDeal.id, { pipelineId: pipeline.id, stageId: pipeline.stages[2].id, version: secondDeal.version })
+  assert.equal((await staff.opportunitiesWithoutActivity({})).total, 1)
+  await manager.updatePipeline(pipeline.id, { ...pipelineUpdate(pipeline), archived: true })
+  assert.equal((await staff.opportunitiesWithoutActivity({})).total, 0)
+  assert.equal((await second.opportunitiesWithoutActivity({ scope: "team", assignedUserId: staffA.id })).total, 0)
+})
+
 test("activity upgrade preserves existing follow-up IDs, dates, completion and inherited ownership", { skip: process.env.CRM_TEST_EXPECT_UPGRADE_FIXTURE !== "1" }, async () => {
   const rows = await root.crmTask.findMany({ where: { tenantId: "crm_upgrade" }, orderBy: { id: "asc" } })
   assert.deepEqual(rows.map(row => row.id), ["crm_upgrade_done", "crm_upgrade_open"])
@@ -465,6 +549,7 @@ test("failed required audit rolls back the business change", async () => {
 test("disabled CRM, suspended users and customer accounts cannot use the service", async () => {
   await root.tenantModule.update({ where: { tenantId_key: { tenantId: a, key: "crm" } }, data: { enabled: false } })
   await assert.rejects(manager.listContacts({}), expectStatus(403))
+  await assert.rejects(manager.activityOverview({}), expectStatus(403))
   await root.tenantModule.update({ where: { tenantId_key: { tenantId: a, key: "crm" } }, data: { enabled: true } })
   await root.user.update({ where: { id: staffA.id }, data: { status: "SUSPENDED" } })
   await assert.rejects(staff.listContacts({}), expectStatus(403))

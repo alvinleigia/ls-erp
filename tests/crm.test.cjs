@@ -8,6 +8,24 @@ const { crmAccountSchema, crmAccountLinkSchema } = require("../modules/crm/valid
 const { pipelineSchema, opportunitySchema, opportunityMoveSchema } = require("../modules/crm/sales-validation.ts")
 const { workCreateSchema, workCompleteSchema, workListSchema } = require("../modules/crm/work-validation.ts")
 const { wallTimeToInstant, wallTime } = require("../modules/crm/work-time.ts")
+const { startOfBusinessDate } = require("../modules/crm/work-time.ts")
+const { activityReportSchema, activityReportPageSchema } = require("../modules/crm/report-validation.ts")
+
+test("activity reporting bounds periods, validates filters and rejects client-controlled scope fields", () => {
+  assert.equal(activityReportSchema.parse({}).scope, "mine")
+  assert.equal(activityReportSchema.safeParse({ from: "2026-01-01", through: "2026-01-01" }).success, true)
+  for (const input of [{ from: "2026-01-01" }, { through: "2026-01-01" }, { from: "2026-02-01", through: "2026-01-01" }, { from: "2025-01-01", through: "2026-02-01" }, { tenantId: "other" }, { scope: "all" }, { type: "UNKNOWN" }]) assert.equal(activityReportSchema.safeParse(input).success, false)
+  assert.equal(activityReportPageSchema.safeParse({ pageSize: 101 }).success, false)
+  assert.equal(workListSchema.safeParse({ completedFrom: "2026-01-01" }).success, false)
+})
+
+test("report boundaries include local dates with skipped midnight and daylight-saving changes", () => {
+  assert.equal(startOfBusinessDate("2026-01-10", "Asia/Kolkata").toISOString(), "2026-01-09T18:30:00.000Z")
+  assert.equal(startOfBusinessDate("2026-03-09", "America/New_York") - startOfBusinessDate("2026-03-08", "America/New_York"), 23 * 3600000)
+  assert.equal(startOfBusinessDate("2026-11-02", "America/New_York") - startOfBusinessDate("2026-11-01", "America/New_York"), 25 * 3600000)
+  assert.equal(startOfBusinessDate("2018-11-04", "America/Sao_Paulo").toISOString(), "2018-11-04T03:00:00.000Z")
+  assert.equal(startOfBusinessDate("2011-12-30", "Pacific/Apia").toISOString(), startOfBusinessDate("2011-12-31", "Pacific/Apia").toISOString())
+})
 
 test("activity schedules validate timed windows, call direction, reminders and strict tenancy", () => {
   const data = { title: "Call", type: "CALL", assignedUserId: "u", contactId: "c", dueOn: "2026-10-01", callDirection: "OUTBOUND", startsAt: "2026-10-01T10:00:00Z", endsAt: "2026-10-01T10:30:00Z", reminderAt: "2026-10-01T09:45:00Z" }

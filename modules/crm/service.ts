@@ -2,6 +2,7 @@ import type { Prisma, PrismaClient, Role } from "@prisma/client"
 import { recordDomainAuditEvent } from "@/lib/domain-audit"
 import { createSalesService } from "./sales-service"
 import { createWorkService } from "./work-service"
+import { createReportService } from "./report-service"
 import { CrmError, canManageCrm, canUseCrm, contactScope, accountScope, enquiryScope, type CrmActor } from "./policy"
 import {
   crmContactSchema, crmContactUpdateSchema, crmEnquiryCreateSchema,
@@ -83,6 +84,7 @@ export function createCrmService(db: PrismaClient, identity: Pick<CrmActor, "ten
   return {
     ...createSalesService({ run, audit, checkAssignee }),
     ...createWorkService({ run, audit, checkAssignee }),
+    ...createReportService({ run }),
     listAccounts(input: unknown) {
       const query = crmListSchema.parse(input)
       return run(async (tx, actor) => {

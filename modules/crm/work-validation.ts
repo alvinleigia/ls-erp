@@ -33,8 +33,10 @@ export const workListSchema = crmListSchema.omit({ status: true, due: true, arch
   state: z.enum(["open", "all", "completed", "cancelled"]).default("open"),
   due: z.enum(["overdue", "today", "upcoming", "reminders"]).optional(),
   from: z.iso.date().optional(), to: z.iso.date().optional(), sort: z.enum(["dueOn", "priority", "updatedAt"]).default("dueOn"),
+  completedFrom: z.iso.date().optional(), completedThrough: z.iso.date().optional(),
   order: z.enum(["asc", "desc"]).default("asc"),
 }).superRefine((value, ctx) => {
+  if (!!value.completedFrom !== !!value.completedThrough || (value.completedFrom && value.completedThrough && (value.completedThrough < value.completedFrom || Date.parse(value.completedThrough) - Date.parse(value.completedFrom) > 365 * 86400000))) ctx.addIssue({ code: "custom", path: ["completedThrough"], message: "Choose a completion period of 1–366 days." })
   if (!!value.from !== !!value.to || (value.from && value.to && (value.to <= value.from || Date.parse(value.to) - Date.parse(value.from) > 62 * 86400000))) ctx.addIssue({ code: "custom", path: ["to"], message: "Choose a calendar window of 1–62 days." })
 })
 export type WorkScheduleInput = z.infer<typeof workScheduleSchema>
