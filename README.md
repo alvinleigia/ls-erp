@@ -18,9 +18,9 @@ Recommended local values:
 - `PLATFORM_ADMIN_*` values control the bootstrap tenant and first admin login.
 
 For Supabase instead of local Postgres:
-- use the `Session pooler` connection string on port `5432` for `DATABASE_URL`
-- optionally use the `Direct connection` string on port `5432` for `DIRECT_URL`
-- do not use the transaction pooler on port `6543` for normal app runtime
+- use the `Transaction pooler` connection string on port `6543` for `DATABASE_URL`
+- use direct or session-pooler port `5432` for Prisma migrations via `DIRECT_URL`
+- existing shared-pooler `5432` URLs are mapped to `6543` by runtime only; tenant settings are transaction-local
 - see `docs/SUPABASE_SETUP.md`
 
 3. Create the database named in `DATABASE_URL`.

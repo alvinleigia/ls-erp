@@ -5,43 +5,52 @@ This project works well with Supabase because it is a standard PostgreSQL app.
 Important for this codebase:
 - keep Prisma
 - keep our existing Postgres row-level security (RLS)
-- do not use Supabase transaction pooler (`6543`) for normal app traffic
+- use Supabase transaction pooling (`6543`) for serverless app traffic
 - do not give the main app role `BYPASSRLS`
 
 ## Why
 
-The app sets tenant DB context through connection/session settings in `lib/prisma.ts`:
+The app sets transaction-local tenant DB context through `lib/tenant-pg-adapter.ts`:
 - `app.tenant_id`
 - `app.rls_bypass`
 
 Those settings are then used by the policies created in `prisma/migrations/20260623160000_enable_tenant_rls/migration.sql`.
 
-Because of that, the app needs a persistent/session-style PostgreSQL connection, not transaction pooling.
+Both settings are applied inside the same transaction as the queries and are
+cleared at commit/rollback. Standalone Prisma queries receive a short transaction;
+interactive and batch transactions retain one scope for their full lifetime.
+Base, tenant and platform clients share one bounded `pg` pool per server instance.
+This replaces the old per-tenant session pools that exhausted Supabase's session
+connection limit when Vercel scaled or suspended instances.
 
 ## Recommended connection pattern
 
-Use one of these:
+Configure runtime and migration connections separately:
 
 1. `DATABASE_URL`
-Session pooler on port `5432`
+Transaction pooler on port `6543`
 
-Use this for the running app. This is the safest default for local Windows development when direct IPv6 access is awkward.
+Use this for the running app. For existing deployments, the runtime automatically
+maps a shared Supabase pooler URL on `5432` to the same hostname/credentials on
+`6543`. Direct PostgreSQL and local URLs are unchanged. The original environment
+variable is not modified, so Prisma CLI/scripts keep their existing connection.
 
 2. `DIRECT_URL`
-Direct connection on port `5432` if available
+Direct connection or session pooler on port `5432`
 
 Use this optionally for Prisma CLI and migrations. The repo is configured so Prisma CLI will prefer `DIRECT_URL` when present, otherwise it falls back to `DATABASE_URL`.
 
-Do not use:
-- Supavisor transaction mode on port `6543` for this app runtime
+When `DATABASE_URL` already uses `6543`, provide a direct/session `DIRECT_URL`
+for migrations. Never use persistent session `SET` for tenant context in runtime
+code: transaction pooling can choose a different backend after each commit.
 
 ## Supabase dashboard steps
 
 1. Create a new Supabase project.
 2. Open `Connect` in the project dashboard.
 3. Copy:
-   - the `Session pooler` connection string ending in `:5432`
-   - optionally the `Direct connection` string ending in `:5432`
+   - the `Transaction pooler` connection string ending in `:6543` for runtime
+   - a `Direct connection` or `Session pooler` string ending in `:5432` for migrations
 4. Open `SQL Editor`.
 5. Run the SQL below to create the app role.
 
@@ -80,8 +89,8 @@ Notes:
 Set these in `.env`:
 
 ```env
-# App runtime: use Supabase session pooler on 5432
-DATABASE_URL="postgres://prisma_app.[PROJECT-REF]:YOUR_STRONG_PASSWORD@aws-[REGION].pooler.supabase.com:5432/postgres"
+# App runtime: use Supabase transaction pooler on 6543
+DATABASE_URL="postgres://prisma_app.[PROJECT-REF]:YOUR_STRONG_PASSWORD@aws-[REGION].pooler.supabase.com:6543/postgres"
 
 # Optional: use direct connection for Prisma CLI/migrations when available
 DIRECT_URL="postgresql://prisma_app:YOUR_STRONG_PASSWORD@db.[PROJECT-REF].supabase.co:5432/postgres"
@@ -95,7 +104,7 @@ PLATFORM_ADMIN_EMAIL="platform-admin@ls-salon.test"
 PLATFORM_ADMIN_PASSWORD="password123"
 ```
 
-If your Supabase project/network does not support the direct connection path, omit `DIRECT_URL`.
+If direct IPv6 access is unavailable, use the session pooler (`5432`) for `DIRECT_URL`.
 
 ## Local commands after env setup
 
@@ -116,7 +125,7 @@ With `APP_ROOT_DOMAIN=localhost`:
 ## Troubleshooting
 
 If migrations fail:
-- confirm you are not using port `6543` in `DATABASE_URL`
+- confirm Prisma CLI's `DIRECT_URL` uses direct/session port `5432`
 - confirm the password belongs to `prisma_app`, not the default `postgres` user
-- if `DIRECT_URL` is present and failing, remove it temporarily and retry with only `DATABASE_URL`
+- if the direct host is unreachable, use the session pooler for `DIRECT_URL`
 - make sure the custom role SQL was executed before running Prisma

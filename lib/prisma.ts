@@ -1,8 +1,8 @@
 import { AsyncLocalStorage } from "node:async_hooks"
 
 import { PrismaClient } from "@prisma/client"
-import { PrismaPg } from "@prisma/adapter-pg"
-import { Pool, type PoolClient } from "pg"
+import { TenantPgAdapter, runtimeDatabaseUrl } from "./tenant-pg-adapter"
+import { Pool } from "pg"
 
 const databaseUrl = process.env.DATABASE_URL
 
@@ -36,27 +36,22 @@ const prismaContext = new AsyncLocalStorage<PrismaClient>()
 const basePool =
   globalForPrisma.prismaPool ??
   new Pool({
-    connectionString: databaseUrl,
-    // Unscoped reads (including tenant lookup) must share the same connection
-    // budget as scoped clients; pg's default of ten exhausts session poolers.
+    connectionString: runtimeDatabaseUrl(databaseUrl),
+    // One shared connection budget across base, tenant and platform clients.
     max: RLS_POOL_MAX,
     idleTimeoutMillis: RLS_POOL_IDLE_TIMEOUT_MS,
   })
 
-if (process.env.NODE_ENV !== "production") {
-  globalForPrisma.prismaPool = basePool
-}
+globalForPrisma.prismaPool = basePool
 
 const basePrismaClient =
   globalForPrisma.prisma ??
   new PrismaClient({
-    adapter: new PrismaPg(basePool),
+    adapter: new TenantPgAdapter(basePool),
     log: ["error", "warn"],
   })
 
-if (process.env.NODE_ENV !== "production") {
-  globalForPrisma.prisma = basePrismaClient
-}
+globalForPrisma.prisma = basePrismaClient
 
 const getScopedClientCache = () => {
   if (!globalForPrisma.prismaScopedClientCache) {
@@ -72,69 +67,10 @@ const assertSafeSettingValue = (value: string, settingName: string) => {
   return value
 }
 
-const applyRlsSessionSettings = async (
-  client: PoolClient,
-  settings: RlsSessionSettings
-) => {
-  await client.query(
-    `
-    SELECT
-      set_config('app.tenant_id', $1, false),
-      set_config('app.rls_bypass', $2, false)
-    `,
-    [settings.tenantId ?? "", settings.bypass ? "on" : "off"]
-  )
-}
-
-const createScopedPool = (settings: RlsSessionSettings) => {
-  const pool = new Pool({
-    connectionString: databaseUrl,
-    max: RLS_POOL_MAX,
-    idleTimeoutMillis: RLS_POOL_IDLE_TIMEOUT_MS,
-  })
-
-  const originalConnect = pool.connect.bind(pool)
-  pool.connect = ((callback?: Parameters<Pool["connect"]>[0]) => {
-    if (typeof callback === "function") {
-      originalConnect(async (error, client, done) => {
-        if (error || !client) {
-          callback(error, client, done)
-          return
-        }
-        try {
-          await applyRlsSessionSettings(client, settings)
-          callback(undefined, client, done)
-        } catch (settingsError) {
-          done(settingsError as Error)
-          callback(settingsError as Error, client, done)
-        }
-      })
-      return
-    }
-
-    return (async () => {
-      const client = await originalConnect()
-      try {
-        await applyRlsSessionSettings(client, settings)
-        return client
-      } catch (error) {
-        client.release(error as Error)
-        throw error
-      }
-    })()
-  }) as Pool["connect"]
-
-  return pool
-}
-
-const createScopedPrismaClient = (settings: RlsSessionSettings) => {
-  const pool = createScopedPool(settings)
-
-  return new PrismaClient({
-    adapter: new PrismaPg(pool, { disposeExternalPool: true }),
-    log: ["error", "warn"],
-  })
-}
+const createScopedPrismaClient = (settings: RlsSessionSettings) => new PrismaClient({
+  adapter: new TenantPgAdapter(basePool, settings),
+  log: ["error", "warn"],
+})
 
 const evictOldScopedClientsIfNeeded = async () => {
   const cache = getScopedClientCache()

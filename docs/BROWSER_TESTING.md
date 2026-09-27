@@ -182,3 +182,34 @@ the two subsequent warm rounds took 109–723 ms. Initial samples remained slowe
 these measurements do not imply a guaranteed latency or a cold-start fix. The
 deployment configuration was validated and Git whitespace checks passed; no
 application code or database migrations changed in this fix.
+
+## Conversion-page failure — shared transaction pooling, 2026-09-27
+
+The opportunity conversion form and reminders failed together. Read-only hosted
+requests reproduced HTTP 500s across enquiries, assignees and pipelines. The
+underlying error was `EMAXCONNSESSION`: Supabase's session pool allowed only 15
+connections. A one-connection limit per tenant pool did not bound connections
+across tenants and server instances; idle sessions still occupied database slots.
+
+Runtime now uses Supabase's shared transaction pool and a single application pool
+per process. Existing shared Supabase pooler URLs on port 5432 map to 6543 at
+runtime; migration URLs are unchanged. Tenant and platform Prisma clients retain
+separate scopes but share physical connections. The adapter applies both tenant
+and bypass settings transaction-locally, including for standalone queries, so a
+pooled backend cannot carry a previous tenant's context into the next operation.
+No RLS policy or migration is changed. See [Supabase setup](SUPABASE_SETUP.md).
+
+Six focused database tests cover concurrent tenant/platform/unscoped reads using
+one backend, rollback, batch transactions, rejected cross-tenant writes, failed
+bypass queries, invalid identifiers, client disposal and physical reconnection.
+Fifteen API regressions and 68 CRM unit/integration tests pass (one legacy-upgrade
+fixture test is skipped on this fresh database). Eight concurrent read-only CRM
+requests also returned 200 through the corrected local runtime against Supabase
+while the old deployed session pool was saturated.
+
+The production build, TypeScript and targeted ESLint pass. The authenticated HTTP
+workflow also passes against the built app and disposable database, exercising
+real sign-in, enquiry conversion, CRM writes, staff access, plans and rules with a
+one-connection runtime pool. Total: 90 passing tests/checks, plus the one skipped
+legacy-upgrade fixture test. Run focused pooling tests with
+`npm.cmd run test:tenant-pool:integration` and the guarded local test database.

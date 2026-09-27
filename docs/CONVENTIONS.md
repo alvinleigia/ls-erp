@@ -26,6 +26,7 @@ This is the baseline for new modules (API + UI) in this codebase.
 - Database isolation is also enforced with Postgres row-level security (RLS) for tenant-owned tables.
 - Tenant-scoped API/auth entrypoints must establish DB context through `lib/prisma.ts` helpers (`requireTenantSession`, `enterTenantDbContext`, `enterRlsBypassDbContext`) before issuing Prisma queries.
 - Use RLS bypass context only for narrowly scoped platform/provisioning flows that intentionally cross tenant boundaries.
+- All Prisma clients share one process-wide pool. The tenant adapter sets both RLS values transaction-locally, including for standalone queries; never introduce persistent session `SET` or a separate tenant pool. Supabase runtime uses transaction pooling; migrations retain their direct/session connection.
 - After awaiting authorization, explicitly wrap database work in `runWithTenantDbContext` or (for authorized platform operations) `runWithRlsBypassDbContext`. An async helper's `enterWith` context does not propagate back to the awaiting caller; do not rely on it for subsequent route queries.
 - Keep one shared database with strict tenant scoping in Prisma queries and model uniqueness constraints (`@@unique([tenantId, ...])` where applicable).
 - Platform operations (tenant provisioning, status lifecycle, admin reset) are centralized under `/api/tenants*` and must validate platform-tenant scope (`PLATFORM_ADMIN_TENANT_SLUG`).

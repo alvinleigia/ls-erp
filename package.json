@@ -19,6 +19,7 @@
     "test:tenants:integration": "node --require ./tests/register.cjs --test tests/tenant-provisioning.integration.test.cjs",
     "test:dashboard:integration": "node --require ./tests/register.cjs --test tests/dashboard.integration.test.cjs",
     "test:settings-work:integration": "node --require ./tests/register.cjs --test tests/settings-work.integration.test.cjs",
+    "test:tenant-pool:integration": "node --require ./tests/register.cjs --test tests/tenant-pool.integration.test.cjs",
     "test:crm:migration": "node -r dotenv/config --test tests/crm.migration.test.cjs",
     "db:migrate": "prisma migrate dev",
     "db:generate": "prisma generate",
