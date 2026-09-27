@@ -237,3 +237,21 @@ All-day reschedules retain their calendar date. The four focused formatting test
 cover the reported 05:30 UTC to 11:00 Asia/Kolkata case, 12/24-hour preferences,
 date rollover, DST, all-day events and preservation of notes/malformed timestamps.
 They run with `npm.cmd run test:crm` (19 passing tests total). No migration is needed.
+
+## Manual UAT — staff user creation, 2026-09-27
+
+The administrator's Create user request returned `Unable to create user.` and
+the Users list appeared empty. Local integration tests reproduced the underlying
+`new row violates row-level security policy for table "User"` error: the legacy
+user routes relied on tenant context established inside an awaited auth helper.
+The list, create, detail and update handlers now explicitly run database work in
+the authorized tenant context. Role checks and RLS remain enforced.
+
+Seven integration tests exercise real Prisma and Postgres RLS, with authentication
+alone stubbed. Five reproduced failures before the fix; all seven pass after it.
+Coverage includes staff creation with blank optional fields and a hashed password,
+duplicate email conflicts, concurrent tenant-scoped lists, profile reads/edits,
+restricted self-service, cross-tenant/role denial and absence of context leakage.
+Run `npm.cmd run test:users:integration` against the disposable local test database.
+TypeScript and targeted ESLint pass. No migration is required; hosted creation
+will be retried by the user after deployment.
