@@ -4,8 +4,8 @@ import { SearchableSelect } from "@/components/searchable-select"
 import type { ListResponse } from "@/types/api"
 
 type Option = { value: string; label: string }
-export function RecordSelect({ endpoint, value, selected, onChange, id, disabled = false, labelField = "name" }: {
-  endpoint: string; value: string; selected?: Option; onChange: (value: string) => void; id: string; disabled?: boolean; labelField?: "name" | "title";
+export function RecordSelect({ endpoint, value, selected, onChange, id, disabled = false, labelField = "name", placeholder = "Search and select…" }: {
+  endpoint: string; value: string; selected?: Option; onChange: (value: string) => void; id: string; disabled?: boolean; labelField?: "name" | "title"; placeholder?: string;
 }) {
   const [q, setQ] = React.useState("")
   const [options, setOptions] = React.useState<Option[]>([])
@@ -36,5 +36,5 @@ export function RecordSelect({ endpoint, value, selected, onChange, id, disabled
     setMessage("Loading choices…")
     setQ(next)
   }
-  return <SearchableSelect id={id} value={value} selectedOption={retained} onChange={next => { setPicked(options.find(option => option.value === next)); onChange(next) }} options={options} onSearchChange={search} placeholder="Search and select…" emptyLabel={message} disabled={disabled} />
+  return <SearchableSelect id={id} value={value} selectedOption={retained} onChange={next => { setPicked(options.find(option => option.value === next)); onChange(next) }} options={options} onSearchChange={search} placeholder={placeholder} emptyLabel={message} disabled={disabled} />
 }

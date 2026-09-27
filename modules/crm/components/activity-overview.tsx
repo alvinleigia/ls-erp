@@ -5,9 +5,11 @@ import { CrmPageHeader, CrmSurface, crmPageClass } from "./crm-page"
 import { CrmSelect } from "./crm-controls"
 import * as React from "react"
 import Link from "next/link"
+import { CalendarDays, ChevronDown, RefreshCw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { FormField } from "@/components/form-field"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { RecordSelect } from "./record-select"
 import { selectClass } from "./record-list"
 import { useDateFormatter } from "@/hooks/use-date-formatter"
@@ -26,6 +28,7 @@ export function ActivityOverview() {
   const [from, setFrom] = React.useState("")
   const [through, setThrough] = React.useState("")
   const [period, setPeriod] = React.useState<{ from: string; through: string } | null>(null)
+  const [periodOpen, setPeriodOpen] = React.useState(false)
   const [staffPage, setStaffPage] = React.useState(1)
   const [gapPage, setGapPage] = React.useState(1)
   const [loading, setLoading] = React.useState(true)
@@ -50,14 +53,24 @@ export function ActivityOverview() {
   const workLink = (kind: "open" | "overdue" | "today" | "completed", assignedUserId = owner) => `/crm/activities?${new URLSearchParams({ scope: scope === "team" ? "visible" : "mine", state: kind === "completed" ? "completed" : "open", ...(assignedUserId ? { assignedUserId } : {}), ...(type ? { type } : {}), ...(kind === "completed" && data ? { completedFrom: data.from, completedThrough: data.through } : kind !== "open" ? { due: kind } : {}) })}`
   return <section className={crmPageClass}>
     <CrmPageHeader title="Activity overview" description="Current workload, completed activities and follow-up gaps." actions={<Button asChild><Link href="/crm/activities/new">Schedule activity</Link></Button>} />
-    <CrmSurface><div className="flex flex-wrap items-end gap-3">
-      <FormField id="report-scope" label="Scope"><CrmSelect id="report-scope" className={selectClass} value={scope} onValueChange={event => { setScope(event); setOwner(""); reset() }}><option value="mine">My work</option>{data?.canManage && <option value="team">Team</option>}</CrmSelect></FormField>
-      {scope === "team" && <FormField id="report-owner" label="Assigned staff"><div className="w-56"><RecordSelect id="report-owner" endpoint="/api/crm/assignees" value={owner} onChange={value => { setOwner(value); reset() }} /></div></FormField>}
-      <FormField id="report-type" label="Activity type"><CrmSelect id="report-type" className={selectClass} value={type} onValueChange={event => { setType(event); reset() }}><option value="">All types</option>{workTypes.map(value => <option key={value}>{value}</option>)}</CrmSelect></FormField>
-      <Button variant="outline" disabled={loading} onClick={() => { setOwner(""); setType(""); setPeriod(null); reset(); setRevision(value => value + 1) }}>Reset filters</Button>
-      <Button variant="outline" disabled={loading} onClick={() => setRevision(value => value + 1)}>Refresh</Button>
-    </div>
-    <form className="flex flex-wrap items-end gap-3" onSubmit={event => { event.preventDefault(); setPeriod({ from, through }); reset() }}><FormField id="report-from" label="Completions from"><Input id="report-from" type="date" required value={from} onChange={event => setFrom(event.target.value)} /></FormField><FormField id="report-through" label="Through (inclusive)"><Input id="report-through" type="date" required min={from} value={through} onChange={event => setThrough(event.target.value)} /></FormField><Button type="submit" variant="outline" disabled={loading || !from || !through}>Apply period</Button></form></CrmSurface>
+    <CrmSurface className="p-3 sm:p-3">
+      <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Overview filters">
+        <CrmSelect id="report-scope" aria-label="Scope" className={selectClass} value={scope} onValueChange={value => { setScope(value); setOwner(""); reset() }}><option value="mine">My work</option>{data?.canManage && <option value="team">Team</option>}</CrmSelect>
+        <CrmSelect id="report-type" aria-label="Activity type" className={selectClass} value={type} onValueChange={value => { setType(value); reset() }}><option value="">All types</option>{workTypes.map(value => <option key={value}>{value}</option>)}</CrmSelect>
+        {scope === "team" && <div className="min-w-0 basis-full sm:basis-48"><label htmlFor="report-owner" className="sr-only">Assigned staff</label><RecordSelect id="report-owner" placeholder="All staff" endpoint="/api/crm/assignees" value={owner} onChange={value => { setOwner(value); reset() }} /></div>}
+        <Popover open={periodOpen} onOpenChange={open => { setPeriodOpen(open); if (open && data) { setFrom(data.from); setThrough(data.through) } }}>
+          <PopoverTrigger asChild><Button type="button" variant="outline" aria-label="Completion period" disabled={!data} className="min-w-0 basis-full justify-between font-normal sm:basis-auto"><CalendarDays className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" /><span className="truncate">{data ? `${formatDate(data.from)} – ${formatDate(data.through)}` : "Completion period"}</span><ChevronDown className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" /></Button></PopoverTrigger>
+          <PopoverContent align="start" collisionPadding={16} className="w-[min(24rem,calc(100vw-2rem))] space-y-4 p-4" aria-label="Completion period">
+            <div><h2 className="font-semibold">Completion period</h2><p className="mt-1 text-sm text-muted-foreground">Choose which completed activities to include.</p></div>
+            <form className="space-y-4 [color-scheme:light] dark:[color-scheme:dark]" onSubmit={event => { event.preventDefault(); setPeriod({ from, through }); reset(); setPeriodOpen(false) }}>
+              <div className="grid min-w-0 gap-3 sm:grid-cols-2"><FormField id="report-from" label="From" className="min-w-0"><Input id="report-from" type="date" required value={from} onChange={event => setFrom(event.target.value)} /></FormField><FormField id="report-through" label="Through (inclusive)" className="min-w-0"><Input id="report-through" type="date" required min={from} value={through} onChange={event => setThrough(event.target.value)} /></FormField></div>
+              <div className="flex justify-end gap-2 border-t pt-3"><Button type="button" variant="outline" onClick={() => setPeriodOpen(false)}>Cancel</Button><Button type="submit" disabled={loading || !from || !through}>Apply period</Button></div>
+            </form>
+          </PopoverContent>
+        </Popover>
+        <div className="ml-auto flex items-center gap-1"><Button variant="ghost" size="sm" disabled={loading} onClick={() => { setOwner(""); setType(""); setPeriod(null); reset(); setRevision(value => value + 1) }}>Reset filters</Button><span className="mx-1 h-5 w-px bg-border" aria-hidden="true" /><Button variant="ghost" size="icon" aria-label="Refresh" title="Refresh" disabled={loading} onClick={() => setRevision(value => value + 1)}><RefreshCw className="size-4" aria-hidden="true" /></Button></div>
+      </div>
+    </CrmSurface>
     {error && <p role="alert" className="text-destructive">{error}</p>}
     {loading && <p role="status">Loading activity report…</p>}
     {!loading && !error && data && <>
