@@ -24,6 +24,7 @@ type SearchableSelectProps = {
   value: string
   onChange: (value: string) => void
   options: SearchableSelectOption[]
+  selectedOption?: SearchableSelectOption
   placeholder: string
   searchPlaceholder?: string
   emptyLabel?: string
@@ -36,6 +37,7 @@ export function SearchableSelect({
   value,
   onChange,
   options,
+  selectedOption,
   placeholder,
   searchPlaceholder = "Type to search...",
   emptyLabel = "No results found.",
@@ -46,12 +48,12 @@ export function SearchableSelect({
   const [open, setOpen] = React.useState(false)
 
   const selected = React.useMemo(
-    () => options.find((option) => option.value === value) ?? null,
-    [options, value]
+    () => options.find((option) => option.value === value) ?? (selectedOption?.value === value ? selectedOption : null),
+    [options, value, selectedOption]
   )
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open} onOpenChange={next => { setOpen(next); if (next) onSearchChange?.("") }}>
       <PopoverTrigger asChild>
         <Button
           id={id}

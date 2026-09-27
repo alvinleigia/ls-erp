@@ -255,3 +255,19 @@ restricted self-service, cross-tenant/role denial and absence of context leakage
 Run `npm.cmd run test:users:integration` against the disposable local test database.
 TypeScript and targeted ESLint pass. No migration is required; hosted creation
 will be retried by the user after deployment.
+
+## CRM selector search, 2026-09-27
+
+Staff search showed the selected administrator even when only another staff member
+matched. The shared CRM RecordSelect prepended its retained selection to every
+server result; customer and other CRM record selectors had the same behavior.
+SearchableSelect now accepts a separate selected label for the field, while the
+dropdown contains only server results. Searches clear stale choices while loading,
+ignore aborted responses and reset when reopened. Server matches by email/phone
+are preserved without applying a second name-only filter in the browser.
+
+`tests/browser/record-select.spec.ts` reproduces the extra result in both staff and
+customer selectors before the fix. Both tests pass against the fixed components
+in an isolated local browser fixture. They cover matching results, empty results,
+selection retention, reopening, choosing a new record and backend matches beyond
+the displayed name. The tests mock search responses and never save the form.
