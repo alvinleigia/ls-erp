@@ -17,6 +17,13 @@ No API or database changes are required. Seven browser checks exercise the real
 components with intercepted test data and writes, including filters, pagination,
 archive/restore, account relationships, staff read-only access and mobile themes.
 
+Customer interactions and activity history/internal notes now share a connected
+timeline with event icons, author initials, timestamps and separate message cards.
+Both timelines use centered, independently paginated controls. Internal notes
+retain their permission checks and history retains business-time-zone formatting.
+Local browser verification covers light/dark themes, mobile layout, centered
+pagination, note submission and read-only access; history-format regressions pass.
+
 ## Architecture decision
 
 Keep one Next.js application and PostgreSQL database. The business tenant is the
