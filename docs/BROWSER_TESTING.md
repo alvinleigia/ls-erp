@@ -102,3 +102,27 @@ targeted ESLint also pass. Run with `npm.cmd run test:tenants:integration` and
 
 The fix needs application deployment before retrying the hosted Create tenant
 flow. No hosted business records were created or altered during reproduction.
+
+## Manual UAT — new-business dashboard, 2026-09-27
+
+After the provisioning fix was pushed, the user created `crm-test`, signed in as
+its business administrator and saw `Unable to load dashboard summary.` A
+read-only execution of the dashboard handler against that tenant reproduced
+Supabase's `EMAXCONNSESSION` error: its session pool permits 15 clients, while
+the previously unbounded base application pool could open ten connections for
+the dashboard's parallel queries. The base pool now respects `RLS_POOL_MAX`,
+matching scoped clients (default one connection in production, two locally).
+This caps each pool, not the aggregate across server instances; deployment
+concurrency and the database's total connection budget must still agree.
+
+The dashboard also now runs its queries inside an explicit tenant context, so
+RLS permits its own settings and records without revealing other businesses.
+The browser connection test requires a successful summary API response, rather
+than accepting a rendered dashboard shell that displays an error.
+
+All four dashboard integration tests and six tenant-provisioning regressions
+passed, as did TypeScript and targeted ESLint. Coverage includes empty-business
+responses, concurrent tenant isolation, session rejection and a one-connection
+budget during parallel reads. The corrected handler returned HTTP 200 against
+CRM Test using read-only queries. This verifies local corrected code against the
+hosted database; the deployed UI still needs retesting after deployment.

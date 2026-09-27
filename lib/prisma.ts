@@ -37,6 +37,10 @@ const basePool =
   globalForPrisma.prismaPool ??
   new Pool({
     connectionString: databaseUrl,
+    // Unscoped reads (including tenant lookup) must share the same connection
+    // budget as scoped clients; pg's default of ten exhausts session poolers.
+    max: RLS_POOL_MAX,
+    idleTimeoutMillis: RLS_POOL_IDLE_TIMEOUT_MS,
   })
 
 if (process.env.NODE_ENV !== "production") {
