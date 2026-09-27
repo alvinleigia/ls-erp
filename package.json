@@ -7,6 +7,13 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "browser:open": "node scripts/crm-browser.cjs open",
+    "browser:save": "node scripts/crm-browser.cjs save",
+    "browser:status": "node scripts/crm-browser.cjs status",
+    "test:browser": "playwright test",
+    "test:browser:connection": "playwright test connection.spec.ts",
+    "test:browser:headed": "playwright test --headed",
+    "test:browser:report": "playwright show-report",
     "test:crm": "node --require ./tests/register.cjs --test tests/crm.test.cjs",
     "test:crm:integration": "node --require ./tests/register.cjs --test tests/crm.integration.test.cjs",
     "test:crm:migration": "node -r dotenv/config --test tests/crm.migration.test.cjs",
@@ -50,6 +57,7 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@playwright/test": "1.61.1",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/nodemailer": "^7.0.5",

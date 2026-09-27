@@ -82,6 +82,7 @@ Optional:
 - Tenant-safe Prisma context is handled in `lib/prisma.ts`.
 - Platform provisioning APIs intentionally use a tightly scoped RLS bypass path.
 - Supabase setup notes live in `docs/SUPABASE_SETUP.md`.
+- Linked Chrome setup and saved-login browser tests are documented in `docs/BROWSER_TESTING.md`.
 
 ## Current status
 
