@@ -151,3 +151,23 @@ upgrade-fixture test skipped on this fresh schema. TypeScript and targeted ESLin
 also pass. Hosted
 browser verification still requires deployment and a page refresh; these results
 do not claim that the deployed UI has been visually verified.
+
+## Hosted latency — function/database region alignment, 2026-09-27
+
+Authenticated hosted reads showed approximately 3.2–3.4 seconds for enquiries
+and 4 seconds for reminders, even sequentially. Response routing headers showed
+`bom1::iad1`: requests entered in Mumbai but executed in the US. The configured
+Supabase session pool is in `ap-south-1` (Mumbai). Multiple database round trips
+across regions also lengthened connection queues when page panels loaded together.
+
+`vercel.json` now selects `bom1` for server functions, matching the database.
+This is an application-wide deployment setting, independent of the business's
+display time zone. It leaves database isolation and connection limits unchanged.
+If the database moves regions, update this setting with it. Vercel documents
+[function region configuration](https://vercel.com/docs/functions/configuring-functions/region)
+and recommends locating functions near their data source.
+
+Verification uses authenticated read-only HTTP requests against the hosted app;
+the test administrator's saved login remains in the ignored authentication folder.
+Compare routing headers and repeated warm request timings after deployment,
+including concurrent enquiries and reminders. Cold starts may remain slower.
