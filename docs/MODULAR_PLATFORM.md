@@ -585,3 +585,30 @@ stopped. Application hosting deployment and visual browser testing remain deferr
 
 Implementation checkpoints: `a50e1fe` (backend, migration and database tests) and
 `1ab763c` (configuration UI, completion review and authenticated HTTP coverage).
+
+## Legacy default tenant retired — 2026-09-27
+
+Businesses are provisioned explicitly. There is no single-business fallback or
+default business in the runtime. The platform tenant remains the administrative
+control plane and is the only tenant excluded from the business list.
+
+Migration `20260927090000_retire_legacy_default_tenant` removes the historical
+`tenant_default` / `default` placeholder only when it has no linked tenant-owned
+records. The migration locks the parent row and checks tenant-owned tables with
+transaction-local RLS bypass before deleting, preventing accidental cascading
+deletion and concurrent creation of foreign-key references. It aborts if data
+must first be reviewed or reassigned. Applied historical migrations remain
+unchanged; a fresh installation finishes without their obsolete placeholder.
+New businesses named `default` have no special handling and appear normally.
+
+Supabase preflight found the legacy tenant empty. The retirement migration was
+applied successfully, with all 77 migrations current and no Prisma schema drift.
+Three disposable-database tests passed: empty retirement preserves other tenants
+and the platform admin, populated retirement rolls back even under a non-bypass
+RLS role, and repeat execution preserves an explicitly provisioned business.
+All six read-only deployment checks, TypeScript and targeted ESLint passed.
+No application hosting deployment was performed.
+
+Run the focused migration tests against the prepared disposable database with
+`node --test tests/tenant-cleanup.integration.test.cjs` and the usual guarded
+`CRM_TEST_DATABASE_URL` from the CRM testing instructions above.

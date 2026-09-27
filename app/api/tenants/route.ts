@@ -20,8 +20,6 @@ import type { ListResponse } from "@/types/api"
 const PLATFORM_TENANT_SLUG = (
   process.env.PLATFORM_ADMIN_TENANT_SLUG?.trim().toLowerCase() || "platform"
 )
-const LEGACY_DEFAULT_TENANT_SLUG = "default"
-
 const listSchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(20),
@@ -54,7 +52,7 @@ export async function GET(request: Request) {
   try {
     const { page, pageSize, q, status } = parsed.data
     const andConditions: Prisma.TenantWhereInput[] = [{
-      slug: { notIn: [PLATFORM_TENANT_SLUG, LEGACY_DEFAULT_TENANT_SLUG] },
+      slug: { not: PLATFORM_TENANT_SLUG },
     }]
     if (status) andConditions.push({ status })
     if (q) {

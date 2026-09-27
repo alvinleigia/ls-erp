@@ -11,7 +11,7 @@ if (process.env.CRM_VERIFY_CONFIGURED_DATABASE !== "1" || !process.env.DATABASE_
   throw new Error("Set CRM_VERIFY_CONFIGURED_DATABASE=1 and load DATABASE_URL to run read-only deployment checks.")
 }
 const db = new Client({ connectionString: process.env.DATABASE_URL, connectionTimeoutMillis: 15000 })
-const migrationNames = ["20260923090000_crm_foundation", "20260923120000_crm_business_accounts", "20260923160000_crm_sales_pipelines", "20260924090000_crm_activity_workspace", "20260924120000_crm_activity_plans", "20260924150000_crm_follow_up_rules"]
+const migrationNames = ["20260923090000_crm_foundation", "20260923120000_crm_business_accounts", "20260923160000_crm_sales_pipelines", "20260924090000_crm_activity_workspace", "20260924120000_crm_activity_plans", "20260924150000_crm_follow_up_rules", "20260927090000_retire_legacy_default_tenant"]
 const tables = ["TenantModule", "CrmContact", "CrmEnquiry", "CrmTask", "CrmActivity", "CrmAccount", "CrmAccountContact", "CrmPipeline", "CrmStage", "CrmOpportunity", "CrmOpportunityActivity", "CrmTaskEvent", "CrmActivityPlan", "CrmPlanLaunch", "CrmFollowUpRule"]
 
 before(async () => {
@@ -23,7 +23,7 @@ after(async () => {
   try { await db.query("ROLLBACK") } finally { await db.end() }
 })
 
-test("the checked-in CRM migrations are applied successfully without failed migrations", async () => {
+test("the checked-in CRM and tenant-retirement migrations are applied successfully without failed migrations", async () => {
   for (const migrationName of migrationNames) {
     const applied = await db.query('SELECT checksum, finished_at, rolled_back_at FROM "_prisma_migrations" WHERE migration_name = $1', [migrationName])
     assert.equal(applied.rowCount, 1)
@@ -70,4 +70,10 @@ test("activity rollout bridges are enabled and run with caller permissions", asy
   const triggers = await db.query("SELECT t.tgname, t.tgenabled, p.prosecdef FROM pg_trigger t JOIN pg_proc p ON p.oid=t.tgfoid WHERE t.tgrelid IN ('public.\"CrmTask\"'::regclass, 'public.\"CrmEnquiry\"'::regclass) AND t.tgname=ANY($1::text[])", [["crm_task_legacy_bridge", "crm_inherit_enquiry_assignment"]])
   assert.equal(triggers.rowCount, 2)
   for (const trigger of triggers.rows) { assert.equal(trigger.tgenabled, "O"); assert.equal(trigger.prosecdef, false) }
+})
+
+test("the legacy default tenant is absent and the active platform tenant remains", async () => {
+  assert.equal((await db.query('SELECT id FROM "Tenant" WHERE id=$1', ["tenant_default"])).rowCount, 0)
+  const platform = await db.query('SELECT id FROM "Tenant" WHERE slug=$1 AND status=$2', [(process.env.PLATFORM_ADMIN_TENANT_SLUG || "platform").trim().toLowerCase(), "ACTIVE"])
+  assert.equal(platform.rowCount, 1)
 })

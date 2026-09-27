@@ -29,8 +29,8 @@ This is the baseline for new modules (API + UI) in this codebase.
 - Keep one shared database with strict tenant scoping in Prisma queries and model uniqueness constraints (`@@unique([tenantId, ...])` where applicable).
 - Platform operations (tenant provisioning, status lifecycle, admin reset) are centralized under `/api/tenants*` and must validate platform-tenant scope (`PLATFORM_ADMIN_TENANT_SLUG`).
 - Tenant management UI lives under `/settings/tenants` and is only visible/accessible for platform admin users.
-- `/api/tenants` storefront listing should exclude internal tenant records (`platform` control-plane tenant and legacy `default` bootstrap tenant).
-- Use a dedicated platform tenant slug (recommended: `platform`) instead of reusing a business tenant slug like `default`.
+- `/api/tenants` storefront listing excludes the `platform` control-plane tenant. Business tenants are provisioned explicitly and have no special default/fallback tenant.
+- Use a dedicated platform tenant slug (recommended: `platform`). The obsolete `tenant_default` bootstrap record is removed by the retirement migration; do not recreate it in seeds or runtime code.
 - Tenant admin profile management (name/email/phone/status/password) is handled via `/api/tenants/[id]/admin` and exposed from `/settings/tenants` row actions.
 - Platform danger reset is handled via `/api/tenants/reset-all` (confirmation token required); preserve the configured platform-admin login tenant and allow optional platform-tenant preservation.
 - Platform super-admin scope is provisioning-only:
