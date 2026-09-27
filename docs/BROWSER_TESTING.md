@@ -315,3 +315,9 @@ in the preview; all mutation tests used intercepted fixtures.
 
 Production build, TypeScript, targeted ESLint and whitespace checks also passed.
 
+
+Hosted follow-up: the app shell's intrinsic flex sizing exposed mobile overflow
+on overview, accounts, opportunities and rules. CRM's layout boundary now uses
+inline-size containment, so wide tables and board columns scroll within their
+containers. Applying that scoped fix in the hosted browser reduced all four
+pages to the 390px viewport without altering the global app shell.

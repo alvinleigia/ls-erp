@@ -19,5 +19,6 @@ export default async function CrmLayout({ children }: { children: React.ReactNod
   })
   if (!access) redirect("/dashboard")
   if (!access.enabled) return <div className="space-y-3"><h1 className="text-2xl font-semibold">CRM is not enabled</h1><p>Ask your business administrator to enable CRM for this workspace.</p>{access.role === "ADMIN" && <Link className="underline" href="/settings/modules">Manage business modules</Link>}</div>
-  return <div className="mx-auto w-full min-w-0 max-w-6xl space-y-6"><CrmNavigation /><WorkReminders />{children}</div>
+  // Keep CRM tables/boards from setting the surrounding app shell's intrinsic width.
+  return <div className="mx-auto w-full min-w-0 max-w-6xl space-y-6 [contain:inline-size]"><CrmNavigation /><WorkReminders />{children}</div>
 }

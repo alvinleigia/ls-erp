@@ -96,6 +96,7 @@ This is the baseline for new modules (API + UI) in this codebase.
 - Use `CrmTablePagination` with DataTable, or `CrmPagination` for reports, board columns and timelines. Show the record range on the left, centered Previous / Page / Next controls, and page size on the right. Narrow sections move centered page controls to a second row. Keep server-side paging and reset to page one when filters or page size change.
 - Render customer interactions and record history through `CrmTimeline`, with actor, event, timestamp and message. Keep internal-note forms within the history section.
 - These wrappers are CRM-specific; other modules retain their existing layout and pagination.
+- Keep inline-size containment on the CRM layout boundary. The surrounding app shell is a flex item; wide tables and board columns must scroll inside CRM instead of expanding the document on mobile. Verify layouts within that shell as well as isolated previews.
 
 ## Email templates
 - Put templates in `lib/emails/*`.

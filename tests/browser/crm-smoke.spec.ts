@@ -48,3 +48,14 @@ test("rule form is usable on mobile without saving changes", async ({ page }, in
   expect(width.content).toBeLessThanOrEqual(width.viewport)
   await page.screenshot({ path: info.outputPath("mobile-rule-form.png"), fullPage: true })
 })
+
+for (const path of ["overview", "accounts", "opportunities", "follow-up-rules"]) {
+  test(`mobile ${path} stays within the app shell`, async ({ page }, info) => {
+    await page.setViewportSize({ width: 390, height: 844 })
+    await page.goto(`/crm/${path}`)
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible()
+    await page.waitForLoadState("networkidle")
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390)
+    await page.screenshot({ path: info.outputPath(`mobile-${path}.png`), fullPage: true })
+  })
+}
