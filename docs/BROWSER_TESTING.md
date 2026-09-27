@@ -171,3 +171,14 @@ Verification uses authenticated read-only HTTP requests against the hosted app;
 the test administrator's saved login remains in the ignored authentication folder.
 Compare routing headers and repeated warm request timings after deployment,
 including concurrent enquiries and reminders. Cold starts may remain slower.
+
+Deployment was verified live: routing changed to `bom1::bom1`. All 27 authenticated
+HTTP checks returned 200 across enquiries, reminders, contacts, opportunities,
+pipelines and activity reports. Repeated warm sequential reads took 89–193 ms;
+enquiries took 100–105 ms versus 3.2–3.4 seconds before, and reminders 108–110 ms
+versus 4 seconds. Three concurrent reads previously took 5.7–8.5 seconds each;
+the two subsequent warm rounds took 109–723 ms. Initial samples remained slower
+(up to 1.2 seconds sequentially and 2.7 seconds in the first concurrent round), so
+these measurements do not imply a guaranteed latency or a cold-start fix. The
+deployment configuration was validated and Git whitespace checks passed; no
+application code or database migrations changed in this fix.
