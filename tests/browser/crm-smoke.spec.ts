@@ -23,7 +23,8 @@ for (const route of [
     await page.goto(route.path)
     expect((await loaded).status()).toBe(200)
     await expect(page.getByRole("heading", { name: route.heading, exact: true })).toBeVisible()
-    await expect(page.getByRole("alert")).toHaveCount(0)
+    // Next's document-level route announcer also has role="alert".
+    await expect(page.getByRole("main").getByRole("alert")).toHaveCount(0)
     await page.screenshot({ path: info.outputPath("desktop.png"), fullPage: true })
     expect(pageErrors).toEqual([])
   })

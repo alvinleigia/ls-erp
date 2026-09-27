@@ -321,3 +321,9 @@ on overview, accounts, opportunities and rules. CRM's layout boundary now uses
 inline-size containment, so wide tables and board columns scroll within their
 containers. Applying that scoped fix in the hosted browser reduced all four
 pages to the 390px viewport without altering the global app shell.
+
+The deployed interface and containment fix were confirmed on CRM Test. All nine
+read-only hosted smoke checks passed, including the four mobile app-shell
+regressions and keyboard/dropdown changes on an unsaved rule form. The smoke
+suite scopes error alerts to the application's main content so Next.js's
+accessibility route announcer is not mistaken for an application failure.
