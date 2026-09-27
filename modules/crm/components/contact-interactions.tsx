@@ -14,7 +14,7 @@ const interactionAppearance = {
   TASK: { icon: CheckSquare, action: "completed a task" },
 }
 
-export function ContactInteractions({ contactId, revision = 0, card = false }: { contactId: string; revision?: number; card?: boolean }) {
+export function ContactInteractions({ contactId, revision = 0 }: { contactId: string; revision?: number }) {
   const [data, setData] = React.useState<ListResponse<InteractionRow> | null>(null)
   const [page, setPage] = React.useState(1)
   const [error, setError] = React.useState("")
@@ -36,8 +36,8 @@ export function ContactInteractions({ contactId, revision = 0, card = false }: {
       dateTime: item.occurredAt, timeLabel: formatDate(item.occurredAt),
       detail: <><div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground"><span className="rounded-md border bg-background px-2 py-0.5 font-medium text-foreground">{item.outcome.replaceAll("_", " ")}</span>{item.callDirection && <span>{item.callDirection === "INBOUND" ? "Inbound" : "Outbound"}</span>}{item.durationMinutes !== null && <span>{item.durationMinutes} min</span>}</div><p className="whitespace-pre-wrap break-words">{item.summary}</p></>,
     }))} />}
-    {!loading && data?.total === 0 && (card ? <CrmEmptyState title="No interactions logged yet" description="Completed calls, meetings, emails and tasks will appear here." /> : <p className="text-sm text-muted-foreground">No interactions logged yet.</p>)}
-    {data && <TimelinePagination label="Customer interaction pages" page={page} totalPages={data.totalPages} loading={loading} onPageChange={setPage} />}
+    {!loading && data?.total === 0 && <CrmEmptyState title="No interactions logged yet" description="Completed calls, meetings, emails and tasks will appear here." />}
+    {data && <TimelinePagination label="Customer interaction pages" page={page} totalPages={data.totalPages} total={data.total} pageSize={data.pageSize} loading={loading} onPageChange={setPage} />}
   </>
-  return card ? <CrmSection title="Previous customer interactions" description="Shared conversation history for everyone working with this contact." icon={History}>{content}</CrmSection> : <section className="space-y-3"><h2 className="text-lg font-semibold">Previous customer interactions</h2><p className="text-sm text-muted-foreground">Shared call, meeting, email and task summaries help the next staff member continue the conversation.</p>{content}</section>
+  return <CrmSection title="Previous customer interactions" description="Shared conversation history for everyone working with this contact." icon={History}>{content}</CrmSection>
 }

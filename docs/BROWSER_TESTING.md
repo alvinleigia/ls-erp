@@ -294,3 +294,24 @@ response fields, cross-tenant and customer denial, current role/status checks,
 continued denial of admin settings access, and missing-settings behavior without
 writes. `tests/browser/crm-staff.spec.ts` adds read-only staff form coverage and
 skips when the selected saved login is not STAFF. No migration is needed.
+
+## CRM interface standardization — 2026-09-28
+
+All CRM lists, editors, reports, calendar controls, plan/rule screens and embedded
+sections now share CRM-scoped layout components. Fixed choices use Radix dropdowns,
+secondary filters use a common popover, page headers keep save/cancel actions
+together, and named sections have consistent cards and spacing. History uses the
+shared timeline. Pagination shows record ranges on the left, page controls in the
+center and page size on the right, stacking inside narrow sections. These wrappers
+do not change the other application modules or the CRM APIs and authorization.
+
+Local verification: 19 unit tests and 11 intercepted browser tests passed. Browser
+coverage includes header saves, dependent dropdowns, required-field validation,
+activity completion, contact permissions, archive confirmation, account linking,
+filter context and pagination. A read-only staging-data preview checked 27 CRM
+routes at desktop/mobile widths with no runtime errors or document overflow;
+representative light/dark screenshots were inspected. Hosted changes were blocked
+in the preview; all mutation tests used intercepted fixtures.
+
+Production build, TypeScript, targeted ESLint and whitespace checks also passed.
+

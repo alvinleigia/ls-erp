@@ -1,4 +1,9 @@
 "use client"
+import { History, MessageSquare } from "lucide-react"
+import { CrmSection, CrmEmptyState } from "./crm-section"
+import { CrmTimeline, TimelinePagination } from "./crm-timeline"
+import { CrmActionBar } from "./crm-page"
+import { CrmTextarea } from "./crm-controls"
 import * as React from "react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
@@ -31,8 +36,11 @@ export function OpportunityTimeline({ id, revision }: { id: string; revision: nu
     try { const response = await fetch(`/api/crm/opportunities/${id}/activity`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message }) }); const result = await response.json(); if (!response.ok) throw new Error(result.error || "Unable to save note."); setMessage(""); setPage(1); setRefresh(value => value + 1); toast.success("Note added.") }
     catch (error) { setError((error as Error).message) } finally { setSaving(false) }
   }
-  return <section className="space-y-4"><h2 className="text-lg font-semibold">Activity and history</h2><form onSubmit={add} className="space-y-3"><FormField id="opportunity-note" label="Add a note"><textarea id="opportunity-note" required maxLength={5000} className="min-h-24 w-full rounded border p-3" value={message} onChange={event => setMessage(event.target.value)} /></FormField><Button type="submit" loading={saving}>Add note</Button></form>
-    {error && <p role="alert" className="text-destructive">{error}</p>}{loading ? <p>Loading history…</p> : data?.items.map(item => <article key={item.id} className="rounded-lg border p-4"><p className="whitespace-pre-wrap break-words text-sm">{item.message}</p><p className="mt-2 text-xs text-muted-foreground">{item.actor.name || "Team member"} · {formatDate(item.createdAt)}</p></article>)}
-    <div className="flex items-center gap-3"><Button variant="outline" disabled={loading || page <= 1} onClick={() => setPage(value => value - 1)}>Previous</Button><span className="text-sm">Page {page} of {data?.totalPages || 1}</span><Button variant="outline" disabled={loading || !data || page >= data.totalPages} onClick={() => setPage(value => value + 1)}>Next</Button></div>
-  </section>
+  return <CrmSection title="Activity history and internal notes" description="Updates and notes for your team." icon={History}>
+    <form onSubmit={add} className="space-y-3 rounded-lg border bg-muted/20 p-4"><FormField id="opportunity-note" label="Add a note"><CrmTextarea id="opportunity-note" required maxLength={5000} value={message} onChange={event => setMessage(event.target.value)} /></FormField><CrmActionBar><Button type="submit" loading={saving}>Add note</Button></CrmActionBar></form>
+    {error && <p role="alert" className="text-destructive">{error}</p>}
+    {loading ? <p className="text-sm text-muted-foreground">Loading history…</p> : !error && data && <CrmTimeline entries={data.items.map(item => ({ id: item.id, icon: item.event.includes("note") ? MessageSquare : History, actor: item.actor.name || "Staff member", action: item.event.includes("note") ? "added an internal note" : "recorded an update", dateTime: item.createdAt, timeLabel: formatDate(item.createdAt), detail: <p className="whitespace-pre-wrap break-words">{item.message}</p> }))} />}
+    {!loading && !error && data?.total === 0 && <CrmEmptyState title="No activity history yet" description="Updates and internal notes will appear here." />}
+    {data && <TimelinePagination label="Activity history pages" page={page} pageSize={data.pageSize} total={data.total} totalPages={data.totalPages} loading={loading} onPageChange={setPage} />}
+  </CrmSection>
 }

@@ -1,11 +1,12 @@
 "use client"
+import { CrmTablePagination } from "./crm-pagination"
 import * as React from "react"
 import Link from "next/link"
 import { type ColumnDef, getCoreRowModel, useReactTable } from "@tanstack/react-table"
 import { toast } from "sonner"
 import { Building2, Plus } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { DataTable, DataTablePagination } from "@/components/data-table"
+import { DataTable } from "@/components/data-table"
 import { FormField } from "@/components/form-field"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
 import type { CrmAccountRow } from "@/types/crm"
@@ -68,7 +69,7 @@ export function ContactAccounts({ contactId, canEdit, archived }: { contactId: s
     </form>}
     {error && <p role="alert" className="text-destructive">{error}</p>}
     {!loading && data?.total === 0 ? <CrmEmptyState title="No linked business accounts" description={canEdit && !archived ? "Select an account above to connect this contact to a company." : "This contact is not linked to a company."} /> : <DataTable table={table} loading={loading} emptyMessage="No linked business accounts." />}
-    <DataTablePagination table={table} totalRows={data?.total ?? 0} compact />
+    <CrmTablePagination table={table} totalRows={data?.total ?? 0} loading={loading} />
     <Dialog open={!!removing} onOpenChange={open => { if (!open && !saving) setRemoving(null) }}><DialogContent><DialogHeader><DialogTitle>Unlink {removing?.name}?</DialogTitle><DialogDescription>The contact and account will be kept. This relationship will be removed and the change recorded in audit history.</DialogDescription></DialogHeader><DialogFooter><Button variant="outline" disabled={saving} onClick={() => setRemoving(null)}>Cancel</Button><Button loading={saving} onClick={() => removing && void change(removing)}>Unlink account</Button></DialogFooter></DialogContent></Dialog>
   </CrmSection>
 }

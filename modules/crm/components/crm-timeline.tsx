@@ -1,8 +1,8 @@
 "use client"
 
-import type { ReactNode } from "react"
-import { ChevronLeft, ChevronRight, Quote, type LucideIcon } from "lucide-react"
-import { Button } from "@/components/ui/button"
+import type { ComponentProps, ReactNode } from "react"
+import { Quote, type LucideIcon } from "lucide-react"
+import { CrmPagination } from "./crm-pagination"
 
 export type CrmTimelineEntry = {
   id: string
@@ -36,17 +36,4 @@ export function CrmTimeline({ entries }: { entries: CrmTimelineEntry[] }) {
   </ol>
 }
 
-export function TimelinePagination({ label, page, totalPages, loading, onPageChange }: {
-  label: string
-  page: number
-  totalPages: number
-  loading: boolean
-  onPageChange: (page: number) => void
-}) {
-  if (totalPages <= 1 && page <= 1) return null
-  return <nav aria-label={label} className="flex items-center justify-center gap-3 border-t pt-4">
-    <Button variant="outline" size="icon" aria-label="Previous page" disabled={loading || page <= 1} onClick={() => onPageChange(page - 1)}><ChevronLeft aria-hidden="true" /></Button>
-    <span className="text-sm text-muted-foreground" aria-live="polite">Page {page} of {Math.max(1, totalPages)}</span>
-    <Button variant="outline" size="icon" aria-label="Next page" disabled={loading || page >= totalPages} onClick={() => onPageChange(page + 1)}><ChevronRight aria-hidden="true" /></Button>
-  </nav>
-}
+export function TimelinePagination(props: ComponentProps<typeof CrmPagination>) { return <CrmPagination {...props} /> }

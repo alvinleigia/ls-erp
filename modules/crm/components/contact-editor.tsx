@@ -1,9 +1,10 @@
 "use client"
+import { CrmPageHeader, CrmFormActions } from "./crm-page"
 import * as React from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
-import { ArrowLeft, Plus, UserRound } from "lucide-react"
+import { Plus, UserRound } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { FormField } from "@/components/form-field"
@@ -56,19 +57,7 @@ export function ContactEditor({ id }: { id?: string }) {
   if (loading) return <p>Loading contact…</p>
   const canEdit = !id || !!contact?.canEdit
   return <div className="mx-auto w-full min-w-0 max-w-6xl space-y-6">
-    <header className="space-y-4">
-      <Link href="/crm/contacts" className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" aria-hidden="true" />Back to contacts</Link>
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="min-w-0 flex-1">
-          <p className="mb-1 text-xs font-medium uppercase tracking-wider text-muted-foreground">Contact</p>
-          <div className="flex flex-wrap items-center gap-3"><h1 className="min-w-0 break-words text-2xl font-semibold tracking-tight">{contact?.name || (id ? "Contact" : "New contact")}</h1>{contact && <span className="rounded-full border bg-muted px-2.5 py-0.5 text-xs font-medium">{contact.archived ? "Archived" : "Active"}</span>}</div>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {contact && !contact.archived && <Button type="button" variant="outline" asChild><Link href={`/crm/enquiries/new?contactId=${contact.id}`}><Plus className="size-4" aria-hidden="true" />Create enquiry</Link></Button>}
-          {canEdit && <Button form="contact-details" loading={saving} loadingText="Saving…" type="submit">Save contact</Button>}
-        </div>
-      </div>
-    </header>
+    <CrmPageHeader title={contact?.name || (id ? "Contact" : "New contact")} backHref="/crm/contacts" backLabel="Back to contacts" badge={contact && <span className="rounded-full border bg-muted px-2.5 py-0.5 text-xs font-medium">{contact.archived ? "Archived" : "Active"}</span>} actions={<CrmFormActions form="contact-details" cancelHref="/crm/contacts" canSave={canEdit} saving={saving} saveLabel="Save contact">{contact && !contact.archived && <Button type="button" variant="outline" asChild><Link href={"/crm/enquiries/new?contactId=" + contact.id}><Plus className="size-4" aria-hidden="true" />Create enquiry</Link></Button>}</CrmFormActions>} />
     {error && <p role="alert" className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">{error}</p>}
     {(!id || contact) && <div className={contact ? "grid items-start gap-6 xl:grid-cols-[1.2fr_1fr]" : "max-w-3xl"}>
       <form id="contact-details" onSubmit={save} className="min-w-0">
@@ -86,6 +75,6 @@ export function ContactEditor({ id }: { id?: string }) {
       </form>
       {contact && <ContactAccounts contactId={contact.id} canEdit={!!contact.canEdit} archived={contact.archived} />}
     </div>}
-    {contact && <><WorkList contactId={contact.id} compact /><ContactInteractions contactId={contact.id} card /></>}
+    {contact && <><WorkList contactId={contact.id} /><ContactInteractions contactId={contact.id} /></>}
   </div>
 }

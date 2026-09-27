@@ -1,4 +1,6 @@
 "use client"
+import { CrmActionBar } from "./crm-page"
+import { CrmTextarea } from "./crm-controls"
 import * as React from "react"
 import { CalendarPlus, CheckCircle2, CircleX, Pencil, Bell, MessageSquare, History, GitBranch, UserRound, type LucideIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -41,7 +43,7 @@ export function WorkHistory({ id, revision, canEdit, settings }: { id: string; r
     catch (error) { setError((error as Error).message) } finally { setSaving(false) }
   }
   return <CrmSection title="Activity history and internal notes" description="Changes to this activity and notes for your team." icon={History}>
-    {canEdit && <form onSubmit={add} className="space-y-3 rounded-lg border bg-muted/20 p-4"><FormField id="work-note" label="Internal note or correction"><textarea id="work-note" required maxLength={5000} disabled={saving} placeholder="Add context for your team…" className="min-h-24 w-full rounded-md border bg-background p-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" value={message} onChange={event => setMessage(event.target.value)} /></FormField><div className="flex justify-end"><Button loading={saving} type="submit">Add note</Button></div></form>}
+    {canEdit && <form onSubmit={add} className="space-y-3 rounded-lg border bg-muted/20 p-4"><FormField id="work-note" label="Internal note or correction"><CrmTextarea id="work-note" required maxLength={5000} disabled={saving} placeholder="Add context for your team…" value={message} onChange={event => setMessage(event.target.value)} /></FormField><CrmActionBar><Button loading={saving} type="submit">Add note</Button></CrmActionBar></form>}
     {error && <p role="alert" className="text-destructive">{error}</p>}
     {loading ? <p className="text-sm text-muted-foreground">Loading activity history…</p> : data && <CrmTimeline entries={data.items.map(item => ({
       id: item.id, ...(historyAppearance[item.event] || { icon: History, action: "recorded an activity update" }),
@@ -49,6 +51,6 @@ export function WorkHistory({ id, revision, canEdit, settings }: { id: string; r
       detail: <p className="whitespace-pre-wrap break-words">{formatWorkHistoryMessage(item, settings)}</p>,
     }))} />}
     {!loading && data?.total === 0 && <CrmEmptyState title="No activity history yet" description="Activity updates and internal notes will appear here." />}
-    {data && <TimelinePagination label="Activity history pages" page={page} totalPages={data.totalPages} loading={loading} onPageChange={setPage} />}
+    {data && <TimelinePagination label="Activity history pages" page={page} totalPages={data.totalPages} total={data.total} pageSize={data.pageSize} loading={loading} onPageChange={setPage} />}
   </CrmSection>
 }

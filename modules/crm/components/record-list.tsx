@@ -1,9 +1,13 @@
 "use client"
+import { CrmTableToolbar, CrmPageHeader, CrmSurface, crmPageClass } from "./crm-page"
+import { CrmTablePagination } from "./crm-pagination"
+import { CrmSection } from "./crm-section"
+import { CrmSelect } from "./crm-controls"
 import * as React from "react"
 import Link from "next/link"
 import { type ColumnDef, type PaginationState, getCoreRowModel, useReactTable } from "@tanstack/react-table"
 import { toast } from "sonner"
-import { DataTable, DataTablePagination, DataTableToolbar } from "@/components/data-table"
+import { DataTable } from "@/components/data-table"
 import { Button } from "@/components/ui/button"
 import { useDateFormatter } from "@/hooks/use-date-formatter"
 import { enquiryStatuses } from "@/modules/crm/validation"
@@ -83,17 +87,15 @@ export function RecordList({ kind, enquiryId, accountId, refresh = 0, onChanged 
     onGlobalFilterChange: value => { setSearch(String(value)); setPagination(previous => ({ ...previous, pageIndex: 0 })) },
   })
   const title = kind === "accounts" ? "Business accounts" : kind === "contacts" ? "Contacts" : kind === "enquiries" ? "Enquiries" : "Follow-ups"
-  return <section className="space-y-4">
-    <div className="flex items-center justify-between gap-3"><h1 className={enquiryId || accountId ? "text-lg font-semibold" : "text-2xl font-semibold"}>{title}</h1>
-      {kind !== "tasks" && !accountId && <Button asChild><Link href={`/crm/${kind}/new`}>New {kind === "accounts" ? "account" : kind === "contacts" ? "contact" : "enquiry"}</Link></Button>}
-    </div>
-    <DataTableToolbar table={table} searchPlaceholder={`Search ${title.toLowerCase()}…`} showColumnToggle={false}>
-      <select aria-label={`${title} filter`} className={selectClass} value={filter} onChange={event => { setFilter(event.target.value); setPagination(previous => ({ ...previous, pageIndex: 0 })) }}>
+  const content = <>
+    <CrmTableToolbar table={table} searchPlaceholder={`Search ${title.toLowerCase()}…`} showColumnToggle={false}>
+      <CrmSelect aria-label={`${title} filter`} className={selectClass} value={filter} onValueChange={event => { setFilter(event); setPagination(previous => ({ ...previous, pageIndex: 0 })) }}>
         {kind === "contacts" || kind === "accounts" ? <><option value="">Active {kind}</option><option value="true">Archived {kind}</option></> : kind === "tasks" ? <><option value="">Open follow-ups</option><option value="overdue">Overdue</option><option value="completed">Completed</option></> : <><option value="">All statuses</option>{enquiryStatuses.map(status => <option key={status}>{status}</option>)}</>}
-      </select>
-    </DataTableToolbar>
+      </CrmSelect>
+    </CrmTableToolbar>
     {error && <p className="text-destructive" role="alert">{error} <Button variant="link" onClick={() => setRevision(value => value + 1)}>Retry</Button></p>}
     <DataTable table={table} loading={loading} emptyMessage={`No ${title.toLowerCase()} found.`} />
-    <DataTablePagination table={table} totalRows={total} />
-  </section>
+    <CrmTablePagination table={table} totalRows={total} loading={loading} />
+  </>
+  return enquiryId || accountId ? <CrmSection title={title}>{content}</CrmSection> : <section className={crmPageClass}><CrmPageHeader title={title} actions={kind !== "tasks" && !accountId && <Button asChild><Link href={"/crm/" + kind + "/new"}>New {kind === "accounts" ? "account" : kind === "contacts" ? "contact" : "enquiry"}</Link></Button>} /><CrmSurface>{content}</CrmSurface></section>
 }

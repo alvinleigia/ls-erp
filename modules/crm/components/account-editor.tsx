@@ -1,4 +1,7 @@
 "use client"
+import { CrmSection } from "./crm-section"
+import { CrmPageHeader, CrmFormActions, crmPageClass } from "./crm-page"
+import { CrmTextarea, CrmCheckbox } from "./crm-controls"
 import * as React from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
@@ -49,18 +52,18 @@ export function AccountEditor({ id }: { id?: string }) {
   }
   if (loading) return <p>Loading business account…</p>
   const canEdit = !id || !!account?.canEdit
-  return <div className="mx-auto max-w-4xl space-y-8">
-    <form onSubmit={save} className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3"><h1 className="text-2xl font-semibold">{id ? "Business account" : "New business account"}</h1><div className="flex gap-2"><Button type="button" variant="outline" asChild><Link href="/crm/accounts">Back</Link></Button>{canEdit && <Button type="submit" loading={saving} loadingText="Saving…">Save account</Button>}</div></div>
+  return <div className={crmPageClass}>
+    <form id="account-form" onSubmit={save} className="space-y-6">
+      <CrmPageHeader title={id ? account?.name || "Business account" : "New business account"} backHref="/crm/accounts" backLabel="Back to business accounts" actions={<CrmFormActions form="account-form" cancelHref="/crm/accounts" saving={saving} disabled={false} canSave={canEdit} saveLabel="Save account" />} />
       {error && <p role="alert" className="text-destructive">{error}</p>}
-      <fieldset disabled={!canEdit || saving} className="grid gap-5 rounded-xl border p-5 sm:grid-cols-2">
+      <CrmSection title="Account details" description="Company information and contact details."><fieldset disabled={!canEdit || saving} className="grid min-w-0 gap-5 sm:grid-cols-2">
         <FormField id="name" label="Company name" error={errors.name} className="sm:col-span-2"><Input id="name" value={values.name} required maxLength={160} onChange={event => setValues({ ...values, name: event.target.value })} /></FormField>
         <FormField id="email" label="Email" error={errors.email}><Input id="email" type="email" value={values.email} onChange={event => setValues({ ...values, email: event.target.value })} /></FormField>
         <FormField id="phone" label="Phone (include country code)" error={errors.phone}><Input id="phone" type="tel" placeholder="+919876543210" value={values.phone} onChange={event => setValues({ ...values, phone: event.target.value })} /></FormField>
         <FormField id="website" label="Website" error={errors.website} className="sm:col-span-2"><Input id="website" type="url" placeholder="https://example.com" value={values.website} onChange={event => setValues({ ...values, website: event.target.value })} /></FormField>
-        <FormField id="notes" label="Notes" error={errors.notes} className="sm:col-span-2"><textarea id="notes" maxLength={5000} className="min-h-24 w-full rounded-md border bg-background p-3 text-sm" value={values.notes} onChange={event => setValues({ ...values, notes: event.target.value })} /></FormField>
-        {id && <label className="flex items-center gap-2 text-sm sm:col-span-2"><input type="checkbox" checked={values.archived} onChange={event => setValues({ ...values, archived: event.target.checked })} />Archived — keep relationships and stop new links</label>}
-      </fieldset>
+        <FormField id="notes" label="Notes" error={errors.notes} className="sm:col-span-2"><CrmTextarea id="notes" maxLength={5000} value={values.notes} onChange={event => setValues({ ...values, notes: event.target.value })} /></FormField>
+        {id && <label className="flex items-center gap-2 text-sm sm:col-span-2"><CrmCheckbox  checked={values.archived} onChange={event => setValues({ ...values, archived: event.target.checked })} />Archived — keep relationships and stop new links</label>}
+      </fieldset></CrmSection>
       {account && !canEdit && <p className="text-sm text-muted-foreground">You can view this account through a contact. Ask its owner or a manager to edit it.</p>}
     </form>
     {account && <><p className="text-sm text-muted-foreground">Link or unlink accounts from a <Link className="underline" href="/crm/contacts">contact’s page</Link>. Only contacts you can access appear here.</p><RecordList kind="contacts" accountId={account.id} /></>}

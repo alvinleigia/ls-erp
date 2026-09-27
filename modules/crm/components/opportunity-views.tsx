@@ -1,4 +1,7 @@
 "use client"
+import { CrmPageHeader, CrmSurface, CrmFilters, crmPageClass } from "./crm-page"
+import { CrmTablePagination, CrmPagination } from "./crm-pagination"
+import { CrmSelect, CrmCheckbox, CrmTextarea } from "./crm-controls"
 import * as React from "react"
 import Link from "next/link"
 import { getCoreRowModel, useReactTable, type ColumnDef } from "@tanstack/react-table"
@@ -6,7 +9,7 @@ import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { FormField } from "@/components/form-field"
-import { DataTable, DataTablePagination } from "@/components/data-table"
+import { DataTable } from "@/components/data-table"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
 import { useDateFormatter } from "@/hooks/use-date-formatter"
 import { formatDecimalCurrency } from "@/lib/formatting"
@@ -39,9 +42,9 @@ function useOpportunityPage(params: string, revision: number) {
 type Moves = { stages: CrmStageRow[]; busy: boolean; move: (record: CrmOpportunityRow, stage: CrmStageRow) => void }
 type Money = { formatMoney: (amount: string, currency: string) => string }
 function StageSelect({ record, stages, busy, move }: Moves & { record: CrmOpportunityRow }) {
-  return <select aria-label={`Move ${record.title} to stage`} className={`${selectClass} w-full`} disabled={busy} value={record.stageId} onChange={event => { const stage = stages.find(item => item.id === event.target.value); if (stage) move(record, stage) }}>
+  return <CrmSelect aria-label={`Move ${record.title} to stage`} className={`${selectClass} w-full`} disabled={busy} value={record.stageId} onValueChange={event => { const stage = stages.find(item => item.id === event); if (stage) move(record, stage) }}>
     {stages.filter(stage => !stage.archived || stage.id === record.stageId).map(stage => <option key={stage.id} value={stage.id} disabled={stage.archived}>{stage.name}{stage.archived ? " (archived)" : ""}</option>)}
-  </select>
+  </CrmSelect>
 }
 function BoardColumn({ stage, params, revision, onDrag, onDrop, formatMoney, ...moves }: Moves & Money & { stage: CrmStageRow; params: string; revision: number; onDrag: (record: CrmOpportunityRow | null) => void; onDrop: (stage: CrmStageRow) => void }) {
   const [page, setPage] = React.useState(1)
@@ -61,7 +64,7 @@ function BoardColumn({ stage, params, revision, onDrag, onDrop, formatMoney, ...
         <StageSelect record={record} {...moves} />
         {!!record.overdueActivityCount && <Link className="block text-sm text-destructive underline" href={`/crm/opportunities/${record.id}`}>{record.overdueActivityCount} overdue {record.overdueActivityCount === 1 ? "activity" : "activities"}</Link>}
       </article>)}
-      <div className="flex items-center justify-between gap-2 text-xs"><Button variant="outline" size="sm" disabled={loading || page <= 1} onClick={() => setPage(value => value - 1)}>Previous</Button><span>{page} / {data?.totalPages ?? 1}</span><Button variant="outline" size="sm" disabled={loading || !data || page >= data.totalPages} onClick={() => setPage(value => value + 1)}>Next</Button></div>
+      <CrmPagination label={`${stage.name} pages`} page={page} pageSize={20} total={data?.total ?? 0} totalPages={data?.totalPages} loading={loading} onPageChange={setPage} />
     </div>
   </section>
 }
@@ -84,7 +87,7 @@ function OpportunityTable({ params, revision, formatMoney, ...moves }: Moves & M
   const table = useReactTable({ data: data?.items ?? [], columns, getCoreRowModel: getCoreRowModel(), manualPagination: true, rowCount: data?.total ?? 0, state: { pagination },
     onPaginationChange: updater => setPagination(previous => { const next = typeof updater === "function" ? updater(previous) : updater; return next.pageSize !== previous.pageSize ? { ...next, pageIndex: 0 } : next }),
   })
-  return <div className="space-y-4">{error && <p role="alert" className="text-destructive">{error}</p>}<DataTable table={table} loading={loading} emptyMessage="No opportunities match these filters." /><DataTablePagination table={table} totalRows={data?.total ?? 0} /></div>
+  return <div className="space-y-4">{error && <p role="alert" className="text-destructive">{error}</p>}<DataTable table={table} loading={loading} emptyMessage="No opportunities match these filters." /><CrmTablePagination table={table} totalRows={data?.total ?? 0} loading={loading} /></div>
 }
 
 export function OpportunityViews() {
@@ -144,25 +147,13 @@ export function OpportunityViews() {
   }, [busy, persistMove])
   const params = new URLSearchParams({ pipelineId, q, sort, order, ...(owner ? { assignedUserId: owner } : {}), ...(kind ? { kind } : {}) }).toString()
   const ready = pipeline?.id === pipelineId
-  return <section className="space-y-5">
-    <div className="flex flex-wrap items-center justify-between gap-3"><h1 className="text-2xl font-semibold">Opportunities</h1><div className="flex gap-2"><Button variant="outline" asChild><Link href="/crm/pipelines">Pipelines</Link></Button><Button asChild><Link href="/crm/opportunities/new">New opportunity</Link></Button></div></div>
-    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-      <FormField id="pipeline-filter" label="Pipeline"><RecordSelect id="pipeline-filter" endpoint={`/api/crm/pipelines?archived=${archive}`} value={pipelineId} selected={ready && pipeline ? { value: pipeline.id, label: pipeline.name } : undefined} onChange={value => { setPipelineId(value); setError("") }} /></FormField>
-      <FormField id="opportunity-search" label="Search"><Input id="opportunity-search" placeholder="Search titles…" value={q} onChange={event => setQ(event.target.value)} /></FormField>
-      <FormField id="owner-filter" label="Salesperson"><RecordSelect id="owner-filter" endpoint="/api/crm/assignees" value={owner} onChange={setOwner} /></FormField>
-      <FormField id="kind-filter" label="Outcome"><select id="kind-filter" className={`${selectClass} w-full`} value={kind} onChange={event => setKind(event.target.value)}><option value="">All outcomes</option><option>OPEN</option><option>WON</option><option>LOST</option></select></FormField>
-    </div>
-    <div className="flex flex-wrap items-center gap-3">
-      <Button variant={view === "board" ? "default" : "outline"} aria-pressed={view === "board"} onClick={() => setView("board")}>Kanban</Button><Button variant={view === "list" ? "default" : "outline"} aria-pressed={view === "list"} onClick={() => setView("list")}>List</Button>
-      <select aria-label="Sort opportunities" className={selectClass} value={sort} onChange={event => setSort(event.target.value)}><option value="updatedAt">Last updated</option><option value="expectedCloseOn">Expected close</option><option value="title">Title</option></select>
-      <select aria-label="Sort direction" className={selectClass} value={order} onChange={event => setOrder(event.target.value)}><option value="desc">Descending</option><option value="asc">Ascending</option></select>
-      <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={archive} onChange={event => setArchive(event.target.checked)} />Search archived pipelines</label>
-      <Button variant="outline" size="sm" onClick={() => { setOwner(""); setQ(""); setKind("") }}>Clear filters</Button><Button variant="outline" size="sm" disabled={busy} onClick={() => setRevision(value => value + 1)}>Refresh</Button>
-    </div>
+  return <section className={crmPageClass}>
+    <CrmPageHeader title="Opportunities" description="Track deals through your sales pipeline." actions={<><Button variant="outline" asChild><Link href="/crm/pipelines">Pipelines</Link></Button><Button asChild><Link href="/crm/opportunities/new">New opportunity</Link></Button></>} />
+    <CrmSurface><div className="grid items-end gap-3 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_auto]"><FormField id="pipeline-filter" label="Pipeline"><RecordSelect id="pipeline-filter" endpoint={`/api/crm/pipelines?archived=${archive}`} value={pipelineId} selected={ready && pipeline ? { value: pipeline.id, label: pipeline.name } : undefined} onChange={value => { setPipelineId(value); setError("") }} /></FormField><FormField id="opportunity-search" label="Search"><Input id="opportunity-search" placeholder="Search titles…" value={q} onChange={event => setQ(event.target.value)} /></FormField><div className="flex flex-wrap gap-2"><CrmFilters activeCount={[!!owner, !!kind, archive, sort !== "updatedAt", order !== "desc"].filter(Boolean).length} onReset={() => { setOwner(""); setKind(""); setArchive(false); setSort("updatedAt"); setOrder("desc") }}><FormField id="owner-filter" label="Salesperson"><RecordSelect id="owner-filter" endpoint="/api/crm/assignees" value={owner} onChange={setOwner} /></FormField><FormField id="kind-filter" label="Outcome"><CrmSelect id="kind-filter" className={`${selectClass} w-full`} value={kind} onValueChange={event => setKind(event)}><option value="">All outcomes</option><option>OPEN</option><option>WON</option><option>LOST</option></CrmSelect></FormField><div className="space-y-2"><p className="text-sm font-medium">Sort opportunities</p><CrmSelect aria-label="Sort opportunities" className={`${selectClass} w-full`} value={sort} onValueChange={event => setSort(event)}><option value="updatedAt">Last updated</option><option value="expectedCloseOn">Expected close</option><option value="title">Title</option></CrmSelect></div><div className="space-y-2"><p className="text-sm font-medium">Sort direction</p><CrmSelect aria-label="Sort direction" className={`${selectClass} w-full`} value={order} onValueChange={event => setOrder(event)}><option value="desc">Descending</option><option value="asc">Ascending</option></CrmSelect></div><label className="flex items-center gap-2 text-sm"><CrmCheckbox checked={archive} onChange={event => setArchive(event.target.checked)} />Search archived pipelines</label></CrmFilters><Button variant="outline" disabled={busy} onClick={() => setRevision(value => value + 1)}>Refresh</Button></div></div><div className="flex gap-2 border-t pt-4"><Button variant={view === "board" ? "default" : "outline"} aria-pressed={view === "board"} onClick={() => setView("board")}>Kanban</Button><Button variant={view === "list" ? "default" : "outline"} aria-pressed={view === "list"} onClick={() => setView("list")}>List</Button></div></CrmSurface>
     {error && <p role="alert" className="text-destructive">{error}</p>}
     {!pipelineId && <p>Select a pipeline, or ask a manager to create one under <Link className="underline" href="/crm/pipelines">Pipelines</Link>.</p>}
     {pipelineId && !ready && <p>Loading pipeline…</p>}
-    {ready && pipeline && <>{pipeline.archived && <p className="text-sm">Archived pipeline. Open an opportunity to move it to an active pipeline.</p>}{view === "board" ? <><p className="text-sm text-muted-foreground">Drag cards between stages or use each card’s stage selector. Columns are paginated independently.</p><div className="flex gap-4 overflow-x-auto pb-4">{pipeline.stages.filter(stage => !kind || stage.kind === kind).map(stage => <BoardColumn key={`${stage.id}:${params}:${revision}`} stage={stage} params={params} revision={revision} stages={pipeline.stages} busy={busy || pipeline.archived} move={move} formatMoney={formatMoney} onDrag={setDrag} onDrop={stage => { if (drag && !pipeline.archived) move(drag, stage); setDrag(null) }} />)}</div></> : <OpportunityTable key={params} params={params} revision={revision} stages={pipeline.stages} busy={busy || pipeline.archived} move={move} formatMoney={formatMoney} />}</>}
-    <Dialog open={!!pending} onOpenChange={open => { if (!open && !busy) setPending(null) }}><DialogContent><DialogHeader><DialogTitle>Close as lost</DialogTitle><DialogDescription>Record why {pending?.record.title} was lost. It will remain available in the pipeline and history.</DialogDescription></DialogHeader><form onSubmit={event => { event.preventDefault(); if (pending) void persistMove(pending.record, pending.stage, lossReason) }} className="space-y-4"><FormField id="loss-reason" label="Loss reason"><textarea id="loss-reason" required maxLength={2000} className="min-h-24 w-full rounded border p-3" value={lossReason} onChange={event => setLossReason(event.target.value)} /></FormField><DialogFooter><Button type="button" variant="outline" disabled={busy} onClick={() => setPending(null)}>Cancel</Button><Button type="submit" loading={busy} disabled={!lossReason.trim()}>Close as lost</Button></DialogFooter></form></DialogContent></Dialog>
+    {ready && pipeline && <>{pipeline.archived && <p className="text-sm">Archived pipeline. Open an opportunity to move it to an active pipeline.</p>}{view === "board" ? <><p className="text-sm text-muted-foreground">Drag cards between stages or use each card’s stage selector. Columns are paginated independently.</p><div className="flex gap-4 overflow-x-auto pb-4">{pipeline.stages.filter(stage => !kind || stage.kind === kind).map(stage => <BoardColumn key={`${stage.id}:${params}:${revision}`} stage={stage} params={params} revision={revision} stages={pipeline.stages} busy={busy || pipeline.archived} move={move} formatMoney={formatMoney} onDrag={setDrag} onDrop={stage => { if (drag && !pipeline.archived) move(drag, stage); setDrag(null) }} />)}</div></> : <CrmSurface><OpportunityTable key={params} params={params} revision={revision} stages={pipeline.stages} busy={busy || pipeline.archived} move={move} formatMoney={formatMoney} /></CrmSurface>}</>}
+    <Dialog open={!!pending} onOpenChange={open => { if (!open && !busy) setPending(null) }}><DialogContent><DialogHeader><DialogTitle>Close as lost</DialogTitle><DialogDescription>Record why {pending?.record.title} was lost. It will remain available in the pipeline and history.</DialogDescription></DialogHeader><form onSubmit={event => { event.preventDefault(); if (pending) void persistMove(pending.record, pending.stage, lossReason) }} className="space-y-4"><FormField id="loss-reason" label="Loss reason"><CrmTextarea id="loss-reason" required maxLength={2000} value={lossReason} onChange={event => setLossReason(event.target.value)} /></FormField><DialogFooter><Button type="button" variant="outline" disabled={busy} onClick={() => setPending(null)}>Cancel</Button><Button type="submit" loading={busy} disabled={!lossReason.trim()}>Close as lost</Button></DialogFooter></form></DialogContent></Dialog>
   </section>
 }

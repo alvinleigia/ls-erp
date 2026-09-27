@@ -1,4 +1,9 @@
 "use client"
+import { History, MessageSquare } from "lucide-react"
+import { CrmSection, CrmEmptyState } from "./crm-section"
+import { CrmTimeline, TimelinePagination } from "./crm-timeline"
+import { CrmActionBar } from "./crm-page"
+import { CrmTextarea } from "./crm-controls"
 import * as React from "react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
@@ -46,13 +51,11 @@ export function EnquiryTimeline({ enquiryId, contactId, revision }: { enquiryId:
       setNote(""); changed(); toast.success("Note added.")
     } catch (error) { toast.error((error as Error).message) } finally { setSaving(false) }
   }
-  return <div className="space-y-8">
-    <WorkList enquiryId={enquiryId} contactId={contactId} />
-    <form onSubmit={event => void add(event)} className="space-y-4 rounded-xl border p-5"><FormField id="note" label="Add an enquiry note" error={noteErrors.errors.message}><textarea id="note" required maxLength={5000} className="min-h-24 w-full rounded-md border bg-background p-3 text-sm" value={note} onChange={event => setNote(event.target.value)} /></FormField><Button type="submit" loading={saving}>Add note</Button></form>
-    <section className="space-y-4"><h2 className="text-lg font-semibold">Activity history</h2>
-      {activityError && <p role="alert" className="text-destructive">{activityError}</p>}
-      {activityLoading ? <p>Loading activity…</p> : !activityError && activity?.items.map(item => <article key={item.id} className="rounded-lg border p-4"><p className="whitespace-pre-wrap break-words text-sm">{item.message}</p><p className="mt-2 text-xs text-muted-foreground">{item.actor.name || "Team member"} · {formatDate(item.createdAt)}</p></article>)}
-      <div className="flex items-center justify-between text-sm"><Button variant="outline" disabled={page <= 1 || activityLoading} onClick={() => setPage(value => value - 1)}>Previous</Button><span>Page {page} of {activity?.totalPages ?? 1}</span><Button variant="outline" disabled={page >= (activity?.totalPages ?? 1) || activityLoading} onClick={() => setPage(value => value + 1)}>Next</Button></div>
-    </section>
-  </div>
+  return <div className="space-y-6"><WorkList enquiryId={enquiryId} contactId={contactId} /><CrmSection title="Activity history and internal notes" description="Updates and notes for your team." icon={History}>
+    <form onSubmit={event => void add(event)} className="space-y-3 rounded-lg border bg-muted/20 p-4"><FormField id="note" label="Add an enquiry note" error={noteErrors.errors.message}><CrmTextarea id="note" required maxLength={5000} value={note} onChange={event => setNote(event.target.value)} /></FormField><CrmActionBar><Button type="submit" loading={saving}>Add note</Button></CrmActionBar></form>
+    {activityError && <p role="alert" className="text-destructive">{activityError}</p>}
+    {activityLoading ? <p className="text-sm text-muted-foreground">Loading history…</p> : !activityError && activity && <CrmTimeline entries={activity.items.map(item => ({ id: item.id, icon: item.event.includes("note") ? MessageSquare : History, actor: item.actor.name || "Staff member", action: item.event.includes("note") ? "added an internal note" : "recorded an update", dateTime: item.createdAt, timeLabel: formatDate(item.createdAt), detail: <p className="whitespace-pre-wrap break-words">{item.message}</p> }))} />}
+    {!activityLoading && !activityError && activity?.total === 0 && <CrmEmptyState title="No activity history yet" description="Updates and internal notes will appear here." />}
+    {activity && <TimelinePagination label="Activity history pages" page={page} pageSize={activity.pageSize} total={activity.total} totalPages={activity.totalPages} loading={activityLoading} onPageChange={setPage} />}
+  </CrmSection></div>
 }

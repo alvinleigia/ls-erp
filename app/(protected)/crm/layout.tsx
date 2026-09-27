@@ -1,3 +1,4 @@
+import { CrmNavigation } from "@/modules/crm/components/crm-navigation"
 import Link from "next/link"
 import { redirect } from "next/navigation"
 import { auth } from "@/auth"
@@ -18,5 +19,5 @@ export default async function CrmLayout({ children }: { children: React.ReactNod
   })
   if (!access) redirect("/dashboard")
   if (!access.enabled) return <div className="space-y-3"><h1 className="text-2xl font-semibold">CRM is not enabled</h1><p>Ask your business administrator to enable CRM for this workspace.</p>{access.role === "ADMIN" && <Link className="underline" href="/settings/modules">Manage business modules</Link>}</div>
-  return <div className="space-y-6"><nav aria-label="CRM" className="flex flex-wrap gap-5 border-b pb-3 text-sm"><Link className="hover:underline" href="/crm/overview">Overview</Link><Link className="hover:underline" href="/crm/opportunities">Opportunities</Link><Link className="hover:underline" href="/crm/enquiries">Enquiries</Link><Link className="hover:underline" href="/crm/contacts">Contacts</Link><Link className="hover:underline" href="/crm/accounts">Business accounts</Link><Link className="hover:underline" href="/crm/activities">My Work</Link><Link className="hover:underline" href="/crm/calendar">Calendar</Link><Link className="hover:underline" href="/crm/pipelines">Pipelines</Link></nav><WorkReminders />{children}</div>
+  return <div className="mx-auto w-full min-w-0 max-w-6xl space-y-6"><CrmNavigation /><WorkReminders />{children}</div>
 }

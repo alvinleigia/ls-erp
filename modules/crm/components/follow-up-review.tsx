@@ -1,4 +1,5 @@
 "use client"
+import { CrmSelect } from "./crm-controls"
 import * as React from "react"
 import { Input } from "@/components/ui/input"
 import { FormField } from "@/components/form-field"
@@ -38,7 +39,7 @@ export function FollowUpReview({ review }: { review: ReturnType<typeof useFollow
     {data?.rule && <section className="space-y-3 rounded-lg border p-4"><h3 className="font-medium">Suggested next step: {data.rule.name}</h3>
       {data.schedule && <><p className="text-sm">{data.schedule.type}: {data.schedule.title} · Due {data.schedule.dueOn} ({data.timeZone}). Assigned to the same staff member.</p>{data.schedule.description && <p className="whitespace-pre-wrap text-sm">{data.schedule.description}</p>}{data.schedule.reminderAt && <p className="text-sm">Reminder: {wallTime(data.schedule.reminderAt, data.timeZone || "UTC").replace("T", " ")}</p>}<p className="text-xs text-muted-foreground">This rule permits up to {data.rule.maxDepth} consecutive generated follow-ups. Dates are based on when you complete this activity.</p></>}
       {data.blockedReason && <p className="text-sm">{data.blockedReason}</p>}
-      <FormField id="follow-up-decision" label="Next step"><select id="follow-up-decision" className={`${selectClass} w-full`} value={review.action} onChange={event => review.setAction(event.target.value as "APPLY" | "SKIP")}><option value="APPLY" disabled={!data.schedule}>Create the suggested follow-up</option><option value="SKIP">Skip this suggestion / choose a manual follow-up</option></select></FormField>
+      <FormField id="follow-up-decision" label="Next step"><CrmSelect id="follow-up-decision" className={`${selectClass} w-full`} value={review.action} onValueChange={event => review.setAction(event as "APPLY" | "SKIP")}><option value="APPLY" disabled={!data.schedule}>Create the suggested follow-up</option><option value="SKIP">Skip this suggestion / choose a manual follow-up</option></CrmSelect></FormField>
       {review.action === "SKIP" && <FormField id="follow-up-skip-reason" label="Reason for skipping the suggestion"><Input id="follow-up-skip-reason" required maxLength={2000} value={review.reason} onChange={event => review.setReason(event.target.value)} /></FormField>}
     </section>}
     {!data?.rule && data?.blockedReason && <p className="text-sm text-muted-foreground">{data.blockedReason}</p>}

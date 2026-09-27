@@ -1,4 +1,7 @@
 "use client"
+import { CrmSection } from "./crm-section"
+import { CrmPageHeader, CrmFormActions, crmPageClass } from "./crm-page"
+import { CrmSelect, CrmTextarea } from "./crm-controls"
 import * as React from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
@@ -72,22 +75,22 @@ export function EnquiryEditor({ id, initialContactId }: { id?: string; initialCo
   }
   if (loading) return <p>Loading enquiry…</p>
   const selectedAssignee = enquiry?.assignee ?? { id: values.assignedUserId, name: session?.user?.name || "Me" }
-  return <div className="mx-auto max-w-4xl space-y-8">
-    <form onSubmit={save} className="space-y-5">
-      <div className="flex flex-wrap items-center justify-between gap-3"><h1 className="text-2xl font-semibold">{id ? "Enquiry" : "New enquiry"}</h1><div className="flex gap-2"><Button type="button" variant="outline" asChild><Link href="/crm/enquiries">Back</Link></Button><Button type="submit" loading={saving} loadingText="Saving…" disabled={loadFailed}>Save enquiry</Button></div></div>
+  return <div className={crmPageClass}>
+    <form id="enquiry-form" onSubmit={save} className="space-y-5">
+      <CrmPageHeader title={id ? enquiry?.title || "Enquiry" : "New enquiry"} backHref="/crm/enquiries" backLabel="Back to enquiries" actions={<CrmFormActions form="enquiry-form" cancelHref="/crm/enquiries" saving={saving} disabled={loadFailed} canSave={true} saveLabel="Save enquiry">{enquiry && <>{enquiry.opportunity ? <Button variant="outline" asChild><Link href={`/crm/opportunities/${enquiry.opportunity.id}`}>Open opportunity</Link></Button> : enquiry.status !== "CLOSED" && <Button variant="outline" asChild><Link href={`/crm/opportunities/new?enquiryId=${enquiry.id}`}>Convert to opportunity</Link></Button>}</>}</CrmFormActions>} />
       {error && <p role="alert" className="text-destructive">{error}</p>}
-      <fieldset disabled={saving || loadFailed} className="grid gap-5 rounded-xl border p-5 sm:grid-cols-2">
+      <CrmSection title="Enquiry details" description="Customer requirements, ownership and progress."><fieldset disabled={saving || loadFailed} className="grid min-w-0 gap-5 sm:grid-cols-2">
         <FormField id="contactId" label="Contact" error={errors.contactId}>
           {id ? <Link className="block py-2 underline" href={`/crm/contacts/${contact?.id}`}>{contact?.name}</Link> : <><RecordSelect id="contactId" endpoint="/api/crm/contacts" value={values.contactId} selected={contact ? { value: contact.id, label: contact.name } : undefined} onChange={contactId => setValues({ ...values, contactId })} /><Link className="text-sm underline" href="/crm/contacts/new">Create a contact first</Link></>}
         </FormField>
         <FormField id="assignedUserId" label="Salesperson" error={errors.assignedUserId}><RecordSelect id="assignedUserId" endpoint="/api/crm/assignees" value={values.assignedUserId} selected={{ value: selectedAssignee.id, label: selectedAssignee.name || "Unnamed user" }} onChange={assignedUserId => setValues({ ...values, assignedUserId })} disabled={!canAssign} /></FormField>
         <FormField id="title" label="Enquiry title" error={errors.title} className="sm:col-span-2"><Input id="title" required maxLength={200} value={values.title} onChange={event => setValues({ ...values, title: event.target.value })} /></FormField>
         <FormField id="source" label="Source" error={errors.source}><Input id="source" placeholder="Website, referral, walk-in…" maxLength={100} value={values.source} onChange={event => setValues({ ...values, source: event.target.value })} /></FormField>
-        {id && <FormField id="status" label="Status" error={errors.status}><select id="status" className={`${selectClass} w-full`} value={values.status} onChange={event => setValues({ ...values, status: event.target.value as CrmStatus })}>{enquiryStatuses.map(status => <option key={status}>{status}</option>)}</select></FormField>}
-        <FormField id="requirements" label="Requirements" error={errors.requirements} className="sm:col-span-2"><textarea id="requirements" className={textareaClass} maxLength={5000} value={values.requirements} onChange={event => setValues({ ...values, requirements: event.target.value })} /></FormField>
-        {id && <FormField id="outcome" label="Outcome (required when closed)" error={errors.outcome} className="sm:col-span-2"><textarea id="outcome" className={textareaClass} maxLength={2000} value={values.outcome} onChange={event => setValues({ ...values, outcome: event.target.value })} /></FormField>}
-      </fieldset>
+        {id && <FormField id="status" label="Status" error={errors.status}><CrmSelect id="status" className={`${selectClass} w-full`} value={values.status} onValueChange={event => setValues({ ...values, status: event as CrmStatus })}>{enquiryStatuses.map(status => <option key={status}>{status}</option>)}</CrmSelect></FormField>}
+        <FormField id="requirements" label="Requirements" error={errors.requirements} className="sm:col-span-2"><CrmTextarea id="requirements" className={textareaClass} maxLength={5000} value={values.requirements} onChange={event => setValues({ ...values, requirements: event.target.value })} /></FormField>
+        {id && <FormField id="outcome" label="Outcome (required when closed)" error={errors.outcome} className="sm:col-span-2"><CrmTextarea id="outcome" className={textareaClass} maxLength={2000} value={values.outcome} onChange={event => setValues({ ...values, outcome: event.target.value })} /></FormField>}
+      </fieldset></CrmSection>
     </form>
-    {enquiry && <>{enquiry.opportunity ? <Button variant="outline" asChild><Link href={`/crm/opportunities/${enquiry.opportunity.id}`}>Open opportunity</Link></Button> : enquiry.status !== "CLOSED" && <Button variant="outline" asChild><Link href={`/crm/opportunities/new?enquiryId=${enquiry.id}`}>Convert to opportunity</Link></Button>}<EnquiryTimeline enquiryId={enquiry.id} contactId={enquiry.contact.id} revision={revision} /></>}
+    {enquiry && <><EnquiryTimeline enquiryId={enquiry.id} contactId={enquiry.contact.id} revision={revision} /></>}
   </div>
 }

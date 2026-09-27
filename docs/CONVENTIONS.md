@@ -88,6 +88,15 @@ This is the baseline for new modules (API + UI) in this codebase.
 - Suppress `react-hooks/incompatible-library` on `useReactTable` (TanStack) with an inline eslint disable.
 - Prefer the standard DataTable + DataTableToolbar + DataTablePagination pattern for admin lists.
 
+## CRM interface
+- Keep CRM page layouts within `crmPageClass`, with `CrmPageHeader` for the title, back link and actions. Use `CrmSection` for named sections and `CrmSurface` for list/filter panels. Embedded lists have section headings, not additional page headings.
+- Place the primary save and navigation Cancel together in the page header with `CrmFormActions`. Associate the save button with its form ID. Keep independent actions (completion, notes and scheduling a reviewed plan) in that section's right-aligned `CrmActionBar`. Preserve confirmation dialogs for destructive actions.
+- Use `CrmSelect` for fixed choices, `RecordSelect` for searchable server-backed records, and shared `Input`, `CrmTextarea` and `CrmCheckbox` controls. Retain labels, disabled permissions and required-field validation. Do not add visible native select controls in CRM.
+- Keep search and the main status filter visible. Group additional filters in `CrmFilters` with reset controls and an active-filter count.
+- Use `CrmTablePagination` with DataTable, or `CrmPagination` for reports, board columns and timelines. Show the record range on the left, centered Previous / Page / Next controls, and page size on the right. Narrow sections move centered page controls to a second row. Keep server-side paging and reset to page one when filters or page size change.
+- Render customer interactions and record history through `CrmTimeline`, with actor, event, timestamp and message. Keep internal-note forms within the history section.
+- These wrappers are CRM-specific; other modules retain their existing layout and pagination.
+
 ## Email templates
 - Put templates in `lib/emails/*`.
 - API routes import templates and pass `subject/text/html` into `mailer.sendMail`.
