@@ -91,7 +91,7 @@ export function OpportunityViews() {
   const [moneySettings, setMoneySettings] = React.useState<AppSettingsPayload | undefined>(undefined)
   React.useEffect(() => {
     const controller = new AbortController()
-    void fetch("/api/settings", { signal: controller.signal, cache: "no-store" }).then(async response => { if (response.ok) setMoneySettings((await response.json()).settings) }).catch(() => {})
+    void fetch("/api/settings/display", { signal: controller.signal, cache: "no-store" }).then(async response => { if (response.ok) setMoneySettings((await response.json()).settings) }).catch(() => {})
     return () => controller.abort()
   }, [])
   const formatMoney = React.useCallback((amount: string, currency: string) => formatDecimalCurrency(amount, currency, moneySettings), [moneySettings])

@@ -30,7 +30,7 @@ export function ActivityPlanApply({ initial }: { initial: Initial }) {
   React.useEffect(() => {
     const controller = new AbortController()
     const get = async (url: string) => { const response = await fetch(url, { signal: controller.signal, cache: "no-store" }); const data = await response.json(); if (!response.ok) throw new Error(data.error || "Unable to load options."); return data }
-    void Promise.all([get("/api/crm/assignees"), get("/api/settings")]).then(([people, settings]) => { const tz = settings.settings?.timeZone || "UTC"; setTimeZone(tz); setStartOn(wallTime(new Date(), tz).slice(0, 10)); setAssignedUserId(people.currentUserId); setMe({ id: people.currentUserId, name: "Me" }); setCanAssign(people.canAssign) }).catch(error => { if (!controller.signal.aborted) setError(error.message) }).finally(() => { if (!controller.signal.aborted) setLoading(false) })
+    void Promise.all([get("/api/crm/assignees"), get("/api/settings/display")]).then(([people, settings]) => { const tz = settings.settings?.timeZone || "UTC"; setTimeZone(tz); setStartOn(wallTime(new Date(), tz).slice(0, 10)); setAssignedUserId(people.currentUserId); setMe({ id: people.currentUserId, name: "Me" }); setCanAssign(people.canAssign) }).catch(error => { if (!controller.signal.aborted) setError(error.message) }).finally(() => { if (!controller.signal.aborted) setLoading(false) })
     return () => controller.abort()
   }, [])
   React.useEffect(() => {

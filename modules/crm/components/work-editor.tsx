@@ -63,7 +63,7 @@ export function WorkEditor({ id, initial = {} }: { id?: string; initial?: Initia
     const get = async (url: string) => { const response = await fetch(url, { signal: controller.signal, cache: "no-store" }); const data = await response.json(); if (!response.ok) throw new Error(data.error || "Unable to load activity."); return data }
     void (async () => {
       try {
-        const [assignees, settings, existing] = await Promise.all([get("/api/crm/assignees"), get("/api/settings"), id ? get(`/api/crm/work/${id}`) : null])
+        const [assignees, settings, existing] = await Promise.all([get("/api/crm/assignees"), get("/api/settings/display"), id ? get(`/api/crm/work/${id}`) : null])
         const tz = existing?.timeZone || settings.settings?.timeZone || "UTC", today = wallTime(new Date(), tz).slice(0, 10)
         setTimeZone(tz); setCanAssign(assignees.canAssign); setCompletion({ ...emptyCompletion, when: wallTime(new Date(), tz) })
         setHistoryFormat({ timeZone: tz, locale: settings.settings?.locale || defaultWorkHistoryFormat.locale, dateFormat: settings.settings?.dateFormat || defaultWorkHistoryFormat.dateFormat, timeFormat: settings.settings?.timeFormat === "H12" ? "H12" : "H24" })

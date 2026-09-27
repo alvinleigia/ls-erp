@@ -14,7 +14,7 @@ const loadDateFormat = async () => {
     return cachedDateFormat
   }
   if (!pending) {
-    pending = fetch("/api/settings", { cache: "no-store" })
+    pending = fetch("/api/settings/display", { cache: "no-store" })
       .then(async (response) => {
         if (!response.ok) return null
         const data = (await response.json()) as SettingsResponse

@@ -35,7 +35,7 @@ export function ActivityCalendar() {
   const [revision, setRevision] = React.useState(0)
   React.useEffect(() => {
     const controller = new AbortController()
-    void fetch("/api/settings", { signal: controller.signal, cache: "no-store" }).then(async response => { const data = await response.json(); if (!response.ok) throw new Error(data.error || "Unable to load calendar settings."); setSettings(data.settings) }).catch(error => { if (!controller.signal.aborted) setError(error.message) })
+    void fetch("/api/settings/display", { signal: controller.signal, cache: "no-store" }).then(async response => { const data = await response.json(); if (!response.ok) throw new Error(data.error || "Unable to load calendar settings."); setSettings(data.settings) }).catch(error => { if (!controller.signal.aborted) setError(error.message) })
     return () => controller.abort()
   }, [])
   React.useEffect(() => {

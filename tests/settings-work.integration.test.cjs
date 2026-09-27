@@ -19,6 +19,7 @@ const { logger } = require("../lib/logger.ts")
 logger.info = () => {}
 const { prisma, runWithTenantDbContext } = require("../lib/prisma.ts")
 const settings = require("../app/api/settings/route.ts")
+const display = require("../app/api/settings/display/route.ts")
 const work = require("../app/api/crm/work/route.ts")
 const { createCrmService } = require("../modules/crm/service.ts")
 const session = id => ({ user: { id: `${id}_admin`, tenantId: id, role: "ADMIN" } })
@@ -33,6 +34,9 @@ before(async () => {
     await root.query('INSERT INTO "User" (id,name,email,role,"tenantId","updatedAt") VALUES ($1,$1,$2,$3,$4,NOW())', [`${id}_admin`, `${id}@example.test`, "ADMIN", id])
     await root.query('INSERT INTO "AppSetting" (id,"tenantId","timeZone","updatedAt") VALUES ($1,$1,$2,NOW())', [id, id.endsWith("a") ? "Asia/Kolkata" : "Europe/London"])
     await root.query('INSERT INTO "TenantModule" ("tenantId",key,enabled,"updatedAt") VALUES ($1,$2,true,NOW())', [id, "crm"])
+    for (const role of ["STAFF", "CUSTOMER"]) {
+      await root.query('INSERT INTO "User" (id,name,email,role,"tenantId","updatedAt") VALUES ($1,$1,$2,$3,$4,NOW())', [`${id}_${role}`, `${id}_${role}@example.test`, role, id])
+    }
   }
 })
 after(async () => {
@@ -91,4 +95,48 @@ test("concurrent activity API reads succeed with a one-connection pool", async (
   assert.ok(responses.every(response => response.status === 200))
   for (const response of responses) assert.equal((await response.json()).total, 0)
   assert.equal(await prisma.user.count(), 0)
+})
+
+const staffSession = (id = "settings_work_a", role = "STAFF") => ({ user: { id: `${id}_${role}`, tenantId: id, role } })
+
+test("staff can read only their business display preferences without administrative settings", async () => {
+  const responses = await Promise.all(["settings_work_a", "settings_work_b"].map(id => sessions.run(staffSession(id), () => display.GET(request(id, "settings/display")))))
+  assert.deepEqual(responses.map(response => response.status), [200, 200])
+  const [a, b] = await Promise.all(responses.map(response => response.json()))
+  assert.equal(a.settings.timeZone, "America/New_York") // Updated by the administrator test above.
+  assert.equal(b.settings.timeZone, "Europe/London")
+  assert.deepEqual(Object.keys(a), ["settings"])
+  assert.deepEqual(Object.keys(a.settings).sort(), ["locale", "currency", "timeZone", "dateFormat", "timeFormat", "firstDayOfWeek", "currencySymbolPlacement", "numberFormat"].sort())
+  assert.equal(responses[0].headers.get("cache-control"), "no-store")
+  assert.equal(await prisma.appSetting.count(), 0)
+})
+
+test("staff display access does not grant administrative settings read/write access", async () => {
+  const id = "settings_work_a"
+  assert.equal((await sessions.run(staffSession(), () => settings.GET(request(id, "settings")))).status, 401)
+  assert.equal((await sessions.run(staffSession(), () => settings.PATCH(request(id, "settings", { locale: "en-IN", currency: "INR", timeZone: "Asia/Kolkata", dateFormat: "dd/MM/yyyy" })))).status, 401)
+  assert.equal((await root.query('SELECT "timeZone" FROM "AppSetting" WHERE "tenantId"=$1', [id])).rows[0].timeZone, "America/New_York")
+})
+
+test("display preferences reject anonymous, customer and cross-tenant sessions", async () => {
+  assert.equal((await sessions.run(null, () => display.GET(request("settings_work_a", "settings/display")))).status, 401)
+  assert.equal((await sessions.run(staffSession("settings_work_a", "CUSTOMER"), () => display.GET(request("settings_work_a", "settings/display")))).status, 403)
+  assert.equal((await sessions.run(staffSession(), () => display.GET(request("settings_work_b", "settings/display")))).status, 403)
+})
+
+test("display preferences recheck current user status and role rather than trusting stale sessions", async () => {
+  const id = "settings_work_a_STAFF"
+  try {
+    await root.query('UPDATE "User" SET status=$1 WHERE id=$2', ["SUSPENDED", id])
+    assert.equal((await sessions.run(staffSession(), () => display.GET(request("settings_work_a", "settings/display")))).status, 403)
+    await root.query('UPDATE "User" SET status=$1, role=$2 WHERE id=$3', ["ACTIVE", "CUSTOMER", id])
+    assert.equal((await sessions.run(staffSession(), () => display.GET(request("settings_work_a", "settings/display")))).status, 403)
+  } finally { await root.query('UPDATE "User" SET status=$1, role=$2 WHERE id=$3', ["ACTIVE", "STAFF", id]) }
+})
+
+test("missing display preferences return an explicit error without creating settings", async () => {
+  await root.query('DELETE FROM "AppSetting" WHERE "tenantId"=$1', ["settings_work_b"])
+  const response = await sessions.run(staffSession("settings_work_b"), () => display.GET(request("settings_work_b", "settings/display")))
+  assert.equal(response.status, 503)
+  assert.equal((await root.query('SELECT id FROM "AppSetting" WHERE "tenantId"=$1', ["settings_work_b"])).rowCount, 0)
 })

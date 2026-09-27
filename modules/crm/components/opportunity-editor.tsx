@@ -38,7 +38,7 @@ export function OpportunityEditor({ id, enquiryId }: { id?: string; enquiryId?: 
     async function get(url: string) { const response = await fetch(url, { signal: controller.signal, cache: "no-store" }); const data = await response.json(); if (!response.ok) throw new Error(data.error || "Unable to load opportunity."); return data }
     void (async () => {
       try {
-        const [assignees, existing, enquiry, choices, settings] = await Promise.all([get("/api/crm/assignees"), id ? get(`/api/crm/opportunities/${id}`) : null, !id && enquiryId ? get(`/api/crm/enquiries/${enquiryId}`) : null, !id ? get("/api/crm/pipelines?pageSize=1") : null, !id ? get("/api/settings") : null])
+        const [assignees, existing, enquiry, choices, settings] = await Promise.all([get("/api/crm/assignees"), id ? get(`/api/crm/opportunities/${id}`) : null, !id && enquiryId ? get(`/api/crm/enquiries/${enquiryId}`) : null, !id ? get("/api/crm/pipelines?pageSize=1") : null, !id ? get("/api/settings/display") : null])
         setCanAssign(assignees.canAssign)
         if (existing) { setRecord(existing); setContact(existing.contact); setValues(fields(existing)) }
         else if (enquiry?.opportunity) router.replace(`/crm/opportunities/${enquiry.opportunity.id}`)

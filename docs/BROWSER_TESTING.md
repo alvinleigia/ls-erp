@@ -274,3 +274,23 @@ the displayed name. The tests mock search responses and never save the form.
 Hosted verification also exposed a quick-reopen case hidden by the fixture's
 lack of closing animations: the still-mounted input retained its text. The input
 is now controlled and cleared on opening together with the backend query.
+
+## Staff activity editor access, 2026-09-27
+
+Staff could see their assigned activity in My Work but opening it failed with
+`Unauthorized`. A read-only check with the staff test login confirmed the activity
+API returned 200 while `/api/settings` returned 401. The editor loaded both together,
+so the restricted settings request prevented the otherwise authorized form loading.
+
+`GET /api/settings/display` now returns only formatting preferences to active
+business staff/managers/admins, using the shared business authorization boundary
+and explicit tenant database scope. It does not initialize settings or expose
+email-delivery configuration, working hours or administrative settings. The
+existing settings GET/PATCH permissions are unchanged. CRM editors, calendar,
+plan application, opportunity views and shared date formatting use this endpoint.
+
+All ten settings/work integration tests pass, including staff read access, exact
+response fields, cross-tenant and customer denial, current role/status checks,
+continued denial of admin settings access, and missing-settings behavior without
+writes. `tests/browser/crm-staff.spec.ts` adds read-only staff form coverage and
+skips when the selected saved login is not STAFF. No migration is needed.
