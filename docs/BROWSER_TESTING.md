@@ -213,3 +213,14 @@ real sign-in, enquiry conversion, CRM writes, staff access, plans and rules with
 one-connection runtime pool. Total: 90 passing tests/checks, plus the one skipped
 legacy-upgrade fixture test. Run focused pooling tests with
 `npm.cmd run test:tenant-pool:integration` and the guarded local test database.
+
+After deployment, a separate saved-session Chrome context loaded the real
+conversion form without saving. All nine observed CRM/settings requests returned
+200, and the inspected screenshot confirmed the enquiry title, contact, assignee,
+currency and description were populated with no application error. The business
+has no selected pipeline, so Save remains disabled until one is configured.
+Three further rounds of five concurrent preload requests all returned 200
+(warm rounds 115–342 ms; initial round 748–1153 ms). A generic alert-count
+assertion encountered Next.js's empty accessibility announcer; inspecting its
+text and the form confirmed this was not an application error. The default
+browser suite was not reported as passed. No hosted opportunity was created.
