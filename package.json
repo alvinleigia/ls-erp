@@ -16,6 +16,7 @@
     "test:browser:report": "playwright show-report",
     "test:crm": "node --require ./tests/register.cjs --test tests/crm.test.cjs",
     "test:crm:integration": "node --require ./tests/register.cjs --test tests/crm.integration.test.cjs",
+    "test:tenants:integration": "node --require ./tests/register.cjs --test tests/tenant-provisioning.integration.test.cjs",
     "test:crm:migration": "node -r dotenv/config --test tests/crm.migration.test.cjs",
     "db:migrate": "prisma migrate dev",
     "db:generate": "prisma generate",

@@ -79,3 +79,26 @@ and opened `https://salon.leigia.com`. TypeScript, targeted ESLint and Git white
 checks passed. Authentication/profile files and browser reports are Git-ignored.
 Authenticated browser tests are pending the user's login and session capture;
 the hosted CRM pages have not yet been visually verified through this setup.
+
+## Manual UAT — tenant provisioning, 2026-09-27
+
+The user signed in as the platform administrator; the session was saved locally.
+The platform console initially listed no business tenants. Creating `CRM Test`
+then returned `Unable to provision tenant.`
+
+The actual API handler reproduced this error against an isolated PostgreSQL
+database with a non-bypass application role: `new row violates row-level security
+policy for table "User"`. Authorization succeeded, but the async authorization
+helper's ambient database context did not propagate back to the route. Tenant
+creation now runs inside an explicit, authorized RLS-bypass callback. Tenant
+listing uses the same explicit scope so related user counts remain accurate.
+
+Six integration tests pass, covering creation with settings and audit, duplicate
+admin detection, unauthorized callers, organization scope, failed-transaction
+rollback and absence of bypass leakage. Only authentication is stubbed; the real
+route, authorization, Prisma adapter and database policies run. TypeScript and
+targeted ESLint also pass. Run with `npm.cmd run test:tenants:integration` and
+`CRM_TEST_DATABASE_URL` pointing to the prepared disposable local database.
+
+The fix needs application deployment before retrying the hosted Create tenant
+flow. No hosted business records were created or altered during reproduction.
