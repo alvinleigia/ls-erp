@@ -7,7 +7,7 @@ import {
   logApiRequestSuccess,
   withRequestId,
 } from "@/lib/api-logging"
-import { prisma } from "@/lib/prisma"
+import { prisma, runWithTenantDbContext } from "@/lib/prisma"
 import { Weekday } from "@prisma/client"
 import { appSettingsSchema } from "@/lib/validation"
 import { toISODate } from "@/lib/date"
@@ -154,66 +154,68 @@ export async function GET(request: Request) {
   }
 
   try {
-    const settings = await prisma.appSetting.findFirst({
-      where: { tenantId },
-      include: includeWorkingHours,
-    })
+    return await runWithTenantDbContext(tenantId, async () => {
+      const settings = await prisma.appSetting.findFirst({
+        where: { tenantId },
+        include: includeWorkingHours,
+      })
 
-    if (settings) {
-      if (settings.workingDays.length === 0) {
-        await seedWorkingHours(settings.id)
-        const seeded = await prisma.appSetting.findFirst({
-          where: { tenantId },
-          include: includeWorkingHours,
-        })
-        if (seeded) {
+      if (settings) {
+        if (settings.workingDays.length === 0) {
+          await seedWorkingHours(settings.id)
+          const seeded = await prisma.appSetting.findFirst({
+            where: { tenantId },
+            include: includeWorkingHours,
+          })
+          if (seeded) {
+            const response = NextResponse.json({
+              settings: mapSettingsResponse(seeded),
+              emailDelivery: getEmailDeliveryStatus(),
+            })
+            logApiRequestSuccess(logContext, 200, { result: "settings_seeded_working_hours" })
+            return withRequestId(response, logContext.requestId)
+          }
           const response = NextResponse.json({
-            settings: mapSettingsResponse(seeded),
+            settings: mapSettingsResponse(settings),
             emailDelivery: getEmailDeliveryStatus(),
           })
-          logApiRequestSuccess(logContext, 200, { result: "settings_seeded_working_hours" })
+          logApiRequestSuccess(logContext, 200, { result: "settings_existing_after_seed_attempt" })
           return withRequestId(response, logContext.requestId)
         }
         const response = NextResponse.json({
           settings: mapSettingsResponse(settings),
           emailDelivery: getEmailDeliveryStatus(),
         })
-        logApiRequestSuccess(logContext, 200, { result: "settings_existing_after_seed_attempt" })
+        logApiRequestSuccess(logContext, 200, { result: "settings_existing" })
         return withRequestId(response, logContext.requestId)
       }
+
+      const created = await prisma.appSetting.create({
+        data: { tenantId },
+      })
+
+      await seedWorkingHours(created.id)
+      const seeded = await prisma.appSetting.findFirst({
+        where: { tenantId },
+        include: includeWorkingHours,
+      })
+
+      if (seeded) {
+        const response = NextResponse.json({
+          settings: mapSettingsResponse(seeded),
+          emailDelivery: getEmailDeliveryStatus(),
+        })
+        logApiRequestSuccess(logContext, 200, { result: "settings_created_seeded" })
+        return withRequestId(response, logContext.requestId)
+      }
+
       const response = NextResponse.json({
-        settings: mapSettingsResponse(settings),
+        settings: created,
         emailDelivery: getEmailDeliveryStatus(),
       })
-      logApiRequestSuccess(logContext, 200, { result: "settings_existing" })
+      logApiRequestSuccess(logContext, 200, { result: "settings_created" })
       return withRequestId(response, logContext.requestId)
-    }
-
-    const created = await prisma.appSetting.create({
-      data: { tenantId },
     })
-
-    await seedWorkingHours(created.id)
-    const seeded = await prisma.appSetting.findFirst({
-      where: { tenantId },
-      include: includeWorkingHours,
-    })
-
-    if (seeded) {
-      const response = NextResponse.json({
-        settings: mapSettingsResponse(seeded),
-        emailDelivery: getEmailDeliveryStatus(),
-      })
-      logApiRequestSuccess(logContext, 200, { result: "settings_created_seeded" })
-      return withRequestId(response, logContext.requestId)
-    }
-
-    const response = NextResponse.json({
-      settings: created,
-      emailDelivery: getEmailDeliveryStatus(),
-    })
-    logApiRequestSuccess(logContext, 200, { result: "settings_created" })
-    return withRequestId(response, logContext.requestId)
   } catch (error) {
     logApiRequestError(logContext, error, 500)
     const response = NextResponse.json({ error: "Unable to load settings." }, { status: 500 })
@@ -256,124 +258,126 @@ export async function PATCH(request: Request) {
   }
 
   try {
-    const { workingHours, overrides, ...baseSettings } = parsed.data
+    return await runWithTenantDbContext(tenantId, async () => {
+      const { workingHours, overrides, ...baseSettings } = parsed.data
 
-    const existingSettings = await prisma.appSetting.findFirst({
-      where: { tenantId },
-      select: { id: true },
-    })
-    const settingId = existingSettings?.id ??
-      (
-        await prisma.appSetting.create({
-          data: { tenantId, ...baseSettings },
-          select: { id: true },
-        })
-      ).id
-
-    if (existingSettings?.id) {
-      await prisma.appSetting.update({
-        where: { id: existingSettings.id },
-        data: baseSettings,
+      const existingSettings = await prisma.appSetting.findFirst({
+        where: { tenantId },
+        select: { id: true },
       })
-    }
-
-    if (workingHours) {
-      await prisma.$transaction(async (tx) => {
-        for (const day of workingHours) {
-          const dayRecord = await tx.appSettingDay.upsert({
-            where: { settingId_day: { settingId, day: day.day } },
-            update: { isOpen: day.isOpen },
-            create: {
-              settingId,
-              day: day.day,
-              isOpen: day.isOpen,
-            },
+      const settingId = existingSettings?.id ??
+        (
+          await prisma.appSetting.create({
+            data: { tenantId, ...baseSettings },
+            select: { id: true },
           })
-          await tx.appSettingPeriod.deleteMany({ where: { dayId: dayRecord.id } })
-          if (day.periods.length) {
-            await tx.appSettingPeriod.createMany({
-              data: day.periods.map((period, index) => ({
-                dayId: dayRecord.id,
-                kind: period.kind,
-                startTime: period.startTime,
-                endTime: period.endTime,
-                sortOrder: period.sortOrder ?? index,
-              })),
+        ).id
+
+      if (existingSettings?.id) {
+        await prisma.appSetting.update({
+          where: { id: existingSettings.id },
+          data: baseSettings,
+        })
+      }
+
+      if (workingHours) {
+        await prisma.$transaction(async (tx) => {
+          for (const day of workingHours) {
+            const dayRecord = await tx.appSettingDay.upsert({
+              where: { settingId_day: { settingId, day: day.day } },
+              update: { isOpen: day.isOpen },
+              create: {
+                settingId,
+                day: day.day,
+                isOpen: day.isOpen,
+              },
+            })
+            await tx.appSettingPeriod.deleteMany({ where: { dayId: dayRecord.id } })
+            if (day.periods.length) {
+              await tx.appSettingPeriod.createMany({
+                data: day.periods.map((period, index) => ({
+                  dayId: dayRecord.id,
+                  kind: period.kind,
+                  startTime: period.startTime,
+                  endTime: period.endTime,
+                  sortOrder: period.sortOrder ?? index,
+                })),
+              })
+            }
+          }
+        })
+      }
+
+      if (overrides) {
+        await prisma.$transaction(async (tx) => {
+          const existing = await tx.appSettingOverride.findMany({
+            where: { settingId },
+            select: { id: true, date: true },
+          })
+          const nextDates = new Set(
+            overrides.map((override) => override.date)
+          )
+          const toRemove = existing.filter(
+            (item) => !nextDates.has(item.date.toISOString().slice(0, 10))
+          )
+          if (toRemove.length) {
+            await tx.appSettingOverridePeriod.deleteMany({
+              where: { overrideId: { in: toRemove.map((item) => item.id) } },
+            })
+            await tx.appSettingOverride.deleteMany({
+              where: { id: { in: toRemove.map((item) => item.id) } },
             })
           }
-        }
-      })
-    }
 
-    if (overrides) {
-      await prisma.$transaction(async (tx) => {
-        const existing = await tx.appSettingOverride.findMany({
-          where: { settingId },
-          select: { id: true, date: true },
-        })
-        const nextDates = new Set(
-          overrides.map((override) => override.date)
-        )
-        const toRemove = existing.filter(
-          (item) => !nextDates.has(item.date.toISOString().slice(0, 10))
-        )
-        if (toRemove.length) {
-          await tx.appSettingOverridePeriod.deleteMany({
-            where: { overrideId: { in: toRemove.map((item) => item.id) } },
-          })
-          await tx.appSettingOverride.deleteMany({
-            where: { id: { in: toRemove.map((item) => item.id) } },
-          })
-        }
-
-        for (const override of overrides) {
-          const overrideDate = new Date(override.date)
-          const overrideRecord = await tx.appSettingOverride.upsert({
-            where: {
-              settingId_date: { settingId, date: overrideDate },
-            },
-            update: { isOpen: override.isOpen },
-            create: {
-              settingId,
-              date: overrideDate,
-              isOpen: override.isOpen,
-            },
-          })
-          await tx.appSettingOverridePeriod.deleteMany({
-            where: { overrideId: overrideRecord.id },
-          })
-          if (override.periods.length) {
-            await tx.appSettingOverridePeriod.createMany({
-              data: override.periods.map((period, index) => ({
-                overrideId: overrideRecord.id,
-                kind: period.kind,
-                startTime: period.startTime,
-                endTime: period.endTime,
-                sortOrder: period.sortOrder ?? index,
-              })),
+          for (const override of overrides) {
+            const overrideDate = new Date(override.date)
+            const overrideRecord = await tx.appSettingOverride.upsert({
+              where: {
+                settingId_date: { settingId, date: overrideDate },
+              },
+              update: { isOpen: override.isOpen },
+              create: {
+                settingId,
+                date: overrideDate,
+                isOpen: override.isOpen,
+              },
             })
+            await tx.appSettingOverridePeriod.deleteMany({
+              where: { overrideId: overrideRecord.id },
+            })
+            if (override.periods.length) {
+              await tx.appSettingOverridePeriod.createMany({
+                data: override.periods.map((period, index) => ({
+                  overrideId: overrideRecord.id,
+                  kind: period.kind,
+                  startTime: period.startTime,
+                  endTime: period.endTime,
+                  sortOrder: period.sortOrder ?? index,
+                })),
+              })
+            }
           }
-        }
-      })
-    }
+        })
+      }
 
-    const settings = await prisma.appSetting.findFirst({
-      where: { tenantId },
-      include: includeWorkingHours,
-    })
-
-    if (settings) {
-      const response = NextResponse.json({
-        settings: mapSettingsResponse(settings),
-        emailDelivery: getEmailDeliveryStatus(),
+      const settings = await prisma.appSetting.findFirst({
+        where: { tenantId },
+        include: includeWorkingHours,
       })
-      logApiRequestSuccess(logContext, 200, { result: "settings_updated" })
+
+      if (settings) {
+        const response = NextResponse.json({
+          settings: mapSettingsResponse(settings),
+          emailDelivery: getEmailDeliveryStatus(),
+        })
+        logApiRequestSuccess(logContext, 200, { result: "settings_updated" })
+        return withRequestId(response, logContext.requestId)
+      }
+
+      const response = NextResponse.json({ settings, emailDelivery: getEmailDeliveryStatus() })
+      logApiRequestSuccess(logContext, 200, { result: "settings_updated_empty" })
       return withRequestId(response, logContext.requestId)
-    }
-
-    const response = NextResponse.json({ settings, emailDelivery: getEmailDeliveryStatus() })
-    logApiRequestSuccess(logContext, 200, { result: "settings_updated_empty" })
-    return withRequestId(response, logContext.requestId)
+    })
   } catch (error) {
     logApiRequestError(logContext, error, 500)
     const response = NextResponse.json({ error: "Unable to update settings." }, { status: 500 })

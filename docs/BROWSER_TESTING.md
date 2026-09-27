@@ -126,3 +126,28 @@ responses, concurrent tenant isolation, session rejection and a one-connection
 budget during parallel reads. The corrected handler returned HTTP 200 against
 CRM Test using read-only queries. This verifies local corrected code against the
 hosted database; the deployed UI still needs retesting after deployment.
+
+## Manual UAT — settings and embedded activities, 2026-09-27
+
+The enquiry activity panel showed `Unable to complete this request`, alongside
+HTTP 500 responses from `/api/settings`. The settings GET and PATCH handlers now
+explicitly scope database work to the authorized tenant. Previously, RLS hid the
+existing settings and rejected the attempted replacement. Regression tests cover
+initial working hours, settings edits, tenant isolation and rejected sessions.
+
+Concurrent activity reads reproduced a separate transaction acquisition timeout:
+with the production one-connection pool, Prisma's default two-second wait expired
+while other page panels were loading. CRM transactions now allow a bounded
+20-second acquisition wait, retaining the existing 20-second execution limit and
+connection budget. A local regression holds the connection for three seconds to
+verify that queued work succeeds. Eight concurrent read-only requests against
+Supabase changed from five successes and three failures to eight HTTP 200s using
+the corrected local handler. Hosted business data was not changed by diagnostics.
+
+Run the focused tests with `npm.cmd run test:settings-work:integration` and the
+guarded disposable `CRM_TEST_DATABASE_URL`. All five focused tests and four
+dashboard regressions pass. The CRM suite adds 68 passing tests, with one legacy
+upgrade-fixture test skipped on this fresh schema. TypeScript and targeted ESLint
+also pass. Hosted
+browser verification still requires deployment and a page refresh; these results
+do not claim that the deployed UI has been visually verified.

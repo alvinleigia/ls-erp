@@ -26,6 +26,9 @@ export function createCrmService(db: PrismaClient, identity: Pick<CrmActor, "ten
   async function run<T>(operation: (tx: Tx, actor: CrmActor) => Promise<T>): Promise<T> {
     for (let attempt = 0; ; attempt++) {
       try {
+        // A page loads several CRM panels concurrently through the small tenant
+        // pool. Allow bounded queueing beyond Prisma's two-second default while
+        // retaining the execution limit for up to 12 audited plan activities.
         return await db.$transaction(async tx => {
           const user = await tx.user.findFirst({
             where: { id: identity.userId, tenantId: identity.tenantId, status: "ACTIVE" },
@@ -40,7 +43,7 @@ export function createCrmService(db: PrismaClient, identity: Pick<CrmActor, "ten
           })
           if (!enabledModule?.enabled) throw new CrmError(403, "CRM is not enabled for this business.")
           return operation(tx, { ...identity, role: user.role })
-        }, { isolationLevel: "Serializable", timeout: 20000 }) // Bounded plan launches create up to 12 audited activities atomically.
+        }, { isolationLevel: "Serializable", maxWait: 20000, timeout: 20000 })
       } catch (error) {
         const code = (error as { code?: string })?.code
         if (code === "P2034" && attempt < 2) continue
