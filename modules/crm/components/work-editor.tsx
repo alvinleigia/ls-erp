@@ -17,6 +17,7 @@ import { WorkHistory } from "./work-history"
 import { FollowUpReview, useFollowUpReview } from "./follow-up-review"
 import { workOutcomes } from "../work-validation"
 import { wallTime, wallTimeToInstant } from "../work-time"
+import { defaultWorkHistoryFormat } from "../work-history-format"
 import type { CrmWorkRow, WorkType } from "@/types/crm-work"
 
 type Initial = { contactId?: string; enquiryId?: string; opportunityId?: string; log?: string; dueOn?: string; startsAt?: string; endsAt?: string }
@@ -46,6 +47,7 @@ export function WorkEditor({ id, initial = {} }: { id?: string; initial?: Initia
   const [scheduleNext, setScheduleNext] = React.useState(false)
   const [logOnly, setLogOnly] = React.useState(initial.log === "true")
   const [timeZone, setTimeZone] = React.useState("UTC")
+  const [historyFormat, setHistoryFormat] = React.useState(defaultWorkHistoryFormat)
   const [canAssign, setCanAssign] = React.useState(false)
   const [loading, setLoading] = React.useState(true)
   const [failed, setFailed] = React.useState(false)
@@ -64,6 +66,7 @@ export function WorkEditor({ id, initial = {} }: { id?: string; initial?: Initia
         const [assignees, settings, existing] = await Promise.all([get("/api/crm/assignees"), get("/api/settings"), id ? get(`/api/crm/work/${id}`) : null])
         const tz = existing?.timeZone || settings.settings?.timeZone || "UTC", today = wallTime(new Date(), tz).slice(0, 10)
         setTimeZone(tz); setCanAssign(assignees.canAssign); setCompletion({ ...emptyCompletion, when: wallTime(new Date(), tz) })
+        setHistoryFormat({ timeZone: tz, locale: settings.settings?.locale || defaultWorkHistoryFormat.locale, dateFormat: settings.settings?.dateFormat || defaultWorkHistoryFormat.dateFormat, timeFormat: settings.settings?.timeFormat === "H12" ? "H12" : "H24" })
         if (existing) { setRecord(existing); setContactId(existing.contactId); setContact(existing.contact); setValues(workForm(existing, tz)) }
         else setValues({ ...emptyWork, assignedUserId: assignees.currentUserId, dueOn: initial.dueOn || today, type: initial.log === "true" ? "CALL" : "TASK", callDirection: initial.log === "true" ? "OUTBOUND" : null, startsLocal: initial.startsAt ? wallTime(initial.startsAt, tz) : "", endsLocal: initial.endsAt ? wallTime(initial.endsAt, tz) : "" })
         setNext({ ...emptyWork, title: "Next follow-up", assignedUserId: existing?.assignedUserId || assignees.currentUserId, dueOn: new Date(Date.parse(`${today}T00:00:00Z`) + 86400000).toISOString().slice(0, 10), type: "CALL", callDirection: "OUTBOUND" })
@@ -146,7 +149,7 @@ export function WorkEditor({ id, initial = {} }: { id?: string; initial?: Initia
       <form onSubmit={finish} className="space-y-5 rounded-xl border p-5"><h2 className="text-lg font-semibold">Record outcome and next step</h2><fieldset disabled={saving} className="space-y-5"><CompletionFields type={record.type} value={completion} onChange={setCompletion} timeZone={timeZone} /><FollowUpReview review={review} />{!review.applying && <><label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={scheduleNext} onChange={event => setScheduleNext(event.target.checked)} />Schedule a manual follow-up</label>{scheduleNext && <WorkScheduleFields prefix="next" values={next} onChange={setNext} canAssign={canAssign} assignee={person} timeZone={timeZone} />}</>}</fieldset><Button type="submit" loading={saving} disabled={!review.ready}>{review.applying ? "Complete and create suggested follow-up" : scheduleNext ? "Complete and schedule next" : "Complete activity"}</Button></form>
     </>}
     {contactId && <ContactInteractions contactId={contactId} revision={revision} />}
-    {record && <WorkHistory id={record.id} revision={revision} canEdit={record.canEdit} />}
+    {record && <WorkHistory id={record.id} revision={revision} canEdit={record.canEdit} settings={historyFormat} />}
     <Dialog open={cancelOpen} onOpenChange={open => { if (!saving) setCancelOpen(open) }}><DialogContent><DialogHeader><DialogTitle>Cancel this activity?</DialogTitle><DialogDescription>The record and history will be kept. Its reminders will stop.</DialogDescription></DialogHeader><form onSubmit={event => { event.preventDefault(); void cancel() }} className="space-y-4"><FormField id="cancel-reason" label="Reason"><textarea id="cancel-reason" required maxLength={2000} className="min-h-24 w-full rounded border p-3" value={cancelReason} onChange={event => setCancelReason(event.target.value)} /></FormField><DialogFooter><Button type="button" variant="outline" disabled={saving} onClick={() => setCancelOpen(false)}>Keep activity</Button><Button type="submit" loading={saving}>Cancel activity</Button></DialogFooter></form></DialogContent></Dialog>
   </div>
 }

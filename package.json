@@ -14,7 +14,7 @@
     "test:browser:connection": "playwright test connection.spec.ts",
     "test:browser:headed": "playwright test --headed",
     "test:browser:report": "playwright show-report",
-    "test:crm": "node --require ./tests/register.cjs --test tests/crm.test.cjs",
+    "test:crm": "node --require ./tests/register.cjs --test tests/crm.test.cjs tests/work-history-format.test.cjs",
     "test:crm:integration": "node --require ./tests/register.cjs --test tests/crm.integration.test.cjs",
     "test:tenants:integration": "node --require ./tests/register.cjs --test tests/tenant-provisioning.integration.test.cjs",
     "test:dashboard:integration": "node --require ./tests/register.cjs --test tests/dashboard.integration.test.cjs",

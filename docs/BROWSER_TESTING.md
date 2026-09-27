@@ -224,3 +224,16 @@ Three further rounds of five concurrent preload requests all returned 200
 assertion encountered Next.js's empty accessibility announcer; inspecting its
 text and the form confirmed this was not an application error. The default
 browser suite was not reported as passed. No hosted opportunity was created.
+
+## Activity history timezone display, 2026-09-27
+
+Manual reminder testing passed due visibility, snooze/reappearance and dismissal
+while retaining an open activity. The history exposed a display defect: generated
+reschedule sentences contained raw UTC ISO timestamps. Activity history now formats
+those sentences and event timestamps using the current business timezone, locale,
+date format and 12/24-hour setting already loaded by the editor. Existing history
+benefits immediately; stored audit text and staff-authored notes are not rewritten.
+All-day reschedules retain their calendar date. The four focused formatting tests
+cover the reported 05:30 UTC to 11:00 Asia/Kolkata case, 12/24-hour preferences,
+date rollover, DST, all-day events and preservation of notes/malformed timestamps.
+They run with `npm.cmd run test:crm` (19 passing tests total). No migration is needed.
