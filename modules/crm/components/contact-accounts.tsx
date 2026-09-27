@@ -3,6 +3,7 @@ import * as React from "react"
 import Link from "next/link"
 import { type ColumnDef, getCoreRowModel, useReactTable } from "@tanstack/react-table"
 import { toast } from "sonner"
+import { Building2, Plus } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { DataTable, DataTablePagination } from "@/components/data-table"
 import { FormField } from "@/components/form-field"
@@ -10,6 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import type { CrmAccountRow } from "@/types/crm"
 import type { ListResponse } from "@/types/api"
 import { RecordSelect } from "./record-select"
+import { CrmEmptyState, CrmSection } from "./crm-section"
 
 export function ContactAccounts({ contactId, canEdit, archived }: { contactId: string; canEdit: boolean; archived: boolean }) {
   const [data, setData] = React.useState<ListResponse<CrmAccountRow> | null>(null)
@@ -59,16 +61,14 @@ export function ContactAccounts({ contactId, canEdit, archived }: { contactId: s
       return previous.pageSize !== next.pageSize ? { ...next, pageIndex: 0 } : next
     }),
   })
-  return <section className="space-y-4">
-    <h2 className="text-lg font-semibold">Business accounts</h2>
+  return <CrmSection title="Business accounts" description="Companies connected to this contact." icon={Building2} actions={canEdit && !archived && <Button type="button" variant="outline" size="sm" asChild><Link href="/crm/accounts/new"><Plus className="size-4" aria-hidden="true" />New account</Link></Button>}>
     {canEdit && !archived && <form onSubmit={event => { event.preventDefault(); void change() }} className="flex flex-wrap items-end gap-3">
-      <FormField id="accountId" label="Link an account" className="min-w-64 flex-1"><RecordSelect id="accountId" endpoint="/api/crm/accounts" value={accountId} onChange={setAccountId} disabled={saving} /></FormField>
+      <FormField id="accountId" label="Link an account" className="min-w-0 basis-48 flex-1"><RecordSelect id="accountId" endpoint="/api/crm/accounts" value={accountId} onChange={setAccountId} disabled={saving} /></FormField>
       <Button type="submit" loading={saving} disabled={!accountId}>Link account</Button>
-      <Button type="button" variant="outline" asChild><Link href="/crm/accounts/new">New account</Link></Button>
     </form>}
     {error && <p role="alert" className="text-destructive">{error}</p>}
-    <DataTable table={table} loading={loading} emptyMessage="No linked business accounts." />
-    <DataTablePagination table={table} totalRows={data?.total ?? 0} />
+    {!loading && data?.total === 0 ? <CrmEmptyState title="No linked business accounts" description={canEdit && !archived ? "Select an account above to connect this contact to a company." : "This contact is not linked to a company."} /> : <DataTable table={table} loading={loading} emptyMessage="No linked business accounts." />}
+    <DataTablePagination table={table} totalRows={data?.total ?? 0} compact />
     <Dialog open={!!removing} onOpenChange={open => { if (!open && !saving) setRemoving(null) }}><DialogContent><DialogHeader><DialogTitle>Unlink {removing?.name}?</DialogTitle><DialogDescription>The contact and account will be kept. This relationship will be removed and the change recorded in audit history.</DialogDescription></DialogHeader><DialogFooter><Button variant="outline" disabled={saving} onClick={() => setRemoving(null)}>Cancel</Button><Button loading={saving} onClick={() => removing && void change(removing)}>Unlink account</Button></DialogFooter></DialogContent></Dialog>
-  </section>
+  </CrmSection>
 }

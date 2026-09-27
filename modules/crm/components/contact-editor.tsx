@@ -3,6 +3,7 @@ import * as React from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
+import { ArrowLeft, Plus, UserRound } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { FormField } from "@/components/form-field"
@@ -12,6 +13,8 @@ import type { CrmContactRow } from "@/types/crm"
 import { ContactAccounts } from "./contact-accounts"
 import { WorkList } from "./work-list"
 import { ContactInteractions } from "./contact-interactions"
+import { DropdownSelect } from "@/components/ui/dropdown-select"
+import { CrmSection } from "./crm-section"
 
 export function ContactEditor({ id }: { id?: string }) {
   const router = useRouter()
@@ -52,20 +55,37 @@ export function ContactEditor({ id }: { id?: string }) {
   }
   if (loading) return <p>Loading contact…</p>
   const canEdit = !id || !!contact?.canEdit
-  return <div className="mx-auto max-w-3xl space-y-8"><form onSubmit={save} className="space-y-6">
-    <div className="flex flex-wrap items-center justify-between gap-3"><h1 className="text-2xl font-semibold">{id ? "Contact" : "New contact"}</h1><div className="flex gap-2"><Button type="button" variant="outline" asChild><Link href="/crm/contacts">Back</Link></Button>{canEdit && <Button loading={saving} loadingText="Saving…" type="submit">Save contact</Button>}</div></div>
-    {error && <p role="alert" className="text-destructive">{error}</p>}
-    <fieldset disabled={!canEdit || saving} className="space-y-5 rounded-xl border p-5">
-      <FormField id="name" label="Name" error={errors.name}><Input id="name" value={values.name} required maxLength={160} onChange={event => setValues({ ...values, name: event.target.value })} /></FormField>
-      <FormField id="email" label="Email" error={errors.email}><Input id="email" type="email" value={values.email} onChange={event => setValues({ ...values, email: event.target.value })} /></FormField>
-      <FormField id="phone" label="Phone (include country code)" error={errors.phone}><Input id="phone" type="tel" placeholder="+919876543210" value={values.phone} onChange={event => setValues({ ...values, phone: event.target.value })} /></FormField>
-      {id && <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={values.archived} onChange={event => setValues({ ...values, archived: event.target.checked })} />Archived — keep history and stop new enquiries</label>}
-    </fieldset>
-    {contact && !contact.archived && <Button type="button" asChild><Link href={`/crm/enquiries/new?contactId=${contact.id}`}>Create enquiry</Link></Button>}
-    {contact && !canEdit && <p className="text-sm text-muted-foreground">You can view this contact through assigned CRM work. Ask its owner or a manager to edit it.</p>}
-    <Dialog open={confirmArchive} onOpenChange={open => { if (!saving) setConfirmArchive(open) }}><DialogContent><DialogHeader><DialogTitle>Archive this contact?</DialogTitle><DialogDescription>Existing enquiries and history will be kept. New enquiries cannot be created until the contact is restored.</DialogDescription></DialogHeader><DialogFooter><Button type="button" variant="outline" disabled={saving} onClick={() => setConfirmArchive(false)}>Cancel</Button><Button type="button" loading={saving} onClick={() => void persist()}>Archive contact</Button></DialogFooter></DialogContent></Dialog>
-  </form>
-    {contact && <ContactAccounts contactId={contact.id} canEdit={!!contact.canEdit} archived={contact.archived} />}
-    {contact && <><WorkList contactId={contact.id} /><ContactInteractions contactId={contact.id} /></>}
+  return <div className="mx-auto w-full min-w-0 max-w-6xl space-y-6">
+    <header className="space-y-4">
+      <Link href="/crm/contacts" className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" aria-hidden="true" />Back to contacts</Link>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0 flex-1">
+          <p className="mb-1 text-xs font-medium uppercase tracking-wider text-muted-foreground">Contact</p>
+          <div className="flex flex-wrap items-center gap-3"><h1 className="min-w-0 break-words text-2xl font-semibold tracking-tight">{contact?.name || (id ? "Contact" : "New contact")}</h1>{contact && <span className="rounded-full border bg-muted px-2.5 py-0.5 text-xs font-medium">{contact.archived ? "Archived" : "Active"}</span>}</div>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {contact && !contact.archived && <Button type="button" variant="outline" asChild><Link href={`/crm/enquiries/new?contactId=${contact.id}`}><Plus className="size-4" aria-hidden="true" />Create enquiry</Link></Button>}
+          {canEdit && <Button form="contact-details" loading={saving} loadingText="Saving…" type="submit">Save contact</Button>}
+        </div>
+      </div>
+    </header>
+    {error && <p role="alert" className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">{error}</p>}
+    {(!id || contact) && <div className={contact ? "grid items-start gap-6 xl:grid-cols-[1.2fr_1fr]" : "max-w-3xl"}>
+      <form id="contact-details" onSubmit={save} className="min-w-0">
+        <CrmSection title="Contact details" description="Basic information and contact status." icon={UserRound}>
+          <fieldset disabled={!canEdit || saving} className="grid min-w-0 gap-5 sm:grid-cols-2">
+            <FormField id="name" label="Full name" error={errors.name} className="min-w-0"><Input id="name" autoComplete="name" value={values.name} required maxLength={160} onChange={event => setValues({ ...values, name: event.target.value })} /></FormField>
+            {id && <FormField id="contact-status" label="Status"><DropdownSelect id="contact-status" label="Contact status" className="w-full" disabled={!canEdit || saving} value={values.archived ? "archived" : "active"} options={[{ value: "active", label: "Active" }, { value: "archived", label: "Archived" }]} onValueChange={value => setValues({ ...values, archived: value === "archived" })} /></FormField>}
+            <FormField id="email" label="Email" error={errors.email} className="min-w-0"><Input id="email" type="email" autoComplete="email" placeholder="name@example.com" value={values.email} onChange={event => setValues({ ...values, email: event.target.value })} /></FormField>
+            <FormField id="phone" label="Phone" error={errors.phone} className="min-w-0"><Input id="phone" type="tel" autoComplete="tel" placeholder="+919876543210" value={values.phone} onChange={event => setValues({ ...values, phone: event.target.value })} /><p className="text-xs text-muted-foreground">Include the country code.</p></FormField>
+          </fieldset>
+          {values.archived && <p className="rounded-md bg-muted p-3 text-sm text-muted-foreground">Archived contacts keep their history. Restore to Active to create new enquiries.</p>}
+          {contact && !canEdit && <p className="text-sm text-muted-foreground">You can view this contact through assigned CRM work. Ask its owner or a manager to edit it.</p>}
+        </CrmSection>
+        <Dialog open={confirmArchive} onOpenChange={open => { if (!saving) setConfirmArchive(open) }}><DialogContent><DialogHeader><DialogTitle>Archive this contact?</DialogTitle><DialogDescription>Existing enquiries and history will be kept. New enquiries cannot be created until the contact is restored.</DialogDescription></DialogHeader><DialogFooter><Button type="button" variant="outline" disabled={saving} onClick={() => setConfirmArchive(false)}>Cancel</Button><Button type="button" loading={saving} onClick={() => void persist()}>Archive contact</Button></DialogFooter></DialogContent></Dialog>
+      </form>
+      {contact && <ContactAccounts contactId={contact.id} canEdit={!!contact.canEdit} archived={contact.archived} />}
+    </div>}
+    {contact && <><WorkList contactId={contact.id} compact /><ContactInteractions contactId={contact.id} card /></>}
   </div>
 }

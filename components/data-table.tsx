@@ -3,7 +3,7 @@
 import * as React from "react"
 import type { Table as TableInstance, VisibilityState } from "@tanstack/react-table"
 import { flexRender } from "@tanstack/react-table"
-import { ChevronDownIcon } from "lucide-react"
+import { ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -13,6 +13,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
+import { DropdownSelect } from "@/components/ui/dropdown-select"
 import {
   Table,
   TableBody,
@@ -41,6 +42,7 @@ type DataTablePaginationProps<TData> = {
   pageSizeOptions?: number[]
   totalRows?: number
   totalPages?: number
+  compact?: boolean
 }
 
 export function DataTable<TData>({
@@ -166,6 +168,7 @@ export function DataTablePagination<TData>({
   pageSizeOptions = [5, 10, 20, 30],
   totalRows,
   totalPages,
+  compact = false,
 }: DataTablePaginationProps<TData>) {
   const resolvedTotalRows =
     typeof totalRows === "number"
@@ -180,6 +183,8 @@ export function DataTablePagination<TData>({
   const start = resolvedTotalRows === 0 ? 0 : pageIndex * pageSize + 1
   const end = Math.min(resolvedTotalRows, (pageIndex + 1) * pageSize)
 
+  if (compact && resolvedTotalRows === 0 && pageIndex === 0) return null
+
   return (
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
       <div className="text-sm text-muted-foreground">
@@ -189,7 +194,7 @@ export function DataTablePagination<TData>({
         <span className="font-medium text-foreground">{resolvedTotalRows}</span>
       </div>
       <div className="flex flex-wrap items-center gap-2">
-        <select
+        {compact ? <DropdownSelect label="Rows per page" value={String(pageSize)} options={pageSizeOptions.map(size => ({ value: String(size), label: `${size} / page` }))} onValueChange={value => table.setPageSize(Number(value))} /> : <select
           className="h-9 rounded-md border border-input bg-background px-3 text-sm"
           value={pageSize}
           onChange={(event) => table.setPageSize(Number(event.target.value))}
@@ -199,26 +204,30 @@ export function DataTablePagination<TData>({
               {size} / page
             </option>
           ))}
-        </select>
+        </select>}
+        {(!compact || resolvedTotalPages > 1 || pageIndex > 0) && <>
         <Button
           variant="outline"
-          size="sm"
+          size={compact ? "icon" : "sm"}
+          aria-label="Previous"
           onClick={() => table.previousPage()}
           disabled={!table.getCanPreviousPage()}
         >
-          Previous
+          {compact ? <ChevronLeftIcon aria-hidden="true" /> : "Previous"}
         </Button>
         <span className="text-sm text-muted-foreground">
           Page {currentPage} of {resolvedTotalPages}
         </span>
         <Button
           variant="outline"
-          size="sm"
+          size={compact ? "icon" : "sm"}
+          aria-label="Next"
           onClick={() => table.nextPage()}
           disabled={!table.getCanNextPage()}
         >
-          Next
+          {compact ? <ChevronRightIcon aria-hidden="true" /> : "Next"}
         </Button>
+        </>}
       </div>
     </div>
   )

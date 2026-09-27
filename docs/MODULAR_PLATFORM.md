@@ -1,5 +1,22 @@
 # Modular business platform — CRM milestones 1–7
 
+## Contact workspace UI — 2026-09-28
+
+The contact detail view uses separate cards for contact information, business
+accounts, activities and shared interaction history. Fixed choices use the shared
+shadcn/Radix `DropdownSelect`; large record choices retain server-side searchable
+comboboxes. Contact activities expose search and status, group secondary filters
+in a labelled popover, and place Apply plan / Log interaction in More actions.
+Mobile activities use cards; empty sections omit redundant tables and pagination.
+
+`CrmSection` provides the section pattern for further CRM work. The compact work
+list, interaction card and pagination treatments are opt-in on this view; other
+CRM screens retain their current layout. Contact saves, archive/unlink confirmation,
+server pagination, record context, permissions and version checks are preserved.
+No API or database changes are required. Seven browser checks exercise the real
+components with intercepted test data and writes, including filters, pagination,
+archive/restore, account relationships, staff read-only access and mobile themes.
+
 ## Architecture decision
 
 Keep one Next.js application and PostgreSQL database. The business tenant is the
