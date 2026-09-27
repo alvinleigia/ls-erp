@@ -46,6 +46,7 @@ export function SearchableSelect({
   onSearchChange,
 }: SearchableSelectProps) {
   const [open, setOpen] = React.useState(false)
+  const [search, setSearch] = React.useState("")
 
   const selected = React.useMemo(
     () => options.find((option) => option.value === value) ?? (selectedOption?.value === value ? selectedOption : null),
@@ -53,7 +54,7 @@ export function SearchableSelect({
   )
 
   return (
-    <Popover open={open} onOpenChange={next => { setOpen(next); if (next) onSearchChange?.("") }}>
+    <Popover open={open} onOpenChange={next => { setOpen(next); if (next) { setSearch(""); onSearchChange?.("") } }}>
       <PopoverTrigger asChild>
         <Button
           id={id}
@@ -72,7 +73,7 @@ export function SearchableSelect({
       </PopoverTrigger>
       <PopoverContent align="start" className="w-[var(--radix-popover-trigger-width)] p-0">
         <Command shouldFilter={!onSearchChange}>
-          <CommandInput placeholder={searchPlaceholder} onValueChange={onSearchChange} />
+          <CommandInput placeholder={searchPlaceholder} value={search} onValueChange={next => { setSearch(next); onSearchChange?.(next) }} />
           <CommandList>
             <CommandEmpty>{emptyLabel}</CommandEmpty>
             <CommandGroup>

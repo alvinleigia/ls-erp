@@ -271,3 +271,6 @@ customer selectors before the fix. Both tests pass against the fixed components
 in an isolated local browser fixture. They cover matching results, empty results,
 selection retention, reopening, choosing a new record and backend matches beyond
 the displayed name. The tests mock search responses and never save the form.
+Hosted verification also exposed a quick-reopen case hidden by the fixture's
+lack of closing animations: the still-mounted input retained its text. The input
+is now controlled and cleared on opening together with the backend query.
