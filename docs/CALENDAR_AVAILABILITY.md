@@ -1,4 +1,20 @@
-# Temporary calendar pause - 2026-09-28
+# Calendar availability - 2026-09-28
+
+Production now has a Syncfusion license and `NEXT_PUBLIC_ENABLE_CALENDAR_VIEWS=true`.
+Preview remains disabled unless its own environment is configured and rebuilt.
+The license value is managed in Vercel and is not committed to this repository.
+
+The roster relies on the calendar's React `eventSettings` prop for event updates.
+Do not also call `dataBind()` from a parent effect: it can run before the grouped
+staff resources finish initializing when the lazy calendar first mounts.
+Read-only hosted verification is available with:
+
+```powershell
+$env:CRM_VERIFY_CALENDAR_ENABLED='1'
+npx.cmd playwright test --config playwright.crm-existing.config.ts calendar.spec.ts
+```
+
+## Default-off behavior
 
 The application title is now Leiweissen ERP. The updated logo remains at
 `public/assets/images/logo.png`.

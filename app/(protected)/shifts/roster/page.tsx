@@ -1325,17 +1325,6 @@ export default function RosterPage() {
     )
   }, [openOverrideEditor, settings])
 
-  React.useEffect(() => {
-    if (scheduleRef.current) {
-      scheduleRef.current.eventSettings = {
-        ...scheduleRef.current.eventSettings,
-        dataSource: calendarEvents,
-      }
-      scheduleRef.current.dataBind()
-      scheduleRef.current.refreshEvents?.()
-    }
-  }, [calendarEvents])
-
   const staffResources = React.useMemo(
     () =>
       filteredStaff.map((member, index) => ({
