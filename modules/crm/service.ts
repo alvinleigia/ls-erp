@@ -1,3 +1,4 @@
+import { createLostReasonService, resolveLostReason } from "./lost-reason-service"
 import { createSalesReportService } from "./sales-report-service"
 import { checkExportLimit, CRM_EXPORT_LIMIT } from "./csv"
 import type { Prisma, PrismaClient, Role } from "@prisma/client"
@@ -57,7 +58,7 @@ export function createCrmService(db: PrismaClient, identity: Pick<CrmActor, "ten
           // nested cause rather than Prisma's legacy meta.target location.
           const meta = (error as { meta?: { target?: unknown; driverAdapterError?: { cause?: { constraint?: { fields?: unknown } } } } }).meta
           const target = String(meta?.target || meta?.driverAdapterError?.cause?.constraint?.fields || "")
-          if (target.includes("nameKey")) throw new CrmError(409, "This lead source already exists. Edit or restore it.")
+          if (target.includes("nameKey")) throw new CrmError(409, "A choice with this name already exists. Edit or restore it.")
           if (target.includes("sourceType") && target.includes("outcome")) throw new CrmError(409, "A rule for this activity type and outcome already exists. Edit or restore that rule.")
           if (target.includes("requestKey")) { if (attempt < 2) continue; throw new CrmError(409, "This plan application is being processed. Retry to see its activities.") }
           if (target.includes("followUpOfId")) throw new CrmError(409, "A next follow-up was already scheduled. Refresh to see it.")
@@ -75,7 +76,7 @@ export function createCrmService(db: PrismaClient, identity: Pick<CrmActor, "ten
   async function audit(tx: Tx, actor: CrmActor, event: string, entityId: string, before?: Prisma.InputJsonValue, after?: Prisma.InputJsonValue) {
     await recordDomainAuditEvent(tx, {
       tenantId: actor.tenantId, actorUserId: actor.userId, actorRole: actor.role as Role,
-      requestId: actor.requestId, event, entityType: event.startsWith("crm.source.") ? "CrmLeadSource" : event.startsWith("crm.rule.") ? "CrmFollowUpRule" : event.startsWith("crm.plan.") ? "CrmActivityPlan" : event.startsWith("crm.work") ? "CrmTask" : event.startsWith("crm.opportunity") ? "CrmOpportunity" : event.startsWith("crm.pipeline") ? "CrmPipeline" : event.startsWith("crm.account") ? "CrmAccount" : event.startsWith("crm.contact") ? "CrmContact" : "CrmEnquiry",
+      requestId: actor.requestId, event, entityType: event.startsWith("crm.lostReason.") ? "CrmLostReason" : event.startsWith("crm.source.") ? "CrmLeadSource" : event.startsWith("crm.rule.") ? "CrmFollowUpRule" : event.startsWith("crm.plan.") ? "CrmActivityPlan" : event.startsWith("crm.work") ? "CrmTask" : event.startsWith("crm.opportunity") ? "CrmOpportunity" : event.startsWith("crm.pipeline") ? "CrmPipeline" : event.startsWith("crm.account") ? "CrmAccount" : event.startsWith("crm.contact") ? "CrmContact" : "CrmEnquiry",
       entityId, before, after,
     })
   }
@@ -107,6 +108,7 @@ export function createCrmService(db: PrismaClient, identity: Pick<CrmActor, "ten
     ...createSalesReportService({ run }),
     ...createFollowUpService({ run, audit }),
     ...createIntakeService({ run, audit }),
+    ...createLostReasonService({ run, audit }),
     listAccounts(input: unknown) {
       const query = crmListSchema.parse(input)
       return run(async (tx, actor) => {
@@ -260,7 +262,7 @@ export function createCrmService(db: PrismaClient, identity: Pick<CrmActor, "ten
         const phoneQuery = query.q.replace(/[\s().-]/g, "")
         const where: Prisma.CrmEnquiryWhereInput = { AND: [enquiryScope(actor), {
           ...(query.status ? { status: query.status } : {}),
-          sourceId: query.sourceId, assignedUserId: query.assignedUserId,
+          sourceId: query.sourceId, assignedUserId: query.assignedUserId, lostReasonId: query.lostReasonId,
           ...(propertyContext ? { propertyContext: { is: propertyContext } } : {}),
           ...(query.q ? { OR: [{ title: { contains: query.q, mode: "insensitive" } }, { contact: { name: { contains: query.q, mode: "insensitive" } } },
             { account: { name: { contains: query.q, mode: "insensitive" } } },
@@ -315,7 +317,8 @@ export function createCrmService(db: PrismaClient, identity: Pick<CrmActor, "ten
         const before = await findEnquiry(tx, actor, id)
         await checkAssignee(tx, actor, data.assignedUserId)
         const context = await enquiryContext(tx, actor, before.contactId, data, before)
-        const changed = await tx.crmEnquiry.updateMany({ where: { ...enquiryScope(actor), id, version }, data: { ...data, ...context, version: { increment: 1 } } })
+        const lost = await resolveLostReason(tx, actor, data.status === "CLOSED", data.lostReasonId, before.status === "CLOSED" ? before : undefined)
+        const changed = await tx.crmEnquiry.updateMany({ where: { ...enquiryScope(actor), id, version }, data: { ...data, ...context, ...lost, version: { increment: 1 } } })
         if (!changed.count) throw new CrmError(409, "This enquiry changed. Refresh before saving.")
         await savePropertyContext(tx, actor, "enquiry", id, propertyContext)
         if (before.assignedUserId !== data.assignedUserId) {
@@ -326,8 +329,8 @@ export function createCrmService(db: PrismaClient, identity: Pick<CrmActor, "ten
           // New clients additionally record who performed the handoff in activity history.
           if (inherited.length) await tx.crmTaskEvent.createMany({ data: inherited.map(item => ({ tenantId: actor.tenantId, taskId: item.id, actorUserId: actor.userId, event: "crm.work.assignment.inherited", message: "Activity reassigned with its enquiry." })) })
         }
-        await activity(tx, actor, id, "updated", `Enquiry updated. Status: ${data.status}.${data.assignedUserId !== before.assignedUserId ? " Salesperson changed." : ""}`)
-        await audit(tx, actor, "crm.enquiry.updated", id, snapshot(before), snapshot({ ...data, ...context }))
+        await activity(tx, actor, id, "updated", `Enquiry updated. Status: ${data.status === "CLOSED" ? "Lost" : data.status}.${lost.lostReasonName ? ` Lost reason: ${lost.lostReasonName}.` : ""}${data.assignedUserId !== before.assignedUserId ? " Salesperson changed." : ""}`)
+        await audit(tx, actor, "crm.enquiry.updated", id, snapshot(before), snapshot({ ...data, ...context, ...lost }))
         return (await withPropertyContext(tx, actor, "enquiry", await maskReferrals(tx, actor, [await tx.crmEnquiry.findFirstOrThrow({ where: { tenantId: actor.tenantId, id }, include: enquiryInclude })])))[0]
       })
     },

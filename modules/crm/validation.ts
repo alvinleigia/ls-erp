@@ -49,8 +49,7 @@ export const crmEnquiryUpdateSchema = enquiryFields.extend({
   version: z.number().int().positive(),
   status: z.enum(enquiryStatuses),
   outcome: text(2000),
-}).refine(value => value.status !== "CLOSED" || value.outcome.length > 0, {
-  path: ["outcome"], message: "Record an outcome before closing the enquiry.",
+  lostReasonId: optionalText(100),
 })
 export const crmTaskSchema = z.object({
   title: z.string().trim().min(1).max(200),
@@ -64,7 +63,7 @@ export const crmListSchema = z.object({
   pageSize: z.coerce.number().int().min(1).max(100).default(20),
   q: text(200),
   status: z.enum(enquiryStatuses).optional(),
-  sourceId: id.optional(), assignedUserId: id.optional(),
+  sourceId: id.optional(), assignedUserId: id.optional(), lostReasonId: id.optional(),
   archived: z.enum(["true", "false"]).default("false"),
   activeOnly: z.enum(["true", "false"]).optional(),
   due: z.enum(["open", "overdue", "completed"]).optional(),

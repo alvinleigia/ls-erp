@@ -13,7 +13,7 @@ const crmLinks = [
   ["Business accounts", "/crm/accounts"], ["My Work", "/crm/activities"],
   ["Calendar", "/crm/calendar"], ["Pipelines", "/crm/pipelines"],
   ["Activity plans", "/crm/activity-plans"], ["Follow-up rules", "/crm/follow-up-rules"],
-  ["Lead sources", "/crm/lead-sources"],
+  ["Lead sources", "/crm/lead-sources"], ["Lost reasons", "/crm/lost-reasons"],
 ] as const
 
 export function CrmNavigation({ realEstateEnabled = false }: { realEstateEnabled?: boolean }) {

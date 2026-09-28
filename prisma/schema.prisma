@@ -146,6 +146,9 @@ model CrmOpportunity {
   probability    Int
   expectedCloseOn DateTime @db.Date
   closedAt       DateTime?
+  lostReasonId   String?
+  lostReasonName String?
+  lostReason     CrmLostReason? @relation(fields: [tenantId, lostReasonId], references: [tenantId, id], onDelete: Restrict)
   lossReason     String?
   description    String?
   version        Int @default(1)
@@ -171,6 +174,7 @@ model CrmOpportunity {
   @@index([tenantId, assignedUserId, expectedCloseOn])
   @@index([tenantId, contactId])
   @@index([tenantId, accountId])
+  @@index([tenantId, lostReasonId])
 }
 
 model CrmOpportunityActivity {
@@ -294,6 +298,24 @@ model CrmLeadSource {
   @@index([tenantId, archived, name])
 }
 
+model CrmLostReason {
+  id        String @id @default(cuid())
+  tenantId  String
+  name      String
+  nameKey   String
+  archived  Boolean @default(false)
+  version   Int @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  tenant    Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  enquiries CrmEnquiry[]
+  opportunities CrmOpportunity[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, nameKey])
+  @@index([tenantId, archived, name])
+}
+
 model CrmEnquiry {
   propertyContext RealEstateEnquiryContext?
   id             String @id @default(cuid())
@@ -309,6 +331,9 @@ model CrmEnquiry {
   requirements   String?
   assignedUserId String
   status         CrmEnquiryStatus @default(NEW)
+  lostReasonId   String?
+  lostReasonName String?
+  lostReason     CrmLostReason? @relation(fields: [tenantId, lostReasonId], references: [tenantId, id], onDelete: Restrict)
   outcome        String?
   version        Int @default(1)
   createdAt      DateTime @default(now())
@@ -331,6 +356,7 @@ model CrmEnquiry {
   @@index([tenantId, updatedAt])
   @@index([tenantId, sourceId, assignedUserId])
   @@index([tenantId, accountId])
+  @@index([tenantId, lostReasonId])
 }
 
 model CrmTask {
@@ -758,6 +784,7 @@ model Tenant {
   crmOpportunityActivities CrmOpportunityActivity[]
   crmEnquiries   CrmEnquiry[]
   crmLeadSources CrmLeadSource[]
+  crmLostReasons CrmLostReason[]
   crmTasks       CrmTask[]
   crmWorkEvents  CrmTaskEvent[]
   crmActivityPlans CrmActivityPlan[]

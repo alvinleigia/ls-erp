@@ -1,3 +1,9 @@
+## Configurable lost reasons - 2026-09-28
+
+Shared enquiry/opportunity reasons, conditional closing controls, scoped filters,
+reporting and historical-label preservation are implemented. See
+[CRM_LOST_REASONS.md](CRM_LOST_REASONS.md) for configuration and verification.
+
 ## CRM Phase 6 internal regression - 2026-09-28
 
 Phase 6 now uses the existing CRM Test leads, as requested by the user.

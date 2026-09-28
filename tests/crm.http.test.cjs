@@ -45,6 +45,10 @@ test("real HTTP authentication, module access and complete CRM workflow", async 
   assert.equal((await admin("/api/modules", json("PATCH", { key: "crm", enabled: false }))).status, 200)
   assert.equal((await admin("/api/crm/contacts")).status, 403)
   assert.equal((await admin("/api/modules", json("PATCH", { key: "crm", enabled: true }))).status, 200)
+  const reasonResponse = await admin("/api/crm/lost-reasons", json("POST", { name: `HTTP budget mismatch ${Date.now()}` }))
+  assert.equal(reasonResponse.status, 201)
+  const lostReason = await reasonResponse.json()
+  assert.equal((await salesperson("/api/crm/lost-reasons", json("POST", { name: "Not allowed" }))).status, 403)
   assert.equal((await admin("/api/crm/contacts", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{" })).status, 400)
   const created = await admin("/api/crm/contacts", json("POST", { name: "HTTP workflow buyer" }))
   assert.equal(created.status, 201)
@@ -68,9 +72,10 @@ test("real HTTP authentication, module access and complete CRM workflow", async 
   assert.equal(taskResponse.status, 201)
   const task = await taskResponse.json()
   assert.equal((await salesperson(`/api/crm/tasks/${task.id}`, json("PATCH", { completed: true }))).status, 200)
-  assert.equal((await salesperson(`/api/crm/enquiries/${enquiry.id}`, json("PATCH", { title: enquiry.title, assignedUserId: salespersonId, status: "CLOSED", outcome: "Visit arranged", version: enquiry.version }))).status, 200)
+  assert.equal((await salesperson(`/api/crm/enquiries/${enquiry.id}`, json("PATCH", { title: enquiry.title, assignedUserId: salespersonId, status: "CLOSED", outcome: "Budget too low", lostReasonId: lostReason.id, version: enquiry.version }))).status, 200)
   const history = await (await salesperson(`/api/crm/enquiries/${enquiry.id}/activity`)).json()
-  assert.equal(history.total, 5)
+  assert.equal(history.total, 6) // creation, assignment, note, task creation/completion, closing
+  assert.ok(history.items.some(item => item.message.includes(`Lost reason: ${lostReason.name}`)))
   const pipelineInput = { name: "HTTP Sales", stages: [
     { name: "Qualify", kind: "OPEN", probability: 20, color: "#123456" },
     { name: "Won", kind: "WON", probability: 100, color: "#16a34a" },
@@ -92,7 +97,7 @@ test("real HTTP authentication, module access and complete CRM workflow", async 
   assert.equal((await (await salesperson(`/api/crm/enquiries/${source.id}`)).json()).opportunity.id, deal.id)
   const loss = { pipelineId: pipeline.id, stageId: pipeline.stages[2].id, version: 1 }
   assert.equal((await salesperson(`/api/crm/opportunities/${deal.id}/move`, json("PATCH", loss))).status, 400)
-  assert.equal((await salesperson(`/api/crm/opportunities/${deal.id}/move`, json("PATCH", { ...loss, lossReason: "Budget postponed" }))).status, 200)
+  assert.equal((await salesperson(`/api/crm/opportunities/${deal.id}/move`, json("PATCH", { ...loss, lossReason: "Budget postponed", lostReasonId: lostReason.id }))).status, 200)
   assert.equal((await salesperson(`/api/crm/opportunities/${deal.id}/move`, json("PATCH", { ...loss, stageId: pipeline.stages[1].id }))).status, 409)
   const board = await (await salesperson(`/api/crm/opportunities?pipelineId=${pipeline.id}&stageId=${pipeline.stages[2].id}&kind=LOST&pageSize=1`)).json()
   assert.equal(board.total, 1); assert.equal(board.items[0].probability, 0)

@@ -1,4 +1,5 @@
 "use client"
+import { LostReasonFields } from "./lost-reason-fields"
 import { PropertyFields, emptyProperty, propertyFields, useRealEstateEnabled } from "@/modules/real-estate/components/property-fields"
 import { CrmSection } from "./crm-section"
 import { CrmPageHeader, CrmFormActions, crmPageClass } from "./crm-page"
@@ -36,7 +37,7 @@ export function EnquiryEditor({ id, initialContactId, initialProjectId = "", ini
   const [referralType, setReferralType] = React.useState("none")
   const [enquiry, setEnquiry] = React.useState<CrmEnquiryRow | null>(null)
   const [contact, setContact] = React.useState<CrmContactRow | null>(null)
-  const [values, setValues] = React.useState({ contactId: initialContactId || "", title: "", sourceId: "", accountId: "", referralContactId: "", referralAccountId: "", targetCloseOn: "", requirements: "", assignedUserId: "", status: "NEW" as CrmStatus, outcome: "" })
+  const [values, setValues] = React.useState({ contactId: initialContactId || "", title: "", sourceId: "", accountId: "", referralContactId: "", referralAccountId: "", targetCloseOn: "", requirements: "", assignedUserId: "", status: "NEW" as CrmStatus, outcome: "", lostReasonId: "" })
   const [canAssign, setCanAssign] = React.useState(false)
   const [loading, setLoading] = React.useState(true)
   const [loadFailed, setLoadFailed] = React.useState(false)
@@ -60,7 +61,7 @@ export function EnquiryEditor({ id, initialContactId, initialProjectId = "", ini
         ])
         if (record) {
           setEnquiry(record); setContact(record.contact); setProperty(propertyFields(record.propertyContext)); setPropertyDirty(false)
-          setValues({ contactId: record.contact.id, title: record.title, sourceId: record.sourceId || "", accountId: record.accountId || "", referralContactId: record.referralContactId || "", referralAccountId: record.referralAccountId || "", targetCloseOn: record.targetCloseOn?.slice(0, 10) || "", requirements: record.requirements || "", assignedUserId: record.assignedUserId, status: record.status, outcome: record.outcome || "" })
+          setValues({ contactId: record.contact.id, title: record.title, sourceId: record.sourceId || "", accountId: record.accountId || "", referralContactId: record.referralContactId || "", referralAccountId: record.referralAccountId || "", targetCloseOn: record.targetCloseOn?.slice(0, 10) || "", requirements: record.requirements || "", assignedUserId: record.assignedUserId, status: record.status, outcome: record.outcome || "", lostReasonId: record.lostReasonId || "" })
           setReferralType(record.referralContactId ? "contact" : record.referralAccountId ? "account" : "none")
         } else {
           setContact(selectedContact)
@@ -78,14 +79,14 @@ export function EnquiryEditor({ id, initialContactId, initialProjectId = "", ini
     try {
       const base = { ...(propertyDirty ? { propertyContext: property } : {}), title: values.title, sourceId: values.sourceId, accountId: values.accountId, targetCloseOn: values.targetCloseOn, requirements: values.requirements, assignedUserId: values.assignedUserId,
         ...(!enquiry?.referralRestricted ? { referralContactId: values.referralContactId, referralAccountId: values.referralAccountId } : {}) }
-      const payload = id ? { ...base, version: enquiry?.version, status: values.status, outcome: values.outcome } : { ...base, ...(contactMode === "new" ? { newContact } : { contactId: values.contactId }) }
+      const payload = id ? { ...base, version: enquiry?.version, status: values.status, outcome: values.outcome, lostReasonId: values.lostReasonId } : { ...base, ...(contactMode === "new" ? { newContact } : { contactId: values.contactId }) }
       const response = await fetch(id ? `/api/crm/enquiries/${id}` : "/api/crm/enquiries", { method: id ? "PATCH" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) })
       const data = await response.json()
       if (!response.ok) { setErrorsFromResponse(data); throw new Error(data.error || "Unable to save enquiry.") }
       toast.success("Enquiry saved.")
       if (!id) router.push(`/crm/enquiries/${data.id}`)
       else {
-        setEnquiry(data); setProperty(propertyFields(data.propertyContext)); setPropertyDirty(false); setRevision(value => value + 1)
+        setEnquiry(data); setValues(previous => ({ ...previous, lostReasonId: data.lostReasonId || "" })); setProperty(propertyFields(data.propertyContext)); setPropertyDirty(false); setRevision(value => value + 1)
         try {
           const refreshed = await fetch(`/api/crm/enquiries/${id}`, { cache: "no-store" })
           if (!refreshed.ok) throw new Error("Refresh failed")
@@ -114,9 +115,11 @@ export function EnquiryEditor({ id, initialContactId, initialProjectId = "", ini
         <FormField id="title" label="Enquiry title" error={errors.title} className="sm:col-span-2"><Input id="title" required maxLength={200} value={values.title} onChange={event => setValues({ ...values, title: event.target.value })} /></FormField>
         <FormField id="sourceId" label="Lead source (optional)" error={errors.sourceId}><RecordSelect id="sourceId" endpoint="/api/crm/lead-sources" value={values.sourceId} selected={enquiry?.sourceId ? { value: enquiry.sourceId, label: `${enquiry.source || enquiry.leadSource?.name || "Source"}${enquiry.leadSource?.archived ? " (archived)" : ""}` } : undefined} onChange={sourceId => setValues({ ...values, sourceId })} />{values.sourceId && <Button type="button" variant="link" size="sm" onClick={() => setValues({ ...values, sourceId: "" })}>Clear source</Button>}{canAssign && <Link className="block text-xs underline" href="/crm/lead-sources" target="_blank" rel="noreferrer">Manage lead sources</Link>}</FormField>
         <FormField id="targetCloseOn" label="Target close date (optional)" error={errors.targetCloseOn}><Input id="targetCloseOn" type="date" value={values.targetCloseOn} onChange={event => setValues({ ...values, targetCloseOn: event.target.value })} /></FormField>
-        {id && <FormField id="status" label="Status" error={errors.status}><CrmSelect id="status" className={`${selectClass} w-full`} value={values.status} onValueChange={event => setValues({ ...values, status: event as CrmStatus })}>{enquiryStatuses.map(status => <option key={status}>{status}</option>)}</CrmSelect></FormField>}
+        {id && <FormField id="status" label="Status" error={errors.status}><CrmSelect id="status" className={`${selectClass} w-full`} value={values.status} onValueChange={event => setValues({ ...values, status: event as CrmStatus, lostReasonId: event === "CLOSED" ? values.lostReasonId : "" })}>{enquiryStatuses.map(status => <option key={status} value={status}>{status === "CLOSED" ? "Lost" : status}</option>)}</CrmSelect></FormField>}
         <FormField id="requirements" label="Requirements" error={errors.requirements} className="sm:col-span-2"><CrmTextarea id="requirements" className={textareaClass} maxLength={5000} value={values.requirements} onChange={event => setValues({ ...values, requirements: event.target.value })} /></FormField>
-        {id && <FormField id="outcome" label="Outcome (required when closed)" error={errors.outcome} className="sm:col-span-2"><CrmTextarea id="outcome" className={textareaClass} maxLength={2000} value={values.outcome} onChange={event => setValues({ ...values, outcome: event.target.value })} /></FormField>}
+        {id && values.status === "CLOSED" && <LostReasonFields value={values.lostReasonId} name={enquiry?.lostReasonName} note={values.outcome} legacy={enquiry?.status === "CLOSED" && !enquiry.lostReasonId} onReasonChange={lostReasonId => setValues({ ...values, lostReasonId })} onNoteChange={outcome => setValues({ ...values, outcome })} />}
+        {id && values.status !== "CLOSED" && enquiry?.outcome && <p className="text-sm text-muted-foreground sm:col-span-2">Previous closing note: {enquiry.outcome}</p>}
+        {id && enquiry?.status === "CLOSED" && <p className="text-sm text-muted-foreground sm:col-span-2">To reopen, choose New, Contacted or Qualified and save. History is preserved.</p>}
       </fieldset></CrmSection>
       <CrmSection title="Referral (optional)" description="Who introduced this enquiry, separate from the buyer’s company."><fieldset disabled={saving || loadFailed || enquiry?.referralRestricted} className="grid gap-5 sm:grid-cols-2">{enquiry?.referralRestricted ? <p className="text-sm text-muted-foreground sm:col-span-2">Referral details are restricted. They will be preserved when you save.</p> : <><FormField id="referral-type" label="Referred by"><DropdownSelect id="referral-type" className="w-full" value={referralType} options={[{ value: "none", label: "No referral" }, { value: "contact", label: "Person" }, { value: "account", label: "Company" }]} onValueChange={type => { setReferralType(type); setValues({ ...values, referralContactId: "", referralAccountId: "" }) }} /></FormField>{referralType !== "none" && <FormField id="referrer" label={referralType === "contact" ? "Referring person" : "Referring company"}><RecordSelect key={referralType} id="referrer" endpoint={`/api/crm/${referralType === "contact" ? "contacts" : "accounts"}`} value={referralType === "contact" ? values.referralContactId : values.referralAccountId} selected={enquiry?.referralContact ? { value: enquiry.referralContact.id, label: enquiry.referralContact.name } : enquiry?.referralAccount ? { value: enquiry.referralAccount.id, label: enquiry.referralAccount.name } : undefined} onChange={value => setValues({ ...values, referralContactId: referralType === "contact" ? value : "", referralAccountId: referralType === "account" ? value : "" })} /></FormField>}</>}</fieldset></CrmSection>
       {(id ? enquiry?.realEstateEnabled : realEstateEnabled) && <PropertyFields error={errors.propertyContext} value={property} selected={enquiry?.propertyContext} disabled={saving || loadFailed} onChange={value => { setProperty(value); setPropertyDirty(true) }} />}

@@ -95,9 +95,11 @@ test("contacts need no login and normalize identifiers before duplicate checks",
   assert.equal(crmContactSchema.safeParse({ name: "A", ownerUserId: "another-user" }).success, false)
   assert.equal(crmContactSchema.safeParse({ name: "A", phone: "9876543210" }).success, false)
 })
-test("closed enquiries require an outcome and reject client-controlled tenancy", () => {
+test("enquiry reason input is structured; transition requirements are checked by the service", () => {
   const input = { title: "Flat enquiry", assignedUserId: "salesperson", status: "CLOSED", version: 1 }
-  assert.equal(crmEnquiryUpdateSchema.safeParse(input).success, false)
+  assert.equal(crmEnquiryUpdateSchema.safeParse(input).success, true)
+  assert.equal(crmEnquiryUpdateSchema.safeParse({ ...input, lostReasonId: "reason-id" }).success, true)
+  assert.equal(crmEnquiryUpdateSchema.safeParse({ ...input, lostReasonName: "Spoofed" }).success, false)
   assert.equal(crmEnquiryUpdateSchema.safeParse({ ...input, outcome: "Not proceeding" }).success, true)
   assert.equal(crmEnquiryCreateSchema.safeParse({ title: "A", contactId: "c", assignedUserId: "u", tenantId: "b" }).success, false)
 })

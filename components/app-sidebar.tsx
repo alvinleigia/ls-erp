@@ -150,6 +150,7 @@ export function AppSidebar() {
           { title: "Calendar", href: "/crm/calendar", icon: CalendarClockIcon, isActive: current => current.startsWith("/crm/calendar") },
           { title: "Activity plans", href: "/crm/activity-plans", icon: CalendarClockIcon, isActive: current => current.startsWith("/crm/activity-plans") },
           { title: "Follow-up rules", href: "/crm/follow-up-rules", icon: CalendarClockIcon, isActive: current => current.startsWith("/crm/follow-up-rules") },
+          { title: "Lost reasons", href: "/crm/lost-reasons", icon: TagIcon, isActive: current => current.startsWith("/crm/lost-reasons") },
         ],
       })
     }

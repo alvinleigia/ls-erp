@@ -29,11 +29,11 @@ export const opportunitySchema = z.object({
   enquiryVersion: z.number().int().positive().optional(),
   amount: z.string().trim().regex(/^(0|[1-9]\d{0,13})(\.\d{1,4})?$/, "Enter a positive amount or zero, with up to four decimal places."),
   currency: z.string().trim().toUpperCase().refine(value => Intl.supportedValuesOf("currency").includes(value), "Choose a supported currency code."),
-  expectedCloseOn: z.iso.date().optional(), description: text(5000), lossReason: text(2000),
+  expectedCloseOn: z.iso.date().optional(), description: text(5000), lossReason: text(2000), lostReasonId: z.string().trim().max(100).optional(),
   probability: z.number().int().min(0).max(100).optional(),
 }).strict()
 export const opportunityUpdateSchema = opportunitySchema.omit({ enquiryId: true, enquiryVersion: true }).extend({ version: z.number().int().positive(), accountId: text(100), expectedCloseOn: z.iso.date() })
-export const opportunityMoveSchema = z.object({ pipelineId: id, stageId: id, version: z.number().int().positive(), lossReason: text(2000) }).strict()
+export const opportunityMoveSchema = z.object({ pipelineId: id, stageId: id, version: z.number().int().positive(), lossReason: text(2000), lostReasonId: z.string().trim().max(100).optional() }).strict()
 export const opportunityListSchema = crmListSchema.omit({ status: true, due: true, archived: true, sort: true }).extend({
   pipelineId: id.optional(), stageId: id.optional(), assignedUserId: id.optional(), kind: z.enum(stageKinds).optional(),
   sort: z.enum(["updatedAt", "title", "expectedCloseOn"]).default("updatedAt"),

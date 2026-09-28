@@ -1,3 +1,4 @@
+import { resolveLostReason } from "./lost-reason-service"
 import { checkExportLimit, CRM_EXPORT_LIMIT } from "./csv"
 import type { Prisma, CrmOpportunity, CrmEnquiry } from "@prisma/client"
 import { maskReferrals, referralInclude } from "./intake-service"
@@ -34,7 +35,6 @@ export function createSalesService({ run, audit, checkAssignee }: Context) {
     return stage
   }
   function outcome(stage: { kind: string; probability: number }, lossReason: string, probability?: number) {
-    if (stage.kind === "LOST" && !lossReason) throw new CrmError(400, "Record a loss reason before closing this opportunity.")
     if (stage.kind === "OPEN" && probability === 100) throw new CrmError(400, "Use a won stage for 100% probability.")
     return { probability: stage.kind === "WON" ? 100 : stage.kind === "LOST" ? 0 : probability ?? stage.probability,
       lossReason: stage.kind === "LOST" ? lossReason : null }
@@ -111,7 +111,7 @@ export function createSalesService({ run, audit, checkAssignee }: Context) {
       return run(async (tx, actor) => {
         const propertyContext = await requirePropertyFilter(tx, actor, query)
         const where: Prisma.CrmOpportunityWhereInput = { AND: [scope(actor), {
-          pipelineId: query.pipelineId, stageId: query.stageId, assignedUserId: query.assignedUserId, sourceId: query.sourceId,
+          pipelineId: query.pipelineId, stageId: query.stageId, assignedUserId: query.assignedUserId, sourceId: query.sourceId, lostReasonId: query.lostReasonId,
           ...(propertyContext ? { propertyContext: { is: propertyContext } } : {}),
           ...(query.kind ? { stage: { kind: query.kind } } : {}), title: { contains: query.q, mode: "insensitive" },
         }] }
@@ -152,7 +152,7 @@ export function createSalesService({ run, audit, checkAssignee }: Context) {
         await relations(tx, actor, data.contactId, accountId)
         const stage = await destination(tx, actor, data.pipelineId, data.stageId)
         const result = await tx.crmOpportunity.create({ data: {
-          ...data, ...outcome(stage, data.lossReason, data.probability), tenantId: actor.tenantId,
+          ...data, ...outcome(stage, data.lossReason, data.probability), ...await resolveLostReason(tx, actor, stage.kind === "LOST", data.lostReasonId), tenantId: actor.tenantId,
           accountId: accountId || null, enquiryId: data.enquiryId || null, expectedCloseOn: new Date(`${expectedCloseOn}T00:00:00Z`),
           sourceId: sourceEnquiry?.sourceId, source: sourceEnquiry?.source,
           referralContactId: sourceEnquiry?.referralContactId, referralAccountId: sourceEnquiry?.referralAccountId,
@@ -179,7 +179,8 @@ export function createSalesService({ run, audit, checkAssignee }: Context) {
         const changedStage = data.stageId !== before.stageId
         const stage = await destination(tx, actor, data.pipelineId, data.stageId, changedStage)
         const updated = await tx.crmOpportunity.updateMany({ where: { ...scope(actor), id, version }, data: {
-          ...data, ...outcome(stage, data.lossReason, data.probability ?? (changedStage ? undefined : before.probability)), accountId: data.accountId || null,
+          ...data, ...outcome(stage, data.lossReason, data.probability ?? (changedStage ? undefined : before.probability)),
+          ...await resolveLostReason(tx, actor, stage.kind === "LOST", data.lostReasonId, before.stage.kind === "LOST" ? before : undefined), accountId: data.accountId || null,
           expectedCloseOn: new Date(`${data.expectedCloseOn}T00:00:00Z`), version: { increment: 1 },
           closedAt: stage.kind === "OPEN" ? null : before.closedAt ?? new Date(),
         } })
@@ -187,7 +188,7 @@ export function createSalesService({ run, audit, checkAssignee }: Context) {
         await savePropertyContext(tx, actor, "opportunity", id, propertyContext)
         const after = await tx.crmOpportunity.findFirstOrThrow({ where: { tenantId: actor.tenantId, id }, include })
         await history(tx, actor, id, changedStage ? "crm.opportunity.stage.changed" : "crm.opportunity.updated",
-          changedStage ? `${before.pipeline.name} / ${before.stage.name} → ${stage.pipeline.name} / ${stage.name}.${after.lossReason ? ` Loss reason: ${after.lossReason}` : ""}` : "Opportunity details updated.", before, after)
+          changedStage ? `${before.pipeline.name} / ${before.stage.name} → ${stage.pipeline.name} / ${stage.name}.${after.lostReasonName ? ` Lost reason: ${after.lostReasonName}.` : ""}${after.lossReason ? ` Closing note: ${after.lossReason}` : ""}` : "Opportunity details updated.", before, after)
         return (await withPropertyContext(tx, actor, "opportunity", await maskReferrals(tx, actor, [after])))[0]
       })
     },
@@ -198,13 +199,13 @@ export function createSalesService({ run, audit, checkAssignee }: Context) {
         if (before.version !== data.version) throw new CrmError(409, "This opportunity changed. Refresh before moving it.")
         const stage = await destination(tx, actor, data.pipelineId, data.stageId)
         if (before.stageId === stage.id) return before
-        const fields = outcome(stage, data.lossReason)
+        const fields = { ...outcome(stage, data.lossReason), ...await resolveLostReason(tx, actor, stage.kind === "LOST", data.lostReasonId, before.stage.kind === "LOST" ? before : undefined) }
         const updated = await tx.crmOpportunity.updateMany({ where: { ...scope(actor), id, version: data.version }, data: {
           ...fields, stageId: stage.id, pipelineId: data.pipelineId, version: { increment: 1 }, closedAt: stage.kind === "OPEN" ? null : before.closedAt ?? new Date(),
         } })
         if (!updated.count) throw new CrmError(409, "This opportunity changed. Refresh before moving it.")
         const after = await find(tx, actor, id)
-        await history(tx, actor, id, "crm.opportunity.stage.changed", `${before.pipeline.name} / ${before.stage.name} → ${stage.pipeline.name} / ${stage.name}.${fields.lossReason ? ` Loss reason: ${fields.lossReason}` : ""}`, before, after)
+        await history(tx, actor, id, "crm.opportunity.stage.changed", `${before.pipeline.name} / ${before.stage.name} → ${stage.pipeline.name} / ${stage.name}.${fields.lostReasonName ? ` Lost reason: ${fields.lostReasonName}.` : ""}${fields.lossReason ? ` Closing note: ${fields.lossReason}` : ""}`, before, after)
         return after
       })
     },

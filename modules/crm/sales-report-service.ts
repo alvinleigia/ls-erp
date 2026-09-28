@@ -28,10 +28,11 @@ export function createSalesReportService({ run }: Context) {
     // parameter. The same scoped sets power counts, drill-downs and downloads.
     const filter = Prisma.sql`r."tenantId" = ${actor.tenantId}
       ${owner ? Prisma.sql`AND r."assignedUserId" = ${owner}` : Prisma.empty}
+      ${q.lostReasonId ? Prisma.sql`AND r."lostReasonId" = ${q.lostReasonId}` : Prisma.empty}
       ${q.sourceId ? Prisma.sql`AND r."sourceId" = ${q.sourceId}` : Prisma.empty}
       ${q.projectId ? Prisma.sql`AND x."projectId" = ${q.projectId}` : Prisma.empty}
       ${q.subprojectId ? Prisma.sql`AND x."subprojectId" = ${q.subprojectId}` : Prisma.empty}`
-    const sharedColumns = Prisma.sql`r.id, r.title, r."tenantId", r."assignedUserId", r."sourceId", r."createdAt",
+    const sharedColumns = Prisma.sql`r.id, r.title, r."tenantId", r."assignedUserId", r."sourceId", r."createdAt", r."lostReasonId", r."lostReasonName",
       c.name AS customer, u.name AS owner, COALESCE(s.name, r.source) AS source,
       ${propertyEnabled ? Prisma.sql`x."projectId"` : Prisma.sql`NULL::text`} AS "projectId",
       ${propertyEnabled ? Prisma.sql`p.name` : Prisma.sql`NULL::text`} AS project,
@@ -66,7 +67,7 @@ export function createSalesReportService({ run }: Context) {
     overdue AS (
       SELECT t.id, t.title, t.status::text AS status, t."createdAt", t."dueOn", COALESCE(l.customer, d.customer) AS customer,
         u.name AS owner, COALESCE(l.source, d.source) AS source, COALESCE(l.project, d.project) AS project,
-        COALESCE(l.subproject, d.subproject) AS subproject
+        COALESCE(l.subproject, d.subproject) AS subproject, COALESCE(l."lostReasonName", d."lostReasonName") AS "lostReasonName"
       FROM "CrmTask" t
       LEFT JOIN leads_all l ON l.id = t."enquiryId" AND l."tenantId" = t."tenantId"
       LEFT JOIN deals d ON d.id = t."opportunityId" AND d."tenantId" = t."tenantId"
@@ -77,10 +78,10 @@ export function createSalesReportService({ run }: Context) {
     return { cte, metadata: { from, through, today, timeZone, canManage, realEstateEnabled: propertyEnabled, generatedAt: now.toISOString() } }
   }
   const table = (view: SalesReportView) => ({ leads: Prisma.sql`leads`, converted: Prisma.sql`leads`, pipeline: Prisma.sql`pipeline`, won: Prisma.sql`won`, lost: Prisma.sql`lost`, overdue: Prisma.sql`overdue`, gaps: Prisma.sql`gaps` })[view]
-  const dimension = (q: SalesReportQuery) => q.dimension === "source" ? Prisma.sql`"sourceId"` : q.dimension === "project" ? Prisma.sql`"projectId"` : Prisma.sql`"assignedUserId"`
+  const dimension = (q: SalesReportQuery) => q.dimension === "lostReason" ? Prisma.sql`"lostReasonId"` : q.dimension === "source" ? Prisma.sql`"sourceId"` : q.dimension === "project" ? Prisma.sql`"projectId"` : Prisma.sql`"assignedUserId"`
   function selection(q: SalesReportQuery) {
     const lead = q.view === "leads" || q.view === "converted"
-    return Prisma.sql`WHERE true ${q.view === "converted" ? Prisma.sql`AND converted` : Prisma.empty}
+    return Prisma.sql`WHERE true ${lead && q.dimension === "lostReason" ? Prisma.sql`AND status = 'CLOSED'` : Prisma.empty} ${q.view === "converted" ? Prisma.sql`AND converted` : Prisma.empty}
       ${lead && q.bucket ? Prisma.sql`AND COALESCE(${dimension(q)}, '__none__') = ${q.bucket}` : Prisma.empty}
       ${!lead && q.view !== "overdue" && q.stageId ? Prisma.sql`AND "stageId" = ${q.stageId}` : Prisma.empty}
       ${!lead && q.view !== "overdue" && q.currency ? Prisma.sql`AND currency = ${q.currency}` : Prisma.empty}`
@@ -90,7 +91,7 @@ export function createSalesReportService({ run }: Context) {
     if (exporting) checkExportLimit(total)
     const lead = q.view === "leads" || q.view === "converted", work = q.view === "overdue"
     const items = await tx.$queryRaw<SalesReportRecord[]>(Prisma.sql`${cte}
-      SELECT id, title, customer, owner, source, project, subproject, status, "createdAt",
+      SELECT id, title, customer, owner, source, project, subproject, status, "createdAt", "lostReasonName",
         ${lead || work ? Prisma.sql`NULL::text AS amount, NULL::text AS currency, NULL::timestamp AS "closedAt"` : Prisma.sql`amount::text, currency, "closedAt"`},
         ${work ? Prisma.sql`"dueOn"` : Prisma.sql`NULL::date`} AS "dueOn",
         ${lead ? "enquiries" : work ? "activities" : "opportunities"}::text AS "recordKind"
@@ -114,10 +115,10 @@ export function createSalesReportService({ run }: Context) {
       const q = salesReportSchema.parse(input)
       return run(async (tx, actor) => {
         const c = await context(tx, actor, q), key = dimension(q)
-        const label = q.dimension === "source" ? Prisma.sql`source` : q.dimension === "project" ? Prisma.sql`project` : Prisma.sql`owner`
+        const label = q.dimension === "lostReason" ? Prisma.sql`"lostReasonName"` : q.dimension === "source" ? Prisma.sql`source` : q.dimension === "project" ? Prisma.sql`project` : Prisma.sql`owner`
         const grouped = Prisma.sql`${c.cte}, groups AS (SELECT COALESCE(${key}, '__none__') AS id,
-          CASE WHEN ${key} IS NULL THEN ${q.dimension === "source" ? "Unclassified / legacy source" : "No project"} ELSE COALESCE(MAX(${label}), 'Unnamed') END AS label,
-          COUNT(*)::int AS leads, COUNT(*) FILTER (WHERE converted)::int AS converted FROM leads GROUP BY ${key})`
+          CASE WHEN ${key} IS NULL THEN ${q.dimension === "lostReason" ? "No reason / legacy closure" : q.dimension === "source" ? "Unclassified / legacy source" : "No project"} ELSE COALESCE(MAX(${label}), 'Unnamed') END AS label,
+          COUNT(*)::int AS leads, COUNT(*) FILTER (WHERE converted)::int AS converted FROM leads ${q.dimension === "lostReason" ? Prisma.sql`WHERE status = 'CLOSED'` : Prisma.empty} GROUP BY ${key})`
         const [{ total }] = await tx.$queryRaw<{ total: number }[]>(Prisma.sql`${grouped} SELECT COUNT(*)::int AS total FROM groups`)
         const items = await tx.$queryRaw<SalesLeadGroup[]>(Prisma.sql`${grouped} SELECT * FROM groups ORDER BY label, id LIMIT ${q.pageSize} OFFSET ${(q.page - 1) * q.pageSize}`)
         return pageResult(items, total, q)
@@ -142,8 +143,8 @@ export function createSalesReportService({ run }: Context) {
       const q = salesReportSchema.parse(input)
       return run(async (tx, actor) => {
         const c = await context(tx, actor, q), result = await records(tx, c.cte, q, true)
-        return crmCsv(["ID", "Title", "Record type", "Customer", "Assigned staff", "Source", ...(c.metadata.realEstateEnabled ? ["Project", "Subproject"] : []), "Status / outcome", "Deal value", "Currency", "Created (UTC)", "Closed (UTC)", "Due date"],
-          result.items.map(r => [r.id, r.title, r.recordKind, r.customer, r.owner, r.source, ...(c.metadata.realEstateEnabled ? [r.project, r.subproject] : []), r.status, r.amount, r.currency, r.createdAt, r.closedAt, r.dueOn]))
+        return crmCsv(["ID", "Title", "Record type", "Customer", "Assigned staff", "Source", ...(c.metadata.realEstateEnabled ? ["Project", "Subproject"] : []), "Status / outcome", "Lost reason", "Deal value", "Currency", "Created (UTC)", "Closed (UTC)", "Due date"],
+          result.items.map(r => [r.id, r.title, r.recordKind, r.customer, r.owner, r.source, ...(c.metadata.realEstateEnabled ? [r.project, r.subproject] : []), r.status === "CLOSED" ? "Lost" : r.status, r.lostReasonName, r.amount, r.currency, r.createdAt, r.closedAt, r.dueOn]))
       })
     },
   }
