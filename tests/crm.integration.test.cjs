@@ -65,6 +65,8 @@ before(async () => {
   staff = createCrmService(dbA, { tenantId: a, userId: staffA.id })
   other = createCrmService(dbA, { tenantId: a, userId: otherA.id })
   second = createCrmService(dbB, { tenantId: b, userId: adminB.id })
+  await manager.createLeadSource({ name: "Referral" })
+  await manager.createLeadSource({ name: "Website" })
 })
 after(async () => { await Promise.all(clients.map(db => db.$disconnect())) })
 
@@ -467,7 +469,7 @@ test("complete contact, enquiry, note, follow-up and outcome workflow persists a
   assert.equal(updated.status, "CLOSED")
   assert.equal(updated.version, 2)
   const history = await staff.listActivity(enquiry.id, {})
-  assert.equal(history.total, 5)
+  assert.equal(history.total, 6)
   assert.equal((await staff.listTasks({ due: "completed" }, enquiry.id)).total, 1)
   assert.equal(await root.auditLog.count({ where: { tenantId: a, entityId: enquiry.id } }), 5)
 })
@@ -914,4 +916,210 @@ test("required rule audit failure rolls back completion, next activity and histo
     assert.equal(await root.crmTask.count({ where: { tenantId: a, followUpOfId: work.id } }), 0)
     assert.equal((await staff.listWorkHistory(work.id, {})).total, 1)
   } finally { await root.$executeRawUnsafe('ALTER TABLE "AuditLog" DROP CONSTRAINT "crm_test_rule_audit"') }
+})
+
+test("one customer can pursue independent enquiries without duplicating identity or conversion", async () => {
+  const contact = await staff.createContact({ name: "Repeat buyer", email: `repeat-${suffix}@example.test` })
+  const pipeline = await manager.createPipeline(pipelineInput("Independent purchases"))
+  const first = await staff.createEnquiry({ ...enquiryInput(contact.id, staffA.id), title: "First purchase", source: "Referral", requirements: "Near a school" })
+  const secondEnquiry = await staff.createEnquiry({ ...enquiryInput(contact.id, staffA.id), title: "Second purchase", source: "Website", requirements: "Near an office" })
+  const convert = enquiry => staff.createOpportunity({ ...dealInput(pipeline, contact, staffA), title: enquiry.title, enquiryId: enquiry.id })
+  const firstDeal = await convert(first)
+  const secondDeal = await convert(secondEnquiry)
+  assert.notEqual(firstDeal.id, secondDeal.id)
+  assert.equal((await convert(first)).id, firstDeal.id)
+  assert.equal((await convert(secondEnquiry)).id, secondDeal.id)
+  assert.equal(await root.crmContact.count({ where: { tenantId: a, email: contact.email } }), 1)
+  for (const [enquiry, deal] of [[first, firstDeal], [secondEnquiry, secondDeal]]) {
+    const saved = await staff.getEnquiry(enquiry.id)
+    assert.equal(saved.contactId, contact.id)
+    assert.equal(saved.source, enquiry.source)
+    assert.equal(saved.requirements, enquiry.requirements)
+    assert.equal(saved.opportunity.id, deal.id)
+    assert.equal(await root.crmActivity.count({ where: { tenantId: a, enquiryId: enquiry.id, event: "crm.enquiry.converted" } }), 1)
+  }
+})
+
+test("disabling CRM blocks writes and re-enabling preserves customer, sales and work history", async () => {
+  const contact = await staff.createContact({ name: "Disable and restore buyer" })
+  const enquiry = await staff.createEnquiry(enquiryInput(contact.id, staffA.id))
+  await staff.addNote(enquiry.id, { message: "Requirements recorded before disablement." })
+  const pipeline = await manager.createPipeline(pipelineInput("Disable and restore"))
+  const deal = await staff.createOpportunity({ ...dealInput(pipeline, contact, staffA), enquiryId: enquiry.id })
+  const work = await staff.createWork(workInput(contact.id, staffA.id, { opportunityId: deal.id }))
+  const snapshot = async () => ({
+    contact: await staff.getContact(contact.id), enquiry: await staff.getEnquiry(enquiry.id),
+    deal: await staff.getOpportunity(deal.id), work: await staff.getWork(work.id),
+    enquiryHistory: await staff.listActivity(enquiry.id, {}), workHistory: await staff.listWorkHistory(work.id, {}),
+  })
+  const beforeDisable = await snapshot()
+  await root.tenantModule.update({ where: { tenantId_key: { tenantId: a, key: "crm" } }, data: { enabled: false } })
+  try {
+    await assert.rejects(staff.getEnquiry(enquiry.id), expectStatus(403))
+    await assert.rejects(staff.createEnquiry(enquiryInput(contact.id, staffA.id)), expectStatus(403))
+    await assert.rejects(staff.updateOpportunity(deal.id, { ...dealUpdate(deal), title: "Blocked change" }), expectStatus(403))
+    await assert.rejects(staff.completeWork(work.id, completionInput(work)), expectStatus(403))
+  } finally {
+    await root.tenantModule.update({ where: { tenantId_key: { tenantId: a, key: "crm" } }, data: { enabled: true } })
+  }
+  assert.deepEqual(await snapshot(), beforeDisable)
+  await staff.completeWork(work.id, completionInput(work))
+  assert.equal((await staff.getWork(work.id)).status, "COMPLETED")
+})
+
+test("hidden duplicate identifiers do not disclose private contacts or partially edit a contact", async () => {
+  const hidden = await manager.createContact({ name: "Private identity owner", email: `hidden-${suffix}@example.test`, phone: "+919999000123" })
+  const own = await staff.createContact({ name: "Staff owned buyer", email: `own-${suffix}@example.test` })
+  await assert.rejects(staff.getContact(hidden.id), expectStatus(404))
+  const privateConflict = error => {
+    assert.equal(error.status, 409)
+    assert.ok(!error.message.includes(hidden.id))
+    assert.ok(!error.message.includes(hidden.name))
+    assert.ok(!error.message.includes(hidden.email))
+    assert.ok(!error.message.includes(hidden.phone))
+    return true
+  }
+  for (const identifier of [{ email: hidden.email.toUpperCase() }, { phone: "+91 99990 00123" }]) {
+    await assert.rejects(staff.createContact({ name: "Attempted duplicate", ...identifier }), privateConflict)
+    await assert.rejects(staff.updateContact(own.id, { name: "Must roll back", archived: false, version: own.version, ...identifier }), privateConflict)
+    const unchanged = await staff.getContact(own.id)
+    assert.equal(unchanged.name, own.name)
+    assert.equal(unchanged.email, own.email)
+    assert.equal(unchanged.phone, own.phone)
+    assert.equal(unchanged.version, own.version)
+  }
+})
+
+test("conversion audit failure rolls back the deal and conversion history and permits a safe retry", async () => {
+  const contact = await staff.createContact({ name: "Atomic conversion buyer" })
+  const enquiry = await staff.createEnquiry(enquiryInput(contact.id, staffA.id))
+  const task = await staff.createTask(enquiry.id, { title: "Keep existing follow-up", dueOn: "2026-10-01" })
+  const history = await staff.listActivity(enquiry.id, {})
+  const pipeline = await manager.createPipeline(pipelineInput("Atomic conversion"))
+  const input = { ...dealInput(pipeline, contact, staffA), enquiryId: enquiry.id }
+  await root.$executeRawUnsafe('ALTER TABLE "AuditLog" ADD CONSTRAINT "crm_test_conversion_audit" CHECK (event <> \'crm.enquiry.converted\') NOT VALID')
+  try {
+    await assert.rejects(staff.createOpportunity(input))
+    assert.equal(await root.crmOpportunity.count({ where: { tenantId: a, enquiryId: enquiry.id } }), 0)
+    assert.deepEqual(await staff.listActivity(enquiry.id, {}), history)
+    assert.equal((await staff.getEnquiry(enquiry.id)).status, enquiry.status)
+    assert.equal((await staff.listTasks({}, enquiry.id)).items[0].id, task.id)
+  } finally { await root.$executeRawUnsafe('ALTER TABLE "AuditLog" DROP CONSTRAINT "crm_test_conversion_audit"') }
+  const converted = await staff.createOpportunity(input)
+  assert.equal((await staff.createOpportunity(input)).id, converted.id)
+  assert.equal(await root.crmActivity.count({ where: { tenantId: a, enquiryId: enquiry.id, event: "crm.enquiry.converted" } }), 1)
+})
+
+test("lead-intake migration groups tenant source choices without rewriting legacy labels or dates", { skip: process.env.CRM_TEST_EXPECT_INTAKE_UPGRADE !== "1" }, async () => {
+  const leads = await root.crmEnquiry.findMany({ where: { id: { startsWith: "intake_lead_" } }, orderBy: { id: "asc" } })
+  assert.equal(leads.length, 4)
+  assert.equal(leads[0].source, "  Web   Site  ")
+  assert.equal(leads[1].source, "web site")
+  assert.equal(leads[0].sourceId, leads[1].sourceId)
+  assert.notEqual(leads[0].sourceId, leads[3].sourceId)
+  assert.equal(leads[2].sourceId, null)
+  assert.equal(leads[0].version, 4)
+  assert.equal(leads[0].updatedAt.toISOString(), "2026-02-01T00:00:00.000Z")
+  const deal = await root.crmOpportunity.findUniqueOrThrow({ where: { id: "intake_deal" } })
+  assert.equal(deal.sourceId, leads[0].sourceId)
+  assert.equal(deal.source, leads[0].source)
+  assert.equal(deal.updatedAt.toISOString(), "2026-02-01T00:00:00.000Z")
+  assert.equal(await root.crmLeadSource.count({ where: { tenantId: { in: ["intake_upgrade_a", "intake_upgrade_b"] } } }), 2)
+})
+
+test("contact communication and address edits validate numbers and preserve omitted new fields", async () => {
+  const contact = await staff.createContact({ name: "Detailed buyer", phone: "+91 99990 00125", alternatePhone: "+91 99990 00126", whatsappPhone: "+91 99990 00127", addressLine1: "12 Example Road", city: "Pune", country: "India", postalCode: "411001" })
+  assert.equal(contact.whatsappPhone, "+919999000127")
+  assert.throws(() => staff.updateContact(contact.id, { name: contact.name, phone: contact.phone, alternatePhone: "123", archived: false, version: 1 }))
+  const edited = await staff.updateContact(contact.id, { name: "Renamed buyer", phone: contact.phone, archived: false, version: 1 })
+  assert.equal(edited.whatsappPhone, contact.whatsappPhone)
+  assert.equal(edited.addressLine1, contact.addressLine1)
+  assert.equal(edited.city, "Pune")
+  await assert.rejects(other.updateContact(contact.id, { name: "Forbidden", archived: false, version: edited.version, city: "Mumbai" }), expectStatus(404))
+})
+
+test("managed sources enforce manager access, uniqueness, retirement and historical snapshots", async () => {
+  await assert.rejects(staff.createLeadSource({ name: "Forbidden source" }), expectStatus(403))
+  const source = await manager.createLeadSource({ name: "  Trade   show " })
+  await assert.rejects(manager.createLeadSource({ name: "trade show" }), expectStatus(409))
+  const contact = await staff.createContact({ name: "Source buyer" })
+  const enquiry = await staff.createEnquiry({ ...enquiryInput(contact.id, staffA.id), source: undefined, sourceId: source.id })
+  const archived = await manager.updateLeadSource(source.id, { name: "Exhibition", archived: true, version: source.version })
+  assert.equal((await staff.getEnquiry(enquiry.id)).source, "Trade show")
+  assert.equal((await staff.listLeadSources({ q: "Exhibition" })).total, 0)
+  assert.equal((await staff.listLeadSources({ q: "Exhibition", includeArchived: "true" })).total, 1)
+  await staff.updateEnquiry(enquiry.id, { title: "Keep historical source", assignedUserId: staffA.id, status: "CONTACTED", sourceId: source.id, version: enquiry.version })
+  await assert.rejects(staff.createEnquiry({ ...enquiryInput(contact.id, staffA.id), sourceId: source.id }), expectStatus(400))
+  await assert.rejects(manager.updateLeadSource(source.id, { name: "Stale", archived: false, version: source.version }), expectStatus(409))
+  await assert.rejects(staff.updateLeadSource(source.id, { name: "Forbidden", archived: false, version: archived.version }), expectStatus(403))
+  const foreign = await second.createLeadSource({ name: "Foreign source" })
+  await assert.rejects(manager.createEnquiry({ ...enquiryInput(contact.id, adminA.id), sourceId: foreign.id }), expectStatus(400))
+  assert.equal(await unscoped.crmLeadSource.count(), 0)
+  assert.equal(await dbB.crmLeadSource.count({ where: { id: source.id } }), 0)
+  await assert.rejects(dbA.crmEnquiry.update({ where: { id: enquiry.id }, data: { sourceId: foreign.id } }))
+})
+
+test("inline intake is atomic, rejects duplicate contacts, and retries with the existing customer", async () => {
+  const company = await staff.createAccount({ name: "Inline company" })
+  const input = { title: "Inline enquiry", assignedUserId: staffA.id, accountId: company.id, newContact: { name: "Inline buyer", email: `inline-${suffix}@example.test`, country: "India" } }
+  await root.$executeRawUnsafe('ALTER TABLE "AuditLog" ADD CONSTRAINT "crm_test_intake_audit" CHECK (event <> \'crm.enquiry.created\') NOT VALID')
+  try {
+    await assert.rejects(staff.createEnquiry(input))
+    assert.equal(await root.crmContact.count({ where: { tenantId: a, email: input.newContact.email } }), 0)
+    assert.equal(await root.crmEnquiry.count({ where: { tenantId: a, title: input.title } }), 0)
+    assert.equal(await root.crmAccountContact.count({ where: { tenantId: a, accountId: company.id } }), 0)
+  } finally { await root.$executeRawUnsafe('ALTER TABLE "AuditLog" DROP CONSTRAINT "crm_test_intake_audit"') }
+  const created = await staff.createEnquiry(input)
+  assert.equal(created.accountId, company.id)
+  assert.equal((await staff.listContactAccounts(created.contactId, {})).items[0].id, company.id)
+  await assert.rejects(staff.createEnquiry(input), expectStatus(409))
+  const next = await staff.createEnquiry({ title: "Another interest", assignedUserId: staffA.id, contactId: created.contactId })
+  assert.equal(next.contactId, created.contactId)
+  assert.equal(await root.crmContact.count({ where: { tenantId: a, email: input.newContact.email } }), 1)
+})
+
+test("enquiry company, phone search and source/owner filters stay scoped and paginate", async () => {
+  const contact = await manager.createContact({ name: "Search intake buyer", phone: "+919999000128" })
+  const company = await manager.createAccount({ name: "Search intake company" })
+  await manager.linkContactAccount(contact.id, { accountId: company.id })
+  const source = await manager.createLeadSource({ name: "Search intake source" })
+  const base = { contactId: contact.id, sourceId: source.id, accountId: company.id, targetCloseOn: "2026-12-05" }
+  for (const assignedUserId of [staffA.id, staffA.id, otherA.id]) await manager.createEnquiry({ ...base, title: "Search intake", assignedUserId })
+  for (const q of ["Search intake buyer", "+91 99990 00128", "Search intake company"]) assert.equal((await staff.listEnquiries({ q, sourceId: source.id })).total, 2)
+  const first = await staff.listEnquiries({ sourceId: source.id, pageSize: 1 })
+  const next = await staff.listEnquiries({ sourceId: source.id, pageSize: 1, page: 2 })
+  assert.equal(first.totalPages, 2); assert.notEqual(first.items[0].id, next.items[0].id)
+  assert.equal((await staff.listEnquiries({ sourceId: source.id, assignedUserId: otherA.id })).total, 0)
+  assert.equal((await manager.listEnquiries({ sourceId: source.id, assignedUserId: otherA.id })).total, 1)
+  assert.equal((await second.listEnquiries({ q: "Search intake company" })).total, 0)
+  const unrelated = await manager.createAccount({ name: "Unlinked company" })
+  await assert.rejects(manager.createEnquiry({ ...base, title: "Bad company", assignedUserId: adminA.id, accountId: unrelated.id }), expectStatus(400))
+})
+
+test("referral attribution stays private through assignment and carries atomically into conversion", async () => {
+  const contact = await manager.createContact({ name: "Attributed buyer" })
+  const referrer = await manager.createContact({ name: "Private referrer" })
+  const company = await manager.createAccount({ name: "Attributed buyer company" })
+  await manager.linkContactAccount(contact.id, { accountId: company.id })
+  const source = await manager.createLeadSource({ name: "Attributed source" })
+  const enquiry = await manager.createEnquiry({ ...enquiryInput(contact.id, staffA.id), sourceId: source.id, accountId: company.id, referralContactId: referrer.id, targetCloseOn: "2026-12-06" })
+  const visible = await staff.getEnquiry(enquiry.id)
+  assert.equal(visible.referralRestricted, true); assert.equal(visible.referralContactId, null)
+  assert.ok(!JSON.stringify(visible).includes(referrer.id)); assert.ok(!JSON.stringify(visible).includes(referrer.name))
+  const updated = await staff.updateEnquiry(enquiry.id, { title: "Preserved attribution", assignedUserId: staffA.id, status: "QUALIFIED", version: enquiry.version })
+  assert.equal((await root.crmEnquiry.findUnique({ where: { id: enquiry.id } })).referralContactId, referrer.id)
+  const pipeline = await manager.createPipeline(pipelineInput("Intake conversion"))
+  const input = { ...dealInput(pipeline, contact, staffA), enquiryId: enquiry.id, expectedCloseOn: "2026-12-06" }
+  await assert.rejects(staff.createOpportunity({ ...input, enquiryVersion: enquiry.version }), expectStatus(409))
+  const deal = await staff.createOpportunity({ ...input, enquiryVersion: updated.version })
+  assert.equal(deal.accountId, company.id); assert.equal(deal.source, source.name)
+  assert.equal(deal.referralRestricted, true); assert.ok(!JSON.stringify(deal).includes(referrer.id))
+  const stored = await root.crmOpportunity.findUnique({ where: { id: deal.id } })
+  assert.equal(stored.referralContactId, referrer.id)
+  assert.equal((await staff.createOpportunity({ ...input, enquiryVersion: enquiry.version })).id, deal.id)
+  await assert.rejects(other.getContact(referrer.id), expectStatus(404))
+  await assert.rejects(manager.createEnquiry({ ...enquiryInput(contact.id, adminA.id), referralContactId: referrer.id, referralAccountId: company.id }), expectStatus(400))
+  const foreign = await second.createContact({ name: "Foreign referrer" })
+  await assert.rejects(dbA.crmOpportunity.update({ where: { id: deal.id }, data: { referralContactId: foreign.id } }))
+  await assert.rejects(dbA.crmEnquiry.update({ where: { id: enquiry.id }, data: { referralAccountId: company.id } }))
 })

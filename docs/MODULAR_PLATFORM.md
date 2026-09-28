@@ -1,3 +1,23 @@
+## CRM Phase 6 internal regression - 2026-09-28
+
+Phase 6 now uses the existing CRM Test leads, as requested by the user.
+Read-only admin/staff checks and an upgrade baseline are in
+[CRM_SALES_PHASE_6.md](CRM_SALES_PHASE_6.md). The hosted business still lacks
+Phase 2-5 endpoints; deployment and new sales workflow checks remain pending.
+No client pilot or legacy import is part of this step.
+
+## CRM sales extension milestone - 2026-09-28
+
+Phases 2-5 are implemented and verified locally, pending deployment.
+See [Phase 2](CRM_SALES_PHASE_2.md) for lead intake and
+[Phase 3](CRM_SALES_PHASE_3.md) for optional Real Estate projects, module
+dependencies, staff access, migration and verification.
+[Phase 4](CRM_SALES_PHASE_4.md) adds optional project-linked enquiries/opportunities,
+buyer requirements, preserved conversion context, project sales views and an
+explicit editable pipeline draft. [Phase 5](CRM_SALES_PHASE_5.md) adds scoped sales
+reporting, reconciling drill-downs and bounded CSV exports. The active delivery
+sequence is [CRM_EXTENSIBILITY_PLAN.md](CRM_EXTENSIBILITY_PLAN.md).
+
 # Modular business platform — CRM milestones 1–7
 
 ## Contact workspace UI — 2026-09-28

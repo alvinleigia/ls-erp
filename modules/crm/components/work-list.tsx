@@ -18,8 +18,8 @@ import { DropdownSelect } from "@/components/ui/dropdown-select"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { CrmEmptyState, CrmSection } from "./crm-section"
 
-export function WorkList({ contactId, enquiryId, opportunityId, planLaunchId, initialDue = "", initialScope, initialState, assignedUserId, initialType, completedFrom, completedThrough }: { contactId?: string; enquiryId?: string; opportunityId?: string; planLaunchId?: string; initialDue?: string; initialScope?: string; initialState?: string; assignedUserId?: string; initialType?: string; completedFrom?: string; completedThrough?: string }) {
-  const embedded = !!(contactId || enquiryId || opportunityId)
+export function WorkList({ projectId, subprojectId, contactId, enquiryId, opportunityId, planLaunchId, initialDue = "", initialScope, initialState, assignedUserId, initialType, completedFrom, completedThrough }: { projectId?: string; subprojectId?: string; contactId?: string; enquiryId?: string; opportunityId?: string; planLaunchId?: string; initialDue?: string; initialScope?: string; initialState?: string; assignedUserId?: string; initialType?: string; completedFrom?: string; completedThrough?: string }) {
+  const embedded = !!(projectId || contactId || enquiryId || opportunityId)
   const [data, setData] = React.useState<WorkListResponse | null>(null)
   const [q, setQ] = React.useState("")
   const [scope, setScope] = React.useState(initialScope === "visible" || embedded ? "visible" : "mine")
@@ -41,13 +41,13 @@ export function WorkList({ contactId, enquiryId, opportunityId, planLaunchId, in
       setLoading(true); setError("")
       const params = new URLSearchParams({ q, scope, state, sort, order: sort === "dueOn" ? "asc" : "desc", page: String(pagination.pageIndex + 1), pageSize: String(pagination.pageSize) })
       if (completionPeriod) { params.set("completedFrom", completionPeriod.completedFrom); params.set("completedThrough", completionPeriod.completedThrough) }
-      for (const [key, value] of Object.entries({ due, type, assignedUserId: owner, contactId, enquiryId, opportunityId, planLaunchId })) if (value) params.set(key, value)
+      for (const [key, value] of Object.entries({ due, type, assignedUserId: owner, projectId, subprojectId, contactId, enquiryId, opportunityId, planLaunchId })) if (value) params.set(key, value)
       try { const response = await fetch(`/api/crm/work?${params}`, { signal: controller.signal, cache: "no-store" }); const result = await response.json(); if (!response.ok) throw new Error(result.error || "Unable to load activities."); setData(result) }
       catch (error) { if (!controller.signal.aborted) { setError((error as Error).message); setData(null) } }
       finally { if (!controller.signal.aborted) setLoading(false) }
     }, 150)
     return () => { clearTimeout(timer); controller.abort() }
-  }, [q, scope, state, sort, pagination, due, type, owner, contactId, enquiryId, opportunityId, planLaunchId, revision, completionPeriod])
+  }, [q, scope, state, sort, pagination, due, type, owner, projectId, subprojectId, contactId, enquiryId, opportunityId, planLaunchId, revision, completionPeriod])
   const columns = React.useMemo<ColumnDef<CrmWorkRow>[]>(() => [
     { accessorKey: "title", header: "Activity", cell: ({ row }) => <div><Link className="font-medium underline" href={`/crm/activities/${row.original.id}`}>{row.original.title}</Link>{row.original.planLaunch && <p className="text-xs text-muted-foreground">{row.original.planLaunch.planName} · Step {(row.original.planPosition ?? 0) + 1}</p>}</div> },
     { accessorKey: "type", header: "Type" },
@@ -100,5 +100,5 @@ export function WorkList({ contactId, enquiryId, opportunityId, planLaunchId, in
     </>}
     <CrmTablePagination table={table} totalRows={data?.total ?? 0} loading={loading} />
   </>
-  return embedded ? <CrmSection title="Activities and follow-ups" description={`Upcoming work and completed activities. Times use ${data?.timeZone || "the business time zone"}.`} icon={CalendarClock} actions={actions}>{content}</CrmSection> : <section className={crmPageClass}><CrmPageHeader title="My Work" actions={<><Button variant="outline" asChild><Link href="/crm/calendar">Calendar</Link></Button>{actions}</>} /><CrmSurface>{content}</CrmSurface></section>
+  return embedded ? <CrmSection title="Activities and follow-ups" description={`Upcoming work and completed activities. Times use ${data?.timeZone || "the business time zone"}.`} icon={CalendarClock} actions={projectId ? undefined : actions}>{projectId && <p className="text-sm text-muted-foreground">Schedule site visits as meetings and follow-ups as calls from a linked enquiry or opportunity.</p>}{content}</CrmSection> : <section className={crmPageClass}><CrmPageHeader title="My Work" actions={<><Button variant="outline" asChild><Link href="/crm/calendar">Calendar</Link></Button>{actions}</>} /><CrmSurface>{content}</CrmSurface></section>
 }

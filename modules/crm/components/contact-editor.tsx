@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import { Plus, UserRound } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
+import { ContactFields, emptyContact, contactValues } from "./contact-fields"
 import { FormField } from "@/components/form-field"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
 import { useFormErrors } from "@/hooks/use-form-errors"
@@ -20,7 +20,7 @@ import { CrmSection } from "./crm-section"
 export function ContactEditor({ id }: { id?: string }) {
   const router = useRouter()
   const [contact, setContact] = React.useState<CrmContactRow | null>(null)
-  const [values, setValues] = React.useState({ name: "", email: "", phone: "", archived: false })
+  const [values, setValues] = React.useState({ ...emptyContact, archived: false })
   const [loading, setLoading] = React.useState(!!id)
   const [saving, setSaving] = React.useState(false)
   const [error, setError] = React.useState("")
@@ -32,7 +32,7 @@ export function ContactEditor({ id }: { id?: string }) {
     fetch(`/api/crm/contacts/${id}`, { signal: controller.signal, cache: "no-store" }).then(async response => {
       const data = await response.json()
       if (!response.ok) throw new Error(data.error || "Unable to load contact.")
-      setContact(data); setValues({ name: data.name, email: data.email || "", phone: data.phone || "", archived: data.archived })
+      setContact(data); setValues({ ...contactValues(data), archived: data.archived })
     }).catch(error => { if (!controller.signal.aborted) setError(error.message) }).finally(() => { if (!controller.signal.aborted) setLoading(false) })
     return () => controller.abort()
   }, [id])
@@ -44,7 +44,7 @@ export function ContactEditor({ id }: { id?: string }) {
   async function persist() {
     setSaving(true); setError(""); clearErrors()
     try {
-      const payload = id ? { ...values, version: contact?.version } : { name: values.name, email: values.email.trim(), phone: values.phone }
+      const payload = id ? { ...values, version: contact?.version } : contactValues(values)
       const response = await fetch(id ? `/api/crm/contacts/${id}` : "/api/crm/contacts", { method: id ? "PATCH" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) })
       const data = await response.json()
       if (!response.ok) { setErrorsFromResponse(data); throw new Error(data.error || "Unable to save contact.") }
@@ -63,10 +63,8 @@ export function ContactEditor({ id }: { id?: string }) {
       <form id="contact-details" onSubmit={save} className="min-w-0">
         <CrmSection title="Contact details" description="Basic information and contact status." icon={UserRound}>
           <fieldset disabled={!canEdit || saving} className="grid min-w-0 gap-5 sm:grid-cols-2">
-            <FormField id="name" label="Full name" error={errors.name} className="min-w-0"><Input id="name" autoComplete="name" value={values.name} required maxLength={160} onChange={event => setValues({ ...values, name: event.target.value })} /></FormField>
+            <ContactFields values={values} onChange={next => setValues({ ...values, ...next })} errors={errors} disabled={!canEdit || saving} />
             {id && <FormField id="contact-status" label="Status"><DropdownSelect id="contact-status" label="Contact status" className="w-full" disabled={!canEdit || saving} value={values.archived ? "archived" : "active"} options={[{ value: "active", label: "Active" }, { value: "archived", label: "Archived" }]} onValueChange={value => setValues({ ...values, archived: value === "archived" })} /></FormField>}
-            <FormField id="email" label="Email" error={errors.email} className="min-w-0"><Input id="email" type="email" autoComplete="email" placeholder="name@example.com" value={values.email} onChange={event => setValues({ ...values, email: event.target.value })} /></FormField>
-            <FormField id="phone" label="Phone" error={errors.phone} className="min-w-0"><Input id="phone" type="tel" autoComplete="tel" placeholder="+919876543210" value={values.phone} onChange={event => setValues({ ...values, phone: event.target.value })} /><p className="text-xs text-muted-foreground">Include the country code.</p></FormField>
           </fieldset>
           {values.archived && <p className="rounded-md bg-muted p-3 text-sm text-muted-foreground">Archived contacts keep their history. Restore to Active to create new enquiries.</p>}
           {contact && !canEdit && <p className="text-sm text-muted-foreground">You can view this contact through assigned CRM work. Ask its owner or a manager to edit it.</p>}

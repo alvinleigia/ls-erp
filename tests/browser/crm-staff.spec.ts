@@ -31,7 +31,7 @@ test("staff can open assigned work with business formatting but cannot reassign 
   expect((await request.get("/api/settings")).status()).toBe(401)
 })
 
-for (const route of ["/crm/activities/new", "/crm/calendar", "/crm/activity-plans/apply", "/crm/opportunities/new"]) {
+for (const route of ["/crm/activities/new", "/crm/activity-plans/apply", "/crm/opportunities/new"]) {
   test(`staff display preferences load on ${route}`, async ({ page }) => {
     const preferences = page.waitForResponse(response => new URL(response.url()).pathname === "/api/settings/display")
     const adminRequests: string[] = []
@@ -42,3 +42,13 @@ for (const route of ["/crm/activities/new", "/crm/calendar", "/crm/activity-plan
     expect(adminRequests).toEqual([])
   })
 }
+
+test("temporarily disabled staff calendar offers My Work without loading the scheduler", async ({ page }) => {
+  test.skip(process.env.NEXT_PUBLIC_ENABLE_CALENDAR_VIEWS === "true", "Calendar views explicitly re-enabled for this build.")
+  await page.goto("/crm/calendar")
+  await expect(page).toHaveTitle("Leiweissen ERP")
+  await expect(page.getByRole("status").filter({ hasText: "Calendar view is temporarily unavailable." })).toBeVisible()
+  await expect(page.getByRole("main").getByRole("link", { name: "My Work", exact: true })).toBeVisible()
+  await expect(page.locator(".e-schedule")).toHaveCount(0)
+  await expect(page.getByText(/This application was built using a trial version/)).toHaveCount(0)
+})

@@ -1,5 +1,6 @@
 import { z } from "zod"
 import { crmListSchema } from "./validation"
+import { propertyContextSchema } from "@/modules/real-estate/sales-validation"
 
 const id = z.string().trim().min(1).max(100)
 const text = (max: number) => z.string().trim().max(max).default("")
@@ -22,14 +23,16 @@ export const pipelineSchema = z.object({
 })
 export const pipelineUpdateSchema = pipelineSchema.safeExtend({ version: z.number().int().positive() })
 export const opportunitySchema = z.object({
+  propertyContext: propertyContextSchema.nullable().optional(),
   title: z.string().trim().min(1).max(200), pipelineId: id, stageId: id, contactId: id,
-  accountId: text(100), enquiryId: text(100), assignedUserId: id,
+  accountId: z.string().trim().max(100).optional(), enquiryId: text(100), assignedUserId: id,
+  enquiryVersion: z.number().int().positive().optional(),
   amount: z.string().trim().regex(/^(0|[1-9]\d{0,13})(\.\d{1,4})?$/, "Enter a positive amount or zero, with up to four decimal places."),
   currency: z.string().trim().toUpperCase().refine(value => Intl.supportedValuesOf("currency").includes(value), "Choose a supported currency code."),
-  expectedCloseOn: z.iso.date(), description: text(5000), lossReason: text(2000),
+  expectedCloseOn: z.iso.date().optional(), description: text(5000), lossReason: text(2000),
   probability: z.number().int().min(0).max(100).optional(),
 }).strict()
-export const opportunityUpdateSchema = opportunitySchema.omit({ enquiryId: true }).extend({ version: z.number().int().positive() })
+export const opportunityUpdateSchema = opportunitySchema.omit({ enquiryId: true, enquiryVersion: true }).extend({ version: z.number().int().positive(), accountId: text(100), expectedCloseOn: z.iso.date() })
 export const opportunityMoveSchema = z.object({ pipelineId: id, stageId: id, version: z.number().int().positive(), lossReason: text(2000) }).strict()
 export const opportunityListSchema = crmListSchema.omit({ status: true, due: true, archived: true, sort: true }).extend({
   pipelineId: id.optional(), stageId: id.optional(), assignedUserId: id.optional(), kind: z.enum(stageKinds).optional(),

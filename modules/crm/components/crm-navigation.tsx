@@ -7,15 +7,17 @@ import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { cn } from "@/lib/utils"
 
-const links = [
-  ["Overview", "/crm/overview"], ["Opportunities", "/crm/opportunities"],
+const crmLinks = [
+  ["Overview", "/crm/overview"], ["Sales reports", "/crm/sales"], ["Opportunities", "/crm/opportunities"],
   ["Enquiries", "/crm/enquiries"], ["Contacts", "/crm/contacts"],
   ["Business accounts", "/crm/accounts"], ["My Work", "/crm/activities"],
   ["Calendar", "/crm/calendar"], ["Pipelines", "/crm/pipelines"],
   ["Activity plans", "/crm/activity-plans"], ["Follow-up rules", "/crm/follow-up-rules"],
+  ["Lead sources", "/crm/lead-sources"],
 ] as const
 
-export function CrmNavigation() {
+export function CrmNavigation({ realEstateEnabled = false }: { realEstateEnabled?: boolean }) {
+  const links = realEstateEnabled ? [...crmLinks, ["Projects", "/crm/projects"] as const] : crmLinks
   const pathname = usePathname()
   const active = links.find(([, href]) => pathname === href || pathname.startsWith(`${href}/`))
   return <nav aria-label="CRM" className="min-w-0 border-b pb-3">

@@ -9,15 +9,9 @@ import {
   getCoreRowModel,
   useReactTable,
 } from "@tanstack/react-table"
-import {
-  Day,
-  Inject,
-  Month,
-  ScheduleComponent,
-  Week,
-  ViewDirective,
-  ViewsDirective,
-} from "@syncfusion/ej2-react-schedule"
+import type { ScheduleComponent } from "@syncfusion/ej2-react-schedule"
+import { Calendar, CalendarUnavailable } from "@/components/calendar"
+import { calendarViewsEnabled } from "@/lib/calendar-features"
 import { ArrowDownIcon, ArrowUpDownIcon, ArrowUpIcon, MoreHorizontalIcon } from "lucide-react"
 import { toast } from "sonner"
 
@@ -943,13 +937,13 @@ export default function AppointmentsPage() {
         <div>
           <h1 className="text-2xl font-semibold">Appointments</h1>
           <p className="text-sm text-muted-foreground">
-            Create bookings from calendar cells or from the new appointment button.
+            Manage bookings below or use New appointment to create one.
           </p>
         </div>
         <Button onClick={() => router.push("/appointments/new")}>New appointment</Button>
       </div>
 
-      <div className="rounded-xl border bg-card p-3 shadow-sm">
+      {calendarViewsEnabled ? <div className="rounded-xl border bg-card p-3 shadow-sm">
         <div className="mb-3 flex flex-wrap items-center justify-end gap-2">
           <select
             className="h-9 rounded-md border border-input bg-background px-3 text-sm"
@@ -985,8 +979,8 @@ export default function AppointmentsPage() {
             Full day
           </Button>
         </div>
-        <ScheduleComponent
-          ref={scheduleRef}
+        <Calendar
+          scheduleRef={scheduleRef}
           currentView="Week"
           firstDayOfWeek={firstDayOfWeek}
           startHour={calendarHourMode === "full" ? "00:00" : workingHourBounds.startHour}
@@ -1011,15 +1005,9 @@ export default function AppointmentsPage() {
           eventClick={handleEventClick}
           eventRendered={handleEventRendered}
           height="auto"
-        >
-          <ViewsDirective>
-            <ViewDirective option="Day" />
-            <ViewDirective option="Week" />
-            <ViewDirective option="Month" />
-          </ViewsDirective>
-          <Inject services={[Day, Week, Month]} />
-        </ScheduleComponent>
-      </div>
+          views={["Day", "Week", "Month"]}
+        />
+      </div> : <CalendarUnavailable />}
 
       <DataTableToolbar table={table} searchPlaceholder="Search appointments">
         <select

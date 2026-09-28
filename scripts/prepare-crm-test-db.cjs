@@ -16,7 +16,7 @@ async function main() {
   try {
     const tables = await db.query("SELECT 1 FROM pg_tables WHERE schemaname = 'public' LIMIT 1")
     if (tables.rowCount) throw new Error("Database is not empty. Refusing to modify it; use a fresh disposable instance.")
-    const migrationNames = ["20260923090000_crm_foundation", "20260923120000_crm_business_accounts", "20260923160000_crm_sales_pipelines", "20260924090000_crm_activity_workspace", "20260924120000_crm_activity_plans", "20260924150000_crm_follow_up_rules"]
+    const migrationNames = ["20260923090000_crm_foundation", "20260923120000_crm_business_accounts", "20260923160000_crm_sales_pipelines", "20260924090000_crm_activity_workspace", "20260924120000_crm_activity_plans", "20260924150000_crm_follow_up_rules", "20260928120000_crm_lead_intake", "20260928160000_real_estate_projects", "20260928190000_real_estate_sales"]
     const firstPending = process.env.CRM_TEST_FROM_MIGRATION || migrationNames[0]
     if (!migrationNames.includes(firstPending)) throw new Error("Unknown CRM_TEST_FROM_MIGRATION.")
     const basePath = process.env.CRM_TEST_BASE_SQL
@@ -41,7 +41,11 @@ async function main() {
       if (policyStart < 0) throw new Error(`Missing tenant policy section: ${name}`)
       await db.query(basePath && name >= firstPending ? migration : `BEGIN;\n${migration.slice(policyStart).replace(/\nCOMMIT;\s*$/, "")}\nCOMMIT;`)
     }
-    await db.query("CREATE ROLE crm_test_runtime LOGIN NOSUPERUSER NOBYPASSRLS; GRANT USAGE ON SCHEMA public, app TO crm_test_runtime; GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO crm_test_runtime")
+    // Roles are cluster-wide and may outlive a recreated disposable database.
+    const runtimeRole = await db.query("SELECT rolsuper, rolbypassrls FROM pg_roles WHERE rolname = 'crm_test_runtime'")
+    if (!runtimeRole.rowCount) await db.query("CREATE ROLE crm_test_runtime LOGIN NOSUPERUSER NOBYPASSRLS")
+    else if (runtimeRole.rows[0].rolsuper || runtimeRole.rows[0].rolbypassrls) throw new Error("Refusing to use a CRM test role with RLS bypass.")
+    await db.query("GRANT USAGE ON SCHEMA public, app TO crm_test_runtime; GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO crm_test_runtime")
     console.log("Prepared disposable CRM test database with tenant RLS and a non-bypass application role.")
   } finally { await db.end() }
 }

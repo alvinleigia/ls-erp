@@ -27,7 +27,8 @@ export async function withBusinessApi(request: Request, handler: (actor: Busines
       }
       return handler({ tenantId, userId: sessionUserId!, role: user.role, requestId: log.requestId })
     })
-    logApiRequestSuccess(log, successStatus)
+    logApiRequestSuccess(log, result instanceof NextResponse ? result.status : successStatus)
+    if (result instanceof NextResponse) { result.headers.set("Cache-Control", "no-store"); return withRequestId(result, log.requestId) }
     return withRequestId(NextResponse.json(result, { status: successStatus, headers: { "Cache-Control": "no-store" } }), log.requestId)
   } catch (error) {
     const missingMigration = (error as { code?: string })?.code === "P2021"

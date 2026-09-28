@@ -1,9 +1,13 @@
+import { createSalesReportService } from "./sales-report-service"
+import { checkExportLimit, CRM_EXPORT_LIMIT } from "./csv"
 import type { Prisma, PrismaClient, Role } from "@prisma/client"
 import { recordDomainAuditEvent } from "@/lib/domain-audit"
 import { createSalesService } from "./sales-service"
 import { createWorkService } from "./work-service"
 import { createReportService } from "./report-service"
 import { createFollowUpService } from "./follow-up-service"
+import { createIntakeService, enquiryContext, maskReferrals, referralInclude } from "./intake-service"
+import { savePropertyContext, withPropertyContext, requirePropertyFilter, projectFilterChoices, realEstateEnabled } from "@/modules/real-estate/sales-context"
 import { CrmError, canManageCrm, canUseCrm, contactScope, accountScope, enquiryScope, type CrmActor } from "./policy"
 import {
   crmContactSchema, crmContactUpdateSchema, crmEnquiryCreateSchema,
@@ -13,7 +17,8 @@ import {
 
 const personSelect = { id: true, name: true } as const
 const contactSelect = { id: true, name: true, email: true, phone: true, archived: true } as const
-const enquiryInclude = { contact: { select: contactSelect }, assignee: { select: personSelect } } as const
+const enquiryInclude = { contact: { select: contactSelect }, assignee: { select: personSelect }, account: { select: { id: true, name: true } }, leadSource: { select: { id: true, name: true, archived: true } }, ...referralInclude } as const
+const snapshot = (value: unknown): Prisma.InputJsonValue => JSON.parse(JSON.stringify(value))
 type Tx = Prisma.TransactionClient
 
 function pageResult<T>(items: T[], total: number, page: number, pageSize: number) {
@@ -48,10 +53,17 @@ export function createCrmService(db: PrismaClient, identity: Pick<CrmActor, "ten
         const code = (error as { code?: string })?.code
         if (code === "P2034" && attempt < 2) continue
         if (code === "P2002") {
-          const target = String((error as { meta?: { target?: unknown } }).meta?.target || "")
+          // The PostgreSQL driver adapter reports constraint fields in its
+          // nested cause rather than Prisma's legacy meta.target location.
+          const meta = (error as { meta?: { target?: unknown; driverAdapterError?: { cause?: { constraint?: { fields?: unknown } } } } }).meta
+          const target = String(meta?.target || meta?.driverAdapterError?.cause?.constraint?.fields || "")
+          if (target.includes("nameKey")) throw new CrmError(409, "This lead source already exists. Edit or restore it.")
           if (target.includes("sourceType") && target.includes("outcome")) throw new CrmError(409, "A rule for this activity type and outcome already exists. Edit or restore that rule.")
           if (target.includes("requestKey")) { if (attempt < 2) continue; throw new CrmError(409, "This plan application is being processed. Retry to see its activities.") }
           if (target.includes("followUpOfId")) throw new CrmError(409, "A next follow-up was already scheduled. Refresh to see it.")
+          // A competing conversion may win the unique enquiry link before this
+          // transaction commits. Retry to return the authorized existing deal.
+          if (target.includes("enquiryId") && attempt < 2) continue
           throw new CrmError(409, target.includes("enquiryId") ? "This enquiry already has an opportunity. Refresh to open it." : "A contact with this email or phone already exists in this business. Ask your manager if you cannot find it.")
         }
         if (code === "P2034") throw new CrmError(409, "This record changed. Refresh and try again.")
@@ -63,7 +75,7 @@ export function createCrmService(db: PrismaClient, identity: Pick<CrmActor, "ten
   async function audit(tx: Tx, actor: CrmActor, event: string, entityId: string, before?: Prisma.InputJsonValue, after?: Prisma.InputJsonValue) {
     await recordDomainAuditEvent(tx, {
       tenantId: actor.tenantId, actorUserId: actor.userId, actorRole: actor.role as Role,
-      requestId: actor.requestId, event, entityType: event.startsWith("crm.rule.") ? "CrmFollowUpRule" : event.startsWith("crm.plan.") ? "CrmActivityPlan" : event.startsWith("crm.work") ? "CrmTask" : event.startsWith("crm.opportunity") ? "CrmOpportunity" : event.startsWith("crm.pipeline") ? "CrmPipeline" : event.startsWith("crm.account") ? "CrmAccount" : event.startsWith("crm.contact") ? "CrmContact" : "CrmEnquiry",
+      requestId: actor.requestId, event, entityType: event.startsWith("crm.source.") ? "CrmLeadSource" : event.startsWith("crm.rule.") ? "CrmFollowUpRule" : event.startsWith("crm.plan.") ? "CrmActivityPlan" : event.startsWith("crm.work") ? "CrmTask" : event.startsWith("crm.opportunity") ? "CrmOpportunity" : event.startsWith("crm.pipeline") ? "CrmPipeline" : event.startsWith("crm.account") ? "CrmAccount" : event.startsWith("crm.contact") ? "CrmContact" : "CrmEnquiry",
       entityId, before, after,
     })
   }
@@ -88,10 +100,13 @@ export function createCrmService(db: PrismaClient, identity: Pick<CrmActor, "ten
   }
 
   return {
+    listProjectFilterChoices(input: unknown) { return run((tx, actor) => projectFilterChoices(tx, actor, input)) },
     ...createSalesService({ run, audit, checkAssignee }),
     ...createWorkService({ run, audit, checkAssignee }),
     ...createReportService({ run }),
+    ...createSalesReportService({ run }),
     ...createFollowUpService({ run, audit }),
+    ...createIntakeService({ run, audit }),
     listAccounts(input: unknown) {
       const query = crmListSchema.parse(input)
       return run(async (tx, actor) => {
@@ -156,7 +171,10 @@ export function createCrmService(db: PrismaClient, identity: Pick<CrmActor, "ten
       return run(async (tx, actor) => {
         const contact = await tx.crmContact.findFirst({ where: { ...contactScope(actor), id: contactId }, select: { id: true } })
         if (!contact) throw new CrmError(404, "Contact not found.")
-        const where: Prisma.CrmAccountWhereInput = { AND: [accountScope(actor), { contacts: { some: { tenantId: actor.tenantId, contactId } } }] }
+        const where: Prisma.CrmAccountWhereInput = { AND: [accountScope(actor), { contacts: { some: { tenantId: actor.tenantId, contactId } },
+          ...(query.activeOnly === "true" ? { archived: false } : {}),
+          ...(query.q ? { name: { contains: query.q, mode: "insensitive" } } : {}),
+        }] }
         const [items, total] = await Promise.all([
           tx.crmAccount.findMany({ where, orderBy: [{ name: "asc" }, { id: "asc" }], skip: (query.page - 1) * query.pageSize, take: query.pageSize }),
           tx.crmAccount.count({ where }),
@@ -231,56 +249,86 @@ export function createCrmService(db: PrismaClient, identity: Pick<CrmActor, "ten
         if (!before) throw new CrmError(404, "Editable contact not found.")
         const changed = await tx.crmContact.updateMany({ where: { ...where, version }, data: { ...data, email: data.email || null, phone: data.phone || null, version: { increment: 1 } } })
         if (!changed.count) throw new CrmError(409, "This contact changed. Refresh before saving.")
-        await audit(tx, actor, "crm.contact.updated", id, { name: before.name, email: before.email, phone: before.phone, archived: before.archived }, data)
+        await audit(tx, actor, "crm.contact.updated", id, snapshot(before), data)
         return tx.crmContact.findFirstOrThrow({ where })
       })
     },
-    listEnquiries(input: unknown) {
+    listEnquiries(input: unknown, exporting = false) {
       const query = crmListSchema.parse(input)
       return run(async (tx, actor) => {
-        const where: Prisma.CrmEnquiryWhereInput = { ...enquiryScope(actor),
+        const propertyContext = await requirePropertyFilter(tx, actor, query)
+        const phoneQuery = query.q.replace(/[\s().-]/g, "")
+        const where: Prisma.CrmEnquiryWhereInput = { AND: [enquiryScope(actor), {
           ...(query.status ? { status: query.status } : {}),
-          ...(query.q ? { OR: [{ title: { contains: query.q, mode: "insensitive" } }, { contact: { name: { contains: query.q, mode: "insensitive" } } }] } : {}),
-        }
+          sourceId: query.sourceId, assignedUserId: query.assignedUserId,
+          ...(propertyContext ? { propertyContext: { is: propertyContext } } : {}),
+          ...(query.q ? { OR: [{ title: { contains: query.q, mode: "insensitive" } }, { contact: { name: { contains: query.q, mode: "insensitive" } } },
+            { account: { name: { contains: query.q, mode: "insensitive" } } },
+            ...(phoneQuery ? ["phone", "alternatePhone", "whatsappPhone"].map(field => ({ contact: { [field]: { contains: phoneQuery } } })) : []),
+          ] } : {}),
+        }] }
         const sort = ["title", "createdAt", "updatedAt"].includes(query.sort) ? query.sort : "updatedAt"
-        const [items, total] = await Promise.all([
-          tx.crmEnquiry.findMany({ where, include: enquiryInclude, orderBy: [{ [sort]: query.order }, { id: "asc" }], skip: (query.page - 1) * query.pageSize, take: query.pageSize }),
-          tx.crmEnquiry.count({ where }),
-        ])
-        return pageResult(items, total, query.page, query.pageSize)
+        const total = await tx.crmEnquiry.count({ where })
+        if (exporting) checkExportLimit(total)
+        const items = await tx.crmEnquiry.findMany({ where, include: enquiryInclude, orderBy: [{ [sort]: query.order }, { id: "asc" }], skip: exporting ? 0 : (query.page - 1) * query.pageSize, take: exporting ? CRM_EXPORT_LIMIT : query.pageSize })
+        const decorated = await withPropertyContext(tx, actor, "enquiry", await maskReferrals(tx, actor, items))
+        return { ...pageResult(decorated, total, query.page, query.pageSize), realEstateEnabled: decorated[0]?.realEstateEnabled ?? await realEstateEnabled(tx, actor.tenantId) }
       })
     },
     getEnquiry(id: string) {
-      return run(async (tx, actor) => ({ ...await findEnquiry(tx, actor, id), canAssign: canManageCrm(actor.role), opportunity: await tx.crmOpportunity.findFirst({ where: { ...enquiryScope(actor), enquiryId: id }, select: { id: true } }) }))
+      return run(async (tx, actor) => {
+        const [record] = await withPropertyContext(tx, actor, "enquiry", await maskReferrals(tx, actor, [await findEnquiry(tx, actor, id)]))
+        const events = await Promise.all(["created", "updated", "assigned"].map(event => tx.crmActivity.findFirst({ where: { tenantId: actor.tenantId, enquiryId: id, event }, orderBy: [{ createdAt: "desc" }, { id: "desc" }], select: { createdAt: true, actor: { select: personSelect } } })))
+        return { ...record, metadata: { created: events[0], updated: events[1] || events[0], assigned: events[2] }, canAssign: canManageCrm(actor.role), opportunity: await tx.crmOpportunity.findFirst({ where: { ...enquiryScope(actor), enquiryId: id }, select: { id: true } }) }
+      })
     },
     createEnquiry(input: unknown) {
       const data = crmEnquiryCreateSchema.parse(input)
       return run(async (tx, actor) => {
-        const contact = await tx.crmContact.findFirst({ where: { ...contactScope(actor), id: data.contactId, archived: false } })
-        if (!contact) throw new CrmError(404, "Active contact not found.")
         await checkAssignee(tx, actor, data.assignedUserId)
-        const enquiry = await tx.crmEnquiry.create({ data: { ...data, tenantId: actor.tenantId }, include: enquiryInclude })
+        const contact = data.newContact
+          ? await tx.crmContact.create({ data: { ...data.newContact, email: data.newContact.email || null, phone: data.newContact.phone || null, tenantId: actor.tenantId, ownerUserId: actor.userId } })
+          : await tx.crmContact.findFirst({ where: { ...contactScope(actor), id: data.contactId, archived: false } })
+        if (!contact) throw new CrmError(404, "Active contact not found.")
+        if (data.newContact) {
+          await audit(tx, actor, "crm.contact.created", contact.id, undefined, data.newContact)
+          if (data.accountId) {
+            const account = await tx.crmAccount.findFirst({ where: { ...accountScope(actor), id: data.accountId, archived: false }, select: { id: true } })
+            if (!account) throw new CrmError(404, "Active business account not found.")
+            await tx.crmAccountContact.create({ data: { tenantId: actor.tenantId, contactId: contact.id, accountId: account.id } })
+            await audit(tx, actor, "crm.contact.account.linked", contact.id, undefined, { accountId: account.id })
+            await audit(tx, actor, "crm.account.contact.linked", account.id, undefined, { contactId: contact.id })
+          }
+        }
+        const context = await enquiryContext(tx, actor, contact.id, data)
+        const enquiry = await tx.crmEnquiry.create({ data: { title: data.title, requirements: data.requirements, assignedUserId: data.assignedUserId, contactId: contact.id, ...context, tenantId: actor.tenantId }, include: enquiryInclude })
+        await savePropertyContext(tx, actor, "enquiry", enquiry.id, data.propertyContext)
         await activity(tx, actor, enquiry.id, "created", "Enquiry created.")
-        await audit(tx, actor, "crm.enquiry.created", enquiry.id, undefined, data)
-        return enquiry
+        await activity(tx, actor, enquiry.id, "assigned", `Assigned to ${enquiry.assignee.name || "salesperson"}.`)
+        await audit(tx, actor, "crm.enquiry.created", enquiry.id, undefined, snapshot(enquiry))
+        return (await withPropertyContext(tx, actor, "enquiry", await maskReferrals(tx, actor, [enquiry])))[0]
       })
     },
     updateEnquiry(id: string, input: unknown) {
-      const { version, ...data } = crmEnquiryUpdateSchema.parse(input)
+      const { version, propertyContext, ...data } = crmEnquiryUpdateSchema.parse(input)
       return run(async (tx, actor) => {
         const before = await findEnquiry(tx, actor, id)
         await checkAssignee(tx, actor, data.assignedUserId)
-        const changed = await tx.crmEnquiry.updateMany({ where: { ...enquiryScope(actor), id, version }, data: { ...data, version: { increment: 1 } } })
+        const context = await enquiryContext(tx, actor, before.contactId, data, before)
+        const changed = await tx.crmEnquiry.updateMany({ where: { ...enquiryScope(actor), id, version }, data: { ...data, ...context, version: { increment: 1 } } })
         if (!changed.count) throw new CrmError(409, "This enquiry changed. Refresh before saving.")
+        await savePropertyContext(tx, actor, "enquiry", id, propertyContext)
         if (before.assignedUserId !== data.assignedUserId) {
+          const nextOwner = await tx.user.findFirstOrThrow({ where: { tenantId: actor.tenantId, id: data.assignedUserId }, select: personSelect })
+          await activity(tx, actor, id, "assigned", `Salesperson changed from ${before.assignee.name || "unnamed user"} to ${nextOwner.name || "unnamed user"}.`)
           const inherited = await tx.crmTask.findMany({ where: { tenantId: actor.tenantId, enquiryId: id, followParentAssignment: true, status: { in: ["OPEN", "IN_PROGRESS"] } }, select: { id: true } })
           // The database bridge transfers inherited assignments for old and new clients.
           // New clients additionally record who performed the handoff in activity history.
           if (inherited.length) await tx.crmTaskEvent.createMany({ data: inherited.map(item => ({ tenantId: actor.tenantId, taskId: item.id, actorUserId: actor.userId, event: "crm.work.assignment.inherited", message: "Activity reassigned with its enquiry." })) })
         }
         await activity(tx, actor, id, "updated", `Enquiry updated. Status: ${data.status}.${data.assignedUserId !== before.assignedUserId ? " Salesperson changed." : ""}`)
-        await audit(tx, actor, "crm.enquiry.updated", id, { title: before.title, source: before.source, requirements: before.requirements, status: before.status, assignedUserId: before.assignedUserId, outcome: before.outcome }, data)
-        return tx.crmEnquiry.findFirstOrThrow({ where: { tenantId: actor.tenantId, id }, include: enquiryInclude })
+        await audit(tx, actor, "crm.enquiry.updated", id, snapshot(before), snapshot({ ...data, ...context }))
+        return (await withPropertyContext(tx, actor, "enquiry", await maskReferrals(tx, actor, [await tx.crmEnquiry.findFirstOrThrow({ where: { tenantId: actor.tenantId, id }, include: enquiryInclude })])))[0]
       })
     },
     listTasks(input: unknown, enquiryId?: string) {

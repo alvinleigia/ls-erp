@@ -39,9 +39,9 @@ export default function ModulesPage() {
     {loading && <p>Loading modules…</p>}
     {error && <p role="alert" className="text-destructive">{error}</p>}
     {modules.map(module => <div key={module.key} className="flex flex-wrap items-center justify-between gap-4 rounded-xl border p-5">
-      <div><h2 className="font-semibold">{module.name} · {module.enabled ? "Enabled" : "Disabled"}</h2><p className="text-sm text-muted-foreground">{module.description}</p></div>
-      <div className="flex gap-2">{module.enabled && <Button variant="outline" asChild><Link href={module.href}>Open CRM</Link></Button>}
-        {canManage && <Button loading={saving} onClick={() => module.enabled ? setPending(module) : void save(module)}>{module.enabled ? "Disable" : "Enable"}</Button>}
+      <div><h2 className="font-semibold">{module.name} · {module.enabled ? "Enabled" : "Disabled"}</h2><p className="text-sm text-muted-foreground">{module.description}</p>{module.key === "crm" && modules.some(item => item.key === "realEstate" && item.enabled) && <p className="mt-2 text-sm text-muted-foreground">Disable Real Estate first to turn off CRM.</p>}</div>
+      <div className="flex gap-2">{module.enabled && <Button variant="outline" asChild><Link href={module.href}>Open {module.name}</Link></Button>}
+        {canManage && <Button loading={saving} disabled={module.key === "realEstate" && !module.enabled && !modules.some(item => item.key === "crm" && item.enabled) || module.key === "crm" && module.enabled && modules.some(item => item.key === "realEstate" && item.enabled)} onClick={() => module.enabled ? setPending(module) : void save(module)}>{module.enabled ? "Disable" : "Enable"}</Button>}
       </div>
     </div>)}
     {!loading && !error && !canManage && <p className="text-sm text-muted-foreground">Ask a business administrator to change enabled modules.</p>}

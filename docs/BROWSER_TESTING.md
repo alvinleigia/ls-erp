@@ -327,3 +327,16 @@ read-only hosted smoke checks passed, including the four mobile app-shell
 regressions and keyboard/dropdown changes on an unsaved rule form. The smoke
 suite scopes error alerts to the application's main content so Next.js's
 accessibility route announcer is not mistaken for an application failure.
+
+## Existing CRM sales test records - Phase 6, 2026-09-28
+
+The user requested internal checks using the existing CRM Test leads, not a new
+client pilot or import. Run `npm.cmd run test:crm:existing` for the dedicated
+read-only admin/staff suite and `npm.cmd run test:crm:release` for new-feature
+deployment gates. These use `playwright.crm-existing.config.ts` and do not change
+the default browser target. Details, private session overrides, baseline capture
+and upgrade comparison are in [CRM_SALES_PHASE_6.md](CRM_SALES_PHASE_6.md).
+
+Existing hosted regression: 13 passed, 1 intentional admin-only capture skip.
+All 8 screenshots were inspected. Three release gates fail on the older hosted
+version; Phases 2-5 have not yet been verified against these hosted records.

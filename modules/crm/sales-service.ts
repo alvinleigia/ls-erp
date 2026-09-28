@@ -1,9 +1,12 @@
-import type { Prisma, CrmOpportunity } from "@prisma/client"
+import { checkExportLimit, CRM_EXPORT_LIMIT } from "./csv"
+import type { Prisma, CrmOpportunity, CrmEnquiry } from "@prisma/client"
+import { maskReferrals, referralInclude } from "./intake-service"
 import { CrmError, canManageCrm, contactScope, accountScope, enquiryScope, type CrmActor } from "./policy"
 import { crmListSchema, crmNoteSchema } from "./validation"
 import { pipelineSchema, pipelineUpdateSchema, opportunitySchema, opportunityUpdateSchema, opportunityMoveSchema, opportunityListSchema } from "./sales-validation"
 import { workScope } from "./work-service"
 import { businessDate } from "./work-time"
+import { copyPropertyContext, savePropertyContext, withPropertyContext, requirePropertyFilter, realEstateEnabled } from "@/modules/real-estate/sales-context"
 
 type Tx = Prisma.TransactionClient
 type Context = {
@@ -11,7 +14,7 @@ type Context = {
   audit: (tx: Tx, actor: CrmActor, event: string, id: string, before?: Prisma.InputJsonValue, after?: Prisma.InputJsonValue) => Promise<void>
   checkAssignee: (tx: Tx, actor: CrmActor, id: string) => Promise<void>
 }
-const include = { contact: { select: { id: true, name: true } }, account: { select: { id: true, name: true } }, assignee: { select: { id: true, name: true } }, pipeline: true, stage: true } as const
+const include = { contact: { select: { id: true, name: true } }, account: { select: { id: true, name: true } }, assignee: { select: { id: true, name: true } }, pipeline: true, stage: true, ...referralInclude } as const
 const stages = { orderBy: [{ position: "asc" as const }, { id: "asc" as const }] }
 const page = <T>(items: T[], total: number, page: number, pageSize: number) => ({ items, total, page, pageSize, totalPages: Math.max(1, Math.ceil(total / pageSize)) })
 const snapshot = (value: unknown): Prisma.InputJsonValue => JSON.parse(JSON.stringify(value))
@@ -22,7 +25,7 @@ export function createSalesService({ run, audit, checkAssignee }: Context) {
   async function find(tx: Tx, actor: CrmActor, id: string) {
     const record = await tx.crmOpportunity.findFirst({ where: { ...scope(actor), id }, include })
     if (!record) throw new CrmError(404, "Opportunity not found.")
-    return record
+    return (await withPropertyContext(tx, actor, "opportunity", await maskReferrals(tx, actor, [record])))[0]
   }
   async function destination(tx: Tx, actor: CrmActor, pipelineId: string, stageId: string, changing = true) {
     const stage = await tx.crmStage.findFirst({ where: { tenantId: actor.tenantId, pipelineId, id: stageId }, include: { pipeline: true } })
@@ -103,16 +106,18 @@ export function createSalesService({ run, audit, checkAssignee }: Context) {
         return tx.crmPipeline.findFirstOrThrow({ where: { tenantId: actor.tenantId, id }, include: { stages } })
       })
     },
-    listOpportunities(input: unknown) {
+    listOpportunities(input: unknown, exporting = false) {
       const query = opportunityListSchema.parse(input)
       return run(async (tx, actor) => {
+        const propertyContext = await requirePropertyFilter(tx, actor, query)
         const where: Prisma.CrmOpportunityWhereInput = { AND: [scope(actor), {
-          pipelineId: query.pipelineId, stageId: query.stageId, assignedUserId: query.assignedUserId,
+          pipelineId: query.pipelineId, stageId: query.stageId, assignedUserId: query.assignedUserId, sourceId: query.sourceId,
+          ...(propertyContext ? { propertyContext: { is: propertyContext } } : {}),
           ...(query.kind ? { stage: { kind: query.kind } } : {}), title: { contains: query.q, mode: "insensitive" },
         }] }
-        const [items, total] = await Promise.all([
-          tx.crmOpportunity.findMany({ where, include, orderBy: [{ [query.sort]: query.order }, { id: "asc" }], skip: (query.page - 1) * query.pageSize, take: query.pageSize }), tx.crmOpportunity.count({ where }),
-        ])
+        const total = await tx.crmOpportunity.count({ where })
+        if (exporting) checkExportLimit(total)
+        const items = await tx.crmOpportunity.findMany({ where, include, orderBy: [{ [query.sort]: query.order }, { id: "asc" }], skip: exporting ? 0 : (query.page - 1) * query.pageSize, take: exporting ? CRM_EXPORT_LIMIT : query.pageSize })
         const timeZone = (await tx.appSetting.findUnique({ where: { tenantId: actor.tenantId }, select: { timeZone: true } }))?.timeZone || "UTC"
         const now = new Date()
         const overdue = items.length ? await tx.crmTask.groupBy({ by: ["opportunityId"], where: { AND: [workScope(actor), {
@@ -120,39 +125,51 @@ export function createSalesService({ run, audit, checkAssignee }: Context) {
           OR: [{ startsAt: { lt: now } }, { startsAt: null, dueOn: { lt: new Date(`${businessDate(now, timeZone)}T00:00:00Z`) } }],
         }] }, _count: { _all: true } }) : []
         const counts = new Map(overdue.map(item => [item.opportunityId, item._count._all]))
-        return page(items.map(item => ({ ...item, overdueActivityCount: counts.get(item.id) || 0 })), total, query.page, query.pageSize)
+        const decorated = await withPropertyContext(tx, actor, "opportunity", await maskReferrals(tx, actor, items))
+        return { ...page(decorated.map(item => ({ ...item, overdueActivityCount: counts.get(item.id) || 0 })), total, query.page, query.pageSize), realEstateEnabled: decorated[0]?.realEstateEnabled ?? await realEstateEnabled(tx, actor.tenantId) }
       })
     },
     getOpportunity(id: string) { return run((tx, actor) => find(tx, actor, id)) },
     createOpportunity(input: unknown) {
-      const data = opportunitySchema.parse(input)
+      const { enquiryVersion, propertyContext, ...data } = opportunitySchema.parse(input)
       return run(async (tx, actor) => {
+        let sourceEnquiry: CrmEnquiry | null = null
         if (data.enquiryId) {
           const enquiry = await tx.crmEnquiry.findFirst({ where: { ...enquiryScope(actor), id: data.enquiryId } })
           if (!enquiry) throw new CrmError(404, "Enquiry not found.")
           const existing = await tx.crmOpportunity.findFirst({ where: { tenantId: actor.tenantId, enquiryId: enquiry.id } })
           if (existing) return find(tx, actor, existing.id)
+          if (enquiryVersion !== undefined && enquiry.version !== enquiryVersion) throw new CrmError(409, "This enquiry changed. Refresh before converting.")
           if (enquiry.contactId !== data.contactId) throw new CrmError(400, "Use the enquiry's contact when converting.")
           if (enquiry.status === "CLOSED") throw new CrmError(409, "Reopen this enquiry before converting it.")
+          sourceEnquiry = enquiry
         }
         await checkAssignee(tx, actor, data.assignedUserId)
-        await relations(tx, actor, data.contactId, data.accountId)
+        if (sourceEnquiry && propertyContext !== undefined) throw new CrmError(400, "Conversion copies the enquiry's property context. Edit the opportunity afterwards to change it.")
+        const expectedCloseOn = data.expectedCloseOn || sourceEnquiry?.targetCloseOn?.toISOString().slice(0, 10)
+        if (!expectedCloseOn) throw new CrmError(400, "Enter an expected close date.")
+        const accountId = data.accountId === undefined ? sourceEnquiry?.accountId || "" : data.accountId
+        await relations(tx, actor, data.contactId, accountId)
         const stage = await destination(tx, actor, data.pipelineId, data.stageId)
         const result = await tx.crmOpportunity.create({ data: {
           ...data, ...outcome(stage, data.lossReason, data.probability), tenantId: actor.tenantId,
-          accountId: data.accountId || null, enquiryId: data.enquiryId || null, expectedCloseOn: new Date(`${data.expectedCloseOn}T00:00:00Z`),
+          accountId: accountId || null, enquiryId: data.enquiryId || null, expectedCloseOn: new Date(`${expectedCloseOn}T00:00:00Z`),
+          sourceId: sourceEnquiry?.sourceId, source: sourceEnquiry?.source,
+          referralContactId: sourceEnquiry?.referralContactId, referralAccountId: sourceEnquiry?.referralAccountId,
           closedAt: stage.kind === "OPEN" ? null : new Date(),
         }, include })
+        if (sourceEnquiry) await copyPropertyContext(tx, actor, sourceEnquiry.id, result.id)
+        else await savePropertyContext(tx, actor, "opportunity", result.id, propertyContext)
         await history(tx, actor, result.id, "crm.opportunity.created", `Created in ${stage.pipeline.name} / ${stage.name}.`, undefined, result)
         if (data.enquiryId) {
           await tx.crmActivity.create({ data: { tenantId: actor.tenantId, enquiryId: data.enquiryId, actorUserId: actor.userId, event: "crm.enquiry.converted", message: `Created opportunity: ${result.title}.` } })
           await audit(tx, actor, "crm.enquiry.converted", data.enquiryId, undefined, { opportunityId: result.id })
         }
-        return result
+        return (await withPropertyContext(tx, actor, "opportunity", await maskReferrals(tx, actor, [result])))[0]
       })
     },
     updateOpportunity(id: string, input: unknown) {
-      const { version, ...data } = opportunityUpdateSchema.parse(input)
+      const { version, propertyContext, ...data } = opportunityUpdateSchema.parse(input)
       return run(async (tx, actor) => {
         const before = await find(tx, actor, id)
         if (before.enquiryId && before.contactId !== data.contactId) throw new CrmError(409, "A converted opportunity keeps the enquiry's contact.")
@@ -167,10 +184,11 @@ export function createSalesService({ run, audit, checkAssignee }: Context) {
           closedAt: stage.kind === "OPEN" ? null : before.closedAt ?? new Date(),
         } })
         if (!updated.count) throw new CrmError(409, "This opportunity changed. Refresh before saving.")
+        await savePropertyContext(tx, actor, "opportunity", id, propertyContext)
         const after = await tx.crmOpportunity.findFirstOrThrow({ where: { tenantId: actor.tenantId, id }, include })
         await history(tx, actor, id, changedStage ? "crm.opportunity.stage.changed" : "crm.opportunity.updated",
           changedStage ? `${before.pipeline.name} / ${before.stage.name} → ${stage.pipeline.name} / ${stage.name}.${after.lossReason ? ` Loss reason: ${after.lossReason}` : ""}` : "Opportunity details updated.", before, after)
-        return after
+        return (await withPropertyContext(tx, actor, "opportunity", await maskReferrals(tx, actor, [after])))[0]
       })
     },
     moveOpportunity(id: string, input: unknown) {

@@ -2,16 +2,9 @@
 
 import * as React from "react"
 import { useSearchParams } from "next/navigation"
-import {
-  Inject,
-  Month,
-  Week,
-  ResourceDirective,
-  ResourcesDirective,
-  ScheduleComponent,
-  ViewsDirective,
-  ViewDirective,
-} from "@syncfusion/ej2-react-schedule"
+import type { ScheduleComponent } from "@syncfusion/ej2-react-schedule"
+import { Calendar } from "@/components/calendar"
+import { calendarViewsEnabled } from "@/lib/calendar-features"
 import { toast } from "sonner"
 
 import { formatDateForDisplay, parseISODate, toISODate } from "@/lib/date"
@@ -2169,6 +2162,8 @@ export default function RosterPage() {
             Grid
           </Button>
           <Button
+            disabled={!calendarViewsEnabled}
+            title={calendarViewsEnabled ? undefined : "Calendar view is temporarily unavailable"}
             variant={rosterMode === "calendar" ? "default" : "outline"}
             onClick={() => setRosterMode("calendar")}
           >
@@ -2354,8 +2349,8 @@ export default function RosterPage() {
       ) : (
         <div className="rounded-xl border bg-card p-3 shadow-sm">
           <div className="min-h-[540px]">
-            <ScheduleComponent
-            ref={scheduleRef}
+            <Calendar
+            scheduleRef={scheduleRef}
             currentView="Week"
             firstDayOfWeek={firstDayOfWeek}
             showQuickInfo
@@ -2388,24 +2383,9 @@ export default function RosterPage() {
               content: quickInfoContent,
             }}
             height="auto"
-          >
-            <ViewsDirective>
-              <ViewDirective option="Week" />
-              <ViewDirective option="Month" />
-            </ViewsDirective>
-            <ResourcesDirective>
-              <ResourceDirective
-                field="staffId"
-                title="Staff"
-                name="Staff"
-                dataSource={staffResources}
-                textField="name"
-                idField="id"
-                colorField="color"
-              />
-            </ResourcesDirective>
-            <Inject services={[Week, Month]} />
-          </ScheduleComponent>
+            views={["Week", "Month"]}
+            resources={[{ field: "staffId", title: "Staff", name: "Staff", dataSource: staffResources, textField: "name", idField: "id", colorField: "color" }]}
+          />
         </div>
       </div>
       )}

@@ -15,8 +15,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "LS Snipzy",
-  description: "Created with Love for Salons",
+  title: "Leiweissen ERP",
+  description: "Leiweissen business management",
 };
 
 export default function RootLayout({

@@ -1,3 +1,4 @@
+import { requirePropertyFilter } from "@/modules/real-estate/sales-context"
 import type { Prisma, CrmTask } from "@prisma/client"
 import { CrmError, canManageCrm, contactScope, enquiryScope, type CrmActor } from "./policy"
 import { crmListSchema, crmNoteSchema } from "./validation"
@@ -124,6 +125,11 @@ export function createWorkService({ run, audit, checkAssignee }: Context) {
           ...(query.state === "open" ? { status: { in: [...openStatuses] } } : query.state === "completed" ? { status: "COMPLETED" } : query.state === "cancelled" ? { status: "CANCELLED" } : {}),
         }
         const clauses: Prisma.CrmTaskWhereInput[] = [workScope(actor), filter]
+        const propertyContext = await requirePropertyFilter(tx, actor, query)
+        if (propertyContext) clauses.push({ OR: [
+          { enquiry: { AND: [enquiryScope(actor), { propertyContext: { is: propertyContext } }] } },
+          { opportunity: { AND: [enquiryScope(actor), { propertyContext: { is: propertyContext } }] } },
+        ] })
         if (query.scope === "mine" || query.due === "reminders") clauses.push({ assignedUserId: actor.userId })
         if (query.assignedUserId) clauses.push({ assignedUserId: query.assignedUserId })
         if (query.completedFrom && query.completedThrough) clauses.push({ status: "COMPLETED", completedAt: {

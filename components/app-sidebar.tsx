@@ -110,13 +110,14 @@ export function AppSidebar() {
   const [openSections, setOpenSections] = React.useState<Record<string, boolean>>({})
   const [logoLoadFailed, setLogoLoadFailed] = React.useState(false)
   const [crmEnabled, setCrmEnabled] = React.useState(false)
+  const [realEstateEnabled, setRealEstateEnabled] = React.useState(false)
   React.useEffect(() => {
     if (isPlatformConsoleUser || !canUseCrm(role)) return
     const controller = new AbortController()
     const load = () => {
       void fetch("/api/modules", { cache: "no-store", signal: controller.signal })
         .then(async response => response.ok ? response.json() : null)
-        .then(data => { if (!controller.signal.aborted) setCrmEnabled(!!data?.modules?.some((module: { key: string; enabled: boolean }) => module.key === "crm" && module.enabled)) })
+        .then(data => { if (!controller.signal.aborted) { setCrmEnabled(!!data?.modules?.some((module: { key: string; enabled: boolean }) => module.key === "crm" && module.enabled)); setRealEstateEnabled(!!data?.modules?.some((module: { key: string; enabled: boolean }) => module.key === "realEstate" && module.enabled)) } })
         .catch(() => { if (!controller.signal.aborted) setCrmEnabled(false) })
     }
     load()
@@ -138,10 +139,12 @@ export function AppSidebar() {
       list.push({ key: "crm", title: "CRM", href: "/crm/overview", icon: UsersIcon,
         isActive: current => current.startsWith("/crm"), items: [
           { title: "Overview", href: "/crm/overview", icon: BarChart3Icon, isActive: current => current.startsWith("/crm/overview") },
+          { title: "Sales reports", href: "/crm/sales", icon: BarChart3Icon, isActive: current => current.startsWith("/crm/sales") },
           { title: "Enquiries", href: "/crm/enquiries", icon: MailIcon, isActive: current => current.startsWith("/crm/enquiries") },
           { title: "Contacts", href: "/crm/contacts", icon: UsersIcon, isActive: current => current.startsWith("/crm/contacts") },
           { title: "Business accounts", href: "/crm/accounts", icon: Building2Icon, isActive: current => current.startsWith("/crm/accounts") },
           { title: "Opportunities", href: "/crm/opportunities", icon: Building2Icon, isActive: current => current.startsWith("/crm/opportunities") },
+          ...(realEstateEnabled ? [{ title: "Projects", href: "/crm/projects", icon: Building2Icon, isActive: (current: string) => current.startsWith("/crm/projects") }] : []),
           { title: "Pipelines", href: "/crm/pipelines", icon: Building2Icon, isActive: current => current.startsWith("/crm/pipelines") },
           { title: "My Work", href: "/crm/activities", icon: CalendarClockIcon, isActive: current => current.startsWith("/crm/activities") || current.startsWith("/crm/tasks") },
           { title: "Calendar", href: "/crm/calendar", icon: CalendarClockIcon, isActive: current => current.startsWith("/crm/calendar") },
@@ -365,7 +368,7 @@ export function AppSidebar() {
     }
 
     return list
-  }, [canManage, isPlatformConsoleUser, isPlatformSuperAdmin, role, crmEnabled])
+  }, [canManage, isPlatformConsoleUser, isPlatformSuperAdmin, role, crmEnabled, realEstateEnabled])
 
   const menuButtonClass = (active: boolean) =>
     cn("transition-colors", active && "bg-sidebar-primary/20 text-sidebar-primary font-semibold")
@@ -382,12 +385,12 @@ export function AppSidebar() {
             // eslint-disable-next-line @next/next/no-img-element
             <img
               src="/assets/images/logo.png"
-              alt="LS Salon"
+              alt="Leiweissen ERP"
               className="h-auto w-[150px] max-w-full object-contain"
               onError={() => setLogoLoadFailed(true)}
             />
           ) : (
-            <div className="text-sm font-semibold">LS Salon</div>
+            <div className="text-sm font-semibold">Leiweissen ERP</div>
           )}
         </div>
       </SidebarHeader>

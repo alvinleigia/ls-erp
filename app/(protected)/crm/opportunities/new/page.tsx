@@ -1,2 +1,2 @@
 import { OpportunityEditor } from "@/modules/crm/components/opportunity-editor"
-export default async function Page({ searchParams }: { searchParams: Promise<{ enquiryId?: string }> }) { return <OpportunityEditor enquiryId={(await searchParams).enquiryId} /> }
+export default async function Page({ searchParams }: { searchParams: Promise<{ enquiryId?: string; projectId?: string; subprojectId?: string }> }) { const query = await searchParams; return <OpportunityEditor key={`${query.enquiryId}-${query.projectId}-${query.subprojectId}`} enquiryId={query.enquiryId} initialProjectId={query.projectId} initialSubprojectId={query.subprojectId} /> }

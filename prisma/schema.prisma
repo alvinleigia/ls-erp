@@ -127,6 +127,7 @@ model CrmStage {
 }
 
 model CrmOpportunity {
+  propertyContext RealEstateOpportunityContext?
   id             String @id @default(cuid())
   tenantId       String
   title          String
@@ -135,6 +136,10 @@ model CrmOpportunity {
   contactId      String
   accountId      String?
   enquiryId      String?
+  sourceId       String?
+  source         String?
+  referralContactId String?
+  referralAccountId String?
   assignedUserId String
   amount         Decimal @db.Decimal(18, 4)
   currency       String @db.VarChar(3)
@@ -152,6 +157,9 @@ model CrmOpportunity {
   contact        CrmContact @relation(fields: [tenantId, contactId], references: [tenantId, id], onDelete: Restrict)
   account        CrmAccount? @relation(fields: [tenantId, accountId], references: [tenantId, id], onDelete: Restrict)
   enquiry        CrmEnquiry? @relation(fields: [tenantId, enquiryId], references: [tenantId, id], onDelete: Restrict)
+  leadSource     CrmLeadSource? @relation(fields: [tenantId, sourceId], references: [tenantId, id], onDelete: Restrict)
+  referralContact CrmContact? @relation("OpportunityReferralContact", fields: [tenantId, referralContactId], references: [tenantId, id], onDelete: Restrict)
+  referralAccount CrmAccount? @relation("OpportunityReferralAccount", fields: [tenantId, referralAccountId], references: [tenantId, id], onDelete: Restrict)
   assignee       User @relation(fields: [tenantId, assignedUserId], references: [tenantId, id], onDelete: Restrict)
   activities     CrmOpportunityActivity[]
   workItems      CrmTask[]
@@ -196,6 +204,14 @@ model CrmContact {
   name         String
   email        String?
   phone        String?
+  alternatePhone String?
+  whatsappPhone String?
+  addressLine1 String?
+  addressLine2 String?
+  city         String?
+  region       String?
+  postalCode   String?
+  country      String?
   ownerUserId  String
   legacyUserId String?
   archived     Boolean @default(false)
@@ -209,6 +225,8 @@ model CrmContact {
   accounts     CrmAccountContact[]
   opportunities CrmOpportunity[]
   workItems    CrmTask[]
+  referredEnquiries CrmEnquiry[] @relation("EnquiryReferralContact")
+  referredOpportunities CrmOpportunity[] @relation("OpportunityReferralContact")
 
   @@unique([tenantId, id])
   @@unique([tenantId, email])
@@ -219,6 +237,7 @@ model CrmContact {
 }
 
 model CrmAccount {
+  realEstateProjects RealEstateProject[]
   id          String @id @default(cuid())
   tenantId    String
   name        String
@@ -235,6 +254,9 @@ model CrmAccount {
   owner       User @relation(fields: [tenantId, ownerUserId], references: [tenantId, id], onDelete: Restrict)
   contacts    CrmAccountContact[]
   opportunities CrmOpportunity[]
+  enquiries    CrmEnquiry[] @relation("EnquiryAccount")
+  referredEnquiries CrmEnquiry[] @relation("EnquiryReferralAccount")
+  referredOpportunities CrmOpportunity[] @relation("OpportunityReferralAccount")
 
   @@unique([tenantId, id])
   @@index([tenantId, ownerUserId])
@@ -254,12 +276,36 @@ model CrmAccountContact {
   @@index([tenantId, contactId])
 }
 
+model CrmLeadSource {
+  id        String @id @default(cuid())
+  tenantId  String
+  name      String
+  nameKey   String
+  archived  Boolean @default(false)
+  version   Int @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  tenant    Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  enquiries CrmEnquiry[]
+  opportunities CrmOpportunity[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, nameKey])
+  @@index([tenantId, archived, name])
+}
+
 model CrmEnquiry {
+  propertyContext RealEstateEnquiryContext?
   id             String @id @default(cuid())
   tenantId       String
   contactId      String
   title          String
   source         String?
+  sourceId       String?
+  accountId      String?
+  referralContactId String?
+  referralAccountId String?
+  targetCloseOn  DateTime? @db.Date
   requirements   String?
   assignedUserId String
   status         CrmEnquiryStatus @default(NEW)
@@ -270,6 +316,10 @@ model CrmEnquiry {
   tenant         Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   contact        CrmContact @relation(fields: [tenantId, contactId], references: [tenantId, id], onDelete: Restrict)
   assignee       User @relation(fields: [tenantId, assignedUserId], references: [tenantId, id], onDelete: Restrict)
+  leadSource     CrmLeadSource? @relation(fields: [tenantId, sourceId], references: [tenantId, id], onDelete: Restrict)
+  account        CrmAccount? @relation("EnquiryAccount", fields: [tenantId, accountId], references: [tenantId, id], onDelete: Restrict)
+  referralContact CrmContact? @relation("EnquiryReferralContact", fields: [tenantId, referralContactId], references: [tenantId, id], onDelete: Restrict)
+  referralAccount CrmAccount? @relation("EnquiryReferralAccount", fields: [tenantId, referralAccountId], references: [tenantId, id], onDelete: Restrict)
   tasks          CrmTask[]
   activities     CrmActivity[]
   opportunities  CrmOpportunity[]
@@ -279,6 +329,8 @@ model CrmEnquiry {
   @@index([tenantId, assignedUserId, status])
   @@index([tenantId, contactId])
   @@index([tenantId, updatedAt])
+  @@index([tenantId, sourceId, assignedUserId])
+  @@index([tenantId, accountId])
 }
 
 model CrmTask {
@@ -595,6 +647,7 @@ enum StockMovementType {
 }
 
 model User {
+  realEstateMemberships RealEstateProjectMember[]
   id                    String                    @id @default(cuid())
   tenantId              String?
   name                  String?
@@ -684,6 +737,10 @@ model Organization {
 }
 
 model Tenant {
+  propertyEnquiries RealEstateEnquiryContext[]
+  propertyOpportunities RealEstateOpportunityContext[]
+  realEstateProjects RealEstateProject[]
+  realEstateMembers RealEstateProjectMember[]
   id             String        @id @default(cuid())
   organizationId String?
   name           String
@@ -700,6 +757,7 @@ model Tenant {
   crmOpportunities CrmOpportunity[]
   crmOpportunityActivities CrmOpportunityActivity[]
   crmEnquiries   CrmEnquiry[]
+  crmLeadSources CrmLeadSource[]
   crmTasks       CrmTask[]
   crmWorkEvents  CrmTaskEvent[]
   crmActivityPlans CrmActivityPlan[]
@@ -1814,4 +1872,88 @@ model InventoryStockMovement {
   @@index([orderItemId])
   @@index([type])
   @@index([occurredAt])
+}
+model RealEstateProject {
+  enquiryContexts RealEstateEnquiryContext[] @relation("EnquiryProject")
+  subEnquiryContexts RealEstateEnquiryContext[] @relation("EnquirySubproject")
+  opportunityContexts RealEstateOpportunityContext[] @relation("OpportunityProject")
+  subOpportunityContexts RealEstateOpportunityContext[] @relation("OpportunitySubproject")
+  id String @id @default(cuid())
+  tenantId String
+  parentId String?
+  name String
+  code String
+  developerAccountId String?
+  location String @default("")
+  description String @default("")
+  categories String[] @default([])
+  lifecycle String @default("PLANNING")
+  priceMin Decimal? @db.Decimal(18, 4)
+  priceMax Decimal? @db.Decimal(18, 4)
+  currency String?
+  archived Boolean @default(false)
+  version Int @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  parent RealEstateProject? @relation("ProjectHierarchy", fields: [tenantId, parentId], references: [tenantId, id], onDelete: Restrict)
+  subprojects RealEstateProject[] @relation("ProjectHierarchy")
+  developerAccount CrmAccount? @relation(fields: [tenantId, developerAccountId], references: [tenantId, id], onDelete: Restrict)
+  members RealEstateProjectMember[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, code])
+  @@unique([tenantId, parentId, id])
+  @@index([tenantId, parentId, archived, name])
+  @@index([tenantId, developerAccountId])
+}
+
+model RealEstateProjectMember {
+  tenantId String
+  projectId String
+  userId String
+  createdAt DateTime @default(now())
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  project RealEstateProject @relation(fields: [tenantId, projectId], references: [tenantId, id], onDelete: Restrict)
+  user User @relation(fields: [tenantId, userId], references: [tenantId, id], onDelete: Restrict)
+
+  @@id([tenantId, projectId, userId])
+  @@index([tenantId, userId])
+}
+model RealEstateEnquiryContext {
+  tenantId String
+  enquiryId String
+  projectId String?
+  subprojectId String?
+  budgetMin Decimal? @db.Decimal(18, 4)
+  budgetMax Decimal? @db.Decimal(18, 4)
+  budgetCurrency String?
+  propertyCategory String?
+  bedrooms Int?
+  buyingTimeframe String?
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  enquiry CrmEnquiry @relation(fields: [tenantId, enquiryId], references: [tenantId, id], onDelete: Restrict)
+  project RealEstateProject? @relation("EnquiryProject", fields: [tenantId, projectId], references: [tenantId, id], onDelete: Restrict)
+  subproject RealEstateProject? @relation("EnquirySubproject", fields: [tenantId, projectId, subprojectId], references: [tenantId, parentId, id], onDelete: Restrict)
+  @@id([tenantId, enquiryId])
+  @@index([tenantId, projectId, subprojectId])
+}
+
+model RealEstateOpportunityContext {
+  tenantId String
+  opportunityId String
+  projectId String?
+  subprojectId String?
+  budgetMin Decimal? @db.Decimal(18, 4)
+  budgetMax Decimal? @db.Decimal(18, 4)
+  budgetCurrency String?
+  propertyCategory String?
+  bedrooms Int?
+  buyingTimeframe String?
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  opportunity CrmOpportunity @relation(fields: [tenantId, opportunityId], references: [tenantId, id], onDelete: Restrict)
+  project RealEstateProject? @relation("OpportunityProject", fields: [tenantId, projectId], references: [tenantId, id], onDelete: Restrict)
+  subproject RealEstateProject? @relation("OpportunitySubproject", fields: [tenantId, projectId, subprojectId], references: [tenantId, parentId, id], onDelete: Restrict)
+  @@id([tenantId, opportunityId])
+  @@index([tenantId, projectId, subprojectId])
 }
