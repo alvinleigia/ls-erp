@@ -35,6 +35,32 @@ async function login(email) {
 }
 const json = (method, data) => ({ method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) })
 
+test("custom activity types work through authenticated HTTP configuration, scheduling and report routes", async () => {
+  assert.equal((await session()("/api/crm/activity-types")).status, 401)
+  const admin = await login("admin@crm-demo.test"), staff = await login("sales@crm-demo.test")
+  assert.equal((await admin("/api/modules", json("PATCH", { key: "crm", enabled: true }))).status, 200)
+  const input = { name: `HTTP Site Visit ${Date.now()}`, baseType: "MEETING", defaultInstructions: "Meet at reception." }
+  assert.equal((await staff("/api/crm/activity-types", json("POST", input))).status, 403)
+  const created = await admin("/api/crm/activity-types", json("POST", input))
+  assert.equal(created.status, 201)
+  const type = await created.json()
+  assert.equal((await staff(`/api/crm/activity-types/${type.id}`)).status, 200)
+  const contactResponse = await admin("/api/crm/contacts", json("POST", { name: `HTTP visit buyer ${Date.now()}` }))
+  assert.equal(contactResponse.status, 201)
+  const contact = await contactResponse.json()
+  const assignees = await (await admin("/api/crm/assignees")).json()
+  const response = await admin("/api/crm/work", json("POST", { title: "HTTP site visit", type: "MEETING", activityTypeId: type.id, assignedUserId: assignees.currentUserId, contactId: contact.id, dueOn: "2026-10-01" }))
+  assert.equal(response.status, 201)
+  const work = await response.json()
+  assert.equal(work.activityTypeName, input.name)
+  assert.equal((await (await admin(`/api/crm/work?activityTypeId=${type.id}`)).json()).total, 1)
+  assert.equal((await (await admin(`/api/crm/reports/activities?activityTypeId=${type.id}`)).json()).totals.open, 1)
+  const archive = { ...input, archived: true, version: 1 }
+  assert.equal((await admin(`/api/crm/activity-types/${type.id}`, json("PATCH", archive))).status, 200)
+  assert.equal((await staff(`/api/crm/activity-types/${type.id}`)).status, 200)
+  assert.equal((await admin(`/api/crm/activity-types/${type.id}`, json("PATCH", archive))).status, 409)
+})
+
 test("real HTTP authentication, module access and complete CRM workflow", async () => {
   assert.equal((await session()("/api/crm/contacts")).status, 401)
   assert.equal((await session()("/api/crm/reports/activities")).status, 401)

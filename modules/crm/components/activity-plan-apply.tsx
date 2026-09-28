@@ -27,7 +27,7 @@ export function ActivityPlanApply({ initial }: { initial: Initial }) {
   const [canAssign, setCanAssign] = React.useState(false), [startOn, setStartOn] = React.useState("")
   const [timeZone, setTimeZone] = React.useState("UTC"), [error, setError] = React.useState("")
   const [loading, setLoading] = React.useState(true), [busy, setBusy] = React.useState(false)
-  const [preview, setPreview] = React.useState<{ signature: string; requestKey: string; steps: WorkCreateInput[]; timeZone: string } | null>(null)
+  const [preview, setPreview] = React.useState<{ signature: string; requestKey: string; steps: (WorkCreateInput & { activityTypeName?: string | null })[]; timeZone: string } | null>(null)
   const [revision, setRevision] = React.useState(0)
   React.useEffect(() => {
     const controller = new AbortController()
@@ -80,6 +80,6 @@ export function ActivityPlanApply({ initial }: { initial: Initial }) {
       <FormField id="apply-start" label={`Start date (${timeZone})`}><Input id="apply-start" type="date" required value={startOn} onChange={event => setStartOn(event.target.value)} /></FormField>
     </fieldset></CrmSection></form>
     {plan?.archived && <p>This plan is archived. Choose an active plan.</p>}
-    {reviewed && preview && <CrmSection title={<>{plan?.name}: {preview.steps.length}activities</>}> <p className="text-sm">All-day deadlines and reminders use {preview.timeZone}. Emails are tasks to carry out, not automatic messages.</p><ol className="space-y-3">{preview.steps.map((step, index) => <li key={index} className="rounded border p-3"><p className="font-medium">{index + 1}. {step.title}</p><p className="text-sm">{step.type} · {formatDate(step.dueOn)}{step.reminderAt ? ` · Reminder ${wallTime(step.reminderAt, preview.timeZone).replace("T", " ")}` : ""}</p>{step.description && <p className="mt-2 whitespace-pre-wrap text-sm text-muted-foreground">{step.description}</p>}</li>)}</ol><CrmActionBar><Button disabled={!ready || busy} loading={busy} onClick={() => void submit(true)}>Schedule these activities</Button></CrmActionBar></CrmSection>}
+    {reviewed && preview && <CrmSection title={<>{plan?.name}: {preview.steps.length}activities</>}> <p className="text-sm">All-day deadlines and reminders use {preview.timeZone}. Emails are tasks to carry out, not automatic messages.</p><ol className="space-y-3">{preview.steps.map((step, index) => <li key={index} className="rounded border p-3"><p className="font-medium">{index + 1}. {step.title}</p><p className="text-sm">{step.activityTypeName || step.type} · {formatDate(step.dueOn)}{step.reminderAt ? ` · Reminder ${wallTime(step.reminderAt, preview.timeZone).replace("T", " ")}` : ""}</p>{step.description && <p className="mt-2 whitespace-pre-wrap text-sm text-muted-foreground">{step.description}</p>}</li>)}</ol><CrmActionBar><Button disabled={!ready || busy} loading={busy} onClick={() => void submit(true)}>Schedule these activities</Button></CrmActionBar></CrmSection>}
   </section>
 }

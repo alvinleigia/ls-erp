@@ -2,6 +2,7 @@ import type { WorkType } from "./crm-work"
 export type ActivityOverview = {
   from: string; through: string; today: string; timeZone: string; scope: "mine" | "team"; canManage: boolean; generatedAt: string;
   totals: { open: number; overdue: number; dueToday: number; completed: number; withoutActivity: number };
+  activityTypeName?: string | null;
   byType: { type: WorkType; open: number; completed: number }[];
   callOutcomes: { outcome: string; count: number }[];
 }

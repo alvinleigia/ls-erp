@@ -1,3 +1,8 @@
+## Configurable CRM activity types - 2026-09-28
+
+Tenant-specific activity types, inherited behaviours, defaults, filters and history
+are implemented. See [CRM_ACTIVITY_TYPES.md](CRM_ACTIVITY_TYPES.md) for setup and verification.
+
 ## Configurable lost reasons - 2026-09-28
 
 Shared enquiry/opportunity reasons, conditional closing controls, scoped filters,

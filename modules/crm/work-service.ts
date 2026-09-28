@@ -1,3 +1,4 @@
+import { resolveActivityType } from "./activity-type-service"
 import { requirePropertyFilter } from "@/modules/real-estate/sales-context"
 import type { Prisma, CrmTask } from "@prisma/client"
 import { CrmError, canManageCrm, contactScope, enquiryScope, type CrmActor } from "./policy"
@@ -50,11 +51,11 @@ export function createWorkService({ run, audit, checkAssignee }: Context) {
     await tx.crmTaskEvent.create({ data: { tenantId: actor.tenantId, taskId: id, actorUserId: actor.userId, event, message } })
     await audit(tx, actor, event, id, before ? snapshot(before) : undefined, after ? snapshot(after) : undefined)
   }
-  async function schedule(tx: Tx, actor: CrmActor, data: WorkScheduleInput) {
+  async function schedule(tx: Tx, actor: CrmActor, data: WorkScheduleInput, before?: CrmTask) {
     await checkAssignee(tx, actor, data.assignedUserId)
     const timeZone = await zone(tx, actor)
     if (data.startsAt && businessDate(new Date(data.startsAt), timeZone) !== data.dueOn) throw new CrmError(400, "The due date must match the start date in the business time zone.")
-    return { ...data, dueOn: new Date(`${data.dueOn}T00:00:00Z`), startsAt: data.startsAt ? new Date(data.startsAt) : null, endsAt: data.endsAt ? new Date(data.endsAt) : null, reminderAt: data.reminderAt ? new Date(data.reminderAt) : null }
+    return { ...data, ...await resolveActivityType(tx, actor, data, before), dueOn: new Date(`${data.dueOn}T00:00:00Z`), startsAt: data.startsAt ? new Date(data.startsAt) : null, endsAt: data.endsAt ? new Date(data.endsAt) : null, reminderAt: data.reminderAt ? new Date(data.reminderAt) : null }
   }
   async function create(tx: Tx, actor: CrmActor, data: WorkCreateInput, previous?: Loaded, origin?: { planLaunchId: string; planPosition: number } | { followUpRuleId: string; followUpRuleName: string; followUpRuleVersion: number; automationDepth: number }) {
     const { contactId, enquiryId, opportunityId, completion, ...fields } = data
@@ -120,7 +121,7 @@ export function createWorkService({ run, audit, checkAssignee }: Context) {
       return run(async (tx, actor) => {
         const timeZone = await zone(tx, actor), now = new Date(), today = businessDate(now, timeZone)
         const filter: Prisma.CrmTaskWhereInput = {
-          contactId: query.contactId, enquiryId: query.enquiryId, opportunityId: query.opportunityId, type: query.type, planLaunchId: query.planLaunchId,
+          contactId: query.contactId, enquiryId: query.enquiryId, opportunityId: query.opportunityId, type: query.type, activityTypeId: query.activityTypeId, planLaunchId: query.planLaunchId,
           title: { contains: query.q, mode: "insensitive" },
           ...(query.state === "open" ? { status: { in: [...openStatuses] } } : query.state === "completed" ? { status: "COMPLETED" } : query.state === "cancelled" ? { status: "CANCELLED" } : {}),
         }
@@ -157,7 +158,7 @@ export function createWorkService({ run, audit, checkAssignee }: Context) {
       const { version, status, ...data } = workUpdateSchema.parse(input)
       return run(async (tx, actor) => {
         const before = await find(tx, actor, id, true); requireOpen(before)
-        const prepared = await schedule(tx, actor, data)
+        const prepared = await schedule(tx, actor, data, before)
         const resetReminder = before.assignedUserId !== data.assignedUserId || before.reminderAt?.getTime() !== prepared.reminderAt?.getTime() || before.startsAt?.getTime() !== prepared.startsAt?.getTime() || before.dueOn.getTime() !== prepared.dueOn.getTime()
         const updated = await tx.crmTask.updateMany({ where: { tenantId: actor.tenantId, id, version, status: { in: [...openStatuses] } }, data: { ...prepared, status, followParentAssignment: false, version: { increment: 1 }, ...(resetReminder ? { snoozedUntil: null, reminderDismissedAt: null } : {}) } })
         if (!updated.count) throw new CrmError(409, "This activity changed. Refresh before saving.")
@@ -210,7 +211,7 @@ export function createWorkService({ run, audit, checkAssignee }: Context) {
         if (!await tx.crmContact.findFirst({ where: { ...contactScope(actor), id: contactId }, select: { id: true } })) throw new CrmError(404, "Contact not found.")
         // Shared customer-facing summaries only. Never expose private deal notes or task instructions.
         const where = { tenantId: actor.tenantId, contactId, status: "COMPLETED" as const, summary: { not: null } }
-        const [items, total] = await Promise.all([tx.crmTask.findMany({ where, select: { id: true, type: true, summary: true, outcome: true, callDirection: true, occurredAt: true, durationMinutes: true, completedBy: { select: { name: true } } }, orderBy: [{ occurredAt: "desc" }, { id: "asc" }], skip: (query.page - 1) * query.pageSize, take: query.pageSize }), tx.crmTask.count({ where })])
+        const [items, total] = await Promise.all([tx.crmTask.findMany({ where, select: { id: true, type: true, activityTypeName: true, summary: true, outcome: true, callDirection: true, occurredAt: true, durationMinutes: true, completedBy: { select: { name: true } } }, orderBy: [{ occurredAt: "desc" }, { id: "asc" }], skip: (query.page - 1) * query.pageSize, take: query.pageSize }), tx.crmTask.count({ where })])
         return page(items, total, query.page, query.pageSize)
       })
     },

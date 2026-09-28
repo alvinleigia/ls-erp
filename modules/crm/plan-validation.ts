@@ -2,7 +2,7 @@ import { z } from "zod"
 import { workTypes } from "./work-validation"
 
 export const planStepSchema = z.object({
-  title: z.string().trim().min(1).max(200), type: z.enum(workTypes),
+  title: z.string().trim().min(1).max(200), type: z.enum(workTypes), activityTypeId: z.string().trim().min(1).max(100).nullable().optional(),
   dayOffset: z.number().int().min(0).max(365), priority: z.number().int().min(1).max(3).default(2),
   description: z.string().trim().max(5000).default(""),
   callDirection: z.enum(["INBOUND", "OUTBOUND"]).nullable().default(null),

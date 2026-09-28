@@ -32,7 +32,7 @@ export function ContactInteractions({ contactId, revision = 0 }: { contactId: st
   }, [contactId, page, revision])
   const content = <>{error && <p role="status" className="text-sm text-muted-foreground">{error}</p>}
     {loading ? <p className="text-sm text-muted-foreground">Loading interactions…</p> : data && <CrmTimeline entries={data.items.map(item => ({
-      id: item.id, ...interactionAppearance[item.type], actor: item.completedBy?.name || "Staff member",
+      id: item.id, ...interactionAppearance[item.type], ...(item.activityTypeName ? { action: `recorded ${item.activityTypeName}` } : {}), actor: item.completedBy?.name || "Staff member",
       dateTime: item.occurredAt, timeLabel: formatDate(item.occurredAt),
       detail: <><div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground"><span className="rounded-md border bg-background px-2 py-0.5 font-medium text-foreground">{item.outcome.replaceAll("_", " ")}</span>{item.callDirection && <span>{item.callDirection === "INBOUND" ? "Inbound" : "Outbound"}</span>}{item.durationMinutes !== null && <span>{item.durationMinutes} min</span>}</div><p className="whitespace-pre-wrap break-words">{item.summary}</p></>,
     }))} />}

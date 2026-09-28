@@ -1,3 +1,4 @@
+import { resolveActivityTypes } from "./activity-type-service"
 import type { Prisma } from "@prisma/client"
 import { CrmError, canManageCrm, contactScope, enquiryScope, type CrmActor } from "./policy"
 import { activityPlanSchema, activityPlanUpdateSchema, applyPlanSchema } from "./plan-validation"
@@ -30,13 +31,14 @@ export function createPlanService({ run, audit, checkAssignee, createWork }: Con
     if (data.opportunityId && !await tx.crmOpportunity.findFirst({ where: { ...enquiryScope(actor), id: data.opportunityId, contactId: data.contactId, stage: { kind: "OPEN", archived: false }, pipeline: { archived: false } } })) throw new CrmError(404, "Matching active opportunity not found.")
     const timeZone = (await tx.appSetting.findUnique({ where: { tenantId: actor.tenantId }, select: { timeZone: true } }))?.timeZone || "UTC"
     const template = activityPlanSchema.parse({ name: plan.name, description: plan.description || "", steps: plan.steps })
-    const steps = template.steps.map(step => {
+    const resolved = await resolveActivityTypes(tx, actor, template.steps)
+    const steps = template.steps.map((step, index) => {
       const dueOn = new Date(Date.parse(`${data.startOn}T00:00:00Z`) + step.dayOffset * 86400000).toISOString().slice(0, 10)
       let reminderAt: string | null = null
       try { if (step.reminderTime) reminderAt = wallTimeToInstant(`${dueOn}T${step.reminderTime}`, timeZone) }
       catch (error) { throw new CrmError(400, `${step.title}: ${(error as Error).message} Change the start date or template reminder time.`) }
-      return workCreateSchema.parse({ title: step.title, type: step.type, priority: step.priority, description: step.description, callDirection: step.callDirection, dueOn, reminderAt,
-        contactId: data.contactId, assignedUserId: data.assignedUserId, enquiryId: data.enquiryId, opportunityId: data.opportunityId })
+      return { ...workCreateSchema.parse({ title: step.title, type: step.type, activityTypeId: step.activityTypeId, priority: step.priority, description: step.description, callDirection: step.callDirection, dueOn, reminderAt,
+        contactId: data.contactId, assignedUserId: data.assignedUserId, enquiryId: data.enquiryId, opportunityId: data.opportunityId }), ...resolved[index] }
     })
     const targetKey = data.opportunityId ? `opportunity:${data.opportunityId}` : data.enquiryId ? `enquiry:${data.enquiryId}` : `contact:${data.contactId}`
     return { plan, steps, targetKey, timeZone }
@@ -53,12 +55,13 @@ export function createPlanService({ run, audit, checkAssignee, createWork }: Con
     getActivityPlan(id: string) { return run(async (tx, actor) => ({ ...await find(tx, actor, id), canManage: canManageCrm(actor.role) })) },
     createActivityPlan(input: unknown) {
       const data = activityPlanSchema.parse(input)
-      return run(async (tx, actor) => { manage(actor); const plan = await tx.crmActivityPlan.create({ data: { ...data, tenantId: actor.tenantId, steps: snapshot(data.steps) } }); await audit(tx, actor, "crm.plan.created", plan.id, undefined, snapshot(data)); return plan })
+      return run(async (tx, actor) => { manage(actor); await resolveActivityTypes(tx, actor, data.steps); const plan = await tx.crmActivityPlan.create({ data: { ...data, tenantId: actor.tenantId, steps: snapshot(data.steps) } }); await audit(tx, actor, "crm.plan.created", plan.id, undefined, snapshot(data)); return plan })
     },
     updateActivityPlan(id: string, input: unknown) {
       const { version, ...data } = activityPlanUpdateSchema.parse(input)
       return run(async (tx, actor) => {
         manage(actor); const before = await find(tx, actor, id)
+        if (!data.archived) await resolveActivityTypes(tx, actor, data.steps)
         const updated = await tx.crmActivityPlan.updateMany({ where: { tenantId: actor.tenantId, id, version }, data: { ...data, steps: snapshot(data.steps), version: { increment: 1 } } })
         if (!updated.count) throw new CrmError(409, "This plan changed. Refresh before saving.")
         await audit(tx, actor, "crm.plan.updated", id, snapshot(before), snapshot(data))

@@ -4,6 +4,7 @@ import { checkExportLimit, CRM_EXPORT_LIMIT } from "./csv"
 import type { Prisma, PrismaClient, Role } from "@prisma/client"
 import { recordDomainAuditEvent } from "@/lib/domain-audit"
 import { createSalesService } from "./sales-service"
+import { createActivityTypeService } from "./activity-type-service"
 import { createWorkService } from "./work-service"
 import { createReportService } from "./report-service"
 import { createFollowUpService } from "./follow-up-service"
@@ -76,7 +77,7 @@ export function createCrmService(db: PrismaClient, identity: Pick<CrmActor, "ten
   async function audit(tx: Tx, actor: CrmActor, event: string, entityId: string, before?: Prisma.InputJsonValue, after?: Prisma.InputJsonValue) {
     await recordDomainAuditEvent(tx, {
       tenantId: actor.tenantId, actorUserId: actor.userId, actorRole: actor.role as Role,
-      requestId: actor.requestId, event, entityType: event.startsWith("crm.lostReason.") ? "CrmLostReason" : event.startsWith("crm.source.") ? "CrmLeadSource" : event.startsWith("crm.rule.") ? "CrmFollowUpRule" : event.startsWith("crm.plan.") ? "CrmActivityPlan" : event.startsWith("crm.work") ? "CrmTask" : event.startsWith("crm.opportunity") ? "CrmOpportunity" : event.startsWith("crm.pipeline") ? "CrmPipeline" : event.startsWith("crm.account") ? "CrmAccount" : event.startsWith("crm.contact") ? "CrmContact" : "CrmEnquiry",
+      requestId: actor.requestId, event, entityType: event.startsWith("crm.activityType.") ? "CrmActivityType" : event.startsWith("crm.lostReason.") ? "CrmLostReason" : event.startsWith("crm.source.") ? "CrmLeadSource" : event.startsWith("crm.rule.") ? "CrmFollowUpRule" : event.startsWith("crm.plan.") ? "CrmActivityPlan" : event.startsWith("crm.work") ? "CrmTask" : event.startsWith("crm.opportunity") ? "CrmOpportunity" : event.startsWith("crm.pipeline") ? "CrmPipeline" : event.startsWith("crm.account") ? "CrmAccount" : event.startsWith("crm.contact") ? "CrmContact" : "CrmEnquiry",
       entityId, before, after,
     })
   }
@@ -103,6 +104,7 @@ export function createCrmService(db: PrismaClient, identity: Pick<CrmActor, "ten
   return {
     listProjectFilterChoices(input: unknown) { return run((tx, actor) => projectFilterChoices(tx, actor, input)) },
     ...createSalesService({ run, audit, checkAssignee }),
+    ...createActivityTypeService({ run, audit }),
     ...createWorkService({ run, audit, checkAssignee }),
     ...createReportService({ run }),
     ...createSalesReportService({ run }),

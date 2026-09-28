@@ -11,7 +11,7 @@ const text = (max: number) => z.string().trim().max(max).default("")
 const instant = z.iso.datetime({ offset: true })
 const optionalInstant = instant.nullable().default(null)
 export const workScheduleSchema = z.object({
-  title: z.string().trim().min(1).max(200), type: z.enum(workTypes), assignedUserId: id,
+  title: z.string().trim().min(1).max(200), type: z.enum(workTypes), activityTypeId: id.nullable().optional(), assignedUserId: id,
   priority: z.number().int().min(1).max(3).default(2), description: text(5000), dueOn: z.iso.date(),
   startsAt: optionalInstant, endsAt: optionalInstant, reminderAt: optionalInstant,
   callDirection: z.enum(["INBOUND", "OUTBOUND"]).nullable().default(null),
@@ -34,7 +34,8 @@ export const workReminderSchema = z.object({ version: z.number().int().positive(
 export const workListSchema = crmListSchema.omit({ status: true, due: true, archived: true, sort: true }).extend({
   contactId: id.optional(), enquiryId: id.optional(), opportunityId: id.optional(), assignedUserId: id.optional(),
   planLaunchId: id.optional(),
-  scope: z.enum(["mine", "visible"]).default("mine"), type: z.enum(workTypes).optional(),
+  scope: z.enum(["mine", "visible"]).default("mine"),   type: z.enum(workTypes).optional(),
+  activityTypeId: id.optional(),
   state: z.enum(["open", "all", "completed", "cancelled"]).default("open"),
   due: z.enum(["overdue", "today", "upcoming", "reminders"]).optional(),
   from: z.iso.date().optional(), to: z.iso.date().optional(), sort: z.enum(["dueOn", "priority", "updatedAt"]).default("dueOn"),

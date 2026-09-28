@@ -11,8 +11,8 @@ if (process.env.CRM_VERIFY_CONFIGURED_DATABASE !== "1" || !process.env.DATABASE_
   throw new Error("Set CRM_VERIFY_CONFIGURED_DATABASE=1 and load DATABASE_URL to run read-only deployment checks.")
 }
 const db = new Client({ connectionString: process.env.DATABASE_URL, connectionTimeoutMillis: 15000 })
-const migrationNames = ["20260923090000_crm_foundation", "20260923120000_crm_business_accounts", "20260923160000_crm_sales_pipelines", "20260924090000_crm_activity_workspace", "20260924120000_crm_activity_plans", "20260924150000_crm_follow_up_rules", "20260927090000_retire_legacy_default_tenant", "20260928120000_crm_lead_intake", "20260928160000_real_estate_projects", "20260928190000_real_estate_sales", "20260928220000_crm_lost_reasons"]
-const tables = ["TenantModule", "CrmContact", "CrmEnquiry", "CrmTask", "CrmActivity", "CrmAccount", "CrmAccountContact", "CrmPipeline", "CrmStage", "CrmOpportunity", "CrmOpportunityActivity", "CrmTaskEvent", "CrmActivityPlan", "CrmPlanLaunch", "CrmFollowUpRule", "CrmLeadSource", "CrmLostReason", "RealEstateProject", "RealEstateProjectMember", "RealEstateEnquiryContext", "RealEstateOpportunityContext"]
+const migrationNames = ["20260923090000_crm_foundation", "20260923120000_crm_business_accounts", "20260923160000_crm_sales_pipelines", "20260924090000_crm_activity_workspace", "20260924120000_crm_activity_plans", "20260924150000_crm_follow_up_rules", "20260927090000_retire_legacy_default_tenant", "20260928120000_crm_lead_intake", "20260928160000_real_estate_projects", "20260928190000_real_estate_sales", "20260928220000_crm_lost_reasons", "20260928230000_crm_activity_types"]
+const tables = ["TenantModule", "CrmContact", "CrmEnquiry", "CrmTask", "CrmActivity", "CrmAccount", "CrmAccountContact", "CrmPipeline", "CrmStage", "CrmOpportunity", "CrmOpportunityActivity", "CrmTaskEvent", "CrmActivityPlan", "CrmPlanLaunch", "CrmFollowUpRule", "CrmLeadSource", "CrmLostReason", "CrmActivityType", "RealEstateProject", "RealEstateProjectMember", "RealEstateEnquiryContext", "RealEstateOpportunityContext"]
 
 before(async () => {
   await db.connect()
@@ -49,9 +49,9 @@ test("all CRM tables force RLS and use tenant checks on reads and writes", async
   }
 })
 
-test("tenant-safe relationships are backed by fifty validated composite foreign keys", async () => {
+test("tenant-safe relationships are backed by fifty-one validated composite foreign keys", async () => {
   const constraints = await db.query("SELECT c.conname, c.convalidated FROM pg_constraint c JOIN pg_class t ON t.oid=c.conrelid WHERE t.relnamespace='public'::regnamespace AND t.relname=ANY($1::text[]) AND c.contype='f' AND cardinality(c.conkey) IN (2,3) AND cardinality(c.confkey)=cardinality(c.conkey)", [tables])
-  assert.equal(constraints.rowCount, 50)
+  assert.equal(constraints.rowCount, 51)
   for (const row of constraints.rows) assert.equal(row.convalidated, true, row.conname)
 })
 

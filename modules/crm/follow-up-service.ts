@@ -1,3 +1,4 @@
+import { resolveActivityTypes } from "./activity-type-service"
 import type { Prisma, CrmTask } from "@prisma/client"
 import { CrmError, canManageCrm, type CrmActor } from "./policy"
 import { followUpRuleSchema, followUpRuleUpdateSchema } from "./follow-up-validation"
@@ -27,13 +28,16 @@ export async function prepareRuleFollowUp(tx: Tx, actor: CrmActor, record: CrmTa
   if (record.opportunityId && !await tx.crmOpportunity.findFirst({ where: { tenantId: actor.tenantId, id: record.opportunityId, stage: { kind: "OPEN", archived: false }, pipeline: { archived: false } } })) return blocked("The related opportunity is closed or archived.")
   if (!await tx.user.findFirst({ where: { tenantId: actor.tenantId, id: record.assignedUserId, status: "ACTIVE", role: { in: ["ADMIN", "MANAGER", "STAFF"] } } })) return blocked("The assigned staff member is no longer active. Reassign the activity or use a manual follow-up.")
   const step = planStepSchema.parse(rule.nextStep)
+  let selected
+  try { selected = (await resolveActivityTypes(tx, actor, [step]))[0] }
+  catch (error) { if (error instanceof CrmError) return blocked(error.message); throw error }
   const today = businessDate(new Date(), timeZone)
   const dueOn = new Date(Date.parse(`${today}T00:00:00Z`) + step.dayOffset * 86400000).toISOString().slice(0, 10)
   let reminderAt: string | null = null
   try { if (step.reminderTime) reminderAt = wallTimeToInstant(`${dueOn}T${step.reminderTime}`, timeZone) }
   catch { return blocked("The reminder time is ambiguous or unavailable during a daylight-saving change. Use a manual follow-up or ask a manager to adjust the rule.") }
-  const schedule = workScheduleSchema.parse({ title: step.title, type: step.type, priority: step.priority, description: step.description, callDirection: step.callDirection, dueOn, reminderAt, assignedUserId: record.assignedUserId })
-  return { rule: info, schedule, blockedReason: null, timeZone }
+  const schedule = workScheduleSchema.parse({ title: step.title, type: step.type, activityTypeId: step.activityTypeId, priority: step.priority, description: step.description, callDirection: step.callDirection, dueOn, reminderAt, assignedUserId: record.assignedUserId })
+  return { rule: info, schedule: { ...schedule, ...selected }, blockedReason: null, timeZone }
 }
 
 export function createFollowUpService({ run, audit }: Context) {
@@ -55,12 +59,13 @@ export function createFollowUpService({ run, audit }: Context) {
     getFollowUpRule(id: string) { return run(async (tx, actor) => ({ ...await find(tx, actor, id), canManage: canManageCrm(actor.role) })) },
     createFollowUpRule(input: unknown) {
       const data = followUpRuleSchema.parse(input)
-      return run(async (tx, actor) => { manage(actor); const rule = await tx.crmFollowUpRule.create({ data: { ...data, tenantId: actor.tenantId, nextStep: snapshot(data.nextStep) } }); await audit(tx, actor, "crm.rule.created", rule.id, undefined, snapshot(data)); return rule })
+      return run(async (tx, actor) => { manage(actor); await resolveActivityTypes(tx, actor, [data.nextStep]); const rule = await tx.crmFollowUpRule.create({ data: { ...data, tenantId: actor.tenantId, nextStep: snapshot(data.nextStep) } }); await audit(tx, actor, "crm.rule.created", rule.id, undefined, snapshot(data)); return rule })
     },
     updateFollowUpRule(id: string, input: unknown) {
       const { version, ...data } = followUpRuleUpdateSchema.parse(input)
       return run(async (tx, actor) => {
         manage(actor); const before = await find(tx, actor, id)
+        if (!data.archived) await resolveActivityTypes(tx, actor, [data.nextStep])
         const result = await tx.crmFollowUpRule.updateMany({ where: { tenantId: actor.tenantId, id, version }, data: { ...data, nextStep: snapshot(data.nextStep), version: { increment: 1 } } })
         if (!result.count) throw new CrmError(409, "This rule changed. Refresh before saving.")
         await audit(tx, actor, "crm.rule.updated", id, snapshot(before), snapshot(data))

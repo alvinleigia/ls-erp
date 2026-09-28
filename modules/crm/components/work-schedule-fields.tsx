@@ -4,17 +4,19 @@ import { Input } from "@/components/ui/input"
 import { FormField } from "@/components/form-field"
 import { RecordSelect } from "./record-select"
 import { selectClass } from "./record-list"
-import { workTypes, type WorkScheduleInput } from "../work-validation"
+import { ActivityTypeSelect } from "./activity-type-select"
+import { type WorkScheduleInput } from "../work-validation"
 import { wallTime, wallTimeToInstant } from "../work-time"
 import type { CrmWorkRow, WorkType } from "@/types/crm-work"
 
-export type WorkFormValues = { title: string; type: WorkType; assignedUserId: string; priority: number; description: string; dueOn: string; startsLocal: string; endsLocal: string; reminderLocal: string; callDirection: "INBOUND" | "OUTBOUND" | null }
+export type WorkFormValues = { activityTypeId?: string | null; activityTypeName?: string | null; title: string; type: WorkType; assignedUserId: string; priority: number; description: string; dueOn: string; startsLocal: string; endsLocal: string; reminderLocal: string; callDirection: "INBOUND" | "OUTBOUND" | null }
 export const emptyWork: WorkFormValues = { title: "", type: "TASK", assignedUserId: "", priority: 2, description: "", dueOn: "", startsLocal: "", endsLocal: "", reminderLocal: "", callDirection: null }
 export function workForm(record: CrmWorkRow, timeZone: string): WorkFormValues {
-  return { title: record.title, type: record.type, assignedUserId: record.assignedUserId, priority: record.priority, description: record.description || "", dueOn: record.dueOn.slice(0, 10), startsLocal: record.startsAt ? wallTime(record.startsAt, timeZone) : "", endsLocal: record.endsAt ? wallTime(record.endsAt, timeZone) : "", reminderLocal: record.reminderAt ? wallTime(record.reminderAt, timeZone) : "", callDirection: record.callDirection }
+  return { title: record.title, type: record.type, activityTypeId: record.activityTypeId, activityTypeName: record.activityTypeName, assignedUserId: record.assignedUserId, priority: record.priority, description: record.description || "", dueOn: record.dueOn.slice(0, 10), startsLocal: record.startsAt ? wallTime(record.startsAt, timeZone) : "", endsLocal: record.endsAt ? wallTime(record.endsAt, timeZone) : "", reminderLocal: record.reminderAt ? wallTime(record.reminderAt, timeZone) : "", callDirection: record.callDirection }
 }
 export function workPayload(values: WorkFormValues, timeZone: string): WorkScheduleInput {
-  const { startsLocal, endsLocal, reminderLocal, ...rest } = values
+  const { startsLocal, endsLocal, reminderLocal, activityTypeName: _label, ...rest } = values
+  void _label // Display-only snapshot; never accept it as a client-authored database value.
   return { ...rest, dueOn: startsLocal ? startsLocal.slice(0, 10) : rest.dueOn, startsAt: startsLocal ? wallTimeToInstant(startsLocal, timeZone) : null, endsAt: endsLocal ? wallTimeToInstant(endsLocal, timeZone) : null, reminderAt: reminderLocal ? wallTimeToInstant(reminderLocal, timeZone) : null }
 }
 export function WorkScheduleFields({ values, onChange, prefix = "work", canAssign, assignee, timeZone, errors = {}, logOnly = false }: {
@@ -23,7 +25,7 @@ export function WorkScheduleFields({ values, onChange, prefix = "work", canAssig
   const field = (name: string) => `${prefix}-${name}`
   return <div className="grid gap-4 sm:grid-cols-2">
     <FormField id={field("title")} label="Activity title" error={errors.title} className="sm:col-span-2"><Input id={field("title")} required maxLength={200} value={values.title} onChange={event => onChange({ ...values, title: event.target.value })} /></FormField>
-    <FormField id={field("type")} label="Activity type" error={errors.type}><CrmSelect id={field("type")} className={`${selectClass} w-full`} value={values.type} onValueChange={event => { const type = event as WorkType; onChange({ ...values, type, callDirection: type === "CALL" ? "OUTBOUND" : null }) }}>{workTypes.map(type => <option key={type}>{type}</option>)}</CrmSelect></FormField>
+    <FormField id={field("type")} label="Activity type" error={errors.activityTypeId || errors.type}><ActivityTypeSelect id={field("type")} value={values.activityTypeId || values.type} selectedName={values.activityTypeName} onChange={(value, choice) => { const type = choice?.baseType || value as WorkType; onChange({ ...values, type, activityTypeId: choice?.id || null, activityTypeName: choice?.name || null, description: values.description || choice?.defaultInstructions || "", callDirection: type === "CALL" ? "OUTBOUND" : null }) }} /></FormField>
     <FormField id={field("assignee")} label="Assigned staff" error={errors.assignedUserId}><RecordSelect id={field("assignee")} endpoint="/api/crm/assignees" value={values.assignedUserId} selected={assignee ? { value: assignee.id, label: assignee.name || "Staff member" } : undefined} onChange={assignedUserId => onChange({ ...values, assignedUserId })} disabled={!canAssign} /></FormField>
     <FormField id={field("priority")} label="Priority"><CrmSelect id={field("priority")} className={`${selectClass} w-full`} value={values.priority} onValueChange={event => onChange({ ...values, priority: Number(event) })}><option value={1}>Low</option><option value={2}>Normal</option><option value={3}>High</option></CrmSelect></FormField>
     {values.type === "CALL" && <FormField id={field("direction")} label="Call direction" error={errors.callDirection}><CrmSelect id={field("direction")} className={`${selectClass} w-full`} value={values.callDirection || "OUTBOUND"} onValueChange={event => onChange({ ...values, callDirection: event as "INBOUND" | "OUTBOUND" })}><option value="OUTBOUND">Outbound</option><option value="INBOUND">Inbound</option></CrmSelect></FormField>}

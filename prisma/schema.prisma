@@ -55,6 +55,24 @@ model CrmFollowUpRule {
   @@index([tenantId, archived, name])
 }
 
+model CrmActivityType {
+  id String @id @default(cuid())
+  tenantId String
+  name String
+  nameKey String
+  baseType CrmWorkType
+  defaultInstructions String @default("")
+  archived Boolean @default(false)
+  version Int @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  workItems CrmTask[]
+  @@unique([tenantId, id])
+  @@unique([tenantId, nameKey])
+  @@index([tenantId, archived, name])
+}
+
 model CrmActivityPlan {
   id String @id @default(cuid())
   tenantId String
@@ -377,6 +395,9 @@ model CrmTask {
   followUpRuleVersion Int?
   automationDepth Int @default(0)
   type        CrmWorkType @default(TASK)
+  activityTypeId String?
+  activityTypeName String?
+  activityType CrmActivityType? @relation(fields: [tenantId, activityTypeId], references: [tenantId, id], onDelete: Restrict)
   status      CrmWorkStatus @default(OPEN)
   priority    Int @default(2)
   version     Int @default(1)
@@ -419,6 +440,8 @@ model CrmTask {
   @@index([tenantId, assignedUserId, status, dueOn])
   @@index([tenantId, contactId, occurredAt])
   @@index([tenantId, assignedUserId, reminderAt])
+  @@index([tenantId, activityTypeId, status, dueOn])
+  @@index([tenantId, activityTypeId, completedAt])
 }
 
 model CrmTaskEvent {
@@ -785,6 +808,7 @@ model Tenant {
   crmEnquiries   CrmEnquiry[]
   crmLeadSources CrmLeadSource[]
   crmLostReasons CrmLostReason[]
+  crmActivityTypes CrmActivityType[]
   crmTasks       CrmTask[]
   crmWorkEvents  CrmTaskEvent[]
   crmActivityPlans CrmActivityPlan[]

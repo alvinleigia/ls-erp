@@ -19,7 +19,7 @@ export function createReportService({ run }: Context) {
     const now = new Date(), today = businessDate(now, timeZone)
     const from = query.from || dateAfter(today, -29), through = query.through || today
     const owner = query.scope === "mine" ? actor.userId : query.assignedUserId
-    const base: Prisma.CrmTaskWhereInput = { tenantId: actor.tenantId, assignedUserId: owner, type: query.type }
+    const base: Prisma.CrmTaskWhereInput = { tenantId: actor.tenantId, assignedUserId: owner, type: query.type, activityTypeId: query.activityTypeId }
     const completed: Prisma.CrmTaskWhereInput = { status: "COMPLETED", completedAt: { gte: startOfBusinessDate(from, timeZone), lt: startOfBusinessDate(dateAfter(through, 1), timeZone) } }
     const overdue: Prisma.CrmTaskWhereInput = { status: { in: [...open] }, OR: [{ startsAt: { lt: now } }, { startsAt: null, dueOn: { lt: new Date(`${today}T00:00:00Z`) } }] }
     const dueToday: Prisma.CrmTaskWhereInput = { status: { in: [...open] }, dueOn: new Date(`${today}T00:00:00Z`) }
@@ -39,8 +39,9 @@ export function createReportService({ run }: Context) {
           tx.crmTask.groupBy({ by: ["outcome"], where: { AND: [c.base, c.completed, { type: "CALL" }] }, _count: { _all: true }, orderBy: { outcome: "asc" } }),
           tx.crmOpportunity.count({ where: c.gaps }),
         ])
-        const byType = workTypes.filter(type => !query.type || query.type === type).map(type => ({ type, open: pending.find(row => row.type === type)?._count._all || 0, completed: completed.find(row => row.type === type)?._count._all || 0 }))
-        return { ...c.metadata, totals: { open: byType.reduce((sum, row) => sum + row.open, 0), overdue, dueToday, completed: byType.reduce((sum, row) => sum + row.completed, 0), withoutActivity }, byType,
+        const activityType = query.activityTypeId ? await tx.crmActivityType.findFirst({ where: { tenantId: actor.tenantId, id: query.activityTypeId }, select: { name: true, baseType: true } }) : null
+        const byType = workTypes.filter(type => (!query.type || query.type === type) && (!activityType || activityType.baseType === type)).map(type => ({ type, open: pending.find(row => row.type === type)?._count._all || 0, completed: completed.find(row => row.type === type)?._count._all || 0 }))
+        return { ...c.metadata, activityTypeName: activityType?.name || null, totals: { open: byType.reduce((sum, row) => sum + row.open, 0), overdue, dueToday, completed: byType.reduce((sum, row) => sum + row.completed, 0), withoutActivity }, byType,
           callOutcomes: outcomes.map(row => ({ outcome: row.outcome || "UNKNOWN", count: row._count._all })) }
       })
     },
