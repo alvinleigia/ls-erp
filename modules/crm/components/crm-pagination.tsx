@@ -9,6 +9,7 @@ export function CrmPagination({ page, pageSize, total, totalPages = Math.max(1, 
   page: number; pageSize: number; total: number; totalPages?: number; loading?: boolean;
   onPageChange: (page: number) => void; onPageSizeChange?: (size: number) => void; label?: string;
 }) {
+  if (!loading && total === 0) return null
   const start = total ? Math.min(total, (page - 1) * pageSize + 1) : 0
   const end = Math.min(total, page * pageSize)
   return <nav aria-label={label} className="@container border-t pt-4">

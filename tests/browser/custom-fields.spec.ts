@@ -81,6 +81,7 @@ test("single-select configuration and project fields fit mobile with centered pa
   expect(response.ok()).toBeTruthy()
   const project = await response.json()
   await page.goto(`/crm/projects/${project.id}`)
+  await page.getByRole("button", { name: "Edit additional information", exact: true }).click()
   await expect(page.getByRole("combobox", { name, exact: true })).toContainText("Approved")
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true)
   await page.screenshot({ path: info.outputPath("custom-fields-project-mobile.png"), fullPage: true })

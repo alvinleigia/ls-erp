@@ -22,8 +22,11 @@ export function ProjectSales({ project }: { project: Project }) {
     </CrmSection>
     <RecordList key={`leads-${query}`} kind="enquiries" projectId={projectId} subprojectId={subprojectId} />
     <RelatedOpportunities key={`deals-${query}`} query={query} />
-    <WorkList key={`work-${query}`} projectId={projectId} subprojectId={subprojectId} initialScope="visible" initialState="all" />
+
   </>
+}
+export function ProjectActivities({ project }: { project: Project }) {
+  return <WorkList projectId={project.parentId || project.id} subprojectId={project.parentId ? project.id : undefined} initialScope="visible" initialState="all" />
 }
 function RelatedOpportunities({ query }: { query: string }) {
   const [items, setItems] = React.useState<CrmOpportunityRow[]>([]), [total, setTotal] = React.useState(0)

@@ -6,6 +6,7 @@ import { FormField } from "@/components/form-field"
 import { SearchableSelect } from "@/components/searchable-select"
 import { CrmSelect } from "./crm-controls"
 import { CrmSection } from "./crm-section"
+import { CrmReadOnlyFields } from "./crm-record-detail"
 import { RecordSelect } from "./record-select"
 import type { FieldValue, FieldView } from "@/platform/custom-fields/validation"
 
@@ -70,7 +71,15 @@ export function useCustomFields(resource: string, id?: string, sourceEnquiryId?:
       })}</div>
     </CrmSection>
   }
-  return { load, changeTeam, payload: { customFields: patch }, section, blocked: loading || !!error }
+  function readOnlySection(actions?: React.ReactNode) {
+    if (loading || error) return section(true)
+    if (!fields.length) return null
+    return <CrmSection title="Additional information" actions={actions}><CrmReadOnlyFields fields={fields.map(field => ({
+      label: `${field.savedName || field.name}${field.archived ? " (archived)" : ""}`,
+      value: field.value === null ? null : field.type === "BOOLEAN" ? field.value ? "Yes" : "No" : field.type === "SELECT" ? field.optionName || field.options.find(option => option.id === field.value)?.name || "Saved option" : String(field.value),
+    }))} /></CrmSection>
+  }
+  return { readOnlySection, load, changeTeam, payload: { customFields: patch }, section, blocked: loading || !!error }
 }
 
 export type CustomFilter = { customFieldId: string; customFieldValue: string; customFieldOperator: "eq" | "gte" | "lte" }

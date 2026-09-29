@@ -1,3 +1,10 @@
+## 2026-09-29: Project detail interface (release)
+
+Projects and subprojects now share a read-only overview, record-local tabs and
+focused section edit panels. Optional creation fields are collapsed and currency
+defaults to business settings. Shared empty pagination is hidden. No schema or
+API changes; no hosted data writes. Push/deployment via main is authorized. See [UI delivery notes](CRM_PROJECT_DETAIL_UI.md).
+
 ## 2026-09-29: Modular navigation and optional Sales Documents (release)
 
 Sidebar-only CRM, Contacts, Activities, Sales Documents and Real Estate groups

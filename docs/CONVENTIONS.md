@@ -98,6 +98,11 @@ This is the baseline for new modules (API + UI) in this codebase.
 - These wrappers are CRM-specific; other modules retain their existing layout and pagination.
 - Keep inline-size containment on the CRM layout boundary. The surrounding app shell is a flex item; wide tables and board columns must scroll inside CRM instead of expanding the document on mobile. Verify layouts within that shell as well as isolated previews.
 
+## Record detail views
+- Projects/subprojects use the shared `CrmRecordTabs`, `CrmReadOnlyFields`, `CrmRecordMenu` and `CrmEditPanel` from `modules/crm/components/crm-record-detail.tsx`. Reuse these when adopting the pattern in other CRM records; do not copy panel/tab markup.
+- Saved records open read-only. Focused edits use the panel's fixed Cancel/Save footer and discard confirmation. Creation retains the standard page-header form actions.
+- Mount related lists only in the active tab. Keep server paging and permissions. Empty lists omit pagination but retain filters needed to recover archived or filtered-out records.
+
 ## Email templates
 - Put templates in `lib/emails/*`.
 - API routes import templates and pass `subject/text/html` into `mailer.sendMail`.

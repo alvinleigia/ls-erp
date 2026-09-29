@@ -8,7 +8,7 @@ test.beforeEach(async ({ baseURL, request }) => {
 test("configure a shared category, use its default, archive it and preserve the project selection", async ({ page, request }, info) => {
   test.setTimeout(180000)
   const name = `Townhome ${Date.now()}`
-  await page.goto("/crm/configuration")
+  await page.goto("/crm/configuration/real-estate")
   await page.getByRole("link", { name: "Property categories", exact: true }).click()
   await page.getByRole("link", { name: "New choice", exact: true }).click()
   await page.getByLabel("Name", { exact: true }).fill(name)
@@ -20,6 +20,7 @@ test("configure a shared category, use its default, archive it and preserve the 
   const choice = (await (await request.get(`/api/real-estate/choices/property-categories?q=${encodeURIComponent(name)}`)).json()).items[0]
   await page.goto("/crm/projects/new")
   await expect(page.getByLabel("Sales lifecycle", { exact: true })).toContainText("Planning")
+  await page.getByText("Optional property and pricing", { exact: true }).click()
   await expect(page.getByRole("button", { name: `Remove ${name}`, exact: true })).toBeVisible()
   await page.getByLabel("Project name", { exact: true }).fill(`Choice project ${Date.now()}`)
   await page.getByLabel("Project code", { exact: true }).fill(`CHOICE-${Date.now()}`)
@@ -36,9 +37,12 @@ test("configure a shared category, use its default, archive it and preserve the 
   await page.getByRole("button", { name: "Confirm and save", exact: true }).click()
   await expect(page).toHaveURL(/\/property-categories$/)
   await page.goto(`/crm/projects/${projectId}`)
+  await page.getByRole("button", { name: "Edit pricing", exact: true }).click()
   await expect(page.getByRole("button", { name: `Remove ${name}`, exact: true })).toBeVisible()
+  await page.getByRole("button", { name: "Cancel", exact: true }).click()
+  await page.getByRole("button", { name: "Edit details", exact: true }).click()
   await page.getByLabel("Location", { exact: true }).fill("Pune")
-  await page.getByRole("button", { name: "Save project", exact: true }).click()
+  await page.getByRole("button", { name: "Save changes", exact: true }).click()
   await expect.poll(async () => (await (await request.get(`/api/real-estate/projects/${projectId}`)).json()).location).toBe("Pune")
   await page.setViewportSize({ width: 390, height: 844 })
   await page.goto("/crm/configuration/real-estate/property-categories")
@@ -47,6 +51,7 @@ test("configure a shared category, use its default, archive it and preserve the 
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true)
   await page.screenshot({ path: info.outputPath("choice-list-mobile.png"), fullPage: true })
   await page.goto("/crm/projects/new")
+  await page.getByText("Optional property and pricing", { exact: true }).click()
   await page.locator("#project-category").click()
   await page.getByRole("combobox").last().fill(name)
   await expect(page.getByText("No matching records.", { exact: true })).toBeVisible()

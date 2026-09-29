@@ -20,6 +20,7 @@ test("project to qualified lead, conversion, site visit and won opportunity uses
   const child = await childResponse.json()
   const pipelineCount = (await (await request.get("/api/crm/pipelines")).json()).total
   await page.goto(`/crm/projects/${project.id}`)
+  await page.getByRole("tab", { name: "Sales", exact: true }).click()
   await page.getByRole("link", { name: "Create property sales pipeline", exact: true }).click()
   await expect(page.getByLabel("Pipeline name", { exact: true })).toHaveValue("Property sales")
   await expect(page.getByLabel("Name", { exact: true }).nth(1)).toHaveValue("Site visit planned")
@@ -30,6 +31,7 @@ test("project to qualified lead, conversion, site visit and won opportunity uses
   const pipelineId = new URL(page.url()).pathname.split("/").at(-1)!
   expect((await (await request.get("/api/crm/pipelines")).json()).total).toBe(pipelineCount + 1)
   await page.goto(`/crm/projects/${child.id}`)
+  await page.getByRole("tab", { name: "Sales", exact: true }).click()
   await page.getByRole("link", { name: "New lead", exact: true }).click()
   await expect(page.getByLabel("Project (optional)", { exact: true })).toContainText(projectName)
   await expect(page.getByLabel("Subproject (optional)", { exact: true })).toContainText(childName)
@@ -89,7 +91,9 @@ test("project to qualified lead, conversion, site visit and won opportunity uses
   await page.getByRole("button", { name: "Save opportunity", exact: true }).click()
   await expect.poll(async () => (await (await request.get(`/api/crm/opportunities/${dealId}`)).json()).stage.kind).toBe("WON")
   await page.goto(`/crm/projects/${child.id}`)
+  await page.getByRole("tab", { name: "Sales", exact: true }).click()
   await expect(page.getByRole("link", { name: title, exact: true })).toHaveCount(2)
+  await page.getByRole("tab", { name: "Activities", exact: true }).click()
   await expect(page.getByRole("link", { name: `Site visit ${suffix}`, exact: true })).toBeVisible()
   await page.evaluate(() => { document.documentElement.classList.add("dark") })
   await expect(page.locator("html")).toHaveClass(/dark/)
@@ -125,6 +129,7 @@ test("standalone project opportunities retain context through module-off editing
   expect(contactResponse.ok()).toBe(true)
   const contact = await contactResponse.json()
   await page.goto(`/crm/projects/${project.id}`)
+  await page.getByRole("tab", { name: "Sales", exact: true }).click()
   await page.getByRole("link", { name: "New opportunity", exact: true }).click()
   await expect(page.getByLabel("Project (optional)", { exact: true })).toContainText(projectName)
   await page.getByLabel("Opportunity title", { exact: true }).fill(title)
