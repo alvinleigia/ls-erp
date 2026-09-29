@@ -1,4 +1,5 @@
 "use client"
+import { withCrmRecordView, useCrmRecordView, CrmRecordForm, CrmSummarySection } from "./crm-record-view"
 import { CrmSection } from "./crm-section"
 import { CrmPageHeader, CrmFormActions, crmPageClass } from "./crm-page"
 import { CrmCheckbox, CrmSelect } from "./crm-controls"
@@ -22,7 +23,9 @@ const initial: PipelineInput = { name: "Sales", archived: false, stages: [
   { name: "Lost", kind: "LOST", probability: 0, color: "#dc2626", archived: false },
 ] }
 
-export function PipelineEditor({ id, template }: { id?: string; template?: PipelineInput }) {
+export const PipelineEditor = withCrmRecordView(PipelineEditorBody)
+function PipelineEditorBody({ id, template }: { id?: string; template?: PipelineInput }) {
+  const view = useCrmRecordView()!
   const router = useRouter()
   const [record, setRecord] = React.useState<CrmPipelineRow | null>(null)
   const [values, setValues] = React.useState<PipelineInput>(!id && template ? template : initial)
@@ -52,16 +55,18 @@ export function PipelineEditor({ id, template }: { id?: string; template?: Pipel
       const response = await fetch(id ? `/api/crm/pipelines/${id}` : "/api/crm/pipelines", { method: id ? "PATCH" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...values, ...(id ? { version: record?.version } : {}) }) })
       const data = await response.json()
       if (!response.ok) { setErrorsFromResponse(data); throw new Error(data.error || "Unable to save pipeline.") }
-      toast.success("Pipeline saved."); setConfirm(false)
+      view.done(); toast.success("Pipeline saved."); setConfirm(false)
       if (!id) router.push(`/crm/pipelines/${data.id}`)
       else { setRecord(data); setValues({ name: data.name, archived: data.archived, stages: data.stages.map(({ id, name, kind, probability, color, archived }: CrmPipelineRow["stages"][number]) => ({ id, name, kind, probability, color, archived })) }) }
     } catch (error) { setError((error as Error).message); setConfirm(false) } finally { setSaving(false) }
   }
   if (loading) return <p>Loading pipeline…</p>
   return <div className={crmPageClass}>
-    <form id="pipeline-form" className="space-y-5" onSubmit={event => { event.preventDefault(); if (record && ((!record.archived && values.archived) || values.stages.some(stage => stage.archived && record.stages.some(old => old.id === stage.id && !old.archived)))) setConfirm(true); else void persist() }}>
       <CrmPageHeader title={id ? "Configure pipeline" : "New pipeline"} backHref="/crm/pipelines" backLabel="Back to pipelines" actions={<CrmFormActions form="pipeline-form" cancelHref="/crm/pipelines" saving={saving} disabled={false} canSave={canManage} saveLabel="Save pipeline" />} />
-      {error && <p role="alert" className="text-destructive">{error}</p>}
+    <CrmRecordForm id="pipeline-form" saving={saving} error={error} disabled={!canManage} fingerprint={values} initialSection="Pipeline configuration"
+      overview={record && <CrmSummarySection title="Pipeline configuration" canEdit={canManage} fields={[{ label: "Name", value: record.name }, { label: "Status", value: record.archived ? "Archived" : "Active" }]}><ol className="divide-y">{record.stages.map(stage => <li key={stage.id} className="flex flex-wrap justify-between gap-2 py-3 text-sm"><span>{stage.name}{stage.archived ? " (archived)" : ""}</span><span>{stage.kind} / {stage.probability}%</span></li>)}</ol></CrmSummarySection>} onSubmit={event => { event.preventDefault(); if (record && ((!record.archived && values.archived) || values.stages.some(stage => stage.archived && record.stages.some(old => old.id === stage.id && !old.archived)))) setConfirm(true); else void persist() }}>
+
+
       {!canManage && <p>Only managers and administrators can configure pipelines.</p>}
       <CrmSection title="Pipeline configuration" description="Stages define your board. Keep at least one open, won and lost stage."><fieldset disabled={!canManage || saving} className="space-y-5">
         <FormField id="pipeline-name" label="Pipeline name" error={errors.name}><Input id="pipeline-name" required maxLength={100} value={values.name} onChange={event => setValues({ ...values, name: event.target.value })} /></FormField>
@@ -80,7 +85,7 @@ export function PipelineEditor({ id, template }: { id?: string; template?: Pipel
         </div>)}
         <Button type="button" variant="outline" disabled={values.stages.length >= 30} onClick={() => setValues({ ...values, stages: [...values.stages, { name: "", kind: "OPEN", probability: 10, color: "#64748b", archived: false }] })}>Add stage</Button>
       </fieldset></CrmSection>
-    </form>
+    </CrmRecordForm>
     <Dialog open={confirm} onOpenChange={open => { if (!saving) setConfirm(open) }}><DialogContent><DialogHeader><DialogTitle>Archive this pipeline or its stages?</DialogTitle><DialogDescription>Existing opportunities and their history will remain. New opportunities cannot enter archived stages or pipelines.</DialogDescription></DialogHeader><DialogFooter><Button variant="outline" disabled={saving} onClick={() => setConfirm(false)}>Cancel</Button><Button loading={saving} onClick={() => void persist()}>Save and archive</Button></DialogFooter></DialogContent></Dialog>
   </div>
 }

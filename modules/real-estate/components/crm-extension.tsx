@@ -6,6 +6,7 @@ import type { PropertyContextInput } from "../sales-validation"
 import { PropertyFields, emptyProperty, propertyFields, useRealEstateEnabled } from "./property-fields"
 import { PropertyCaption } from "./property-caption"
 import { ProjectFilter } from "./project-filter"
+import { CrmSummarySection } from "@/modules/crm/components/crm-record-view"
 
 type RecordContext = { propertyContext?: PropertyContext | null; realEstateEnabled?: boolean } | null
 function Editor({ value, record, onChange, disabled, readOnly, errors }: ExtensionEditorProps) {
@@ -19,6 +20,17 @@ export const realEstateCrmView: CrmExtensionView = {
   load: record => propertyFields((record as RecordContext)?.propertyContext),
   payload: value => ({ propertyContext: value }),
   Editor,
+  Summary: ({ record }) => {
+    const selected = record as RecordContext, context = selected?.propertyContext
+    if (!selected?.realEstateEnabled) return null
+    return <CrmSummarySection title="Property interest" fields={[
+      { label: "Project", value: context?.project?.name }, { label: "Subproject", value: context?.subproject?.name },
+      { label: "Property category", value: context?.propertyCategoryName }, { label: "Bedrooms", value: context?.bedrooms },
+      { label: "Minimum budget", value: context?.budgetMin ? `${context.budgetCurrency || ""} ${context.budgetMin}` : null },
+      { label: "Maximum budget", value: context?.budgetMax ? `${context.budgetCurrency || ""} ${context.budgetMax}` : null },
+      { label: "Buying timeframe", value: context?.buyingTimeframeName },
+    ]} />
+  },
   Caption: ({ record }) => <PropertyCaption context={(record as RecordContext)?.propertyContext} />,
   Filter: ({ primaryId, secondaryId, onChange }) => <ProjectFilter projectId={primaryId} subprojectId={secondaryId} onChange={onChange} />,
 }

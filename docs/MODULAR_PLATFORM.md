@@ -768,3 +768,11 @@ in the preview; all mutation tests used intercepted fixtures.
 
 Production build, TypeScript, targeted ESLint and whitespace checks also passed.
 
+
+## CRM shared record views (2026-09-29)
+
+Extended the project detail/edit-panel pattern across CRM records, activities,
+plans, rules, configuration, quotations and templates. See CRM_RECORD_VIEWS.md.
+Optional document tabs are selected in application composition; core CRM keeps
+its extension boundary. No database migration or permission-policy change.
+Local UI verification is separate from hosted acceptance after deployment.

@@ -36,21 +36,27 @@ export function CrmRecordMenu({ actions }: { actions: { label: string; onSelect:
   return <DropdownMenu><DropdownMenuTrigger asChild><Button type="button" variant="outline" size="icon" aria-label="More actions"><MoreHorizontal /></Button></DropdownMenuTrigger><DropdownMenuContent align="end">{actions.map(action => <DropdownMenuItem key={action.label} disabled={action.disabled} onSelect={action.onSelect}>{action.label}</DropdownMenuItem>)}</DropdownMenuContent></DropdownMenu>
 }
 
-export function CrmEditPanel({ open, title, description, onClose, onSubmit, saving, disabled, dirty, error, children }: {
-  open: boolean; title: string; description: string; onClose: () => void; onSubmit: () => void;
-  saving: boolean; disabled?: boolean; dirty: boolean; error?: string; children: React.ReactNode;
+export function CrmEditPanel({ open, title, description, onClose, onSubmit, saving, disabled, dirty, error, children, saveLabel = "Save changes" }: {
+  open: boolean; title: string; description: string; onClose: () => void; onSubmit: React.FormEventHandler<HTMLFormElement>;
+  saving: boolean; disabled?: boolean; dirty: boolean; error?: string; children: React.ReactNode; saveLabel?: string;
 }) {
   const formId = React.useId()
   const [discard, setDiscard] = React.useState(false)
   function close() { if (!saving) { if (dirty) setDiscard(true); else onClose() } }
   return <><Sheet open={open} onOpenChange={next => { if (!next) close() }}><SheetContent className="w-full gap-0 sm:max-w-2xl" onInteractOutside={event => { event.preventDefault() }}>
     <SheetHeader className="shrink-0 border-b p-5 pr-12"><SheetTitle>{title}</SheetTitle><SheetDescription>{description}</SheetDescription></SheetHeader>
-    <form id={formId} onSubmit={event => { event.preventDefault(); onSubmit() }} className="min-h-0 flex-1 space-y-5 overflow-y-auto p-5">
+    <form id={formId} onSubmit={event => { event.preventDefault(); onSubmit(event) }} onInvalidCapture={event => { const target = event.target as HTMLElement; const section = target.closest("details"); if (section) section.open = true }} className="min-h-0 flex-1 space-y-5 overflow-y-auto p-5">
       {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
       <fieldset disabled={saving} className="min-w-0 space-y-5">{children}</fieldset>
     </form>
-    <SheetFooter className="shrink-0 flex-row justify-end border-t bg-background p-4"><Button type="button" variant="outline" disabled={saving} onClick={close}>Cancel</Button><Button type="submit" form={formId} loading={saving} loadingText="Saving..." disabled={disabled}>Save changes</Button></SheetFooter>
+    <SheetFooter className="shrink-0 flex-row justify-end border-t bg-background p-4"><Button type="button" variant="outline" disabled={saving} onClick={close}>Cancel</Button><Button type="submit" form={formId} loading={saving} loadingText="Saving..." disabled={disabled}>{saveLabel}</Button></SheetFooter>
   </SheetContent></Sheet>
   <Dialog open={discard} onOpenChange={setDiscard}><DialogContent><DialogHeader><DialogTitle>Discard unsaved changes?</DialogTitle><DialogDescription>Your changes in this section have not been saved.</DialogDescription></DialogHeader><DialogFooter><Button variant="outline" onClick={() => setDiscard(false)}>Keep editing</Button><Button onClick={() => { setDiscard(false); onClose() }}>Discard changes</Button></DialogFooter></DialogContent></Dialog>
   </>
+}
+
+// Mount a fresh instance for each small configuration draft.
+export function CrmDraftPanel({ fingerprint, ...props }: Omit<React.ComponentProps<typeof CrmEditPanel>, "open" | "dirty"> & { fingerprint: unknown }) {
+  const [baseline] = React.useState(() => JSON.stringify(fingerprint))
+  return <CrmEditPanel {...props} open dirty={baseline !== JSON.stringify(fingerprint)} />
 }

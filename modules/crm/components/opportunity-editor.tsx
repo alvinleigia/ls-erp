@@ -1,9 +1,13 @@
 "use client"
+import { withCrmRecordView, useCrmRecordView, CrmRecordForm, CrmSummarySection, CrmSectionEdit } from "./crm-record-view"
 import { CrmOpportunityPanels } from "./extension-provider"
 import { SalesTeamSelect } from "./sales-teams"
 import { useCustomFields } from "./custom-fields"
 import { LostReasonFields } from "./lost-reason-fields"
 import { useCrmExtensionEditor } from "./extension-provider"
+import { useCrmOpportunityPanelsAvailable } from "./extension-provider"
+import { useDateFormatter } from "@/hooks/use-date-formatter"
+import { formatDecimalCurrency } from "@/lib/formatting"
 import { CrmSection } from "./crm-section"
 import { CrmPageHeader, CrmFormActions, crmPageClass } from "./crm-page"
 import { CrmSelect, CrmTextarea } from "./crm-controls"
@@ -27,12 +31,16 @@ const empty = { salesTeamId: "", title: "", pipelineId: "", stageId: "", contact
 function fields(record: CrmOpportunityRow) {
   return { salesTeamId: record.salesTeamId || "", title: record.title, pipelineId: record.pipelineId, stageId: record.stageId, contactId: record.contactId, accountId: record.accountId || "", assignedUserId: record.assignedUserId, amount: record.amount, currency: record.currency, expectedCloseOn: record.expectedCloseOn.slice(0, 10), description: record.description || "", lossReason: record.lossReason || "", lostReasonId: record.lostReasonId || "", probability: record.probability }
 }
-export function OpportunityEditor({ id, enquiryId, initialProjectId = "", initialSubprojectId = "" }: { id?: string; enquiryId?: string; initialProjectId?: string; initialSubprojectId?: string }) {
+export const OpportunityEditor = withCrmRecordView(OpportunityEditorBody)
+function OpportunityEditorBody({ id, enquiryId, initialProjectId = "", initialSubprojectId = "" }: { id?: string; enquiryId?: string; initialProjectId?: string; initialSubprojectId?: string }) {
   const extension = useCrmExtensionEditor(initialProjectId, initialSubprojectId)
   const loadExtension = extension.load
   const custom = useCustomFields("opportunity", id, enquiryId)
   const loadCustom = custom.load
 
+  const { formatDate } = useDateFormatter()
+  const view = useCrmRecordView()!
+  const hasDocumentPanels = useCrmOpportunityPanelsAvailable()
   const router = useRouter()
   const { data: session } = useSession()
   const [record, setRecord] = React.useState<CrmOpportunityRow | null>(null)
@@ -89,16 +97,26 @@ export function OpportunityEditor({ id, enquiryId, initialProjectId = "", initia
       const response = await fetch(id ? `/api/crm/opportunities/${id}` : "/api/crm/opportunities", { method: id ? "PATCH" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...values, ...custom.payload, ...(!enquiryId ? extension.payload : {}), ...(id ? { version: record?.version } : { enquiryId: enquiryId || "", enquiryVersion }) }) })
       const data = await response.json()
       if (!response.ok) { setErrorsFromResponse(data); throw new Error(data.error || "Unable to save opportunity.") }
-      toast.success("Opportunity saved.")
+      view.done(); toast.success("Opportunity saved.")
       if (!id) router.push(`/crm/opportunities/${data.id}`)
       else { setRecord(data); setContact(data.contact); setValues(fields(data)); loadExtension(data); await loadCustom(data); setRevision(value => value + 1) }
     } catch (error) { setError((error as Error).message) } finally { setSaving(false) }
   }
   const currencies = React.useMemo(() => Intl.supportedValuesOf("currency").map(value => ({ value, label: value })), [])
   if (loading) return <p>Loading opportunity…</p>
-  return <div className={crmPageClass}><form id="opportunity-form" onSubmit={save} className="space-y-5">
-    <CrmPageHeader title={id ? record?.title || "Opportunity" : enquiryId ? "Convert enquiry to opportunity" : "New opportunity"} backHref="/crm/opportunities" backLabel="Back to opportunities" actions={<CrmFormActions form="opportunity-form" cancelHref="/crm/opportunities" saving={saving} disabled={custom.blocked || failed || !stage || pipeline?.id !== values.pipelineId} canSave={true} saveLabel="Save opportunity" />} />
-    {error && <p role="alert" className="text-destructive">{error}</p>}
+  return <div className={crmPageClass}>    <CrmPageHeader title={id ? record?.title || "Opportunity" : enquiryId ? "Convert enquiry to opportunity" : "New opportunity"} backHref="/crm/opportunities" backLabel="Back to opportunities" actions={<CrmFormActions form="opportunity-form" cancelHref="/crm/opportunities" saving={saving} disabled={custom.blocked || failed || !stage || pipeline?.id !== values.pipelineId} canSave={true} saveLabel="Save opportunity" />} /><CrmRecordForm id="opportunity-form" onSubmit={save} saving={saving} disabled={custom.blocked || failed || !stage || pipeline?.id !== values.pipelineId} error={error} fingerprint={{ values, custom: custom.payload, extension: extension.payload }} initialSection="Opportunity details"
+      overview={record && <>
+        <CrmSummarySection title="Opportunity details" fields={[{ label: "Title", value: record.title }, { label: "Contact", value: record.contact.name }, { label: "Company", value: record.account?.name }, { label: "Pipeline", value: record.pipeline.name }, { label: "Stage", value: record.stage.name }, { label: "Salesperson", value: record.assignee.name }, { label: "Sales team", value: record.salesTeam?.name }, { label: "Expected value", value: formatDecimalCurrency(record.amount, record.currency) }, { label: "Expected close", value: formatDate(record.expectedCloseOn) }, { label: "Probability", value: `${record.probability}%` }, { label: "Description", value: record.description }, { label: "Lost reason", value: record.lostReasonName }, { label: "Closing note", value: record.lossReason }]} />
+        {record.enquiryId && <CrmSummarySection title="Lead attribution" canEdit={false} fields={[{ label: "Original source", value: record.source }, { label: "Referrer", value: record.referralRestricted ? "Restricted" : record.referralContact?.name || record.referralAccount?.name }]}><Link className="text-sm underline" href={`/crm/enquiries/${record.enquiryId}`}>Original enquiry</Link></CrmSummarySection>}
+        {extension.summary()} {custom.readOnlySection(<CrmSectionEdit section="Additional information" />)}
+      </>}
+      tabs={record ? [
+        ...(hasDocumentPanels ? [{ value: "documents", label: "Sales documents", content: <CrmOpportunityPanels opportunityId={record.id} /> }] : []),
+        { value: "activities", label: "Activities", content: <WorkList contactId={record.contactId} opportunityId={record.id} /> },
+        { value: "history", label: "History", content: <OpportunityTimeline id={record.id} revision={revision} /> },
+      ] : []}>
+
+
     <CrmSection title="Opportunity details" description="Customer, pipeline stage and expected value."><fieldset disabled={failed || saving} className="grid min-w-0 gap-5 sm:grid-cols-2">
       <FormField id="title" label="Opportunity title" error={errors.title} className="sm:col-span-2"><Input id="title" required maxLength={200} value={values.title} onChange={event => setValues({ ...values, title: event.target.value })} /></FormField>
       <FormField id="pipelineId" label="Pipeline" error={errors.pipelineId}><RecordSelect id="pipelineId" endpoint="/api/crm/pipelines" value={values.pipelineId} selected={pipeline?.id === values.pipelineId ? { value: pipeline.id, label: pipeline.name } : undefined} onChange={pipelineId => setValues(previous => previous.pipelineId === pipelineId ? previous : { ...previous, pipelineId, stageId: "" })} /><Link className="text-sm underline" href="/crm/pipelines">Manage pipelines</Link></FormField>
@@ -118,5 +136,5 @@ export function OpportunityEditor({ id, enquiryId, initialProjectId = "", initia
     {(record?.enquiryId || enquiryId) && <p className="text-sm">Source: <Link className="underline" href={`/crm/enquiries/${record?.enquiryId || enquiryId}`}>original enquiry and follow-ups</Link>. Its records and history are preserved.</p>}
     {extension.fields({ errors, disabled: saving || failed, readOnly: !!enquiryId && !id })}
     {custom.section(saving || failed)}
-  </form>{record && <><CrmOpportunityPanels opportunityId={record.id} /><WorkList contactId={record.contactId} opportunityId={record.id} /><OpportunityTimeline id={record.id} revision={revision} /></>}</div>
+  </CrmRecordForm></div>
 }

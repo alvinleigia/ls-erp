@@ -253,3 +253,10 @@ This is the baseline for new modules (API + UI) in this codebase.
   - current consumers: dashboard and appointments pages.
   - appointments table date filtering should send `startDate` and `endDate` to `/api/appointments`.
   - date range picker should support explicit boundary edits (`From`/`To`) and allow restarting range selection cleanly after a completed range exists.
+
+## CRM record detail and editing
+
+Use the shared record view/form boundary for saved CRM records. Keep related
+lists in lazy record tabs, show read-only summary sections, and open the shared
+edit panel from section actions. Reuse CrmSection for collapsible form sections
+and CrmDraftPanel for small configuration editors. See CRM_RECORD_VIEWS.md.

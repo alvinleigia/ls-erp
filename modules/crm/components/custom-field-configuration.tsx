@@ -1,4 +1,5 @@
 "use client"
+import { withCrmRecordView, useCrmRecordView, CrmRecordForm, CrmSummarySection } from "./crm-record-view"
 import { SalesTeamSelect } from "./sales-teams"
 import * as React from "react"
 import Link from "next/link"
@@ -57,7 +58,9 @@ export function CustomFieldList() {
     </CrmSurface></div>
 }
 
-export function CustomFieldEditor({ id }: { id?: string }) {
+export const CustomFieldEditor = withCrmRecordView(CustomFieldEditorBody)
+function CustomFieldEditorBody({ id }: { id?: string }) {
+  const view = useCrmRecordView()!
   const router = useRouter()
   const [value, setValue] = React.useState<Config>(empty), [scopes, setScopes] = React.useState<FieldScope[]>([])
   const [canManage, setCanManage] = React.useState(false), [loading, setLoading] = React.useState(true), [saving, setSaving] = React.useState(false), [failed, setFailed] = React.useState(false)
@@ -82,7 +85,7 @@ export function CustomFieldEditor({ id }: { id?: string }) {
       if (id) payload.version = value.version
       const response = await fetch(`/api/crm/custom-fields${id ? `/${id}` : ""}`, { method: id ? "PATCH" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }), data = await response.json()
       if (!response.ok) throw new Error(data.error || "Check the field settings.")
-      toast.success("Custom field saved."); router.push(base)
+      view.done(); toast.success("Custom field saved."); router.push(base)
     } catch (error) { setError((error as Error).message); setConfirm(false) } finally { setSaving(false) }
   }
   function submit(event: React.FormEvent) {
@@ -90,8 +93,13 @@ export function CustomFieldEditor({ id }: { id?: string }) {
     if (original && (value.archived !== original.archived || value.options.some(option => option.archived && original.options.some(old => old.id === option.id && !old.archived)))) setConfirm(true)
     else void save()
   }
-  return <div className={crmPageClass}><CrmPageHeader title={id ? "Edit custom field" : "New custom field"} backHref={base} description="Up to 50 fields per record type, including archived fields. Shared sales fields copy from enquiries to opportunities." actions={<CrmFormActions form="custom-field-form" cancelHref={base} canSave={canManage} disabled={loading || failed} saving={saving} saveLabel="Save field"><Button variant="outline" disabled={saving} onClick={() => setRevision(value => value + 1)}>Refresh</Button></CrmFormActions>} />
-    {error && <p role="alert" className="text-destructive">{error}</p>}{loading ? <p>Loading custom field...</p> : <form id="custom-field-form" className="space-y-5" onSubmit={submit}><fieldset disabled={!canManage || failed || saving} className="space-y-5">
+  return <div className={crmPageClass}><CrmPageHeader title={id ? original?.name || "Custom field" : "New custom field"} backHref={base} description="Up to 50 fields per record type, including archived fields. Shared sales fields copy from enquiries to opportunities." actions={<CrmFormActions form="custom-field-form" cancelHref={base} canSave={canManage} disabled={loading || failed} saving={saving} saveLabel="Save field"><Button variant="outline" disabled={saving} onClick={() => setRevision(value => value + 1)}>Refresh</Button></CrmFormActions>} />
+    {loading ? <p>Loading custom field...</p> : <CrmRecordForm id="custom-field-form" saving={saving} error={error} disabled={!canManage || failed} fingerprint={value} initialSection="Field details"
+      overview={original && <>
+        <CrmSummarySection title="Field details" canEdit={canManage} fields={[{ label: "Name", value: original.name }, { label: "Code", value: original.code }, { label: "Record type", value: original.scope }, { label: "Field type", value: original.type }, { label: "Help text", value: original.helpText }]} />
+        <CrmSummarySection title="Rules and access" canEdit={canManage} fields={[{ label: "Visible to", value: original.visibility === "ALL" ? "All staff with record access" : "Managers only" }, { label: "Editable by", value: original.editability === "ALL" ? "All staff with record access" : "Managers only" }, { label: "Display order", value: original.position }, { label: "Default value", value: original.defaultValue === null ? "None" : String(original.defaultValue) }, ...(original.type === "TEXT" ? [{ label: "Maximum characters", value: original.maxLength }] : original.type === "NUMBER" ? [{ label: "Minimum", value: original.minimum }, { label: "Maximum", value: original.maximum }] : []), { label: "Required", value: original.required ? "Yes" : "No" }, { label: "Available in filters", value: original.filterable ? "Yes" : "No" }, { label: "Status", value: original.archived ? "Archived" : "Active" }]} />
+        {original.type === "SELECT" && <CrmSummarySection title="Options" canEdit={canManage} fields={original.options.map((option, index) => ({ label: `Option ${index + 1}`, value: `${option.name}${option.archived ? " (archived)" : ""}` }))} />}
+      </>} className="space-y-5" onSubmit={submit}><fieldset disabled={!canManage || failed || saving} className="space-y-5">
       <CrmSection title="Field details" description="Record type, code and field type are fixed after creation."><div className="grid gap-4 sm:grid-cols-2">
         <FormField id="field-name" label="Name"><Input id="field-name" required maxLength={100} value={value.name} onChange={event => change("name", event.target.value)} /></FormField>
         {value.scope !== "PROJECT" && <SalesTeamSelect fieldScope value={value.salesTeamId || ""} disabled={!!id} onChange={salesTeamId => change("salesTeamId", salesTeamId || null)} />}
@@ -115,7 +123,7 @@ export function CustomFieldEditor({ id }: { id?: string }) {
         <div className="space-y-3">{value.options.slice((optionPage - 1) * 10, optionPage * 10).map((option, offset) => { const index = (optionPage - 1) * 10 + offset; return <div key={option.id || index} className="flex flex-wrap items-end gap-3 rounded-lg border p-3"><FormField className="min-w-0 flex-1 basis-48" id={`option-${index}`} label={`Option ${index + 1}`}><Input id={`option-${index}`} required maxLength={100} value={option.name} onChange={event => change("options", value.options.map((row, i) => i === index ? { ...row, name: event.target.value } : row))} /></FormField><label className="flex items-center gap-2 pb-2 text-sm"><CrmCheckbox checked={option.archived} onChange={event => change("options", value.options.map((row, i) => i === index ? { ...row, archived: event.target.checked } : row))} />Archived</label>{!option.id && <Button type="button" variant="ghost" onClick={() => { change("options", value.options.filter((_, i) => i !== index)); setOptionPage(1) }}>Remove</Button>}</div> })}</div>
         <CrmPagination page={optionPage} pageSize={10} total={value.options.length} onPageChange={setOptionPage} />
       </CrmSection>}
-    </fieldset></form>}
+    </fieldset></CrmRecordForm>}
     <Dialog open={confirm} onOpenChange={open => { if (!saving) setConfirm(open) }}><DialogContent><DialogHeader><DialogTitle>Save archive changes?</DialogTitle><DialogDescription>Archived fields and options remain on existing records and are unavailable for new selections.</DialogDescription></DialogHeader><DialogFooter><Button variant="outline" disabled={saving} onClick={() => setConfirm(false)}>Cancel</Button><Button loading={saving} onClick={() => void save()}>Confirm and save</Button></DialogFooter></DialogContent></Dialog>
   </div>
 }

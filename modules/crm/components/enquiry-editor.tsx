@@ -1,4 +1,5 @@
 "use client"
+import { withCrmRecordView, useCrmRecordView, CrmRecordForm, CrmSummarySection, CrmSectionEdit } from "./crm-record-view"
 import { SalesTeamSelect } from "./sales-teams"
 import { useCustomFields } from "./custom-fields"
 import { LostReasonFields } from "./lost-reason-fields"
@@ -19,6 +20,7 @@ import { enquiryStatuses } from "@/modules/crm/validation"
 import type { CrmContactRow, CrmEnquiryRow, CrmStatus } from "@/types/crm"
 import { RecordSelect } from "./record-select"
 import { selectClass } from "./record-list"
+import { WorkList } from "./work-list"
 import { EnquiryTimeline } from "./enquiry-timeline"
 import { ContactFields, emptyContact } from "./contact-fields"
 import { DropdownSelect } from "@/components/ui/dropdown-select"
@@ -26,12 +28,14 @@ import { useDateFormatter } from "@/hooks/use-date-formatter"
 
 export const textareaClass = "min-h-24 w-full rounded-md border bg-background px-3 py-2 text-sm"
 
-export function EnquiryEditor({ id, initialContactId, initialProjectId = "", initialSubprojectId = "" }: { id?: string; initialContactId?: string; initialProjectId?: string; initialSubprojectId?: string }) {
+export const EnquiryEditor = withCrmRecordView(EnquiryEditorBody)
+function EnquiryEditorBody({ id, initialContactId, initialProjectId = "", initialSubprojectId = "" }: { id?: string; initialContactId?: string; initialProjectId?: string; initialSubprojectId?: string }) {
   const extension = useCrmExtensionEditor(initialProjectId, initialSubprojectId)
   const loadExtension = extension.load
   const custom = useCustomFields("enquiry", id)
   const loadCustom = custom.load
 
+  const view = useCrmRecordView()!
   const router = useRouter()
   const { data: session } = useSession()
   const { formatDate } = useDateFormatter()
@@ -86,7 +90,7 @@ export function EnquiryEditor({ id, initialContactId, initialProjectId = "", ini
       const response = await fetch(id ? `/api/crm/enquiries/${id}` : "/api/crm/enquiries", { method: id ? "PATCH" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) })
       const data = await response.json()
       if (!response.ok) { setErrorsFromResponse(data); throw new Error(data.error || "Unable to save enquiry.") }
-      toast.success("Enquiry saved.")
+      view.done(); toast.success("Enquiry saved.")
       if (!id) router.push(`/crm/enquiries/${data.id}`)
       else {
         setEnquiry(data); setValues(previous => ({ ...previous, lostReasonId: data.lostReasonId || "" })); loadExtension(data); await loadCustom(data); setRevision(value => value + 1)
@@ -101,9 +105,17 @@ export function EnquiryEditor({ id, initialContactId, initialProjectId = "", ini
   if (loading) return <p>Loading enquiry…</p>
   const selectedAssignee = enquiry?.assignee ?? { id: values.assignedUserId, name: session?.user?.name || "Me" }
   return <div className={crmPageClass}>
-    <form id="enquiry-form" onSubmit={save} className="space-y-5">
       <CrmPageHeader title={id ? enquiry?.title || "Enquiry" : "New enquiry"} backHref="/crm/enquiries" backLabel="Back to enquiries" actions={<CrmFormActions form="enquiry-form" cancelHref="/crm/enquiries" saving={saving} disabled={loadFailed || custom.blocked} canSave={true} saveLabel="Save enquiry">{enquiry && <>{enquiry.opportunity ? <Button variant="outline" asChild><Link href={`/crm/opportunities/${enquiry.opportunity.id}`}>Open opportunity</Link></Button> : enquiry.status !== "CLOSED" && <Button variant="outline" asChild><Link href={`/crm/opportunities/new?enquiryId=${enquiry.id}`}>Convert to opportunity</Link></Button>}</>}</CrmFormActions>} />
-      {error && <p role="alert" className="text-destructive">{error}</p>}
+    <CrmRecordForm id="enquiry-form" onSubmit={save} saving={saving} disabled={loadFailed || custom.blocked} error={error} fingerprint={{ values, referralType, extension: extension.payload, custom: custom.payload }} initialSection="Enquiry details" createSection="Customer"
+      overview={enquiry && <>
+        <CrmSummarySection title="Customer" fields={[{ label: "Contact", value: <Link href={`/crm/contacts/${enquiry.contact.id}`} className="underline">{enquiry.contact.name}</Link> }, { label: "Buyer company", value: enquiry.account?.name }]} />
+        <CrmSummarySection title="Enquiry details" fields={[{ label: "Title", value: enquiry.title }, { label: "Status", value: enquiry.status === "CLOSED" ? "Lost" : enquiry.status }, { label: "Salesperson", value: enquiry.assignee.name }, { label: "Sales team", value: enquiry.salesTeam?.name }, { label: "Source", value: enquiry.source }, { label: "Target close", value: formatDate(enquiry.targetCloseOn) }, { label: "Requirements", value: enquiry.requirements }, { label: "Lost reason", value: enquiry.lostReasonName }, { label: "Closing note", value: enquiry.outcome }]} />
+        <CrmSummarySection title="Referral (optional)" canEdit={!enquiry.referralRestricted} fields={[{ label: "Referred by", value: enquiry.referralRestricted ? "Restricted" : enquiry.referralContact?.name || enquiry.referralAccount?.name }]} />
+        {extension.summary()} {custom.readOnlySection(<CrmSectionEdit section="Additional information" />)}
+      </>}
+      tabs={enquiry ? [{ value: "activities", label: "Activities", content: <WorkList enquiryId={enquiry.id} contactId={enquiry.contact.id} /> }, { value: "history", label: "History", content: <EnquiryTimeline enquiryId={enquiry.id} contactId={enquiry.contact.id} revision={revision} includeWork={false} /> }] : []}>
+
+
       <CrmSection title="Customer" description="Reuse an existing contact or create one with this enquiry."><fieldset disabled={saving || loadFailed} className="grid min-w-0 gap-5 sm:grid-cols-2">
         {!id && <FormField id="contact-mode" label="Contact selection" className="sm:col-span-2"><DropdownSelect id="contact-mode" value={contactMode} options={[{ value: "existing", label: "Existing contact" }, { value: "new", label: "New contact" }]} onValueChange={mode => { setContactMode(mode); setValues({ ...values, accountId: "" }) }} /></FormField>}
         {contactMode === "new" && !id ? <><ContactFields values={newContact} onChange={setNewContact} errors={errors} prefix="newContact." disabled={saving || loadFailed} />{errors.newContact && <p className="text-destructive sm:col-span-2">{errors.newContact}</p>}<FormField id="accountId" label="Buyer company (optional)" error={errors.accountId}><RecordSelect id="accountId" endpoint="/api/crm/accounts" value={values.accountId} onChange={accountId => setValues({ ...values, accountId })} />{values.accountId && <Button type="button" variant="link" size="sm" onClick={() => setValues({ ...values, accountId: "" })}>Clear company</Button>}<p className="text-xs text-muted-foreground">The new contact will be linked to this company when you save.</p></FormField></> : <>
@@ -128,8 +140,8 @@ export function EnquiryEditor({ id, initialContactId, initialProjectId = "", ini
       <CrmSection title="Referral (optional)" description="Who introduced this enquiry, separate from the buyer’s company."><fieldset disabled={saving || loadFailed || enquiry?.referralRestricted} className="grid gap-5 sm:grid-cols-2">{enquiry?.referralRestricted ? <p className="text-sm text-muted-foreground sm:col-span-2">Referral details are restricted. They will be preserved when you save.</p> : <><FormField id="referral-type" label="Referred by"><DropdownSelect id="referral-type" className="w-full" value={referralType} options={[{ value: "none", label: "No referral" }, { value: "contact", label: "Person" }, { value: "account", label: "Company" }]} onValueChange={type => { setReferralType(type); setValues({ ...values, referralContactId: "", referralAccountId: "" }) }} /></FormField>{referralType !== "none" && <FormField id="referrer" label={referralType === "contact" ? "Referring person" : "Referring company"}><RecordSelect key={referralType} id="referrer" endpoint={`/api/crm/${referralType === "contact" ? "contacts" : "accounts"}`} value={referralType === "contact" ? values.referralContactId : values.referralAccountId} selected={enquiry?.referralContact ? { value: enquiry.referralContact.id, label: enquiry.referralContact.name } : enquiry?.referralAccount ? { value: enquiry.referralAccount.id, label: enquiry.referralAccount.name } : undefined} onChange={value => setValues({ ...values, referralContactId: referralType === "contact" ? value : "", referralAccountId: referralType === "account" ? value : "" })} /></FormField>}</>}</fieldset></CrmSection>
       {extension.fields({ errors, disabled: saving || loadFailed })}
       {custom.section(saving || loadFailed)}
-    </form>
+    </CrmRecordForm>
     {enquiry && <CrmSection title="Record information"><dl className="grid gap-4 text-sm sm:grid-cols-3">{(["created", "updated", "assigned"] as const).map(key => <div key={key}><dt className="capitalize text-muted-foreground">{key}</dt><dd>{formatDate(enquiry.metadata?.[key]?.createdAt || (key === "created" ? enquiry.createdAt : key === "updated" ? enquiry.updatedAt : undefined)) || "Not recorded"}</dd><dd className="text-muted-foreground">{enquiry.metadata?.[key]?.actor.name || "Actor not recorded"}</dd></div>)}</dl></CrmSection>}
-    {enquiry && <><EnquiryTimeline enquiryId={enquiry.id} contactId={enquiry.contact.id} revision={revision} /></>}
+
   </div>
 }

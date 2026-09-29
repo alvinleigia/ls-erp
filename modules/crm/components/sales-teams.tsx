@@ -1,4 +1,5 @@
 "use client"
+import { withCrmRecordView, useCrmRecordView, CrmRecordForm, CrmSummarySection } from "./crm-record-view"
 import * as React from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
@@ -58,7 +59,9 @@ export function SalesTeamList() {
   </CrmSurface></div>
 }
 
-export function SalesTeamEditor({ id }: { id?: string }) {
+export const SalesTeamEditor = withCrmRecordView(SalesTeamEditorBody)
+function SalesTeamEditorBody({ id }: { id?: string }) {
+  const view = useCrmRecordView()!
   const router = useRouter()
   const [team, setTeam] = React.useState<Team>({ id: "", name: "", workflow: "ENQUIRY_FIRST", archived: false, version: 1 })
   const [original, setOriginal] = React.useState<Team | null>(null), [canManage, setCanManage] = React.useState(false)
@@ -72,20 +75,22 @@ export function SalesTeamEditor({ id }: { id?: string }) {
     setSaving(true); setError("")
     try {
       const row = await request<Team>(`/api/crm/sales-teams${id ? `/${id}` : ""}`, { method: id ? "PATCH" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: team.name, workflow: team.workflow, archived: team.archived, ...(id ? { version: team.version } : {}) }) })
-      setConfirm(false); setTeam(row); setOriginal(row)
+      view.done(); setConfirm(false); setTeam(row); setOriginal(row)
       if (!id) router.push(`${base}/${row.id}`)
     } catch (error) { setError((error as Error).message) } finally { setSaving(false) }
   }
   if (loading) return <p>Loading sales team...</p>
   const dirty = !!original && (original.name !== team.name || original.workflow !== team.workflow || original.archived !== team.archived)
   return <div className={crmPageClass}><CrmPageHeader title={id ? team.name || "Sales team" : "New sales team"} backHref={base} actions={<CrmFormActions form="team-form" cancelHref={base} canSave={canManage} saving={saving} disabled={failed} saveLabel="Save sales team" />} />
-    {error && <p role="alert" className="text-destructive">{error}</p>}
-    <form id="team-form" onSubmit={event => { event.preventDefault(); if (original && !original.archived && team.archived) setConfirm(true); else void save() }} className="space-y-5"><CrmSection title="Team details"><fieldset disabled={!canManage || saving || failed} className="grid gap-4 sm:grid-cols-2">
+
+    <CrmRecordForm id="team-form" saving={saving} error={error} disabled={!canManage || failed} fingerprint={team} initialSection="Team details"
+      overview={original && <CrmSummarySection title="Team details" canEdit={canManage} fields={[{ label: "Name", value: original.name }, { label: "Workflow", value: workflowName(original.workflow) }, { label: "Status", value: original.archived ? "Archived" : "Active" }]}><p className="text-sm text-muted-foreground">Membership controls assignment. Staff retain access to their own sales records; managers can access records across the business.</p></CrmSummarySection>}
+      tabs={id && canManage && !failed ? [{ value: "members", label: "Members", content: <TeamMembers id={id} team={team} disabled={saving || dirty || team.archived} onChange={row => { setTeam(row); setOriginal(row) }} /> }] : []} onSubmit={event => { event.preventDefault(); if (original && !original.archived && team.archived) setConfirm(true); else void save() }} className="space-y-5"><CrmSection title="Team details"><fieldset disabled={!canManage || saving || failed} className="grid gap-4 sm:grid-cols-2">
       <FormField id="team-name" label="Team name"><Input id="team-name" required maxLength={100} value={team.name} onChange={event => setTeam({ ...team, name: event.target.value })} /></FormField>
       <FormField id="team-workflow" label="Sales workflow"><CrmSelect id="team-workflow" value={team.workflow} onValueChange={workflow => setTeam({ ...team, workflow })}><option value="ENQUIRY_FIRST">Qualify enquiries first</option><option value="DIRECT">Direct opportunities</option></CrmSelect><p className="text-sm text-muted-foreground">{team.workflow === "DIRECT" ? "Create opportunities directly. Existing enquiries remain available for conversion." : "Create an enquiry, mark it Qualified, then convert it to an opportunity."}</p></FormField>
       <label className="flex items-center gap-2"><CrmCheckbox checked={team.archived} onChange={event => setTeam({ ...team, archived: event.target.checked })} />Archived</label>
-    </fieldset></CrmSection><CrmSection title="Access and assignment"><p className="text-sm text-muted-foreground">Staff see their own sales records and assign work to themselves. Managers retain access across the business and can assign sales records to active team members. Membership does not share other members’ records. Existing records without a team keep their current workflow.</p></CrmSection></form>
-    {id && canManage && !failed && <TeamMembers id={id} team={team} disabled={saving || dirty || team.archived} onChange={row => { setTeam(row); setOriginal(row) }} />}
+    </fieldset></CrmSection><CrmSection title="Access and assignment"><p className="text-sm text-muted-foreground">Staff see their own sales records and assign work to themselves. Managers retain access across the business and can assign sales records to active team members. Membership does not share other members’ records. Existing records without a team keep their current workflow.</p></CrmSection></CrmRecordForm>
+
     <Dialog open={confirm} onOpenChange={open => { if (!saving) setConfirm(open) }}><DialogContent><DialogHeader><DialogTitle>Archive this sales team?</DialogTitle><DialogDescription>Existing records remain accessible. New records cannot be assigned to this team until it is restored.</DialogDescription></DialogHeader><DialogFooter><Button variant="outline" disabled={saving} onClick={() => setConfirm(false)}>Cancel</Button><Button loading={saving} onClick={() => void save()}>Archive team</Button></DialogFooter></DialogContent></Dialog>
   </div>
 }

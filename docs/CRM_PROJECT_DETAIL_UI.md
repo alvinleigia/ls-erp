@@ -26,9 +26,8 @@ available at creation, including fields required by configuration.
 - `CrmPagination` now omits pagination when a completed request returns no rows.
   Populated lists retain count left, navigation centre and page size right.
 
-Project and subproject instances use the same components. Other CRM record
-editors have not yet been converted to this detail/panel pattern; they can adopt
-these components without copying their markup. Empty pagination is already a
+Project and subproject instances use the same components. Other CRM and Sales Documents editors now share this pattern; see
+`CRM_RECORD_VIEWS.md` for coverage and the shared edit-session components. Empty pagination is already a
 shared change across CRM lists and timelines. Filters remain reachable on empty
 lists so users can recover a filtered-out or archived record.
 

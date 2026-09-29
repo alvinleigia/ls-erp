@@ -1,4 +1,6 @@
 "use client"
+import { withCrmRecordView, useCrmRecordView, CrmRecordForm } from "@/modules/crm/components/crm-record-view"
+import { QuotationSummary } from "./quotation-summary"
 import * as React from "react"
 import { useBusinessModules } from "@/platform/module-provider"
 import Link from "next/link"
@@ -59,7 +61,9 @@ export function QuotationList({ opportunityId, all = false }: { opportunityId?: 
 
 type Document = { id: string; opportunityId: string; title: string; version: number; revision: number; snapshot: QuotationSnapshot; paymentPlansEnabled: boolean }
 type Template = { id: string; name: string; content: QuotationContent; version: number; archived: boolean; canManage: boolean; paymentPlansEnabled: boolean }
-export function QuotationEditor({ id, opportunityId: initialOpportunityId, template = false, revision }: { id?: string; opportunityId?: string; template?: boolean; revision?: number }) {
+export const QuotationEditor = withCrmRecordView(QuotationEditorBody)
+function QuotationEditorBody({ id, opportunityId: initialOpportunityId, template = false, revision }: { id?: string; opportunityId?: string; template?: boolean; revision?: number }) {
+  const view = useCrmRecordView()!
   const settings = useQuotationSettings()
   const modules = useBusinessModules()
   const [paymentPlans, setPaymentPlans] = React.useState(false)
@@ -105,24 +109,32 @@ export function QuotationEditor({ id, opportunityId: initialOpportunityId, templ
       const url = template ? `/api/crm/quotation-templates${id ? `/${id}` : ""}` : id ? `/api/crm/quotations/${id}` : `/api/crm/opportunities/${opportunityId}/quotations`
       const row = await request<{ id: string; version: number }>(url, { method: id ? "PUT" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ content: value, version, ...(template ? { name, archived } : templateId ? { templateId } : {}) }) })
       if (!id) router.push(template ? `${templateBase}/${row.id}` : `/crm/quotations/${row.id}`)
-      else { setVersion(row.version); if (!template) { const saved = await request<Document>(`/api/crm/quotations/${id}`); setDocument(saved); setValue(saved.snapshot.content); setContext(saved.snapshot.context) } }
+      else { setVersion(row.version); if (!template) { const saved = await request<Document>(`/api/crm/quotations/${id}`); setDocument(saved); setValue(saved.snapshot.content); setContext(saved.snapshot.context) } view.done() }
     } catch (error) { setErrorsFromResponse((error as { response?: { details?: { fieldErrors?: Record<string, string[]> } } }).response); setError((error as Error).message) } finally { setSaving(false) }
   }
   async function applyTemplate() {
     setConfirm(null); setSaving(true); setError("")
     try { const row = await request<Template>(`/api/crm/quotation-templates/${templateId}`); if (!plansEnabled && row.content.instalments.length) throw new Error("This template contains a payment plan. Enable Payment Plans or choose a quotation-only template."); setValue({ ...row.content, currency: value.currency, bookingDate: value.bookingDate, validUntil: value.validUntil }) } catch (error) { setError((error as Error).message) } finally { setSaving(false) }
   }
+  const editable = !failed && !unavailable && !scheduleLocked && !oldVersion && (!template || canManage)
   if (loading) return <p>Loading document…</p>
-  return <div className={crmPageClass}><form id="quotation-form" onSubmit={save} className="space-y-5">
-    <CrmPageHeader title={template ? id ? "Edit quotation template" : "New quotation template" : id ? `${document?.title || "Quotation"} · version ${document?.revision}` : "New quotation"} backHref={back} actions={<CrmFormActions form="quotation-form" cancelHref={back} saving={saving} disabled={failed || unavailable || scheduleLocked || oldVersion} canSave={!template || canManage} saveLabel={template ? "Save template" : id ? "Save new version" : "Save document"}>{document && <Button asChild variant="outline"><a href={`/api/crm/quotations/${document.id}/pdf?revision=${document.revision}`} target="_blank" rel="noreferrer">Download saved PDF</a></Button>}</CrmFormActions>} />
-    {error && <p role="alert" className="rounded-lg border border-destructive p-4 text-sm text-destructive">{error}</p>}
+  return <div className={crmPageClass}>
+    <CrmPageHeader title={template ? id ? name || "Quotation template" : "New quotation template" : id ? `${document?.title || "Quotation"} · version ${document?.revision}` : "New quotation"} backHref={back} actions={<CrmFormActions form="quotation-form" cancelHref={back} saving={saving} disabled={failed || unavailable || scheduleLocked || oldVersion} canSave={!template || canManage} saveLabel={template ? "Save template" : id ? "Save new version" : "Save document"}>{document && <Button asChild variant="outline"><a href={`/api/crm/quotations/${document.id}/pdf?revision=${document.revision}`} target="_blank" rel="noreferrer">Download saved PDF</a></Button>}</CrmFormActions>} />
+
     {scheduleLocked && <p className="rounded-lg border p-4 text-sm">Payment Plans is disabled. This saved schedule is read-only. Enable Payment Plans to make changes.</p>}
     {unavailable && !modules.loading && <p role="alert">Sales Documents is not enabled.</p>}
     {oldVersion && <p className="text-sm">This saved version is read-only. <Link className="underline" href={`/crm/quotations/${id}`}>Edit the latest version</Link>.</p>}
     {document && <CrmPagination page={document.revision} pageSize={1} total={document.version} label="Document versions" onPageChange={number => router.push(`/crm/quotations/${id}?revision=${number}`)} />}
+    <CrmRecordForm id="quotation-form" onSubmit={save} initialSection={template ? "Template configuration" : "Document details"} saving={saving} disabled={!editable} error={error} fingerprint={{ value, name, archived, templateId }} saveLabel={template ? "Save template" : "Save new version"}
+      overview={<QuotationSummary value={value} snapshot={document?.snapshot} section="overview" canEdit={editable} name={template ? name : undefined} archived={archived} />}
+      tabs={[
+        { value: "pricing", label: "Pricing and charges", content: <QuotationSummary value={value} snapshot={document?.snapshot} section="pricing" canEdit={editable} /> },
+        ...(plansEnabled || value.instalments.length ? [{ value: "payments", label: "Payment plan", content: <QuotationSummary value={value} snapshot={document?.snapshot} section="payments" canEdit={editable} /> }] : []),
+        { value: "terms", label: "Bank and terms", content: <QuotationSummary value={value} snapshot={document?.snapshot} section="terms" canEdit={editable} /> },
+      ]}>
     {template && <CrmSection title="Template configuration"><div className="max-w-md space-y-4"><FormField id="template-name" label="Template name" error={errors.name}><Input id="template-name" required maxLength={150} value={name} disabled={!canManage || saving} onChange={event => setName(event.target.value)} /></FormField><label className="flex items-center gap-2 text-sm"><CrmCheckbox checked={archived} disabled={!canManage || saving} onChange={event => event.target.checked ? setConfirm("archive") : setArchived(false)} />Archived</label></div></CrmSection>}
     {!template && !oldVersion && !scheduleLocked && <CrmSection title="Start from a template" description="Applying a template replaces document contents. Customer and linked project details are retained."><div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-end"><FormField id="quotation-template" label="Template" className="min-w-0 flex-1"><RecordSelect id="quotation-template" endpoint="/api/crm/quotation-templates" value={templateId} onChange={setTemplateId} disabled={saving || failed} /></FormField><Button type="button" variant="outline" disabled={!templateId || saving || failed} onClick={() => setConfirm("template")}>Apply template</Button></div></CrmSection>}
     {context.length > 0 && <CrmSection title="Linked project"><dl className="grid gap-3 sm:grid-cols-3">{context.map(item => <div key={item.label}><dt className="text-sm text-muted-foreground">{item.label}</dt><dd>{item.value}</dd></div>)}</dl></CrmSection>}
     <QuotationContentFields paymentPlansEnabled={plansEnabled} errors={errors} settings={document?.snapshot || settings} value={value} onChange={setValue} disabled={saving || failed || unavailable || scheduleLocked || oldVersion || (template && !canManage)} template={template} onError={setError} />
-  </form><Dialog open={!!confirm} onOpenChange={open => !open && setConfirm(null)}><DialogContent><DialogHeader><DialogTitle>{confirm === "archive" ? "Archive this template?" : "Apply this template?"}</DialogTitle><DialogDescription>{confirm === "archive" ? "The template will be unavailable for new documents after you save. Existing versions are preserved." : "This replaces your current document fields. Previously saved versions remain unchanged."}</DialogDescription></DialogHeader><DialogFooter><Button variant="outline" onClick={() => setConfirm(null)}>Cancel</Button><Button onClick={() => confirm === "archive" ? (setArchived(true), setConfirm(null)) : void applyTemplate()}>{confirm === "archive" ? "Archive" : "Apply template"}</Button></DialogFooter></DialogContent></Dialog></div>
+  </CrmRecordForm><Dialog open={!!confirm} onOpenChange={open => !open && setConfirm(null)}><DialogContent><DialogHeader><DialogTitle>{confirm === "archive" ? "Archive this template?" : "Apply this template?"}</DialogTitle><DialogDescription>{confirm === "archive" ? "The template will be unavailable for new documents after you save. Existing versions are preserved." : "This replaces your current document fields. Previously saved versions remain unchanged."}</DialogDescription></DialogHeader><DialogFooter><Button variant="outline" onClick={() => setConfirm(null)}>Cancel</Button><Button onClick={() => confirm === "archive" ? (setArchived(true), setConfirm(null)) : void applyTemplate()}>{confirm === "archive" ? "Archive" : "Apply template"}</Button></DialogFooter></DialogContent></Dialog></div>
 }

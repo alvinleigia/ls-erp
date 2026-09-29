@@ -1,4 +1,5 @@
 "use client"
+import { useCrmRecordView } from "./crm-record-view"
 
 import type { ReactNode } from "react"
 import Link from "next/link"
@@ -32,6 +33,8 @@ export function CrmFormActions({ form, cancelHref, saving, disabled, canSave = t
   form: string; cancelHref: string; saving?: boolean; disabled?: boolean; canSave?: boolean; saveLabel: string; loadingText?: string; children?: ReactNode;
 }) {
   const router = useRouter()
+  const view = useCrmRecordView()
+  if (view?.existing) return <>{children}{canSave && <Button type="button" disabled={disabled || saving} onClick={() => view.begin()}>Edit details</Button>}</>
   return <>{children}{canSave && <><Button type="button" variant="outline" disabled={saving} onClick={() => router.push(cancelHref)}>Cancel</Button><Button type="submit" form={form} loading={saving} loadingText={loadingText} disabled={disabled}>{saveLabel}</Button></>}</>
 }
 

@@ -21,6 +21,7 @@ export type CrmExtensionView = {
   payload: (value: unknown) => Record<string, unknown>
   Editor: React.ComponentType<ExtensionEditorProps>
   Caption: React.ComponentType<{ record: unknown }>
+  Summary?: React.ComponentType<{ record: unknown }>
   Filter: React.ComponentType<ExtensionFilterProps>
   OpportunityPanels?: React.ComponentType<{ opportunityId: string }>
 }
@@ -45,6 +46,7 @@ export function useCrmExtensionEditor(primaryId = "", secondaryId = "") {
   }, [view])
   return {
     load,
+    summary: () => view.Summary ? <view.Summary record={record} /> : null,
     payload: dirty ? view.payload(value) : {},
     fields: (props: Omit<ExtensionEditorProps, "value" | "record" | "onChange">) => <view.Editor {...props} value={value} record={record} onChange={next => { setValue(next); setDirty(true) }} />,
   }
@@ -61,3 +63,5 @@ export function CrmOpportunityPanels(props: { opportunityId: string }) {
   const { OpportunityPanels } = React.useContext(ExtensionContext)
   return OpportunityPanels ? <OpportunityPanels {...props} /> : null
 }
+
+export function useCrmOpportunityPanelsAvailable() { return !!React.useContext(ExtensionContext).OpportunityPanels }
