@@ -1,3 +1,9 @@
+import { createPresetService, type CrmPreset } from "./preset-service"
+import { createTeamService, resolveSalesTeam, teamSelect } from "./team-service"
+import { constraintTarget, serializationConflict } from "./database-errors"
+import { splitCustomFields } from "@/platform/custom-fields/validation"
+import { readCustomFields, saveCustomFields, customFieldFilter, customFieldExport } from "@/platform/custom-fields/values"
+import { enquiryFields } from "./custom-fields"
 import { createLostReasonService, resolveLostReason } from "./lost-reason-service"
 import { createSalesReportService } from "./sales-report-service"
 import { checkExportLimit, CRM_EXPORT_LIMIT } from "./csv"
@@ -9,7 +15,7 @@ import { createWorkService } from "./work-service"
 import { createReportService } from "./report-service"
 import { createFollowUpService } from "./follow-up-service"
 import { createIntakeService, enquiryContext, maskReferrals, referralInclude } from "./intake-service"
-import { savePropertyContext, withPropertyContext, requirePropertyFilter, projectFilterChoices, realEstateEnabled } from "@/modules/real-estate/sales-context"
+import { noCrmExtensions, type CrmExtensions } from "./extensions"
 import { CrmError, canManageCrm, canUseCrm, contactScope, accountScope, enquiryScope, type CrmActor } from "./policy"
 import {
   crmContactSchema, crmContactUpdateSchema, crmEnquiryCreateSchema,
@@ -19,7 +25,7 @@ import {
 
 const personSelect = { id: true, name: true } as const
 const contactSelect = { id: true, name: true, email: true, phone: true, archived: true } as const
-const enquiryInclude = { contact: { select: contactSelect }, assignee: { select: personSelect }, account: { select: { id: true, name: true } }, leadSource: { select: { id: true, name: true, archived: true } }, ...referralInclude } as const
+const enquiryInclude = { salesTeam: { select: teamSelect }, contact: { select: contactSelect }, assignee: { select: personSelect }, account: { select: { id: true, name: true } }, leadSource: { select: { id: true, name: true, archived: true } }, ...referralInclude } as const
 const snapshot = (value: unknown): Prisma.InputJsonValue => JSON.parse(JSON.stringify(value))
 type Tx = Prisma.TransactionClient
 
@@ -29,7 +35,7 @@ function pageResult<T>(items: T[], total: number, page: number, pageSize: number
 
 // No HTTP or Lia dependencies. Every operation checks current membership and
 // module access, then runs in a transaction. Caller must establish DB tenant context.
-export function createCrmService(db: PrismaClient, identity: Pick<CrmActor, "tenantId" | "userId" | "requestId">) {
+export function createCrmService<Fields extends object = object, Metadata extends object = object>(db: PrismaClient, identity: Pick<CrmActor, "tenantId" | "userId" | "requestId">, extensions: CrmExtensions<Fields, Metadata> = noCrmExtensions as CrmExtensions<Fields, Metadata>, presets: readonly CrmPreset[] = []) {
   async function run<T>(operation: (tx: Tx, actor: CrmActor) => Promise<T>): Promise<T> {
     for (let attempt = 0; ; attempt++) {
       try {
@@ -53,12 +59,11 @@ export function createCrmService(db: PrismaClient, identity: Pick<CrmActor, "ten
         }, { isolationLevel: "Serializable", maxWait: 20000, timeout: 20000 })
       } catch (error) {
         const code = (error as { code?: string })?.code
-        if (code === "P2034" && attempt < 2) continue
+        if (serializationConflict(error) && attempt < 2) continue
         if (code === "P2002") {
           // The PostgreSQL driver adapter reports constraint fields in its
           // nested cause rather than Prisma's legacy meta.target location.
-          const meta = (error as { meta?: { target?: unknown; driverAdapterError?: { cause?: { constraint?: { fields?: unknown } } } } }).meta
-          const target = String(meta?.target || meta?.driverAdapterError?.cause?.constraint?.fields || "")
+          const target = constraintTarget(error)
           if (target.includes("nameKey")) throw new CrmError(409, "A choice with this name already exists. Edit or restore it.")
           if (target.includes("sourceType") && target.includes("outcome")) throw new CrmError(409, "A rule for this activity type and outcome already exists. Edit or restore that rule.")
           if (target.includes("requestKey")) { if (attempt < 2) continue; throw new CrmError(409, "This plan application is being processed. Retry to see its activities.") }
@@ -68,7 +73,7 @@ export function createCrmService(db: PrismaClient, identity: Pick<CrmActor, "ten
           if (target.includes("enquiryId") && attempt < 2) continue
           throw new CrmError(409, target.includes("enquiryId") ? "This enquiry already has an opportunity. Refresh to open it." : "A contact with this email or phone already exists in this business. Ask your manager if you cannot find it.")
         }
-        if (code === "P2034") throw new CrmError(409, "This record changed. Refresh and try again.")
+        if (serializationConflict(error)) throw new CrmError(409, "This record changed. Refresh and try again.")
         throw error
       }
     }
@@ -77,7 +82,7 @@ export function createCrmService(db: PrismaClient, identity: Pick<CrmActor, "ten
   async function audit(tx: Tx, actor: CrmActor, event: string, entityId: string, before?: Prisma.InputJsonValue, after?: Prisma.InputJsonValue) {
     await recordDomainAuditEvent(tx, {
       tenantId: actor.tenantId, actorUserId: actor.userId, actorRole: actor.role as Role,
-      requestId: actor.requestId, event, entityType: event.startsWith("crm.activityType.") ? "CrmActivityType" : event.startsWith("crm.lostReason.") ? "CrmLostReason" : event.startsWith("crm.source.") ? "CrmLeadSource" : event.startsWith("crm.rule.") ? "CrmFollowUpRule" : event.startsWith("crm.plan.") ? "CrmActivityPlan" : event.startsWith("crm.work") ? "CrmTask" : event.startsWith("crm.opportunity") ? "CrmOpportunity" : event.startsWith("crm.pipeline") ? "CrmPipeline" : event.startsWith("crm.account") ? "CrmAccount" : event.startsWith("crm.contact") ? "CrmContact" : "CrmEnquiry",
+      requestId: actor.requestId, event, entityType: event.startsWith("crm.preset.") ? "CrmPreset" : event.startsWith("crm.team.") ? "CrmSalesTeam" : event.startsWith("crm.activityType.") ? "CrmActivityType" : event.startsWith("crm.lostReason.") ? "CrmLostReason" : event.startsWith("crm.source.") ? "CrmLeadSource" : event.startsWith("crm.rule.") ? "CrmFollowUpRule" : event.startsWith("crm.plan.") ? "CrmActivityPlan" : event.startsWith("crm.work") ? "CrmTask" : event.startsWith("crm.opportunity") ? "CrmOpportunity" : event.startsWith("crm.pipeline") ? "CrmPipeline" : event.startsWith("crm.account") ? "CrmAccount" : event.startsWith("crm.contact") ? "CrmContact" : "CrmEnquiry",
       entityId, before, after,
     })
   }
@@ -102,15 +107,17 @@ export function createCrmService(db: PrismaClient, identity: Pick<CrmActor, "ten
   }
 
   return {
-    listProjectFilterChoices(input: unknown) { return run((tx, actor) => projectFilterChoices(tx, actor, input)) },
-    ...createSalesService({ run, audit, checkAssignee }),
+    listExtensionChoices(key: string, input: unknown) { return run((tx, actor) => extensions.choices(tx, actor, key, input)) },
+    ...createSalesService({ run, audit, checkAssignee }, extensions),
     ...createActivityTypeService({ run, audit }),
-    ...createWorkService({ run, audit, checkAssignee }),
+    ...createWorkService({ run, audit, checkAssignee }, extensions),
     ...createReportService({ run }),
-    ...createSalesReportService({ run }),
+    ...createSalesReportService({ run }, extensions),
     ...createFollowUpService({ run, audit }),
     ...createIntakeService({ run, audit }),
     ...createLostReasonService({ run, audit }),
+    ...createTeamService({ run, audit }),
+    ...createPresetService({ run, audit }, presets),
     listAccounts(input: unknown) {
       const query = crmListSchema.parse(input)
       return run(async (tx, actor) => {
@@ -260,12 +267,13 @@ export function createCrmService(db: PrismaClient, identity: Pick<CrmActor, "ten
     listEnquiries(input: unknown, exporting = false) {
       const query = crmListSchema.parse(input)
       return run(async (tx, actor) => {
-        const propertyContext = await requirePropertyFilter(tx, actor, query)
+        const extensionFilter = await extensions.filters(tx, actor, query)
         const phoneQuery = query.q.replace(/[\s().-]/g, "")
         const where: Prisma.CrmEnquiryWhereInput = { AND: [enquiryScope(actor), {
           ...(query.status ? { status: query.status } : {}),
-          sourceId: query.sourceId, assignedUserId: query.assignedUserId, lostReasonId: query.lostReasonId,
-          ...(propertyContext ? { propertyContext: { is: propertyContext } } : {}),
+          sourceId: query.sourceId, assignedUserId: query.assignedUserId, lostReasonId: query.lostReasonId, salesTeamId: query.salesTeamId,
+          ...extensionFilter.enquiry,
+          ...await customFieldFilter(tx, actor, enquiryFields, query),
           ...(query.q ? { OR: [{ title: { contains: query.q, mode: "insensitive" } }, { contact: { name: { contains: query.q, mode: "insensitive" } } },
             { account: { name: { contains: query.q, mode: "insensitive" } } },
             ...(phoneQuery ? ["phone", "alternatePhone", "whatsappPhone"].map(field => ({ contact: { [field]: { contains: phoneQuery } } })) : []),
@@ -275,21 +283,25 @@ export function createCrmService(db: PrismaClient, identity: Pick<CrmActor, "ten
         const total = await tx.crmEnquiry.count({ where })
         if (exporting) checkExportLimit(total)
         const items = await tx.crmEnquiry.findMany({ where, include: enquiryInclude, orderBy: [{ [sort]: query.order }, { id: "asc" }], skip: exporting ? 0 : (query.page - 1) * query.pageSize, take: exporting ? CRM_EXPORT_LIMIT : query.pageSize })
-        const decorated = await withPropertyContext(tx, actor, "enquiry", await maskReferrals(tx, actor, items))
-        return { ...pageResult(decorated, total, query.page, query.pageSize), realEstateEnabled: decorated[0]?.realEstateEnabled ?? await realEstateEnabled(tx, actor.tenantId) }
+        const decorated = await extensions.decorate(tx, actor, "enquiry", await maskReferrals(tx, actor, items))
+        return { ...pageResult(decorated.items, total, query.page, query.pageSize), ...decorated.metadata, customFieldExport: exporting ? await customFieldExport(tx, actor, enquiryFields, items.map(item => item.id)) : undefined }
       })
     },
     getEnquiry(id: string) {
       return run(async (tx, actor) => {
-        const [record] = await withPropertyContext(tx, actor, "enquiry", await maskReferrals(tx, actor, [await findEnquiry(tx, actor, id)]))
+        const { items: [record] } = await extensions.decorate(tx, actor, "enquiry", await maskReferrals(tx, actor, [await findEnquiry(tx, actor, id)]))
         const events = await Promise.all(["created", "updated", "assigned"].map(event => tx.crmActivity.findFirst({ where: { tenantId: actor.tenantId, enquiryId: id, event }, orderBy: [{ createdAt: "desc" }, { id: "desc" }], select: { createdAt: true, actor: { select: personSelect } } })))
-        return { ...record, metadata: { created: events[0], updated: events[1] || events[0], assigned: events[2] }, canAssign: canManageCrm(actor.role), opportunity: await tx.crmOpportunity.findFirst({ where: { ...enquiryScope(actor), enquiryId: id }, select: { id: true } }) }
+        return { ...record, customFields: await readCustomFields(tx, actor, enquiryFields, record), metadata: { created: events[0], updated: events[1] || events[0], assigned: events[2] }, canAssign: canManageCrm(actor.role), opportunity: await tx.crmOpportunity.findFirst({ where: { ...enquiryScope(actor), enquiryId: id }, select: { id: true } }) }
       })
     },
     createEnquiry(input: unknown) {
-      const data = crmEnquiryCreateSchema.parse(input)
+      const custom = splitCustomFields(input)
+      const { core, extension } = extensions.splitWrite(custom.core)
+      const data = crmEnquiryCreateSchema.parse(core)
       return run(async (tx, actor) => {
         await checkAssignee(tx, actor, data.assignedUserId)
+        const team = await resolveSalesTeam(tx, actor, data.salesTeamId, data.assignedUserId)
+        if (team?.workflow === "DIRECT") throw new CrmError(400, "This team starts with opportunities. Create an opportunity instead.")
         const contact = data.newContact
           ? await tx.crmContact.create({ data: { ...data.newContact, email: data.newContact.email || null, phone: data.newContact.phone || null, tenantId: actor.tenantId, ownerUserId: actor.userId } })
           : await tx.crmContact.findFirst({ where: { ...contactScope(actor), id: data.contactId, archived: false } })
@@ -305,24 +317,31 @@ export function createCrmService(db: PrismaClient, identity: Pick<CrmActor, "ten
           }
         }
         const context = await enquiryContext(tx, actor, contact.id, data)
-        const enquiry = await tx.crmEnquiry.create({ data: { title: data.title, requirements: data.requirements, assignedUserId: data.assignedUserId, contactId: contact.id, ...context, tenantId: actor.tenantId }, include: enquiryInclude })
-        await savePropertyContext(tx, actor, "enquiry", enquiry.id, data.propertyContext)
+        const enquiry = await tx.crmEnquiry.create({ data: { salesTeamId: team?.id ?? null, title: data.title, requirements: data.requirements, assignedUserId: data.assignedUserId, contactId: contact.id, ...context, tenantId: actor.tenantId }, include: enquiryInclude })
+        await extensions.save(tx, actor, "enquiry", enquiry.id, extension)
+        await saveCustomFields(tx, actor, enquiryFields, enquiry, custom.patch, true)
         await activity(tx, actor, enquiry.id, "created", "Enquiry created.")
         await activity(tx, actor, enquiry.id, "assigned", `Assigned to ${enquiry.assignee.name || "salesperson"}.`)
         await audit(tx, actor, "crm.enquiry.created", enquiry.id, undefined, snapshot(enquiry))
-        return (await withPropertyContext(tx, actor, "enquiry", await maskReferrals(tx, actor, [enquiry])))[0]
+        return { ...(await extensions.decorate(tx, actor, "enquiry", await maskReferrals(tx, actor, [enquiry]))).items[0], customFields: await readCustomFields(tx, actor, enquiryFields, enquiry) }
       })
     },
     updateEnquiry(id: string, input: unknown) {
-      const { version, propertyContext, ...data } = crmEnquiryUpdateSchema.parse(input)
+      const custom = splitCustomFields(input)
+      const { core, extension } = extensions.splitWrite(custom.core)
+      const { version, ...data } = crmEnquiryUpdateSchema.parse(core)
       return run(async (tx, actor) => {
         const before = await findEnquiry(tx, actor, id)
         await checkAssignee(tx, actor, data.assignedUserId)
+        const team = await resolveSalesTeam(tx, actor, data.salesTeamId, data.assignedUserId, before)
+        if (before.salesTeamId !== (team?.id ?? null) && await tx.crmOpportunity.count({ where: { tenantId: actor.tenantId, enquiryId: id } })) throw new CrmError(409, "A converted enquiry keeps its original sales team.")
+        const fieldRecord = { ...before, salesTeamId: team?.id ?? null }
         const context = await enquiryContext(tx, actor, before.contactId, data, before)
         const lost = await resolveLostReason(tx, actor, data.status === "CLOSED", data.lostReasonId, before.status === "CLOSED" ? before : undefined)
-        const changed = await tx.crmEnquiry.updateMany({ where: { ...enquiryScope(actor), id, version }, data: { ...data, ...context, ...lost, version: { increment: 1 } } })
+        const changed = await tx.crmEnquiry.updateMany({ where: { ...enquiryScope(actor), id, version }, data: { ...data, salesTeamId: team?.id ?? null, ...context, ...lost, version: { increment: 1 } } })
         if (!changed.count) throw new CrmError(409, "This enquiry changed. Refresh before saving.")
-        await savePropertyContext(tx, actor, "enquiry", id, propertyContext)
+        await extensions.save(tx, actor, "enquiry", id, extension)
+        await saveCustomFields(tx, actor, enquiryFields, fieldRecord, custom.patch)
         if (before.assignedUserId !== data.assignedUserId) {
           const nextOwner = await tx.user.findFirstOrThrow({ where: { tenantId: actor.tenantId, id: data.assignedUserId }, select: personSelect })
           await activity(tx, actor, id, "assigned", `Salesperson changed from ${before.assignee.name || "unnamed user"} to ${nextOwner.name || "unnamed user"}.`)
@@ -333,7 +352,7 @@ export function createCrmService(db: PrismaClient, identity: Pick<CrmActor, "ten
         }
         await activity(tx, actor, id, "updated", `Enquiry updated. Status: ${data.status === "CLOSED" ? "Lost" : data.status}.${lost.lostReasonName ? ` Lost reason: ${lost.lostReasonName}.` : ""}${data.assignedUserId !== before.assignedUserId ? " Salesperson changed." : ""}`)
         await audit(tx, actor, "crm.enquiry.updated", id, snapshot(before), snapshot({ ...data, ...context, ...lost }))
-        return (await withPropertyContext(tx, actor, "enquiry", await maskReferrals(tx, actor, [await tx.crmEnquiry.findFirstOrThrow({ where: { tenantId: actor.tenantId, id }, include: enquiryInclude })])))[0]
+        return { ...(await extensions.decorate(tx, actor, "enquiry", await maskReferrals(tx, actor, [await tx.crmEnquiry.findFirstOrThrow({ where: { tenantId: actor.tenantId, id }, include: enquiryInclude })]))).items[0], customFields: await readCustomFields(tx, actor, enquiryFields, fieldRecord) }
       })
     },
     listTasks(input: unknown, enquiryId?: string) {
@@ -404,6 +423,7 @@ export function createCrmService(db: PrismaClient, identity: Pick<CrmActor, "ten
       return run(async (tx, actor) => {
         const where: Prisma.UserWhereInput = { tenantId: actor.tenantId, status: "ACTIVE", role: { in: ["ADMIN", "MANAGER", "STAFF"] },
           ...(!canManageCrm(actor.role) ? { id: actor.userId } : {}),
+          ...(query.salesTeamId ? { crmSalesTeamMemberships: { some: { tenantId: actor.tenantId, teamId: query.salesTeamId } } } : {}),
           ...(query.q ? { name: { contains: query.q, mode: "insensitive" } } : {}),
         }
         const [items, total] = await Promise.all([

@@ -1,3 +1,3 @@
-import { withCrmApi, queryInput } from "@/modules/crm/http"
+import { withCrmApi, queryInput } from "@/application/crm/http"
 export const dynamic = "force-dynamic"
 export const GET = (request: Request) => withCrmApi(request, service => service.opportunitiesWithoutActivity(queryInput(request)))

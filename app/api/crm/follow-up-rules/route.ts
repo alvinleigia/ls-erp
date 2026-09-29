@@ -1,4 +1,4 @@
-import { withCrmApi, queryInput } from "@/modules/crm/http"
+import { withCrmApi, queryInput } from "@/application/crm/http"
 import { readJson } from "@/platform/business-api"
 export const dynamic = "force-dynamic"
 export const GET = (request: Request) => withCrmApi(request, service => service.listFollowUpRules(queryInput(request)))

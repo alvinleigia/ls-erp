@@ -10,6 +10,7 @@ export type CrmContactRow = {
 }
 export type CrmAccountRow = CrmContactRow & { website: string | null; notes: string | null }
 export type CrmEnquiryRow = {
+  salesTeamId?: string | null; salesTeam?: { id: string; name: string; workflow: string; archived: boolean } | null;
   lostReasonId?: string | null; lostReasonName?: string | null;
   propertyContext?: PropertyContext | null; realEstateEnabled?: boolean;
   id: string; title: string; source: string | null; requirements: string | null;
@@ -32,6 +33,7 @@ export type CrmActivityRow = { id: string; event: string; message: string; creat
 export type CrmStageRow = { id: string; name: string; kind: "OPEN" | "WON" | "LOST"; color: string; probability: number; archived: boolean; position: number }
 export type CrmPipelineRow = { id: string; name: string; archived: boolean; version: number; stages: CrmStageRow[]; canManage?: boolean }
 export type CrmOpportunityRow = {
+  salesTeamId?: string | null; salesTeam?: { id: string; name: string; workflow: string; archived: boolean } | null;
   lostReasonId?: string | null; lostReasonName?: string | null;
   propertyContext?: PropertyContext | null; realEstateEnabled?: boolean;
   id: string; title: string; pipelineId: string; stageId: string; contactId: string; accountId: string | null; enquiryId: string | null;

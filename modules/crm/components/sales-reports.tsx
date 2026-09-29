@@ -1,4 +1,5 @@
 "use client"
+import { SalesTeamSelect } from "./sales-teams"
 import { LostReasonFilter } from "./lost-reason-fields"
 import * as React from "react"
 import Link from "next/link"
@@ -16,7 +17,7 @@ import { CrmSelect } from "./crm-controls"
 import { CrmPagination } from "./crm-pagination"
 import { RecordSelect } from "./record-select"
 import { ExportButton } from "./export-button"
-import { ProjectFilter } from "@/modules/real-estate/components/project-filter"
+import { CrmExtensionFilter } from "./extension-provider"
 import type { ListResponse } from "@/types/api"
 import type { SalesReportSummary, SalesReportView, SalesReportDimension, SalesReportRecord, SalesLeadGroup, SalesValueGroup } from "@/types/crm-sales-report"
 
@@ -92,7 +93,8 @@ export function SalesReports() {
   const [period, setPeriod] = React.useState<{ from: string; through: string } | null>(null), [from, setFrom] = React.useState(""), [through, setThrough] = React.useState("")
   const [periodOpen, setPeriodOpen] = React.useState(false), [periodError, setPeriodError] = React.useState(""), [revision, setRevision] = React.useState(0)
   const [selection, setSelection] = React.useState<{ base: string; view: SalesReportView; extra: Record<string, string>; caption?: string } | null>(null)
-  const params = new URLSearchParams({ scope, ...(lostReasonId ? { lostReasonId } : {}), ...(period || {}), ...(owner ? { assignedUserId: owner } : {}), ...(source ? { sourceId: source } : {}), ...(projectId ? { projectId } : {}), ...(subprojectId ? { subprojectId } : {}) }).toString()
+  const [salesTeamId, setSalesTeamId] = React.useState("")
+  const params = new URLSearchParams({ ...(salesTeamId ? { salesTeamId } : {}), scope, ...(lostReasonId ? { lostReasonId } : {}), ...(period || {}), ...(owner ? { assignedUserId: owner } : {}), ...(source ? { sourceId: source } : {}), ...(projectId ? { projectId } : {}), ...(subprojectId ? { subprojectId } : {}) }).toString()
   const { data, loading, error } = useReport<SalesReportSummary>("", params, revision)
   const selected = selection?.base === params ? selection : { view: "leads" as const, extra: {} }
   const details = `${params}&${new URLSearchParams({ view: selected.view, ...selected.extra })}`
@@ -107,11 +109,11 @@ export function SalesReports() {
     <CrmSurface><div className="flex flex-wrap items-end gap-3">
       <FormField id="sales-scope" label="Scope"><CrmSelect id="sales-scope" value={scope} onValueChange={v => { setScope(v); setOwner("") }}><option value="mine">My sales</option>{data?.canManage && <option value="team">Team sales</option>}</CrmSelect></FormField>
       <Popover open={periodOpen} onOpenChange={open => { setPeriodOpen(open); if (open) { setFrom(period?.from || data?.from || ""); setThrough(period?.through || data?.through || "") } }}><PopoverTrigger asChild><Button variant="outline">{period ? `${period.from} – ${period.through}` : "Reporting period"}</Button></PopoverTrigger><PopoverContent align="start" className="w-[min(24rem,calc(100vw-2rem))] space-y-4"><p className="font-semibold">Reporting period</p><FormField id="sales-from" label="From"><Input id="sales-from" type="date" value={from} onChange={e => setFrom(e.target.value)} /></FormField><FormField id="sales-through" label="Through (inclusive)"><Input id="sales-through" type="date" value={through} onChange={e => setThrough(e.target.value)} /></FormField>{periodError && <p role="alert" className="text-sm text-destructive">{periodError}</p>}<div className="flex justify-end gap-2"><Button variant="outline" onClick={() => setPeriodOpen(false)}>Cancel</Button><Button onClick={applyPeriod}>Apply period</Button></div></PopoverContent></Popover>
-      <CrmFilters activeCount={[lostReasonId, owner, source, projectId, subprojectId].filter(Boolean).length} onReset={reset}>
+      <CrmFilters activeCount={[salesTeamId, lostReasonId, owner, source, projectId, subprojectId].filter(Boolean).length} onReset={() => { setSalesTeamId(""); reset() }}>
         {scope === "team" && <FormField id="sales-owner" label="Salesperson"><RecordSelect id="sales-owner" endpoint="/api/crm/assignees" value={owner} onChange={setOwner} placeholder="All salespeople" /></FormField>}
-        <LostReasonFilter value={lostReasonId} onChange={setLostReasonId} />
+        <SalesTeamSelect all value={salesTeamId} onChange={setSalesTeamId} /><LostReasonFilter value={lostReasonId} onChange={setLostReasonId} />
         <FormField id="sales-source" label="Lead source"><RecordSelect id="sales-source" endpoint="/api/crm/lead-sources?includeArchived=true" value={source} onChange={setSource} placeholder="All sources" /></FormField>
-        {data?.realEstateEnabled && <ProjectFilter projectId={projectId} subprojectId={subprojectId} onChange={(p, s) => { setProjectId(p); setSubprojectId(s) }} />}
+        {data?.realEstateEnabled && <CrmExtensionFilter primaryId={projectId} secondaryId={subprojectId} onChange={(p, s) => { setProjectId(p); setSubprojectId(s) }} />}
       </CrmFilters><Button variant="outline" onClick={() => setRevision(v => v + 1)}>Refresh</Button>
     </div>{data && <p className="text-sm text-muted-foreground">{formatDate(data.from)} through {formatDate(data.through)}, inclusive · {data.timeZone}. Leads use their creation date; won/lost deals use their closing date. Pipeline and follow-up coverage show current work across all dates.</p>}</CrmSurface>
     <ReportError error={error} />

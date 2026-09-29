@@ -1,5 +1,5 @@
 import { resolveActivityType } from "./activity-type-service"
-import { requirePropertyFilter } from "@/modules/real-estate/sales-context"
+import type { CrmExtensions } from "./extensions"
 import type { Prisma, CrmTask } from "@prisma/client"
 import { CrmError, canManageCrm, contactScope, enquiryScope, type CrmActor } from "./policy"
 import { crmListSchema, crmNoteSchema } from "./validation"
@@ -34,7 +34,7 @@ function dto(record: Loaded, actor: CrmActor) {
     parent: canViewParent ? { id: source.id, title: source.title, kind: enquiry ? "enquiry" : "opportunity" } : null,
     canEdit: canManageCrm(actor.role) || record.assignedUserId === actor.userId }
 }
-export function createWorkService({ run, audit, checkAssignee }: Context) {
+export function createWorkService({ run, audit, checkAssignee }: Context, extensions: Pick<CrmExtensions, "filters">) {
   async function zone(tx: Tx, actor: CrmActor) {
     return (await tx.appSetting.findUnique({ where: { tenantId: actor.tenantId }, select: { timeZone: true } }))?.timeZone || "UTC"
   }
@@ -126,11 +126,8 @@ export function createWorkService({ run, audit, checkAssignee }: Context) {
           ...(query.state === "open" ? { status: { in: [...openStatuses] } } : query.state === "completed" ? { status: "COMPLETED" } : query.state === "cancelled" ? { status: "CANCELLED" } : {}),
         }
         const clauses: Prisma.CrmTaskWhereInput[] = [workScope(actor), filter]
-        const propertyContext = await requirePropertyFilter(tx, actor, query)
-        if (propertyContext) clauses.push({ OR: [
-          { enquiry: { AND: [enquiryScope(actor), { propertyContext: { is: propertyContext } }] } },
-          { opportunity: { AND: [enquiryScope(actor), { propertyContext: { is: propertyContext } }] } },
-        ] })
+        const extensionFilter = await extensions.filters(tx, actor, query)
+        if (extensionFilter.work) clauses.push(extensionFilter.work)
         if (query.scope === "mine" || query.due === "reminders") clauses.push({ assignedUserId: actor.userId })
         if (query.assignedUserId) clauses.push({ assignedUserId: query.assignedUserId })
         if (query.completedFrom && query.completedThrough) clauses.push({ status: "COMPLETED", completedAt: {

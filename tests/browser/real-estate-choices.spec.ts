@@ -1,0 +1,74 @@
+import { test, expect } from "@playwright/test"
+
+test.beforeEach(async ({ baseURL, request }) => {
+  test.skip(process.env.CRM_BROWSER_LOCAL_WRITES !== "1" || baseURL !== "http://intake-upgrade-a.localhost:3001", "Requires disposable local data.")
+  expect((await request.patch("/api/modules", { data: { key: "realEstate", enabled: true } })).ok()).toBe(true)
+})
+
+test("configure a shared category, use its default, archive it and preserve the project selection", async ({ page, request }, info) => {
+  test.setTimeout(180000)
+  const name = `Townhome ${Date.now()}`
+  await page.goto("/crm/configuration")
+  await page.getByRole("link", { name: "Property categories", exact: true }).click()
+  await page.getByRole("link", { name: "New choice", exact: true }).click()
+  await page.getByLabel("Name", { exact: true }).fill(name)
+  await page.getByLabel("Display order", { exact: true }).fill("1")
+  await page.getByLabel("Use as default", { exact: true }).check()
+  await page.screenshot({ path: info.outputPath("choice-editor-desktop.png"), fullPage: true })
+  await page.getByRole("button", { name: "Save choice", exact: true }).click()
+  await expect(page.getByRole("link", { name, exact: true })).toBeVisible()
+  const choice = (await (await request.get(`/api/real-estate/choices/property-categories?q=${encodeURIComponent(name)}`)).json()).items[0]
+  await page.goto("/crm/projects/new")
+  await expect(page.getByLabel("Sales lifecycle", { exact: true })).toContainText("Planning")
+  await expect(page.getByRole("button", { name: `Remove ${name}`, exact: true })).toBeVisible()
+  await page.getByLabel("Project name", { exact: true }).fill(`Choice project ${Date.now()}`)
+  await page.getByLabel("Project code", { exact: true }).fill(`CHOICE-${Date.now()}`)
+  await page.getByRole("button", { name: "Save project", exact: true }).click()
+  await expect(page).toHaveURL(/\/crm\/projects\/(?!new)[^/]+$/)
+  const projectId = new URL(page.url()).pathname.split("/").at(-1)!
+  expect((await (await request.get(`/api/real-estate/projects/${projectId}`)).json()).categories).toContain(choice.id)
+  await page.goto(`/crm/configuration/real-estate/property-categories/${choice.id}`)
+  await page.getByLabel("Name", { exact: true }).fill(`${name} renamed`)
+  await page.getByLabel("Status", { exact: true }).click()
+  await page.getByRole("menuitemradio", { name: "Archived", exact: true }).click()
+  await expect(page.getByLabel("Use as default", { exact: true })).not.toBeChecked()
+  await page.getByRole("button", { name: "Save choice", exact: true }).click()
+  await page.getByRole("button", { name: "Confirm and save", exact: true }).click()
+  await expect(page).toHaveURL(/\/property-categories$/)
+  await page.goto(`/crm/projects/${projectId}`)
+  await expect(page.getByRole("button", { name: `Remove ${name}`, exact: true })).toBeVisible()
+  await page.getByLabel("Location", { exact: true }).fill("Pune")
+  await page.getByRole("button", { name: "Save project", exact: true }).click()
+  await expect.poll(async () => (await (await request.get(`/api/real-estate/projects/${projectId}`)).json()).location).toBe("Pune")
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.goto("/crm/configuration/real-estate/property-categories")
+  await expect(page.getByRole("heading", { name: "Property categories", exact: true })).toBeVisible()
+  await expect(page.getByRole("link", { name: "Apartment", exact: true })).toBeVisible()
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true)
+  await page.screenshot({ path: info.outputPath("choice-list-mobile.png"), fullPage: true })
+  await page.goto("/crm/projects/new")
+  await page.locator("#project-category").click()
+  await page.getByRole("combobox").last().fill(name)
+  await expect(page.getByText("No matching records.", { exact: true })).toBeVisible()
+  await expect(page.getByRole("option", { name: `${name} renamed`, exact: true })).toHaveCount(0)
+})
+
+test("configured buyer defaults appear on a new enquiry and can be cleared", async ({ page, request }, info) => {
+  const name = `Buying window ${Date.now()}`
+  const response = await request.post("/api/real-estate/choices/buying-timeframes", { data: { name, isDefault: true } })
+  expect(response.ok()).toBe(true)
+  const choice = await response.json()
+  try {
+    await page.goto("/crm/enquiries/new")
+    await expect(page.getByLabel("Buying timeframe", { exact: true })).toContainText(name)
+    await page.getByRole("button", { name: "Clear selection property-timeframe", exact: true }).click()
+    await expect(page.getByLabel("Buying timeframe", { exact: true })).toContainText("Not specified")
+    await page.setViewportSize({ width: 390, height: 844 })
+    await page.goto(`/crm/configuration/real-estate/buying-timeframes/${choice.id}`)
+    await expect(page.getByLabel("Name", { exact: true })).toHaveValue(name)
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true)
+    await page.screenshot({ path: info.outputPath("choice-editor-mobile.png"), fullPage: true })
+  } finally {
+    expect((await request.patch(`/api/real-estate/choices/buying-timeframes/${choice.id}`, { data: { name, version: choice.version, isDefault: false } })).ok()).toBe(true)
+  }
+})

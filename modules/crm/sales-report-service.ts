@@ -2,7 +2,7 @@ import { Prisma } from "@prisma/client"
 import { CrmError, canManageCrm, type CrmActor } from "./policy"
 import { salesReportSchema, type SalesReportQuery } from "./sales-report-validation"
 import { businessDate, startOfBusinessDate } from "./work-time"
-import { realEstateEnabled, requirePropertyFilter } from "@/modules/real-estate/sales-context"
+import type { CrmExtensions } from "./extensions"
 import { checkExportLimit, CRM_EXPORT_LIMIT, crmCsv } from "./csv"
 import type { SalesReportRecord, SalesLeadGroup, SalesValueGroup, SalesReportView } from "@/types/crm-sales-report"
 
@@ -11,14 +11,12 @@ type Context = { run: <T>(operation: (tx: Tx, actor: CrmActor) => Promise<T>) =>
 const nextDay = (day: string, offset = 1) => new Date(Date.parse(`${day}T00:00:00Z`) + offset * 86400000).toISOString().slice(0, 10)
 const pageResult = <T>(items: T[], total: number, q: SalesReportQuery) => ({ items, total, page: q.page, pageSize: q.pageSize, totalPages: Math.max(1, Math.ceil(total / q.pageSize)) })
 
-export function createSalesReportService({ run }: Context) {
+export function createSalesReportService({ run }: Context, extensions: Pick<CrmExtensions, "report">) {
   async function context(tx: Tx, actor: CrmActor, q: SalesReportQuery) {
     const canManage = canManageCrm(actor.role)
     if (!canManage && (q.scope === "team" || (q.assignedUserId && q.assignedUserId !== actor.userId))) throw new CrmError(403, "Team sales reporting is available to managers only.")
     if (q.scope === "mine" && q.assignedUserId && q.assignedUserId !== actor.userId) throw new CrmError(400, "Choose team scope to report on another salesperson.")
-    await requirePropertyFilter(tx, actor, q)
-    const propertyEnabled = await realEstateEnabled(tx, actor.tenantId)
-    if (q.dimension === "project" && !propertyEnabled) throw new CrmError(403, "Enable Real Estate to group by project.")
+    const extension = await extensions.report(tx, actor, q)
     const timeZone = (await tx.appSetting.findUnique({ where: { tenantId: actor.tenantId }, select: { timeZone: true } }))?.timeZone || "UTC"
     const now = new Date(), today = businessDate(now, timeZone)
     const from = q.from || nextDay(today, -29), through = q.through || today
@@ -29,33 +27,29 @@ export function createSalesReportService({ run }: Context) {
     const filter = Prisma.sql`r."tenantId" = ${actor.tenantId}
       ${owner ? Prisma.sql`AND r."assignedUserId" = ${owner}` : Prisma.empty}
       ${q.lostReasonId ? Prisma.sql`AND r."lostReasonId" = ${q.lostReasonId}` : Prisma.empty}
+      ${q.salesTeamId ? Prisma.sql`AND r."salesTeamId" = ${q.salesTeamId}` : Prisma.empty}
       ${q.sourceId ? Prisma.sql`AND r."sourceId" = ${q.sourceId}` : Prisma.empty}
-      ${q.projectId ? Prisma.sql`AND x."projectId" = ${q.projectId}` : Prisma.empty}
-      ${q.subprojectId ? Prisma.sql`AND x."subprojectId" = ${q.subprojectId}` : Prisma.empty}`
+      ${extension.filter}`
     const sharedColumns = Prisma.sql`r.id, r.title, r."tenantId", r."assignedUserId", r."sourceId", r."createdAt", r."lostReasonId", r."lostReasonName",
       c.name AS customer, u.name AS owner, COALESCE(s.name, r.source) AS source,
-      ${propertyEnabled ? Prisma.sql`x."projectId"` : Prisma.sql`NULL::text`} AS "projectId",
-      ${propertyEnabled ? Prisma.sql`p.name` : Prisma.sql`NULL::text`} AS project,
-      ${propertyEnabled ? Prisma.sql`sp.name` : Prisma.sql`NULL::text`} AS subproject`
+      ${extension.columns}`
     const joins = Prisma.sql`
       JOIN "CrmContact" c ON c.id = r."contactId" AND c."tenantId" = r."tenantId"
       JOIN "User" u ON u.id = r."assignedUserId" AND u."tenantId" = r."tenantId"
-      LEFT JOIN "CrmLeadSource" s ON s.id = r."sourceId" AND s."tenantId" = r."tenantId"
-      LEFT JOIN "RealEstateProject" p ON p.id = x."projectId" AND p."tenantId" = r."tenantId"
-      LEFT JOIN "RealEstateProject" sp ON sp.id = x."subprojectId" AND sp."tenantId" = r."tenantId"`
+      LEFT JOIN "CrmLeadSource" s ON s.id = r."sourceId" AND s."tenantId" = r."tenantId"`
     const cte = Prisma.sql`WITH leads_all AS (
       SELECT ${sharedColumns}, r.status::text AS status,
         EXISTS (SELECT 1 FROM "CrmOpportunity" o WHERE o."tenantId" = r."tenantId" AND o."enquiryId" = r.id
           ${!canManage ? Prisma.sql`AND o."assignedUserId" = ${actor.userId}` : Prisma.empty}) AS converted
       FROM "CrmEnquiry" r
-      LEFT JOIN "RealEstateEnquiryContext" x ON x."enquiryId" = r.id AND x."tenantId" = r."tenantId"
+      ${extension.enquiryJoins}
       ${joins} WHERE ${filter}
     ), leads AS (SELECT * FROM leads_all WHERE "createdAt" >= ${begin} AND "createdAt" < ${end}),
     deals AS (
       SELECT ${sharedColumns}, st.kind::text AS status, st.id AS "stageId", st.name AS stage, pl.name AS pipeline,
         r.amount, r.currency, r."closedAt", (NOT c.archived AND NOT st.archived AND NOT pl.archived) AS active
       FROM "CrmOpportunity" r
-      LEFT JOIN "RealEstateOpportunityContext" x ON x."opportunityId" = r.id AND x."tenantId" = r."tenantId"
+      ${extension.opportunityJoins}
       ${joins}
       JOIN "CrmStage" st ON st.id = r."stageId" AND st."tenantId" = r."tenantId"
       JOIN "CrmPipeline" pl ON pl.id = r."pipelineId" AND pl."tenantId" = r."tenantId"
@@ -75,7 +69,7 @@ export function createSalesReportService({ run }: Context) {
       WHERE t."tenantId" = ${actor.tenantId} AND (l.id IS NOT NULL OR d.id IS NOT NULL)
         AND t.status IN ('OPEN', 'IN_PROGRESS') AND (t."startsAt" < ${now} OR (t."startsAt" IS NULL AND t."dueOn" < ${new Date(`${today}T00:00:00Z`)}))
     )`
-    return { cte, metadata: { from, through, today, timeZone, canManage, realEstateEnabled: propertyEnabled, generatedAt: now.toISOString() } }
+    return { cte, metadata: { from, through, today, timeZone, canManage, realEstateEnabled: extension.realEstateEnabled, generatedAt: now.toISOString() } }
   }
   const table = (view: SalesReportView) => ({ leads: Prisma.sql`leads`, converted: Prisma.sql`leads`, pipeline: Prisma.sql`pipeline`, won: Prisma.sql`won`, lost: Prisma.sql`lost`, overdue: Prisma.sql`overdue`, gaps: Prisma.sql`gaps` })[view]
   const dimension = (q: SalesReportQuery) => q.dimension === "lostReason" ? Prisma.sql`"lostReasonId"` : q.dimension === "source" ? Prisma.sql`"sourceId"` : q.dimension === "project" ? Prisma.sql`"projectId"` : Prisma.sql`"assignedUserId"`

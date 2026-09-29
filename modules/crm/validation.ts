@@ -1,6 +1,6 @@
+import { customFilterShape } from "@/platform/custom-fields/validation"
 import { z } from "zod"
 import { COUNTRY_OPTIONS } from "@/lib/constants/countries"
-import { propertyContextSchema } from "@/modules/real-estate/sales-validation"
 
 const id = z.string().trim().min(1).max(100)
 const text = (max: number) => z.string().trim().max(max).default("")
@@ -33,14 +33,13 @@ export const crmAccountSchema = identitySchema.extend({
 export const crmAccountUpdateSchema = crmAccountSchema.extend({ version: z.number().int().positive(), archived: z.boolean() })
 export const crmAccountLinkSchema = z.object({ accountId: id }).strict()
 const enquiryFields = z.object({
-  propertyContext: propertyContextSchema.nullable().optional(),
   title: z.string().trim().min(1).max(200),
   source: optionalText(100),
   sourceId: optionalText(100), accountId: optionalText(100),
   referralContactId: optionalText(100), referralAccountId: optionalText(100),
   targetCloseOn: z.union([z.iso.date(), z.literal("")]).optional(),
   requirements: text(5000),
-  assignedUserId: id,
+  assignedUserId: id, salesTeamId: z.string().max(100).nullable().optional(),
 }).strict()
 export const crmEnquiryCreateSchema = enquiryFields.extend({ contactId: id.optional(), newContact: crmContactSchema.optional() }).refine(
   value => !!value.contactId !== !!value.newContact, { path: ["contactId"], message: "Choose an existing contact or enter a new contact." },
@@ -58,6 +57,8 @@ export const crmTaskSchema = z.object({
 export const crmNoteSchema = z.object({ message: z.string().trim().min(1).max(5000) }).strict()
 export const crmTaskCompleteSchema = z.object({ completed: z.literal(true) }).strict()
 export const crmListSchema = z.object({
+  ...customFilterShape,
+  salesTeamId: id.optional(),
   projectId: id.optional(), subprojectId: id.optional(),
   page: z.coerce.number().int().min(1).max(100000).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(20),
@@ -65,6 +66,7 @@ export const crmListSchema = z.object({
   status: z.enum(enquiryStatuses).optional(),
   sourceId: id.optional(), assignedUserId: id.optional(), lostReasonId: id.optional(),
   archived: z.enum(["true", "false"]).default("false"),
+  includeArchived: z.enum(["true", "false"]).optional(),
   activeOnly: z.enum(["true", "false"]).optional(),
   due: z.enum(["open", "overdue", "completed"]).optional(),
   sort: z.enum(["createdAt", "updatedAt", "name", "title", "dueOn"]).default("updatedAt"),

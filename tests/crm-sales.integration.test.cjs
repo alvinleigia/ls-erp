@@ -5,7 +5,7 @@ const { randomUUID } = require("node:crypto")
 const { Pool } = require("pg")
 const { PrismaClient } = require("@prisma/client")
 const { TenantPgAdapter } = require("../lib/tenant-pg-adapter.ts")
-const { createCrmService } = require("../modules/crm/service.ts")
+const { createApplicationCrmService: createCrmService } = require("../application/crm/service.ts")
 require("../lib/logger.ts").logger.info = () => {}
 const raw = process.env.CRM_TEST_DATABASE_URL
 if (!raw) throw new Error("CRM_TEST_DATABASE_URL is required.")

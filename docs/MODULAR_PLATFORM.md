@@ -1,3 +1,56 @@
+## 2026-09-29: CRM checkpoint release
+
+The three Odoo-alignment migrations (project choices, custom fields and sales
+teams) have applied successfully to the hosted database. Application release is
+in progress. Per user instruction, full hosted workflow verification is deferred
+until after quotation/payment-plan implementation. Prior local checks remain
+recorded in the phase documents; they are not hosted acceptance results.
+
+## 2026-09-29: Odoo alignment Phase 4 (local, not deployed)
+
+Sales teams, member assignment, qualification/direct-opportunity workflows,
+team-scoped custom fields and reviewed configuration presets are implemented.
+Existing staff visibility and unassigned-record workflows are preserved. Team
+filters reconcile sales reports and exports. See [Phase 4 delivery and checks](CRM_ODOO_PHASE_4.md).
+No hosted data or migrations changed. Payment-plan documents are the next agreed
+feature; collections and accounting remain deferred.
+
+## 2026-09-29: Odoo alignment Phase 3 (local, not deployed)
+
+Shared typed custom fields now cover enquiries, opportunities and Real Estate
+projects. Manager configuration, prospective required rules, permissions,
+conversion snapshots, indexed filters and batch CSV exports reuse one engine.
+See [Phase 3 delivery and verification](CRM_ODOO_PHASE_3.md). Phase 4 sales teams
+and workflow presets remain planned. No hosted records or migrations changed.
+
+## CRM Odoo alignment Phase 2 - 2026-09-29
+
+Implemented locally: configurable project statuses, shared property categories
+and buying timeframes under CRM Configuration > Real Estate. Includes tenant
+catalogs, defaults, ordering, archive/restore, searchable selectors and preserved
+labels. The additive migration was verified against existing local fixture data;
+CRM regressions and desktop/mobile browser checks passed. See
+[CRM_ODOO_PHASE_2.md](CRM_ODOO_PHASE_2.md) for verification and release/recovery.
+No hosted migration or deployment was performed. Custom fields are the next phase.
+
+## CRM Odoo alignment Phase 1 - 2026-09-29
+
+Implemented locally: injected CRM extension contracts, application composition,
+Real Estate server/view adapters and CRM Configuration navigation. Core CRM no
+longer imports Real Estate implementations. Existing APIs and data remain compatible;
+no migration is required. See [CRM_ODOO_PHASE_1.md](CRM_ODOO_PHASE_1.md) for checks
+and local-versus-hosted status. Configurable project choices are the next phase.
+
+## Odoo benchmark and early refactor decision - 2026-09-29
+
+The active forward plan is [CRM_ODOO_ALIGNMENT_PLAN.md](CRM_ODOO_ALIGNMENT_PLAN.md).
+It preserves shared CRM and optional Real Estate, prioritizes industry integration
+boundaries, configurable project choices and reusable additional fields, then
+sales-team workflow configuration. These refactors are planned, not implemented.
+Existing CRM Test leads remain the regression baseline; no pilot or import is requested.
+Older deployment notes below are historical; the latest recorded release baseline
+is commit `3e2971c`, including configurable activity types.
+
 ## Configurable CRM activity types - 2026-09-28
 
 Tenant-specific activity types, inherited behaviours, defaults, filters and history

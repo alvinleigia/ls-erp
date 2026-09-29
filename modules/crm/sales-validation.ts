@@ -1,6 +1,5 @@
 import { z } from "zod"
 import { crmListSchema } from "./validation"
-import { propertyContextSchema } from "@/modules/real-estate/sales-validation"
 
 const id = z.string().trim().min(1).max(100)
 const text = (max: number) => z.string().trim().max(max).default("")
@@ -23,9 +22,9 @@ export const pipelineSchema = z.object({
 })
 export const pipelineUpdateSchema = pipelineSchema.safeExtend({ version: z.number().int().positive() })
 export const opportunitySchema = z.object({
-  propertyContext: propertyContextSchema.nullable().optional(),
   title: z.string().trim().min(1).max(200), pipelineId: id, stageId: id, contactId: id,
   accountId: z.string().trim().max(100).optional(), enquiryId: text(100), assignedUserId: id,
+  salesTeamId: z.string().max(100).nullable().optional(),
   enquiryVersion: z.number().int().positive().optional(),
   amount: z.string().trim().regex(/^(0|[1-9]\d{0,13})(\.\d{1,4})?$/, "Enter a positive amount or zero, with up to four decimal places."),
   currency: z.string().trim().toUpperCase().refine(value => Intl.supportedValuesOf("currency").includes(value), "Choose a supported currency code."),

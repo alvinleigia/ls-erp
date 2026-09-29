@@ -1,4 +1,4 @@
-import { withCrmApi } from "@/modules/crm/http"
+import { withCrmApi } from "@/application/crm/http"
 import { readJson } from "@/platform/business-api"
 export const dynamic = "force-dynamic"
 type Context = { params: Promise<{ id: string }> }

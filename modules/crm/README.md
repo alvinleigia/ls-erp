@@ -4,6 +4,11 @@ CRM owns contacts, business accounts, contact/account relationships, enquiries,
 configurable pipelines, opportunities, follow-up tasks and activity. Contacts do
 not need login accounts. Existing salon records and authentication are preserved.
 See `docs/MODULAR_PLATFORM.md` for boundaries, migration and deferred work.
+See `docs/CRM_ODOO_PHASE_1.md` for the current extension boundary and Configuration
+entry point. `extensions.ts` defines injected transaction hooks; application
+composition in `application/crm/service.ts` installs industry implementations.
+Use that application factory for integrated CRM, or `createCrmService` directly
+for core CRM without extensions. HTTP composition lives in `application/crm/http.ts`.
 See `docs/CRM_SALES_PHASE_3.md` for the optional Real Estate projects extension,
 owned by `modules/real-estate/`. Shared CRM invokes narrow extension hooks within its existing transactions.
 See `docs/CRM_SALES_PHASE_4.md` for optional sales context, project filters,

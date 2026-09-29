@@ -1,8 +1,9 @@
 "use client"
+import { SalesTeamSelect } from "./sales-teams"
+import { CustomFieldFilter, emptyCustomFilter } from "./custom-fields"
 import { LostReasonFilter } from "./lost-reason-fields"
 import { ExportButton } from "./export-button"
-import { PropertyCaption } from "@/modules/real-estate/components/property-caption"
-import { ProjectFilter } from "@/modules/real-estate/components/project-filter"
+import { CrmExtensionCaption, CrmExtensionFilter } from "./extension-provider"
 import { CrmTableToolbar, CrmPageHeader, CrmSurface, CrmFilters, crmPageClass } from "./crm-page"
 import { RecordSelect } from "./record-select"
 import { FormField } from "@/components/form-field"
@@ -31,10 +32,12 @@ export function RecordList({ kind, enquiryId, accountId, projectId: fixedProject
   const [total, setTotal] = React.useState(0)
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState("")
+  const [customFilter, setCustomFilter] = React.useState(emptyCustomFilter)
   const [search, setSearch] = React.useState("")
   const [filter, setFilter] = React.useState("")
   const [projectId, setProjectId] = React.useState(fixedProjectId || "")
   const [subprojectId, setSubprojectId] = React.useState(fixedSubprojectId || "")
+  const [salesTeamId, setSalesTeamId] = React.useState("")
   const [sourceId, setSourceId] = React.useState("")
   const [lostReasonId, setLostReasonId] = React.useState("")
   const [assignedUserId, setAssignedUserId] = React.useState("")
@@ -47,10 +50,12 @@ export function RecordList({ kind, enquiryId, accountId, projectId: fixedProject
   if (kind === "enquiries") {
     if (projectId) params.set("projectId", projectId)
     if (subprojectId) params.set("subprojectId", subprojectId)
+    if (salesTeamId) params.set("salesTeamId", salesTeamId)
     if (sourceId) params.set("sourceId", sourceId)
     if (lostReasonId) params.set("lostReasonId", lostReasonId)
     if (assignedUserId) params.set("assignedUserId", assignedUserId)
   }
+  if (kind === "enquiries" && customFilter.customFieldId && customFilter.customFieldValue !== "") Object.entries(customFilter).forEach(([key, value]) => params.set(key, value))
   const queryString = params.toString()
   React.useEffect(() => {
     const controller = new AbortController()
@@ -84,7 +89,7 @@ export function RecordList({ kind, enquiryId, accountId, projectId: fixedProject
       { accessorKey: "phone", header: "Phone", cell: ({ row }) => row.original.phone || "—" },
     ]
     if (kind === "enquiries") return [
-      { accessorKey: "title", header: "Enquiry", cell: ({ row }) => <><Link className="font-medium underline" href={`/crm/enquiries/${row.original.id}`}>{row.original.title}</Link><PropertyCaption context={row.original.propertyContext} /></> },
+      { accessorKey: "title", header: "Enquiry", cell: ({ row }) => <><Link className="font-medium underline" href={`/crm/enquiries/${row.original.id}`}>{row.original.title}</Link><CrmExtensionCaption record={row.original} /></> },
       { id: "contact", header: "Contact", cell: ({ row }) => row.original.contact?.name },
       { id: "phone", header: "Phone", cell: ({ row }) => row.original.contact?.phone || "—" },
       { id: "company", header: "Company", cell: ({ row }) => row.original.account?.name || "—" },
@@ -116,11 +121,13 @@ export function RecordList({ kind, enquiryId, accountId, projectId: fixedProject
       <CrmSelect aria-label={`${title} filter`} className={selectClass} value={filter} onValueChange={event => { setFilter(event); setPagination(previous => ({ ...previous, pageIndex: 0 })) }}>
         {kind === "contacts" || kind === "accounts" ? <><option value="">Active {kind}</option><option value="true">Archived {kind}</option></> : kind === "tasks" ? <><option value="">Open follow-ups</option><option value="overdue">Overdue</option><option value="completed">Completed</option></> : <><option value="">All statuses</option>{enquiryStatuses.map(status => <option key={status} value={status}>{status === "CLOSED" ? "Lost" : status}</option>)}</>}
       </CrmSelect>
-      {kind === "enquiries" && <CrmFilters label="Enquiry filters" activeCount={Number(!!lostReasonId) + Number(!!sourceId) + Number(!!assignedUserId) + Number(!fixedProjectId && !!projectId) + Number(!fixedProjectId && !!subprojectId)} onReset={() => { setLostReasonId(""); setSourceId(""); setAssignedUserId(""); setProjectId(fixedProjectId || ""); setSubprojectId(fixedSubprojectId || ""); setPagination(previous => ({ ...previous, pageIndex: 0 })) }}>
-        {!fixedProjectId && <ProjectFilter projectId={projectId} subprojectId={subprojectId} onChange={(project, subproject) => { setProjectId(project); setSubprojectId(subproject); setPagination(previous => ({ ...previous, pageIndex: 0 })) }} />}
+      {kind === "enquiries" && <CrmFilters label="Enquiry filters" activeCount={Number(!!salesTeamId) + Number(!!customFilter.customFieldId) + Number(!!lostReasonId) + Number(!!sourceId) + Number(!!assignedUserId) + Number(!fixedProjectId && !!projectId) + Number(!fixedProjectId && !!subprojectId)} onReset={() => { setCustomFilter(emptyCustomFilter); setLostReasonId(""); setSourceId(""); setSalesTeamId(""); setAssignedUserId(""); setProjectId(fixedProjectId || ""); setSubprojectId(fixedSubprojectId || ""); setPagination(previous => ({ ...previous, pageIndex: 0 })) }}>
+        {!fixedProjectId && <CrmExtensionFilter primaryId={projectId} secondaryId={subprojectId} onChange={(project, subproject) => { setProjectId(project); setSubprojectId(subproject); setPagination(previous => ({ ...previous, pageIndex: 0 })) }} />}
         <LostReasonFilter value={lostReasonId} onChange={value => { setLostReasonId(value); setPagination(previous => ({ ...previous, pageIndex: 0 })) }} />
+        <SalesTeamSelect all value={salesTeamId} onChange={value => { setSalesTeamId(value); setPagination(previous => ({ ...previous, pageIndex: 0 })) }} />
         <FormField id="lead-source-filter" label="Lead source"><RecordSelect id="lead-source-filter" endpoint="/api/crm/lead-sources?includeArchived=true" value={sourceId} onChange={value => { setSourceId(value); setPagination(previous => ({ ...previous, pageIndex: 0 })) }} placeholder="All sources" /></FormField>
         <FormField id="salesperson-filter" label="Salesperson"><RecordSelect id="salesperson-filter" endpoint="/api/crm/assignees" value={assignedUserId} onChange={value => { setAssignedUserId(value); setPagination(previous => ({ ...previous, pageIndex: 0 })) }} placeholder="All accessible salespeople" /></FormField>
+        <CustomFieldFilter resource="enquiry" value={customFilter} onChange={next => { setCustomFilter(next); setPagination(previous => ({ ...previous, pageIndex: 0 })) }} />
       </CrmFilters>}
       {kind === "enquiries" && <ExportButton href={`/api/crm/enquiries/export?${queryString}`} filename="enquiries.csv" disabled={loading || !!error || !total} />}
     </CrmTableToolbar>

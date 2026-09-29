@@ -4,6 +4,7 @@ import { recordDomainAuditEvent } from "@/lib/domain-audit"
 import type { PropertyContextInput } from "./sales-validation"
 import { enquiryScope, canManageCrm } from "@/modules/crm/policy"
 import { projectListSchema } from "./validation"
+import { propertyChoiceDefaults, resolvePropertyChoice } from "./choice-service"
 
 type Tx = Prisma.TransactionClient
 type Kind = "enquiry" | "opportunity"
@@ -31,13 +32,13 @@ export async function requirePropertyFilter(tx: Tx, actor: BusinessActor, query:
 
 // Only call after the containing CRM records have passed their own access scope.
 // Linked context is read-only evidence, never permission to browse the project.
-export async function withPropertyContext<T extends { id: string }>(tx: Tx, actor: BusinessActor, kind: Kind, records: T[]) {
-  const enabled = await realEstateEnabled(tx, actor.tenantId)
+export async function withPropertyContext<T extends { id: string }>(tx: Tx, actor: BusinessActor, kind: Kind, records: T[], enabled: boolean) {
   const ids = records.map(row => row.id)
   const contexts = !enabled || !ids.length ? [] : kind === "enquiry"
     ? await tx.realEstateEnquiryContext.findMany({ where: { tenantId: actor.tenantId, enquiryId: { in: ids } }, include })
     : await tx.realEstateOpportunityContext.findMany({ where: { tenantId: actor.tenantId, opportunityId: { in: ids } }, include })
-  return records.map(record => ({ ...record, realEstateEnabled: enabled, propertyContext: contexts.find(context => ("enquiryId" in context ? context.enquiryId : context.opportunityId) === record.id) || null }))
+  const byRecord = new Map(contexts.map(context => ["enquiryId" in context ? context.enquiryId : context.opportunityId, context]))
+  return records.map(record => ({ ...record, realEstateEnabled: enabled, propertyContext: byRecord.get(record.id) || null }))
 }
 
 export async function savePropertyContext(tx: Tx, actor: BusinessActor, kind: Kind, id: string, input: PropertyContextInput | null | undefined) {
@@ -47,6 +48,11 @@ export async function savePropertyContext(tx: Tx, actor: BusinessActor, kind: Ki
     ? await tx.realEstateEnquiryContext.findUnique({ where: { tenantId_enquiryId: { tenantId: actor.tenantId, enquiryId: id } } })
     : await tx.realEstateOpportunityContext.findUnique({ where: { tenantId_opportunityId: { tenantId: actor.tenantId, opportunityId: id } } })
   const projectId = input?.projectId || null, subprojectId = input?.subprojectId || null
+  const defaults = input && !before && (input.propertyCategory === undefined || input.buyingTimeframe === undefined) ? await propertyChoiceDefaults(tx, actor.tenantId) : null
+  const propertyCategory = input ? input.propertyCategory ?? before?.propertyCategory ?? defaults?.["property-categories"]?.id ?? "" : ""
+  const buyingTimeframe = input ? input.buyingTimeframe ?? before?.buyingTimeframe ?? defaults?.["buying-timeframes"]?.id ?? "" : ""
+  const category = await resolvePropertyChoice(tx, actor.tenantId, "property-categories", propertyCategory, before?.propertyCategory)
+  const timeframe = await resolvePropertyChoice(tx, actor.tenantId, "buying-timeframes", buyingTimeframe, before?.buyingTimeframe)
   if (projectId && (projectId !== before?.projectId || (subprojectId && subprojectId !== before?.subprojectId))) {
     const project = await tx.realEstateProject.findFirst({ where: { tenantId: actor.tenantId, id: projectId, parentId: null, archived: false,
       ...(actor.role === "STAFF" ? { members: { some: { tenantId: actor.tenantId, userId: actor.userId } } } : {}),
@@ -58,7 +64,10 @@ export async function savePropertyContext(tx: Tx, actor: BusinessActor, kind: Ki
   const budgetMax = input?.budgetMax ? new Prisma.Decimal(input.budgetMax) : null
   if ((budgetMin || budgetMax) && !input?.budgetCurrency) throw new BusinessError(400, "Choose a currency for the budget.")
   if (budgetMin && budgetMax && budgetMin.greaterThan(budgetMax)) throw new BusinessError(400, "Maximum budget must be at least the minimum budget.")
-  const data = { projectId, subprojectId, budgetMin, budgetMax, budgetCurrency: input?.budgetCurrency || null, propertyCategory: input?.propertyCategory || null, bedrooms: input?.bedrooms ?? null, buyingTimeframe: input?.buyingTimeframe || null }
+  const data = { projectId, subprojectId, budgetMin, budgetMax, budgetCurrency: input?.budgetCurrency || null, propertyCategory: propertyCategory || null, bedrooms: input?.bedrooms ?? null, buyingTimeframe: buyingTimeframe || null,
+    propertyCategoryName: category ? (category.id === before?.propertyCategory ? before.propertyCategoryName : category.name) : null,
+    buyingTimeframeName: timeframe ? (timeframe.id === before?.buyingTimeframe ? before.buyingTimeframeName : timeframe.name) : null,
+  }
   if (kind === "enquiry") {
     if (input === null) await tx.realEstateEnquiryContext.deleteMany({ where: { tenantId: actor.tenantId, enquiryId: id } })
     else await tx.realEstateEnquiryContext.upsert({ where: { tenantId_enquiryId: { tenantId: actor.tenantId, enquiryId: id } }, create: { tenantId: actor.tenantId, enquiryId: id, ...data }, update: data })

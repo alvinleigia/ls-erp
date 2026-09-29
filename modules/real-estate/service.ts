@@ -1,8 +1,13 @@
+import { splitCustomFields } from "@/platform/custom-fields/validation"
+import { readCustomFields, saveCustomFields, customFieldFilter, customFieldExport } from "@/platform/custom-fields/values"
+import { projectFields } from "./custom-fields"
+import { CRM_EXPORT_LIMIT, checkExportLimit } from "@/modules/crm/csv"
 import { Prisma, type PrismaClient } from "@prisma/client"
 import { BusinessError, hasBusinessAccess, type BusinessActor } from "@/platform/policy"
 import { recordDomainAuditEvent } from "@/lib/domain-audit"
 import { accountScope } from "@/modules/crm/policy"
 import { memberSchema, projectListSchema, projectSchema, projectUpdateSchema } from "./validation"
+import { createPropertyChoiceService, propertyChoiceDefaults, resolvePropertyChoice, validatePropertyCategories } from "./choice-service"
 
 type Tx = Prisma.TransactionClient
 const manage = (actor: BusinessActor) => actor.role === "ADMIN" || actor.role === "MANAGER"
@@ -31,9 +36,11 @@ export function createRealEstateService(db: PrismaClient, identity: Pick<Busines
         }, { isolationLevel: "Serializable", maxWait: 20000, timeout: 20000 })
       } catch (error) {
         const code = (error as { code?: string }).code
-        if (code === "P2034" && attempt < 2) continue
-        if (code === "P2034") throw new BusinessError(409, "This project changed. Refresh before saving.")
-        if (code === "P2002") throw new BusinessError(409, "This project code already exists. Use a different code or restore the existing project.")
+        const meta = (error as { meta?: { code?: string; driverAdapterError?: { cause?: { originalCode?: string } } } }).meta
+        const serialization = code === "P2034" || (code === "P2010" && (meta?.code === "40001" || meta?.driverAdapterError?.cause?.originalCode === "40001"))
+        if (serialization && attempt < 2) continue
+        if (serialization) throw new BusinessError(409, "This record changed. Refresh before saving.")
+        if (code === "P2002" || (code === "P2010" && (meta?.code === "23505" || meta?.driverAdapterError?.cause?.originalCode === "23505"))) throw new BusinessError(409, "This code or choice already exists. Edit or restore the existing record.")
         throw error
       }
     }
@@ -47,6 +54,12 @@ export function createRealEstateService(db: PrismaClient, identity: Pick<Busines
     await recordDomainAuditEvent(tx, { tenantId: actor.tenantId, actorUserId: actor.userId, actorRole: actor.role, requestId: actor.requestId, event, entityType: "RealEstateProject", entityId, before: snapshot(before), after: snapshot(after) })
   }
   async function values(tx: Tx, actor: BusinessActor, data: ReturnType<typeof projectSchema.parse>, before?: Awaited<ReturnType<typeof find>>) {
+    const defaults = !before && (!data.lifecycle || data.categories === undefined) ? await propertyChoiceDefaults(tx, actor.tenantId) : null
+    const lifecycle = data.lifecycle || before?.lifecycle || defaults?.["project-statuses"]?.id
+    const categories = data.categories ?? before?.categories ?? (defaults?.["property-categories"] ? [defaults["property-categories"].id] : [])
+    if (!lifecycle) throw new BusinessError(400, "Choose a project status or configure a default.")
+    await resolvePropertyChoice(tx, actor.tenantId, "project-statuses", lifecycle, before?.lifecycle)
+    await validatePropertyCategories(tx, actor.tenantId, categories, before?.categories)
     if (before && (data.parentId || null) !== before.parentId) throw new BusinessError(400, "A project's parent cannot be changed. Create a subproject under the correct project.")
     if (data.parentId) {
       const parent = await tx.realEstateProject.findFirst({ where: { tenantId: actor.tenantId, id: data.parentId, parentId: null } })
@@ -58,20 +71,23 @@ export function createRealEstateService(db: PrismaClient, identity: Pick<Busines
     const priceMax = data.priceMax ? new Prisma.Decimal(data.priceMax) : null
     if ((priceMin || priceMax) && !data.currency) throw new BusinessError(400, "Choose a currency for the indicative price range.")
     if (priceMin && priceMax && priceMin.greaterThan(priceMax)) throw new BusinessError(400, "Maximum price must be at least the minimum price.")
-    return { ...data, categories: [...new Set(data.categories)], parentId: data.parentId || null, developerAccountId: data.developerAccountId || null, priceMin, priceMax, currency: data.currency || null }
+    return { ...data, lifecycle, categories: [...new Set(categories)], parentId: data.parentId || null, developerAccountId: data.developerAccountId || null, priceMin, priceMax, currency: data.currency || null }
   }
   return {
-    listProjects(input: unknown) {
+    ...createPropertyChoiceService(run),
+    listProjects(input: unknown, exporting = false) {
       const query = projectListSchema.parse(input)
       return run(async (tx, actor) => {
         if (query.parentId) await find(tx, actor, query.parentId)
         const where: Prisma.RealEstateProjectWhereInput = { AND: [scope(actor), {
+          ...await customFieldFilter(tx, actor, projectFields, query),
           parentId: query.parentId || null, archived: query.archived === "true", ...(query.lifecycle ? { lifecycle: query.lifecycle } : {}),
           ...(query.q ? { OR: ["name", "code", "location"].map(field => ({ [field]: { contains: query.q, mode: "insensitive" } })) } : {}),
         }] }
-        const [items, total] = await Promise.all([tx.realEstateProject.findMany({ where, orderBy: [{ name: "asc" }, { id: "asc" }], skip: (query.page - 1) * query.pageSize, take: query.pageSize,
-          select: { id: true, parentId: true, name: true, code: true, location: true, lifecycle: true, archived: true, version: true, categories: true, priceMin: true, priceMax: true, currency: true } }), tx.realEstateProject.count({ where })])
-        return { ...pageResult(items, total, query.page, query.pageSize), canManage: manage(actor) }
+        const [items, total] = await Promise.all([tx.realEstateProject.findMany({ where, orderBy: [{ name: "asc" }, { id: "asc" }], skip: exporting ? 0 : (query.page - 1) * query.pageSize, take: exporting ? CRM_EXPORT_LIMIT : query.pageSize,
+          select: { id: true, parentId: true, name: true, code: true, location: true, lifecycle: true, lifecycleName: true, categoryNames: true, archived: true, version: true, categories: true, priceMin: true, priceMax: true, currency: true } }), tx.realEstateProject.count({ where })])
+        if (exporting) checkExportLimit(total)
+        return { ...pageResult(items, total, query.page, query.pageSize), canManage: manage(actor), customFieldExport: exporting ? await customFieldExport(tx, actor, projectFields, items.map(item => item.id)) : undefined }
       })
     },
     getProject(id: string) {
@@ -79,20 +95,23 @@ export function createRealEstateService(db: PrismaClient, identity: Pick<Busines
         const record = await find(tx, actor, id)
         const developerAccount = record.developerAccountId ? await tx.crmAccount.findFirst({ where: { AND: [accountScope(actor), { id: record.developerAccountId }] }, select: { id: true, name: true } }) : null
         const parent = record.parentId ? await tx.realEstateProject.findFirst({ where: { tenantId: actor.tenantId, id: record.parentId }, select: { id: true, name: true, archived: true } }) : null
-        return { ...record, developerAccountId: developerAccount?.id || null, developerAccount, developerRestricted: !!record.developerAccountId && !developerAccount, parent, canManage: manage(actor) }
+        return { ...record, customFields: await readCustomFields(tx, actor, projectFields, record), developerAccountId: developerAccount?.id || null, developerAccount, developerRestricted: !!record.developerAccountId && !developerAccount, parent, canManage: manage(actor) }
       })
     },
     createProject(input: unknown) {
-      const data = projectSchema.parse(input)
+      const custom = splitCustomFields(input)
+      const data = projectSchema.parse(custom.core)
       return run(async (tx, actor) => {
         requireManager(actor)
         const record = await tx.realEstateProject.create({ data: { ...await values(tx, actor, data), tenantId: actor.tenantId } })
+        await saveCustomFields(tx, actor, projectFields, record, custom.patch, true)
         await audit(tx, actor, "realEstate.project.created", record.id, null, record)
         return record
       })
     },
     updateProject(id: string, input: unknown) {
-      const { version, ...data } = projectUpdateSchema.parse(input)
+      const custom = splitCustomFields(input)
+      const { version, ...data } = projectUpdateSchema.parse(custom.core)
       return run(async (tx, actor) => {
         requireManager(actor)
         const before = await find(tx, actor, id)
@@ -100,6 +119,7 @@ export function createRealEstateService(db: PrismaClient, identity: Pick<Busines
         const changed = await tx.realEstateProject.updateMany({ where: { tenantId: actor.tenantId, id, version }, data: { ...next, version: { increment: 1 } } })
         if (!changed.count) throw new BusinessError(409, "This project changed. Refresh before saving.")
         const record = await find(tx, actor, id)
+        await saveCustomFields(tx, actor, projectFields, record, custom.patch)
         await audit(tx, actor, "realEstate.project.updated", id, before, record)
         return record
       })

@@ -4,6 +4,7 @@ import { activityReportSchema } from "./report-validation"
 export const salesReportSchema = activityReportSchema.safeExtend({
   type: z.never().optional(),
   lostReasonId: z.string().trim().min(1).max(100).optional(),
+  salesTeamId: z.string().trim().min(1).max(100).optional(),
   sourceId: z.string().trim().min(1).max(100).optional(),
   projectId: z.string().trim().min(1).max(100).optional(),
   subprojectId: z.string().trim().min(1).max(100).optional(),

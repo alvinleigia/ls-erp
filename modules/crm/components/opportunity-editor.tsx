@@ -1,7 +1,8 @@
 "use client"
+import { SalesTeamSelect } from "./sales-teams"
+import { useCustomFields } from "./custom-fields"
 import { LostReasonFields } from "./lost-reason-fields"
-import { PropertyFields, emptyProperty, propertyFields, useRealEstateEnabled } from "@/modules/real-estate/components/property-fields"
-import type { PropertyContext } from "@/types/real-estate"
+import { useCrmExtensionEditor } from "./extension-provider"
 import { CrmSection } from "./crm-section"
 import { CrmPageHeader, CrmFormActions, crmPageClass } from "./crm-page"
 import { CrmSelect, CrmTextarea } from "./crm-controls"
@@ -21,15 +22,15 @@ import { selectClass } from "./record-list"
 import { OpportunityTimeline } from "./opportunity-timeline"
 import { WorkList } from "./work-list"
 
-const empty = { title: "", pipelineId: "", stageId: "", contactId: "", accountId: "", assignedUserId: "", amount: "0", currency: "", expectedCloseOn: "", description: "", lossReason: "", lostReasonId: "", probability: 10 }
+const empty = { salesTeamId: "", title: "", pipelineId: "", stageId: "", contactId: "", accountId: "", assignedUserId: "", amount: "0", currency: "", expectedCloseOn: "", description: "", lossReason: "", lostReasonId: "", probability: 10 }
 function fields(record: CrmOpportunityRow) {
-  return { title: record.title, pipelineId: record.pipelineId, stageId: record.stageId, contactId: record.contactId, accountId: record.accountId || "", assignedUserId: record.assignedUserId, amount: record.amount, currency: record.currency, expectedCloseOn: record.expectedCloseOn.slice(0, 10), description: record.description || "", lossReason: record.lossReason || "", lostReasonId: record.lostReasonId || "", probability: record.probability }
+  return { salesTeamId: record.salesTeamId || "", title: record.title, pipelineId: record.pipelineId, stageId: record.stageId, contactId: record.contactId, accountId: record.accountId || "", assignedUserId: record.assignedUserId, amount: record.amount, currency: record.currency, expectedCloseOn: record.expectedCloseOn.slice(0, 10), description: record.description || "", lossReason: record.lossReason || "", lostReasonId: record.lostReasonId || "", probability: record.probability }
 }
 export function OpportunityEditor({ id, enquiryId, initialProjectId = "", initialSubprojectId = "" }: { id?: string; enquiryId?: string; initialProjectId?: string; initialSubprojectId?: string }) {
-  const realEstateEnabled = useRealEstateEnabled()
-  const [property, setProperty] = React.useState({ ...emptyProperty, projectId: initialProjectId, subprojectId: initialSubprojectId })
-  const [propertyDirty, setPropertyDirty] = React.useState(!!initialProjectId)
-  const [selectedProperty, setSelectedProperty] = React.useState<PropertyContext | null>(null)
+  const extension = useCrmExtensionEditor(initialProjectId, initialSubprojectId)
+  const loadExtension = extension.load
+  const custom = useCustomFields("opportunity", id, enquiryId)
+  const loadCustom = custom.load
 
   const router = useRouter()
   const { data: session } = useSession()
@@ -53,16 +54,16 @@ export function OpportunityEditor({ id, enquiryId, initialProjectId = "", initia
       try {
         const [assignees, existing, enquiry, choices, settings] = await Promise.all([get("/api/crm/assignees"), id ? get(`/api/crm/opportunities/${id}`) : null, !id && enquiryId ? get(`/api/crm/enquiries/${enquiryId}`) : null, !id ? get("/api/crm/pipelines?pageSize=1") : null, !id ? get("/api/settings/display") : null])
         setCanAssign(assignees.canAssign)
-        if (existing || enquiry) { setProperty(propertyFields((existing || enquiry).propertyContext)); setSelectedProperty((existing || enquiry).propertyContext); setPropertyDirty(false) }
+        if (existing || enquiry) { loadExtension(existing || enquiry); await loadCustom(existing || enquiry, !existing && !!enquiry) }
         setEnquiryVersion(enquiry?.version); setInitialAccount(enquiry?.account || null)
         if (existing) { setRecord(existing); setContact(existing.contact); setValues(fields(existing)) }
         else if (enquiry?.opportunity) router.replace(`/crm/opportunities/${enquiry.opportunity.id}`)
-        else { setContact(enquiry?.contact || null); setValues({ ...empty, title: enquiry?.title || "", contactId: enquiry?.contact.id || "", accountId: enquiry?.accountId || "", expectedCloseOn: enquiry?.targetCloseOn?.slice(0, 10) || "", description: enquiry?.requirements || "", assignedUserId: assignees.canAssign ? enquiry?.assignedUserId || assignees.currentUserId : assignees.currentUserId, pipelineId: choices?.items[0]?.id || "", currency: settings?.settings?.currency || "" }) }
+        else { setContact(enquiry?.contact || null); setValues({ ...empty, salesTeamId: enquiry?.salesTeamId || "", title: enquiry?.title || "", contactId: enquiry?.contact.id || "", accountId: enquiry?.accountId || "", expectedCloseOn: enquiry?.targetCloseOn?.slice(0, 10) || "", description: enquiry?.requirements || "", assignedUserId: assignees.canAssign ? enquiry?.assignedUserId || assignees.currentUserId : assignees.currentUserId, pipelineId: choices?.items[0]?.id || "", currency: settings?.settings?.currency || "" }) }
       } catch (error) { if (!controller.signal.aborted) { setError((error as Error).message); setFailed(true) } }
       finally { if (!controller.signal.aborted) setLoading(false) }
     })()
     return () => controller.abort()
-  }, [id, enquiryId, router])
+  }, [id, enquiryId, router, loadExtension, loadCustom])
   React.useEffect(() => {
     if (!values.pipelineId) return
     const controller = new AbortController()
@@ -84,18 +85,18 @@ export function OpportunityEditor({ id, enquiryId, initialProjectId = "", initia
   async function save(event: React.FormEvent) {
     event.preventDefault(); setSaving(true); setError(""); clearErrors()
     try {
-      const response = await fetch(id ? `/api/crm/opportunities/${id}` : "/api/crm/opportunities", { method: id ? "PATCH" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...values, ...(propertyDirty && !enquiryId ? { propertyContext: property } : {}), ...(id ? { version: record?.version } : { enquiryId: enquiryId || "", enquiryVersion }) }) })
+      const response = await fetch(id ? `/api/crm/opportunities/${id}` : "/api/crm/opportunities", { method: id ? "PATCH" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...values, ...custom.payload, ...(!enquiryId ? extension.payload : {}), ...(id ? { version: record?.version } : { enquiryId: enquiryId || "", enquiryVersion }) }) })
       const data = await response.json()
       if (!response.ok) { setErrorsFromResponse(data); throw new Error(data.error || "Unable to save opportunity.") }
       toast.success("Opportunity saved.")
       if (!id) router.push(`/crm/opportunities/${data.id}`)
-      else { setRecord(data); setContact(data.contact); setValues(fields(data)); setProperty(propertyFields(data.propertyContext)); setSelectedProperty(data.propertyContext); setPropertyDirty(false); setRevision(value => value + 1) }
+      else { setRecord(data); setContact(data.contact); setValues(fields(data)); loadExtension(data); await loadCustom(data); setRevision(value => value + 1) }
     } catch (error) { setError((error as Error).message) } finally { setSaving(false) }
   }
   const currencies = React.useMemo(() => Intl.supportedValuesOf("currency").map(value => ({ value, label: value })), [])
   if (loading) return <p>Loading opportunity…</p>
   return <div className={crmPageClass}><form id="opportunity-form" onSubmit={save} className="space-y-5">
-    <CrmPageHeader title={id ? record?.title || "Opportunity" : enquiryId ? "Convert enquiry to opportunity" : "New opportunity"} backHref="/crm/opportunities" backLabel="Back to opportunities" actions={<CrmFormActions form="opportunity-form" cancelHref="/crm/opportunities" saving={saving} disabled={failed || !stage || pipeline?.id !== values.pipelineId} canSave={true} saveLabel="Save opportunity" />} />
+    <CrmPageHeader title={id ? record?.title || "Opportunity" : enquiryId ? "Convert enquiry to opportunity" : "New opportunity"} backHref="/crm/opportunities" backLabel="Back to opportunities" actions={<CrmFormActions form="opportunity-form" cancelHref="/crm/opportunities" saving={saving} disabled={custom.blocked || failed || !stage || pipeline?.id !== values.pipelineId} canSave={true} saveLabel="Save opportunity" />} />
     {error && <p role="alert" className="text-destructive">{error}</p>}
     <CrmSection title="Opportunity details" description="Customer, pipeline stage and expected value."><fieldset disabled={failed || saving} className="grid min-w-0 gap-5 sm:grid-cols-2">
       <FormField id="title" label="Opportunity title" error={errors.title} className="sm:col-span-2"><Input id="title" required maxLength={200} value={values.title} onChange={event => setValues({ ...values, title: event.target.value })} /></FormField>
@@ -103,7 +104,8 @@ export function OpportunityEditor({ id, enquiryId, initialProjectId = "", initia
       <FormField id="stageId" label="Stage" error={errors.stageId}><CrmSelect id="stageId" required className={`${selectClass} w-full`} value={values.stageId} onValueChange={event => { const stage = pipeline?.stages.find(stage => stage.id === event); if (stage) setValues({ ...values, stageId: stage.id, probability: stage.probability, lossReason: stage.kind === "LOST" ? values.lossReason : "", lostReasonId: stage.kind === "LOST" ? values.lostReasonId : "" }) }}><option value="">Select a stage</option>{pipeline?.id === values.pipelineId && pipeline.stages.filter(stage => !stage.archived || stage.id === values.stageId).map(stage => <option key={stage.id} value={stage.id} disabled={stage.archived}>{stage.name}{stage.archived ? " (archived)" : ""}</option>)}</CrmSelect></FormField>
       <FormField id="contactId" label="Contact" error={errors.contactId}><RecordSelect id="contactId" endpoint="/api/crm/contacts" value={values.contactId} selected={contact ? { value: contact.id, label: contact.name } : undefined} onChange={contactId => setValues({ ...values, contactId })} disabled={!!enquiryId || !!record?.enquiryId} /></FormField>
       <FormField id="accountId" label="Business account (optional)" error={errors.accountId}><RecordSelect id="accountId" endpoint="/api/crm/accounts" value={values.accountId} selected={(record?.account || initialAccount) ? { value: (record?.account || initialAccount)!.id, label: (record?.account || initialAccount)!.name } : undefined} onChange={accountId => setValues({ ...values, accountId })} />{values.accountId && <Button type="button" variant="link" size="sm" onClick={() => setValues({ ...values, accountId: "" })}>Clear account</Button>}</FormField>
-      <FormField id="assignedUserId" label="Salesperson" error={errors.assignedUserId}><RecordSelect id="assignedUserId" endpoint="/api/crm/assignees" value={values.assignedUserId} selected={{ value: record?.assignee.id || values.assignedUserId, label: record?.assignee.name || session?.user?.name || "Salesperson" }} onChange={assignedUserId => setValues({ ...values, assignedUserId })} disabled={!canAssign} /></FormField>
+      <SalesTeamSelect value={values.salesTeamId} selected={record?.salesTeam} disabled={(!!id && !canAssign) || !!enquiryId} onChange={salesTeamId => { setValues({ ...values, salesTeamId }); void custom.changeTeam(salesTeamId) }} />
+      <FormField id="assignedUserId" label="Salesperson" error={errors.assignedUserId}><RecordSelect id="assignedUserId" endpoint={values.salesTeamId ? `/api/crm/assignees?salesTeamId=${values.salesTeamId}` : "/api/crm/assignees"} value={values.assignedUserId} selected={{ value: record?.assignee.id || values.assignedUserId, label: record?.assignee.name || session?.user?.name || "Salesperson" }} onChange={assignedUserId => setValues({ ...values, assignedUserId })} disabled={!canAssign} /></FormField>
       <FormField id="expectedCloseOn" label="Expected close date" error={errors.expectedCloseOn}><Input id="expectedCloseOn" required type="date" value={values.expectedCloseOn} onChange={event => setValues({ ...values, expectedCloseOn: event.target.value })} /></FormField>
       <FormField id="amount" label="Expected value" error={errors.amount}><Input id="amount" inputMode="decimal" required value={values.amount} onChange={event => setValues({ ...values, amount: event.target.value })} /></FormField>
       <FormField id="currency" label="Currency" error={errors.currency}><SearchableSelect id="currency" options={currencies} value={values.currency} onChange={currency => setValues({ ...values, currency })} placeholder="Choose currency" /></FormField>
@@ -113,6 +115,7 @@ export function OpportunityEditor({ id, enquiryId, initialProjectId = "", initia
     </fieldset></CrmSection>
     {record?.enquiryId && <CrmSection title="Lead attribution"><dl className="grid gap-4 text-sm sm:grid-cols-2"><div><dt className="text-muted-foreground">Original source</dt><dd>{record.source || "Not recorded"}</dd></div><div><dt className="text-muted-foreground">Referrer</dt><dd>{record.referralRestricted ? "Restricted" : record.referralContact?.name || record.referralAccount?.name || "Not recorded"}</dd></div></dl></CrmSection>}
     {(record?.enquiryId || enquiryId) && <p className="text-sm">Source: <Link className="underline" href={`/crm/enquiries/${record?.enquiryId || enquiryId}`}>original enquiry and follow-ups</Link>. Its records and history are preserved.</p>}
-    {(id ? record?.realEstateEnabled : realEstateEnabled) && <PropertyFields error={errors.propertyContext} value={property} selected={selectedProperty} disabled={saving || failed} readOnly={!!enquiryId && !id} onChange={value => { setProperty(value); setPropertyDirty(true) }} />}
+    {extension.fields({ errors, disabled: saving || failed, readOnly: !!enquiryId && !id })}
+    {custom.section(saving || failed)}
   </form>{record && <><WorkList contactId={record.contactId} opportunityId={record.id} /><OpportunityTimeline id={record.id} revision={revision} /></>}</div>
 }

@@ -1,3 +1,5 @@
+> **2026-09-29: superseded forward plan.** Use [CRM Odoo alignment](CRM_ODOO_ALIGNMENT_PLAN.md) for the next refactor phases. The user has brought configuration and reusable custom-field foundations forward. The phase and deployment statuses below are historical, not current release status.
+
 # CRM and sales delivery plan
 
 Updated: 2026-09-28. Status: Phase 1 engineering baseline and mapping complete;

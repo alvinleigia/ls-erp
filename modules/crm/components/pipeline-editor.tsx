@@ -1,6 +1,5 @@
 "use client"
 import { CrmSection } from "./crm-section"
-import { propertySalesPipeline } from "@/modules/real-estate/pipeline-template"
 import { CrmPageHeader, CrmFormActions, crmPageClass } from "./crm-page"
 import { CrmCheckbox, CrmSelect } from "./crm-controls"
 import * as React from "react"
@@ -23,10 +22,10 @@ const initial: PipelineInput = { name: "Sales", archived: false, stages: [
   { name: "Lost", kind: "LOST", probability: 0, color: "#dc2626", archived: false },
 ] }
 
-export function PipelineEditor({ id, propertyTemplate = false }: { id?: string; propertyTemplate?: boolean }) {
+export function PipelineEditor({ id, template }: { id?: string; template?: PipelineInput }) {
   const router = useRouter()
   const [record, setRecord] = React.useState<CrmPipelineRow | null>(null)
-  const [values, setValues] = React.useState<PipelineInput>(!id && propertyTemplate ? propertySalesPipeline : initial)
+  const [values, setValues] = React.useState<PipelineInput>(!id && template ? template : initial)
   const [canManage, setCanManage] = React.useState(false)
   const [loading, setLoading] = React.useState(true)
   const [saving, setSaving] = React.useState(false)

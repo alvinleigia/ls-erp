@@ -25,6 +25,7 @@ type SearchableSelectProps = {
   onChange: (value: string) => void
   options: SearchableSelectOption[]
   selectedOption?: SearchableSelectOption
+  preferSelectedOption?: boolean
   placeholder: string
   searchPlaceholder?: string
   emptyLabel?: string
@@ -38,6 +39,7 @@ export function SearchableSelect({
   onChange,
   options,
   selectedOption,
+  preferSelectedOption = false,
   placeholder,
   searchPlaceholder = "Type to search...",
   emptyLabel = "No results found.",
@@ -49,8 +51,8 @@ export function SearchableSelect({
   const [search, setSearch] = React.useState("")
 
   const selected = React.useMemo(
-    () => options.find((option) => option.value === value) ?? (selectedOption?.value === value ? selectedOption : null),
-    [options, value, selectedOption]
+    () => preferSelectedOption && selectedOption?.value === value ? selectedOption : options.find((option) => option.value === value) ?? (selectedOption?.value === value ? selectedOption : null),
+    [options, value, selectedOption, preferSelectedOption]
   )
 
   return (

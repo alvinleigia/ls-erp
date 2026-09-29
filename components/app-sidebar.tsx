@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { isCrmConfigurationPath } from "@/modules/crm/configuration"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { signOut, useSession } from "next-auth/react"
@@ -145,13 +146,9 @@ export function AppSidebar() {
           { title: "Business accounts", href: "/crm/accounts", icon: Building2Icon, isActive: current => current.startsWith("/crm/accounts") },
           { title: "Opportunities", href: "/crm/opportunities", icon: Building2Icon, isActive: current => current.startsWith("/crm/opportunities") },
           ...(realEstateEnabled ? [{ title: "Projects", href: "/crm/projects", icon: Building2Icon, isActive: (current: string) => current.startsWith("/crm/projects") }] : []),
-          { title: "Pipelines", href: "/crm/pipelines", icon: Building2Icon, isActive: current => current.startsWith("/crm/pipelines") },
           { title: "My Work", href: "/crm/activities", icon: CalendarClockIcon, isActive: current => current.startsWith("/crm/activities") || current.startsWith("/crm/tasks") },
           { title: "Calendar", href: "/crm/calendar", icon: CalendarClockIcon, isActive: current => current.startsWith("/crm/calendar") },
-          { title: "Activity plans", href: "/crm/activity-plans", icon: CalendarClockIcon, isActive: current => current.startsWith("/crm/activity-plans") },
-          { title: "Follow-up rules", href: "/crm/follow-up-rules", icon: CalendarClockIcon, isActive: current => current.startsWith("/crm/follow-up-rules") },
-          { title: "Activity types", href: "/crm/activity-types", icon: TagIcon, isActive: current => current.startsWith("/crm/activity-types") },
-          { title: "Lost reasons", href: "/crm/lost-reasons", icon: TagIcon, isActive: current => current.startsWith("/crm/lost-reasons") },
+          { title: "Configuration", href: "/crm/configuration", icon: SettingsIcon, isActive: isCrmConfigurationPath },
         ],
       })
     }

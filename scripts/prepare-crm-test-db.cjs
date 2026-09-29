@@ -16,7 +16,7 @@ async function main() {
   try {
     const tables = await db.query("SELECT 1 FROM pg_tables WHERE schemaname = 'public' LIMIT 1")
     if (tables.rowCount) throw new Error("Database is not empty. Refusing to modify it; use a fresh disposable instance.")
-    const migrationNames = ["20260923090000_crm_foundation", "20260923120000_crm_business_accounts", "20260923160000_crm_sales_pipelines", "20260924090000_crm_activity_workspace", "20260924120000_crm_activity_plans", "20260924150000_crm_follow_up_rules", "20260928120000_crm_lead_intake", "20260928160000_real_estate_projects", "20260928190000_real_estate_sales", "20260928220000_crm_lost_reasons", "20260928230000_crm_activity_types"]
+    const migrationNames = ["20260923090000_crm_foundation", "20260923120000_crm_business_accounts", "20260923160000_crm_sales_pipelines", "20260924090000_crm_activity_workspace", "20260924120000_crm_activity_plans", "20260924150000_crm_follow_up_rules", "20260928120000_crm_lead_intake", "20260928160000_real_estate_projects", "20260928190000_real_estate_sales", "20260928220000_crm_lost_reasons", "20260928230000_crm_activity_types", "20260929090000_real_estate_choices", "20260929120000_crm_custom_fields", "20260929160000_crm_sales_teams"]
     const firstPending = process.env.CRM_TEST_FROM_MIGRATION || migrationNames[0]
     if (!migrationNames.includes(firstPending)) throw new Error("Unknown CRM_TEST_FROM_MIGRATION.")
     const basePath = process.env.CRM_TEST_BASE_SQL

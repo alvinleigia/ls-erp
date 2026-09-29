@@ -145,6 +145,11 @@ model CrmStage {
 }
 
 model CrmOpportunity {
+  salesTeamId String?
+  salesTeam CrmSalesTeam? @relation(fields: [tenantId, salesTeamId], references: [tenantId, id], onDelete: Restrict)
+  @@index([tenantId, salesTeamId])
+  customFieldsCreatedAt DateTime?
+  customFieldValues CrmOpportunityFieldValue[]
   propertyContext RealEstateOpportunityContext?
   id             String @id @default(cuid())
   tenantId       String
@@ -335,6 +340,10 @@ model CrmLostReason {
 }
 
 model CrmEnquiry {
+  salesTeamId String?
+  salesTeam CrmSalesTeam? @relation(fields: [tenantId, salesTeamId], references: [tenantId, id], onDelete: Restrict)
+  @@index([tenantId, salesTeamId])
+  customFieldValues CrmEnquiryFieldValue[]
   propertyContext RealEstateEnquiryContext?
   id             String @id @default(cuid())
   tenantId       String
@@ -696,6 +705,7 @@ enum StockMovementType {
 }
 
 model User {
+  crmSalesTeamMemberships CrmSalesTeamMember[]
   realEstateMemberships RealEstateProjectMember[]
   id                    String                    @id @default(cuid())
   tenantId              String?
@@ -786,6 +796,17 @@ model Organization {
 }
 
 model Tenant {
+  crmSalesTeams CrmSalesTeam[]
+  crmSalesTeamMembers CrmSalesTeamMember[]
+  customFieldDefinitions CustomFieldDefinition[]
+  customFieldOptions CustomFieldOption[]
+  enquiryFieldValues CrmEnquiryFieldValue[]
+  opportunityFieldValues CrmOpportunityFieldValue[]
+  projectFieldValues RealEstateProjectFieldValue[]
+  projectStatuses RealEstateProjectStatus[]
+  propertyCategories RealEstatePropertyCategory[]
+  buyingTimeframes RealEstateBuyingTimeframe[]
+  projectCategories RealEstateProjectCategory[]
   propertyEnquiries RealEstateEnquiryContext[]
   propertyOpportunities RealEstateOpportunityContext[]
   realEstateProjects RealEstateProject[]
@@ -1925,6 +1946,7 @@ model InventoryStockMovement {
   @@index([occurredAt])
 }
 model RealEstateProject {
+  customFieldValues RealEstateProjectFieldValue[]
   enquiryContexts RealEstateEnquiryContext[] @relation("EnquiryProject")
   subEnquiryContexts RealEstateEnquiryContext[] @relation("EnquirySubproject")
   opportunityContexts RealEstateOpportunityContext[] @relation("OpportunityProject")
@@ -1939,6 +1961,10 @@ model RealEstateProject {
   description String @default("")
   categories String[] @default([])
   lifecycle String @default("PLANNING")
+  lifecycleName String @default("")
+  categoryNames Json @default("{}")
+  statusChoice RealEstateProjectStatus @relation(fields: [tenantId, lifecycle], references: [tenantId, id], onDelete: Restrict)
+  categoryLinks RealEstateProjectCategory[]
   priceMin Decimal? @db.Decimal(18, 4)
   priceMax Decimal? @db.Decimal(18, 4)
   currency String?
@@ -1980,8 +2006,12 @@ model RealEstateEnquiryContext {
   budgetMax Decimal? @db.Decimal(18, 4)
   budgetCurrency String?
   propertyCategory String?
+  propertyCategoryName String?
+  categoryChoice RealEstatePropertyCategory? @relation(fields: [tenantId, propertyCategory], references: [tenantId, id], onDelete: Restrict)
   bedrooms Int?
   buyingTimeframe String?
+  buyingTimeframeName String?
+  timeframeChoice RealEstateBuyingTimeframe? @relation(fields: [tenantId, buyingTimeframe], references: [tenantId, id], onDelete: Restrict)
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   enquiry CrmEnquiry @relation(fields: [tenantId, enquiryId], references: [tenantId, id], onDelete: Restrict)
   project RealEstateProject? @relation("EnquiryProject", fields: [tenantId, projectId], references: [tenantId, id], onDelete: Restrict)
@@ -1999,12 +2029,247 @@ model RealEstateOpportunityContext {
   budgetMax Decimal? @db.Decimal(18, 4)
   budgetCurrency String?
   propertyCategory String?
+  propertyCategoryName String?
+  categoryChoice RealEstatePropertyCategory? @relation(fields: [tenantId, propertyCategory], references: [tenantId, id], onDelete: Restrict)
   bedrooms Int?
   buyingTimeframe String?
+  buyingTimeframeName String?
+  timeframeChoice RealEstateBuyingTimeframe? @relation(fields: [tenantId, buyingTimeframe], references: [tenantId, id], onDelete: Restrict)
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   opportunity CrmOpportunity @relation(fields: [tenantId, opportunityId], references: [tenantId, id], onDelete: Restrict)
   project RealEstateProject? @relation("OpportunityProject", fields: [tenantId, projectId], references: [tenantId, id], onDelete: Restrict)
   subproject RealEstateProject? @relation("OpportunitySubproject", fields: [tenantId, projectId, subprojectId], references: [tenantId, parentId, id], onDelete: Restrict)
   @@id([tenantId, opportunityId])
   @@index([tenantId, projectId, subprojectId])
+}
+
+model RealEstateProjectStatus {
+  tenantId String
+  id String @default(cuid())
+  name String
+  nameKey String
+  position Int @default(0)
+  isDefault Boolean @default(false)
+  archived Boolean @default(false)
+  version Int @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  projects RealEstateProject[]
+  @@id([tenantId, id])
+  @@unique([tenantId, nameKey])
+  @@index([tenantId, archived, position, name, id])
+}
+
+model RealEstatePropertyCategory {
+  tenantId String
+  id String @default(cuid())
+  name String
+  nameKey String
+  position Int @default(0)
+  isDefault Boolean @default(false)
+  archived Boolean @default(false)
+  version Int @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  projects RealEstateProjectCategory[]
+  enquiries RealEstateEnquiryContext[]
+  opportunities RealEstateOpportunityContext[]
+  @@id([tenantId, id])
+  @@unique([tenantId, nameKey])
+  @@index([tenantId, archived, position, name, id])
+}
+
+model RealEstateBuyingTimeframe {
+  tenantId String
+  id String @default(cuid())
+  name String
+  nameKey String
+  position Int @default(0)
+  isDefault Boolean @default(false)
+  archived Boolean @default(false)
+  version Int @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  enquiries RealEstateEnquiryContext[]
+  opportunities RealEstateOpportunityContext[]
+  @@id([tenantId, id])
+  @@unique([tenantId, nameKey])
+  @@index([tenantId, archived, position, name, id])
+}
+
+// Relational projection of the legacy categories array, synchronized by a DB
+// trigger so both old and new application writes retain tenant-safe category FKs.
+model RealEstateProjectCategory {
+  tenantId String
+  projectId String
+  categoryId String
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  project RealEstateProject @relation(fields: [tenantId, projectId], references: [tenantId, id], onDelete: Restrict)
+  category RealEstatePropertyCategory @relation(fields: [tenantId, categoryId], references: [tenantId, id], onDelete: Restrict)
+  @@id([tenantId, projectId, categoryId])
+  @@index([tenantId, categoryId, projectId])
+}
+
+// Shared definitions; industry modules register record resources in application composition.
+model CustomFieldDefinition {
+  salesTeamId String?
+  salesTeam CrmSalesTeam? @relation(fields: [tenantId, salesTeamId], references: [tenantId, id], onDelete: Restrict)
+  @@index([tenantId, salesTeamId])
+  tenantId String
+  id String @default(cuid())
+  scope String
+  code String
+  name String
+  type String
+  helpText String @default("")
+  position Int @default(0)
+  required Boolean @default(false)
+  requiredSince DateTime?
+  visibility String @default("ALL")
+  editability String @default("ALL")
+  filterable Boolean @default(false)
+  maxLength Int @default(2000)
+  minimum Decimal? @db.Decimal(24, 6)
+  maximum Decimal? @db.Decimal(24, 6)
+  defaultValue Json?
+  archived Boolean @default(false)
+  version Int @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  options CustomFieldOption[]
+  enquiries CrmEnquiryFieldValue[]
+  opportunities CrmOpportunityFieldValue[]
+  projects RealEstateProjectFieldValue[]
+  @@id([tenantId, id])
+  @@unique([tenantId, scope, code])
+  @@unique([tenantId, id, scope, type])
+  @@index([tenantId, scope, archived, position, id])
+}
+model CustomFieldOption {
+  tenantId String
+  fieldId String
+  id String @default(cuid())
+  name String
+  position Int @default(0)
+  archived Boolean @default(false)
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  field CustomFieldDefinition @relation(fields: [tenantId, fieldId], references: [tenantId, id], onDelete: Restrict)
+  enquiries CrmEnquiryFieldValue[]
+  opportunities CrmOpportunityFieldValue[]
+  projects RealEstateProjectFieldValue[]
+  @@id([tenantId, fieldId, id])
+  @@unique([tenantId, fieldId, name])
+  @@index([tenantId, fieldId, archived, position, id])
+}
+
+model CrmEnquiryFieldValue {
+  tenantId String
+  recordId String
+  fieldId String
+  scope String
+  type String
+  textValue String?
+  textKey String?
+  numberValue Decimal? @db.Decimal(24, 6)
+  dateValue DateTime? @db.Date
+  booleanValue Boolean?
+  optionId String?
+  fieldName String
+  optionName String?
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  record CrmEnquiry @relation(fields: [tenantId, recordId], references: [tenantId, id], onDelete: Restrict)
+  field CustomFieldDefinition @relation(fields: [tenantId, fieldId, scope, type], references: [tenantId, id, scope, type], onDelete: Restrict)
+  option CustomFieldOption? @relation(fields: [tenantId, fieldId, optionId], references: [tenantId, fieldId, id], onDelete: Restrict)
+  @@id([tenantId, recordId, fieldId])
+  @@index([tenantId, fieldId, textKey, recordId])
+  @@index([tenantId, fieldId, numberValue, recordId])
+  @@index([tenantId, fieldId, dateValue, recordId])
+  @@index([tenantId, fieldId, booleanValue, recordId])
+  @@index([tenantId, fieldId, optionId, recordId])
+}
+
+model CrmOpportunityFieldValue {
+  tenantId String
+  recordId String
+  fieldId String
+  scope String
+  type String
+  textValue String?
+  textKey String?
+  numberValue Decimal? @db.Decimal(24, 6)
+  dateValue DateTime? @db.Date
+  booleanValue Boolean?
+  optionId String?
+  fieldName String
+  optionName String?
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  record CrmOpportunity @relation(fields: [tenantId, recordId], references: [tenantId, id], onDelete: Restrict)
+  field CustomFieldDefinition @relation(fields: [tenantId, fieldId, scope, type], references: [tenantId, id, scope, type], onDelete: Restrict)
+  option CustomFieldOption? @relation(fields: [tenantId, fieldId, optionId], references: [tenantId, fieldId, id], onDelete: Restrict)
+  @@id([tenantId, recordId, fieldId])
+  @@index([tenantId, fieldId, textKey, recordId])
+  @@index([tenantId, fieldId, numberValue, recordId])
+  @@index([tenantId, fieldId, dateValue, recordId])
+  @@index([tenantId, fieldId, booleanValue, recordId])
+  @@index([tenantId, fieldId, optionId, recordId])
+}
+
+model RealEstateProjectFieldValue {
+  tenantId String
+  recordId String
+  fieldId String
+  scope String
+  type String
+  textValue String?
+  textKey String?
+  numberValue Decimal? @db.Decimal(24, 6)
+  dateValue DateTime? @db.Date
+  booleanValue Boolean?
+  optionId String?
+  fieldName String
+  optionName String?
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  record RealEstateProject @relation(fields: [tenantId, recordId], references: [tenantId, id], onDelete: Restrict)
+  field CustomFieldDefinition @relation(fields: [tenantId, fieldId, scope, type], references: [tenantId, id, scope, type], onDelete: Restrict)
+  option CustomFieldOption? @relation(fields: [tenantId, fieldId, optionId], references: [tenantId, fieldId, id], onDelete: Restrict)
+  @@id([tenantId, recordId, fieldId])
+  @@index([tenantId, fieldId, textKey, recordId])
+  @@index([tenantId, fieldId, numberValue, recordId])
+  @@index([tenantId, fieldId, dateValue, recordId])
+  @@index([tenantId, fieldId, booleanValue, recordId])
+  @@index([tenantId, fieldId, optionId, recordId])
+}
+
+model CrmSalesTeam {
+  tenantId String
+  id String @default(cuid())
+  name String
+  nameKey String
+  workflow String @default("ENQUIRY_FIRST")
+  archived Boolean @default(false)
+  version Int @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  members CrmSalesTeamMember[]
+  enquiries CrmEnquiry[]
+  opportunities CrmOpportunity[]
+  fields CustomFieldDefinition[]
+  @@id([tenantId, id])
+  @@unique([tenantId, nameKey])
+  @@index([tenantId, archived, name, id])
+}
+model CrmSalesTeamMember {
+  tenantId String
+  teamId String
+  userId String
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  team CrmSalesTeam @relation(fields: [tenantId, teamId], references: [tenantId, id], onDelete: Restrict)
+  user User @relation(fields: [tenantId, userId], references: [tenantId, id], onDelete: Restrict)
+  @@id([tenantId, teamId, userId])
+  @@index([tenantId, userId, teamId])
 }
