@@ -1,8 +1,18 @@
+## 2026-09-29: Quotation / payment-plan documents (release)
+
+Reusable quotation templates, exact charges/instalments, immutable versions and
+PDF download are implemented. See [delivery notes](CRM_QUOTATIONS_PAYMENT_PLANS.md).
+The [four-phase checkpoint](CRM_CHECKPOINT_2026_09_29.md) is already pushed, migrated
+and deployed. The quotation migration is also applied; all 86 hosted migrations are up to date.
+Application release is authorized via main.
+Full hosted workflow verification remains deferred by user instruction.
+
 ## 2026-09-29: CRM checkpoint release
 
 The three Odoo-alignment migrations (project choices, custom fields and sales
-teams) have applied successfully to the hosted database. Application release is
-in progress. Per user instruction, full hosted workflow verification is deferred
+teams) have applied successfully to the hosted database. Application deployment
+`df1b560` is Ready on Vercel, including CRM Test. Per user instruction, full hosted
+workflow verification is deferred
 until after quotation/payment-plan implementation. Prior local checks remain
 recorded in the phase documents; they are not hosted acceptance results.
 

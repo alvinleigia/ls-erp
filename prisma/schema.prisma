@@ -145,6 +145,7 @@ model CrmStage {
 }
 
 model CrmOpportunity {
+  quotations CrmQuotation[]
   salesTeamId String?
   salesTeam CrmSalesTeam? @relation(fields: [tenantId, salesTeamId], references: [tenantId, id], onDelete: Restrict)
   @@index([tenantId, salesTeamId])
@@ -796,6 +797,9 @@ model Organization {
 }
 
 model Tenant {
+  quotationTemplates CrmQuotationTemplate[]
+  quotations CrmQuotation[]
+  quotationRevisions CrmQuotationRevision[]
   crmSalesTeams CrmSalesTeam[]
   crmSalesTeamMembers CrmSalesTeamMember[]
   customFieldDefinitions CustomFieldDefinition[]
@@ -2272,4 +2276,46 @@ model CrmSalesTeamMember {
   user User @relation(fields: [tenantId, userId], references: [tenantId, id], onDelete: Restrict)
   @@id([tenantId, teamId, userId])
   @@index([tenantId, userId, teamId])
+}
+
+model CrmQuotationTemplate {
+  tenantId String
+  id String @default(cuid())
+  name String
+  content Json
+  archived Boolean @default(false)
+  version Int @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  @@id([tenantId, id])
+  @@index([tenantId, archived, name, id])
+}
+
+model CrmQuotation {
+  tenantId String
+  id String @default(cuid())
+  opportunityId String
+  title String
+  currency String
+  consideration Decimal @db.Decimal(18, 4)
+  version Int @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  opportunity CrmOpportunity @relation(fields: [tenantId, opportunityId], references: [tenantId, id], onDelete: Restrict)
+  revisions CrmQuotationRevision[]
+  @@id([tenantId, id])
+  @@index([tenantId, opportunityId, createdAt(sort: Desc), id])
+}
+
+model CrmQuotationRevision {
+  tenantId String
+  quotationId String
+  number Int
+  snapshot Json
+  createdAt DateTime @default(now())
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  quotation CrmQuotation @relation(fields: [tenantId, quotationId], references: [tenantId, id], onDelete: Restrict)
+  @@id([tenantId, quotationId, number])
 }

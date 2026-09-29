@@ -1,0 +1,105 @@
+/* eslint-disable @typescript-eslint/no-require-imports */
+const { test, before, after } = require('node:test')
+const assert = require('node:assert/strict')
+const { randomUUID } = require('node:crypto')
+const { Pool } = require('pg')
+const { PrismaClient } = require('@prisma/client')
+const { TenantPgAdapter } = require('../lib/tenant-pg-adapter.ts')
+const { createCrmService } = require('../modules/crm/service.ts')
+const { realEstateCrmExtension } = require('../modules/real-estate/crm-extension.ts')
+const { emptyQuotationContent } = require('../modules/crm/quotation-validation.ts')
+require('../lib/logger.ts').logger.info = () => {}
+const url = new URL(process.env.CRM_TEST_DATABASE_URL || 'http://invalid')
+if (!['localhost','127.0.0.1'].includes(url.hostname) || url.pathname !== '/ls_salon_crm_test') throw Error('Use only the isolated local CRM test database.')
+const tenant = `quotes_${randomUUID()}`, otherTenant = `quotes_${randomUUID()}`, pools = [], clients = [], queries = []
+function client(tenantId, root = false) {
+ const u = new URL(url); if (!root) {u.username='crm_test_runtime';u.password=''}
+ const pool = new Pool({connectionString:u.toString(),max:4});pools.push(pool)
+ const db = new PrismaClient({adapter:new TenantPgAdapter(pool,{tenantId,bypass:root}), log:[{emit:'event',level:'query'}]});clients.push(db);db.$on('query',event=>queries.push(event.query));return db
+}
+const root = client(undefined,true), db = client(tenant), dbB = client(otherTenant), unscoped = client(undefined)
+let manager,staff,other,adminB,crm,staffCrm,otherCrm,foreign,deal,contact,project
+const status = code => error => error.status === code
+const content = (extra={}) => ({...structuredClone(emptyQuotationContent),supplierName:'Example Developer',currency:'INR',lines:[{description:'Plot 29',quantity:'247',unit:'sq. m',rate:'15000'}],...extra})
+before(async()=>{
+ await root.tenant.createMany({data:[{id:tenant,slug:tenant,name:'Quotation test'},{id:otherTenant,slug:otherTenant,name:'Other'}]})
+ const user=(tenantId,role)=>root.user.create({data:{tenantId,role,name:role,email:`${randomUUID()}@example.test`}})
+ manager=await user(tenant,'MANAGER');staff=await user(tenant,'STAFF');other=await user(tenant,'STAFF');adminB=await user(otherTenant,'ADMIN')
+ await root.tenantModule.createMany({data:[tenant,otherTenant].flatMap(tenantId=>['crm','realEstate'].map(key=>({tenantId,key,enabled:true})))})
+ const service=(client,user)=>createCrmService(client,{tenantId:user.tenantId,userId:user.id},realEstateCrmExtension)
+ crm=service(db,manager);staffCrm=service(db,staff);otherCrm=service(db,other);foreign=service(dbB,adminB)
+ contact=await root.crmContact.create({data:{tenantId:tenant,name:'Buyer Original',ownerUserId:staff.id,email:'buyer@example.test'}})
+ const pipeline=await root.crmPipeline.create({data:{tenantId:tenant,name:'Sales'}})
+ const stage=await root.crmStage.create({data:{tenantId:tenant,pipelineId:pipeline.id,name:'Qualified',position:0,kind:'OPEN',probability:10,color:'#123456'}})
+ deal=await crm.createOpportunity({title:'Example property',contactId:contact.id,assignedUserId:staff.id,pipelineId:pipeline.id,stageId:stage.id,amount:'3705000',currency:'INR',expectedCloseOn:'2026-12-31'})
+ project=await root.realEstateProject.create({data:{tenantId:tenant,name:'BLISS AQUA',code:'AQUA'}})
+ await root.realEstateOpportunityContext.create({data:{tenantId:tenant,opportunityId:deal.id,projectId:project.id}})
+})
+after(async()=>{await Promise.all(clients.map(c=>c.$disconnect()));await Promise.all(pools.map(p=>p.end()))})
+test('templates are managed, tenant-scoped, versioned and archived without modifying existing documents',async()=>{
+ await assert.rejects(staffCrm.saveQuotationTemplate({name:'Denied',content:content()}),status(403))
+ const t=await crm.saveQuotationTemplate({name:'Six instalments',content:content()})
+ assert.equal((await staffCrm.getQuotationTemplate(t.id)).name,t.name)
+ await assert.rejects(foreign.getQuotationTemplate(t.id),status(404))
+ const q=await staffCrm.saveQuotation(deal.id,{content:content(),templateId:t.id})
+ await crm.saveQuotationTemplate({name:'Archived',content:content({terms:'New terms'}),archived:true,version:t.version},t.id)
+ assert.equal((await crm.getQuotation(q.id)).snapshot.template.name,'Six instalments')
+ assert.equal((await staffCrm.listQuotationTemplates({})).total,0)
+ await assert.rejects(staffCrm.getQuotationTemplate(t.id),status(404))
+ await assert.rejects(crm.saveQuotationTemplate({name:'Stale',content:content(),version:1},t.id),status(409))
+})
+test('staff ownership, cross-tenant access and row security hold for documents and revisions',async()=>{
+ const q=await staffCrm.saveQuotation(deal.id,{content:content()})
+ for(const service of [otherCrm,foreign]){
+  await assert.rejects(service.getQuotation(q.id),status(404))
+  await assert.rejects(service.saveQuotation(deal.id,{content:content(),version:1},q.id),status(404))
+  await assert.rejects(service.listQuotations(deal.id,{}),status(404))
+ }
+ assert.equal((await unscoped.crmQuotationRevision.findMany()).length,0)
+ assert.equal((await dbB.crmQuotation.findMany({where:{tenantId:tenant}})).length,0)
+ await assert.rejects(root.crmQuotationRevision.create({data:{tenantId:otherTenant,quotationId:q.id,number:99,snapshot:{}}}))
+})
+test('saved versions preserve original prices, customer/project details and terms',async()=>{
+ const q=await crm.saveQuotation(deal.id,{content:content({terms:'Original terms'})})
+ await root.crmContact.update({where:{id:contact.id},data:{name:'Buyer Changed'}})
+ await root.realEstateProject.update({where:{id:project.id},data:{name:'Project Changed'}})
+ await crm.saveQuotation(deal.id,{content:content({terms:'Updated terms',discount:'5000'}),version:1},q.id)
+ const old=await crm.getQuotation(q.id,1),latest=await crm.getQuotation(q.id)
+ assert.equal(old.snapshot.customer.name,'Buyer Original');assert.equal(old.snapshot.context[0].value,'BLISS AQUA');assert.equal(old.snapshot.content.terms,'Original terms');assert.equal(old.snapshot.calculation.consideration,'3705000.00')
+ assert.equal(latest.revision,2);assert.equal(latest.snapshot.customer.name,'Buyer Changed');assert.equal(latest.snapshot.calculation.consideration,'3700000.00')
+ await assert.rejects(root.crmQuotationRevision.updateMany({where:{tenantId:tenant,quotationId:q.id,number:1},data:{snapshot:{}}}),/immutable/)
+ await assert.rejects(root.crmQuotationRevision.deleteMany({where:{tenantId:tenant,quotationId:q.id}}),/immutable/)
+})
+test('concurrent updates create one new version and stale writer gets a conflict',async()=>{
+ const q=await crm.saveQuotation(deal.id,{content:content()})
+ const results=await Promise.allSettled([crm.saveQuotation(deal.id,{content:content({discount:'100'}),version:1},q.id),crm.saveQuotation(deal.id,{content:content({discount:'200'}),version:1},q.id)])
+ assert.equal(results.filter(r=>r.status==='fulfilled').length,1)
+ assert.equal(results.find(r=>r.status==='rejected').reason.status,409)
+ assert.equal(await root.crmQuotationRevision.count({where:{tenantId:tenant,quotationId:q.id}}),2)
+})
+test('required audit failure rolls document header, snapshot and history back',async()=>{
+ const broken={$transaction:(operation,options)=>db.$transaction(tx=>operation(new Proxy(tx,{get(target,key){if(key==='auditLog')return {create:async()=>{throw Error('audit unavailable')}};return target[key]}})),options)}
+ const service=createCrmService(broken,{tenantId:tenant,userId:manager.id})
+ const before=await root.crmQuotation.count({where:{tenantId:tenant}})
+ await assert.rejects(service.saveQuotation(deal.id,{content:content()}),/audit unavailable/)
+ assert.equal(await root.crmQuotation.count({where:{tenantId:tenant}}),before)
+})
+test('module-off hides new industry context while historical documents and core calculations remain intact',async()=>{
+ const q=await crm.saveQuotation(deal.id,{content:content()})
+ await root.tenantModule.update({where:{tenantId_key:{tenantId:tenant,key:'realEstate'}},data:{enabled:false}})
+ assert.equal((await crm.quotationDefaults(deal.id)).context.length,0)
+ assert.equal((await crm.getQuotation(q.id)).snapshot.context.length,1)
+ const next=await crm.saveQuotation(deal.id,{content:content()});assert.equal((await crm.getQuotation(next.id)).snapshot.context.length,0)
+ await root.tenantModule.update({where:{tenantId_key:{tenantId:tenant,key:'crm'}},data:{enabled:false}})
+ await assert.rejects(crm.getQuotation(q.id),status(403))
+ await root.tenantModule.update({where:{tenantId_key:{tenantId:tenant,key:'crm'}},data:{enabled:true}})
+})
+test('large document list remains paginated and never loads revision payloads',async()=>{
+ await root.crmQuotation.createMany({data:Array.from({length:1000},(_,i)=>({id:`list-${i}-${tenant}`,tenantId:tenant,opportunityId:deal.id,title:'Large list',currency:'INR',consideration:'1'}))})
+ queries.length=0
+ const result=await crm.listQuotations(deal.id,{page:2,pageSize:5})
+ assert.equal(result.items.length,5);assert.ok(result.total>=1000)
+ assert.ok(!queries.some(q=>q.includes('CrmQuotationRevision')))
+ assert.ok(queries.length<=12,`Unexpected query count: ${queries.length}`)
+ console.log(`Quotation list: ${result.total} rows, 5 returned, ${queries.length} SQL statements, no revision payloads.`)
+})

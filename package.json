@@ -31,7 +31,9 @@
     "db:migrate": "prisma migrate dev",
     "db:generate": "prisma generate",
     "db:reset": "prisma migrate reset",
-    "bootstrap:admin": "node scripts/bootstrap-admin.mjs"
+    "bootstrap:admin": "node scripts/bootstrap-admin.mjs",
+    "test:crm:quotations": "node --require ./tests/register.cjs --test tests/quotation-calculation.test.cjs",
+    "test:crm:quotations:integration": "node --require ./tests/register.cjs --test --test-force-exit tests/quotations.integration.test.cjs"
   },
   "dependencies": {
     "@pdf-lib/fontkit": "^1.1.1",
@@ -59,6 +61,7 @@
     "nodemailer": "^7.0.12",
     "pdf-lib": "^1.17.1",
     "pg": "^8.18.0",
+    "qrcode": "^1.5.4",
     "react": "19.2.3",
     "react-day-picker": "^10.0.1",
     "react-dom": "19.2.3",
@@ -73,6 +76,7 @@
     "@types/node": "^20",
     "@types/nodemailer": "^7.0.5",
     "@types/pg": "^8.16.0",
+    "@types/qrcode": "^1.5.6",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",

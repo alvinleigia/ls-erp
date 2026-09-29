@@ -194,3 +194,11 @@ Release the checkpoint; by user instruction, defer full hosted workflow verifica
 until after payment-plan implementation, retaining existing CRM Test records. Next agreed
 feature: reusable quotations/payment-plan documents linked to opportunities,
 with configurable charges and instalments; collections/accounting remain later.
+
+## Subsequent quotation / payment-plan increment
+
+Implemented locally after checkpoint `df1b560` was released. See
+[quotation delivery](CRM_QUOTATIONS_PAYMENT_PLANS.md) and
+[checkpoint status](CRM_CHECKPOINT_2026_09_29.md). The quotation migration is applied and the application release is authorized;
+full hosted workflow verification is deferred
+by user instruction until after this increment.

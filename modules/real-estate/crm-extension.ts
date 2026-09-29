@@ -14,6 +14,15 @@ const projectJoins = Prisma.sql`
   LEFT JOIN "RealEstateProject" sp ON sp.id = x."subprojectId" AND sp."tenantId" = r."tenantId"`
 
 export const realEstateCrmExtension: CrmExtensions<Omit<Fields, "id">, Metadata> = {
+  async quotationContext(tx, actor, opportunityId) {
+    if (!await realEstateEnabled(tx, actor.tenantId)) return []
+    const context = await tx.realEstateOpportunityContext.findFirst({ where: { tenantId: actor.tenantId, opportunityId }, include: { project: { select: { name: true, developerAccount: { select: { name: true } } } }, subproject: { select: { name: true } } } })
+    return [
+      { label: "Project", value: context?.project?.name || "" },
+      { label: "Subproject", value: context?.subproject?.name || "" },
+      { label: "Developer", value: context?.project?.developerAccount?.name || "" },
+    ].filter(item => item.value)
+  },
   splitWrite(input) {
     // Parse only the extension envelope here; core's strict schema still rejects
     // unknown fields. The envelope preserves propertyContext error paths.
