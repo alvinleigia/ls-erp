@@ -4,7 +4,7 @@ const assert = require("node:assert/strict")
 const fs = require("node:fs")
 const path = require("node:path")
 require("../modules/crm/service.ts")
-const coreLoadedIndustry = Object.keys(require.cache).some(file => file.replaceAll("\\", "/").includes("/modules/real-estate/"))
+const coreLoadedIndustry = Object.keys(require.cache).some(file => file.replaceAll("\\", "/").match(/\/modules\/(real-estate|sales-documents)\//))
 const { noCrmExtensions } = require("../modules/crm/extensions.ts")
 const { crmEnquiryCreateSchema } = require("../modules/crm/validation.ts")
 const { realEstateCrmExtension: extension } = require("../modules/real-estate/crm-extension.ts")
@@ -23,7 +23,7 @@ test("core loads independently and cannot import an industry or application comp
   const root = path.join(__dirname, "../modules/crm")
   for (const file of fs.readdirSync(root, { recursive: true }).filter(file => /\.tsx?$/.test(file))) {
     const source = fs.readFileSync(path.join(root, file), "utf8")
-    assert.doesNotMatch(source, /(?:from\s+|import\s*\()["'][^"']*(?:real-estate|application\/crm)/, file)
+    assert.doesNotMatch(source, /(?:from\s+|import\s*\()["'][^"']*(?:real-estate|sales-documents|application\/crm)/, file)
   }
 })
 

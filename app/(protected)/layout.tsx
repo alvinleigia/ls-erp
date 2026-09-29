@@ -1,6 +1,8 @@
 import { redirect } from "next/navigation";
 
 import { AppSidebar } from "@/components/app-sidebar";
+import { canUseCrm } from "@/lib/permissions";
+import { BusinessModuleProvider } from "@/platform/module-provider";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { auth } from "@/auth";
 import { resolveTenantFromServerHeaders } from "@/lib/tenancy";
@@ -21,7 +23,7 @@ export default async function ProtectedLayout({
   }
 
   return (
-    <SidebarProvider>
+    <BusinessModuleProvider key={`${tenant.id}:${session.user.id}:${session.user.role}`} active={canUseCrm(session.user.role) && tenant.slug !== (process.env.PLATFORM_ADMIN_TENANT_SLUG?.trim().toLowerCase() || "platform")}><SidebarProvider>
       <div className="flex min-h-screen w-full">
         <AppSidebar />
 
@@ -30,6 +32,6 @@ export default async function ProtectedLayout({
           <div className="mt-6">{children}</div>
         </main>
       </div>
-    </SidebarProvider>
+    </SidebarProvider></BusinessModuleProvider>
   );
 }

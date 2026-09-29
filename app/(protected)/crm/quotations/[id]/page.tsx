@@ -1,2 +1,2 @@
-import { QuotationEditor } from "@/modules/crm/components/quotations"
+import { QuotationEditor } from "@/modules/sales-documents/components/quotations"
 export default async function Page({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ revision?: string }> }) { const { id } = await params, { revision } = await searchParams; return <QuotationEditor key={`${id}-${revision}`} id={id} revision={revision ? Number(revision) : undefined} /> }

@@ -2307,6 +2307,7 @@ model CrmQuotation {
   revisions CrmQuotationRevision[]
   @@id([tenantId, id])
   @@index([tenantId, opportunityId, createdAt(sort: Desc), id])
+  @@index([tenantId, createdAt(sort: Desc), id])
 }
 
 model CrmQuotationRevision {

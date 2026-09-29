@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { withCrmApi } from "@/application/crm/http"
-import { buildQuotationPdf } from "@/modules/crm/quotation-pdf"
+import { buildQuotationPdf } from "@/modules/sales-documents/quotation-pdf"
 export const runtime = "nodejs"
 export const GET = (request: Request, context: { params: Promise<{ id: string }> }) => withCrmApi(request, async service => {
   const raw = new URL(request.url).searchParams.get("revision")

@@ -1,5 +1,6 @@
 "use client"
 import * as React from "react"
+import { useBusinessModules } from "@/platform/module-provider"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { FormField } from "@/components/form-field"
@@ -15,15 +16,7 @@ export function propertyFields(context?: PropertyContext | null): PropertyContex
   return { projectId: context?.projectId || "", subprojectId: context?.subprojectId || "", budgetMin: context?.budgetMin || "", budgetMax: context?.budgetMax || "", budgetCurrency: context?.budgetCurrency || "", propertyCategory: (context?.propertyCategory || "") as PropertyContextInput["propertyCategory"], bedrooms: context?.bedrooms ?? null, buyingTimeframe: (context?.buyingTimeframe || "") as PropertyContextInput["buyingTimeframe"] }
 }
 export function useRealEstateEnabled() {
-  const [enabled, setEnabled] = React.useState(false)
-  React.useEffect(() => {
-    const controller = new AbortController()
-    fetch("/api/modules", { signal: controller.signal, cache: "no-store" }).then(async response => {
-      if (response.ok) setEnabled(!!(await response.json()).modules?.some((item: { key: string; enabled: boolean }) => item.key === "realEstate" && item.enabled))
-    }).catch(() => {})
-    return () => controller.abort()
-  }, [])
-  return enabled
+  return useBusinessModules().enabled("realEstate")
 }
 export function PropertyFields({ value, onChange, selected, disabled, readOnly, error, isNew = false }: { isNew?: boolean; error?: string; value: PropertyContextInput; onChange: (value: PropertyContextInput) => void; selected?: PropertyContext | null; disabled?: boolean; readOnly?: boolean }) {
   const [defaultsLoading, setDefaultsLoading] = React.useState(isNew)

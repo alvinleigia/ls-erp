@@ -22,6 +22,7 @@ export type CrmExtensionView = {
   Editor: React.ComponentType<ExtensionEditorProps>
   Caption: React.ComponentType<{ record: unknown }>
   Filter: React.ComponentType<ExtensionFilterProps>
+  OpportunityPanels?: React.ComponentType<{ opportunityId: string }>
 }
 const emptyView: CrmExtensionView = {
   initial: () => undefined, load: () => undefined, payload: () => ({}),
@@ -55,4 +56,8 @@ export function CrmExtensionCaption(props: { record: unknown }) {
 export function CrmExtensionFilter(props: ExtensionFilterProps) {
   const { Filter } = React.useContext(ExtensionContext)
   return <Filter {...props} />
+}
+export function CrmOpportunityPanels(props: { opportunityId: string }) {
+  const { OpportunityPanels } = React.useContext(ExtensionContext)
+  return OpportunityPanels ? <OpportunityPanels {...props} /> : null
 }

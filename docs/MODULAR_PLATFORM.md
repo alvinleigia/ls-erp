@@ -1,3 +1,13 @@
+## 2026-09-29: Modular navigation and optional Sales Documents (release)
+
+Sidebar-only CRM, Contacts, Activities, Sales Documents and Real Estate groups
+are implemented. Sales Documents and its Payment Plans capability have separate
+tenant switches, dependency checks and server enforcement. Quotation code is
+extracted from CRM; existing URLs and saved versions are retained. See
+[delivery notes](CRM_MODULE_NAVIGATION_DELIVERY.md). The additive flag-backfill
+migration is applied (87 migrations up to date); application release is authorized
+via main. Hosted workflow verification remains pending.
+
 ## 2026-09-29: Quotation / payment-plan documents (release)
 
 Reusable quotation templates, exact charges/instalments, immutable versions and

@@ -1,8 +1,8 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
 const { test } = require('node:test')
 const assert = require('node:assert/strict')
-const { calculateQuotation } = require('../modules/crm/quotation-calculation.ts')
-const { emptyQuotationContent } = require('../modules/crm/quotation-validation.ts')
+const { calculateQuotation } = require('../modules/sales-documents/quotation-calculation.ts')
+const { emptyQuotationContent } = require('../modules/sales-documents/quotation-validation.ts')
 const sample = (extra = {}) => ({ ...structuredClone(emptyQuotationContent), supplierName: 'Example Developer', currency: 'INR', lines: [{ description: 'Plot 29', quantity: '247', unit: 'sq. m', rate: '15000' }], ...extra })
 module.exports.sample = sample
 test('reference plan: area, fixed statutory charges, extras and six instalments reconcile', () => {
@@ -37,10 +37,14 @@ test('invalid totals, circular charges, malformed dates, values and incomplete s
  assert.throws(() => calculateQuotation(sample({ charges: [{label:'Circular',kind:'PERCENT',value:'10',basis:'CONSIDERATION',included:true,due:''}] })))
  assert.throws(() => calculateQuotation(sample({ bookingDate: '2026-02-30' })))
  assert.throws(() => calculateQuotation(sample({ lines:[{description:'Bad',quantity:'-1',unit:'',rate:'1'}] })))
- const { quotationContentSchema } = require('../modules/crm/quotation-validation.ts')
+ const { quotationContentSchema } = require('../modules/sales-documents/quotation-validation.ts')
  assert.equal(quotationContentSchema.safeParse(sample({instalments:[{label:'Invalid',percent:'-',days:0,note:''}]})).success,false)
 })
 test('dates use calendar days from booking without timezone shifts', () => {
  const result = calculateQuotation(sample({ bookingDate:'2026-09-23', instalments:[{label:'30 days',percent:'100',days:30,note:''}] }))
  assert.equal(result.instalments[0].dueDate,'2026-10-23')
+})
+
+test('quotation-only totals do not manufacture an instalment schedule',()=>{
+ const result=calculateQuotation(sample({instalments:[]})); assert.deepEqual(result.instalments,[]); assert.equal(result.consideration,'3705000.00')
 })

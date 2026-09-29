@@ -5,6 +5,13 @@ The quotation migration was applied to the hosted database on 2026-09-29; Prisma
 confirmed all 86 migrations are up to date. Application release is authorized via main.
 The user deferred the complete hosted CRM workflow review until after this work.
 
+## Optional modules (subsequent refactor)
+
+See [modular navigation delivery](CRM_MODULE_NAVIGATION_DELIVERY.md). Sales Documents
+and Payment Plans now have separate switches locally. Quotation-only documents
+need no instalment schedule; saved scheduled versions are preserved when Payment
+Plans is disabled. The module migration is applied; application release is authorized via main.
+
 ## Where to use it
 
 - **CRM > Configuration > Quotation templates**: managers create, edit or archive

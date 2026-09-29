@@ -41,6 +41,7 @@ async function main() {
       if (policyStart < 0) throw new Error(`Missing tenant policy section: ${name}`)
       await db.query(basePath && name >= firstPending ? migration : `BEGIN;\n${migration.slice(policyStart).replace(/\nCOMMIT;\s*$/, "")}\nCOMMIT;`)
     }
+    if (basePath) await db.query(fs.readFileSync("prisma/migrations/20260929200000_optional_sales_documents/migration.sql", "utf8"))
     // Roles are cluster-wide and may outlive a recreated disposable database.
     const runtimeRole = await db.query("SELECT rolsuper, rolbypassrls FROM pg_roles WHERE rolname = 'crm_test_runtime'")
     if (!runtimeRole.rowCount) await db.query("CREATE ROLE crm_test_runtime LOGIN NOSUPERUSER NOBYPASSRLS")

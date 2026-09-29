@@ -1,4 +1,4 @@
-import { createQuotationService } from "./quotation-service"
+import type { CrmServiceContext } from "./service-context"
 import { createPresetService, type CrmPreset } from "./preset-service"
 import { createTeamService, resolveSalesTeam, teamSelect } from "./team-service"
 import { constraintTarget, serializationConflict } from "./database-errors"
@@ -36,7 +36,7 @@ function pageResult<T>(items: T[], total: number, page: number, pageSize: number
 
 // No HTTP or Lia dependencies. Every operation checks current membership and
 // module access, then runs in a transaction. Caller must establish DB tenant context.
-export function createCrmService<Fields extends object = object, Metadata extends object = object>(db: PrismaClient, identity: Pick<CrmActor, "tenantId" | "userId" | "requestId">, extensions: CrmExtensions<Fields, Metadata> = noCrmExtensions as CrmExtensions<Fields, Metadata>, presets: readonly CrmPreset[] = []) {
+export function createCrmService<Fields extends object = object, Metadata extends object = object, Addons extends object = object>(db: PrismaClient, identity: Pick<CrmActor, "tenantId" | "userId" | "requestId">, extensions: CrmExtensions<Fields, Metadata> = noCrmExtensions as CrmExtensions<Fields, Metadata>, presets: readonly CrmPreset[] = [], install?: (context: CrmServiceContext) => Addons) {
   async function run<T>(operation: (tx: Tx, actor: CrmActor) => Promise<T>): Promise<T> {
     for (let attempt = 0; ; attempt++) {
       try {
@@ -108,7 +108,7 @@ export function createCrmService<Fields extends object = object, Metadata extend
   }
 
   return {
-    ...createQuotationService({ run, audit }, extensions),
+    ...(install ? install({ run, audit }) : {} as Addons),
     listExtensionChoices(key: string, input: unknown) { return run((tx, actor) => extensions.choices(tx, actor, key, input)) },
     ...createSalesService({ run, audit, checkAssignee }, extensions),
     ...createActivityTypeService({ run, audit }),

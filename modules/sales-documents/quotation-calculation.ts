@@ -27,7 +27,7 @@ export function calculateQuotation(input: unknown) {
     grouped.set(key, { label: charge.group, included: charge.included, amount: (previous?.amount || BigInt(0)) + chargeValue(charge, consideration), hasPending: !!previous?.hasPending || charge.kind === "TBD" })
   }
   const groups = [...grouped.values()].map(group => ({ ...group, amount: money(group.amount) }))
-  if (data.instalments.reduce((sum, item) => sum + scaled(item.percent), BigInt(0)) !== BigInt(100) * scale) throw new Error("Instalment percentages must total exactly 100%.")
+  if (data.instalments.length && data.instalments.reduce((sum, item) => sum + scaled(item.percent), BigInt(0)) !== BigInt(100) * scale) throw new Error("Instalment percentages must total exactly 100%.")
   // Round cumulative allocations so every amount is non-negative and reconciles.
   let cumulative = BigInt(0), allocated = BigInt(0)
   const instalments = data.instalments.map(item => {

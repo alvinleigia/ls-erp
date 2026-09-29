@@ -5,15 +5,15 @@ import { calculateQuotation } from "../quotation-calculation"
 import { FormField } from "@/components/form-field"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
-import { CrmSection } from "./crm-section"
-import { CrmSelect, CrmTextarea } from "./crm-controls"
+import { CrmSection } from "@/modules/crm/components/crm-section"
+import { CrmSelect, CrmTextarea } from "@/modules/crm/components/crm-controls"
 import { SearchableSelect } from "@/components/searchable-select"
 import Image from "next/image"
 import { formatDecimalCurrency } from "@/lib/formatting"
 import { formatDateForDisplay } from "@/lib/date"
 import type { AppSettingsPayload } from "@/types/scheduling"
 
-export function QuotationContentFields({ value: v, onChange, disabled, template = false, onError, settings, errors = {} }: { value: QuotationContent; onChange: (next: QuotationContent) => void; disabled?: boolean; template?: boolean; onError: (message: string) => void; settings?: Pick<AppSettingsPayload, "numberFormat" | "currencySymbolPlacement" | "dateFormat">; errors?: Record<string, string> }) {
+export function QuotationContentFields({ value: v, onChange, disabled, template = false, paymentPlansEnabled = false, onError, settings, errors = {} }: { value: QuotationContent; onChange: (next: QuotationContent) => void; disabled?: boolean; template?: boolean; paymentPlansEnabled?: boolean; onError: (message: string) => void; settings?: Pick<AppSettingsPayload, "numberFormat" | "currencySymbolPlacement" | "dateFormat">; errors?: Record<string, string> }) {
   const set = <K extends keyof QuotationContent>(key: K, value: QuotationContent[K]) => onChange({ ...v, [key]: value })
   const field = (id: string, label: string, value: string, update: (value: string) => void, type = "text", max = 300) => <FormField key={id} id={id} label={label} error={errors[id]}><Input id={id} type={type} maxLength={max} value={value} onChange={e => update(e.target.value)} /></FormField>
   const select = (id: string, label: string, value: string, options: Record<string, string>, update: (value: string) => void) => <FormField id={id} label={label} error={errors[id]}><CrmSelect id={id} className="w-full" value={value} onValueChange={update}>{Object.entries(options).map(([key, text]) => <option key={key} value={key}>{text}</option>)}</CrmSelect></FormField>
@@ -70,7 +70,7 @@ export function QuotationContentFields({ value: v, onChange, disabled, template 
       })}
       <Button type="button" variant="outline" disabled={v.charges.length >= 30} onClick={() => set("charges", [...v.charges, { label: "", group: "", kind: "FIXED", value: "0", basis: "BASE", included: false, due: "" }])}>Add charge</Button>
     </CrmSection>
-    <CrmSection title="Instalment schedule" description="Percentages apply to total consideration and must add up to 100%. Extra charges follow their separate conditions.">
+    {(paymentPlansEnabled || v.instalments.length > 0) && <CrmSection title="Instalment schedule" description="Percentages apply to total consideration and must add up to 100%. Extra charges follow their separate conditions.">
       {v.instalments.map((item, i) => {
         const edit = (patch: Partial<typeof item>) => set("instalments", v.instalments.map((r, n) => n === i ? { ...r, ...patch } : r))
         return <div key={i} className="grid gap-3 rounded-lg border p-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -78,11 +78,11 @@ export function QuotationContentFields({ value: v, onChange, disabled, template 
           {field(`instalment-percent-${i}`, "Percentage", item.percent, percent => edit({ percent }))}
           <FormField id={`instalment-days-${i}`} label="Days from booking" error={errors[`instalment-days-${i}`]}><Input id={`instalment-days-${i}`} type="number" min={0} max={36500} value={item.days} onChange={event => edit({ days: Number(event.target.value) })} /></FormField>
           {field(`instalment-note-${i}`, "Condition (optional)", item.note, note => edit({ note }))}
-          {v.instalments.length > 1 && <Button type="button" variant="ghost" onClick={() => set("instalments", v.instalments.filter((_, n) => n !== i))}>Remove instalment</Button>}
+          {<Button type="button" variant="ghost" onClick={() => set("instalments", v.instalments.filter((_, n) => n !== i))}>Remove instalment</Button>}
         </div>
       })}
-      <Button type="button" variant="outline" disabled={v.instalments.length >= 30} onClick={() => set("instalments", [...v.instalments, { label: "", percent: "0", days: 0, note: "" }])}>Add instalment</Button>
-    </CrmSection>
+      <Button type="button" variant="outline" disabled={!paymentPlansEnabled || v.instalments.length >= 30} onClick={() => set("instalments", [...v.instalments, { label: "", percent: "0", days: 0, note: "" }])}>Add instalment</Button>
+    </CrmSection>}
     {!template && <CrmSection title="Calculated summary">{summary ? <>
       <dl className="grid gap-4 sm:grid-cols-3">{[["Base price", summary.base], ["Included charges", summary.included], ["Discount", summary.discount], ["Total consideration", summary.consideration], ["Extra charges (known)", summary.extras], ["Total known amount", summary.totalKnown]].map(([label, value]) => <div key={label}><dt className="text-sm text-muted-foreground">{label}</dt><dd className="text-lg font-semibold">{amount(value)}</dd></div>)}</dl>
       {summary.hasPending && <p className="text-sm">Pending charges are additional and have not been included in the total.</p>}

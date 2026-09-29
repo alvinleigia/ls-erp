@@ -1,3 +1,4 @@
+import { createQuotationService } from "@/modules/sales-documents/quotation-service"
 import { crmPresets } from "./presets"
 import type { PrismaClient } from "@prisma/client"
 import type { CrmActor } from "@/modules/crm/policy"
@@ -7,5 +8,5 @@ import { realEstateCrmExtension } from "@/modules/real-estate/crm-extension"
 // The application installs extensions; each implementation checks the tenant's
 // current module state inside the transaction. No process-wide tenant cache.
 export function createApplicationCrmService(db: PrismaClient, actor: Pick<CrmActor, "tenantId" | "userId" | "requestId">) {
-  return createCrmService(db, actor, realEstateCrmExtension, crmPresets)
+  return createCrmService(db, actor, realEstateCrmExtension, crmPresets, context => createQuotationService(context, realEstateCrmExtension))
 }

@@ -1,6 +1,5 @@
 export const crmConfigurationGroups = [
   { title: "Sales process", description: "Define sales stages and classify incoming enquiries and lost business.", items: [
-    { title: "Quotation templates", href: "/crm/configuration/quotation-templates", description: "Configure reusable pricing, charges, instalments and document terms." },
     { title: "Sales teams", href: "/crm/configuration/sales-teams", description: "Manage membership, assignment and qualification workflow." },
     { title: "Configuration presets", href: "/crm/configuration/presets", description: "Preview and add reusable sales configuration without replacing your choices." },
     { title: "Custom fields", href: "/crm/configuration/custom-fields", description: "Add typed fields to enquiries, opportunities and supported industry records." },

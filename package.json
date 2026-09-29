@@ -16,7 +16,7 @@
     "test:browser:report": "playwright show-report",
     "test:crm:existing": "playwright test --config playwright.crm-existing.config.ts baseline.spec.ts",
     "test:crm:release": "playwright test --config playwright.crm-existing.config.ts release.spec.ts --output test-results/crm-release-gates --reporter=list",
-    "test:crm": "node --require ./tests/register.cjs --test tests/crm.test.cjs tests/work-history-format.test.cjs tests/crm-extensions.test.cjs",
+    "test:crm": "node --require ./tests/register.cjs --test tests/crm.test.cjs tests/work-history-format.test.cjs tests/crm-extensions.test.cjs tests/module-navigation.test.cjs",
     "test:crm:integration": "node --require ./tests/register.cjs --test tests/crm.integration.test.cjs",
     "test:crm:teams:integration": "node --require ./tests/register.cjs --test tests/crm-teams.integration.test.cjs",
     "test:crm:fields:integration": "node --require ./tests/register.cjs --test tests/custom-fields.integration.test.cjs",

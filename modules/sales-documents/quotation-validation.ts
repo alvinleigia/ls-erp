@@ -17,13 +17,13 @@ export const quotationContentSchema = z.object({
   lines: z.array(z.object({ description: text(300).min(1), quantity: decimal.refine(value => Number(value) > 0), unit: text(40), rate: decimal }).strict()).min(1).max(30),
   discount: decimal,
   charges: z.array(z.object({ label: text(150).min(1), group: text(100).default(""), kind: z.enum(["FIXED", "PERCENT", "TBD"]), value: decimal, basis: z.enum(["BASE", "CONSIDERATION"]), included: z.boolean(), due: text(500) }).strict()).max(30),
-  instalments: z.array(z.object({ label: text(150).min(1), percent: decimal.refine(value => Number(value) > 0 && Number(value) <= 100), days: z.number().int().min(0).max(36500), note: text(300) }).strict()).min(1).max(30),
+  instalments: z.array(z.object({ label: text(150).min(1), percent: decimal.refine(value => Number(value) > 0 && Number(value) <= 100), days: z.number().int().min(0).max(36500), note: text(300) }).strict()).max(30),
   bank: z.object({ accountName: text(200), accountNumber: text(100), accountType: text(100), bankName: text(200), branch: text(200), routingCode: text(100) }).strict(),
   terms: text(10000),
 }).strict().superRefine((data, ctx) => {
   if (data.instalments.some(item => !/^\d{1,12}(\.\d{1,4})?$/.test(item.percent))) return
   const total = data.instalments.reduce((sum, item) => { const [whole, decimal = ""] = item.percent.split("."); return sum + BigInt(whole) * BigInt(10000) + BigInt(decimal.padEnd(4, "0")) }, BigInt(0))
-  if (total !== BigInt(1000000)) ctx.addIssue({ code: "custom", path: ["instalments"], message: "Instalment percentages must total exactly 100%." })
+  if (data.instalments.length && total !== BigInt(1000000)) ctx.addIssue({ code: "custom", path: ["instalments"], message: "Instalment percentages must total exactly 100%." })
   data.charges.forEach((charge, index) => {
     if (charge.included && (charge.basis === "CONSIDERATION" || charge.kind === "TBD")) ctx.addIssue({ code: "custom", path: ["charges", index], message: "Included charges must be fixed or based on base price. Pending charges must remain extra." })
   })
@@ -33,8 +33,8 @@ export const quotationSaveSchema = z.object({ content: quotationContentSchema, v
 export const quotationTemplateSchema = z.object({ name: text(150).min(1), content: quotationContentSchema, archived: z.boolean().default(false), version: z.number().int().positive().optional() }).strict()
 export const emptyQuotationContent: QuotationContent = {
   logoDataUrl: "",
-  title: "Quotation / payment plan", currency: "USD", supplierName: "", website: "", bookingDate: "", validUntil: "", registration: "", registrationUrl: "", details: [],
+  title: "Quotation", currency: "USD", supplierName: "", website: "", bookingDate: "", validUntil: "", registration: "", registrationUrl: "", details: [],
   lines: [{ description: "", quantity: "1", unit: "", rate: "0" }], discount: "0", charges: [],
-  instalments: [{ label: "On booking", percent: "100", days: 0, note: "" }],
+  instalments: [],
   bank: { accountName: "", accountNumber: "", accountType: "", bankName: "", branch: "", routingCode: "" }, terms: "",
 }

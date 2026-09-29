@@ -6,7 +6,7 @@ import QRCode from "qrcode"
 import { formatDateForDisplay } from "@/lib/date"
 import { formatDecimalCurrency } from "@/lib/formatting"
 import type { QuotationSnapshot } from "./quotation-service"
-import { CrmError } from "./policy"
+import { CrmError } from "@/modules/crm/policy"
 
 export async function buildQuotationPdf(record: { id: string; revision: number; revisionCreatedAt: Date | string; snapshot: QuotationSnapshot }) {
   const pdf = await PDFDocument.create(); pdf.registerFontkit(fontkit)
@@ -89,10 +89,12 @@ export async function buildQuotationPdf(record: { id: string; revision: number; 
     paragraph(`Total known amount: ${money(calc.totalKnown)}`, 12, accent)
     if (calc.hasPending) paragraph("Pending charges are additional and are not included in the total known amount.", 9, muted)
   }
+  if (calc.instalments.length) {
   section("Instalment schedule")
   paragraph("Instalments cover total consideration. Extra charges follow their separate payment conditions.", 9, muted)
   table(["Milestone", "%", "Amount", "Due / conditions"], calc.instalments.map(item => [item.label, item.percent, money(item.amount), [item.days ? `${item.days} days from booking` : "On booking", item.dueDate ? date(item.dueDate) : "", item.note].filter(Boolean).join("\n")]), [144, 44, 123, 200])
   paragraph(`Total instalments: ${money(calc.consideration)} (100%)`, 11, accent)
+  }
   if (Object.values(c.bank).some(Boolean)) {
     section("Bank details")
     table(["Detail", "Value"], Object.entries({ accountName: "Account name", accountNumber: "Account number", accountType: "Account type", bankName: "Bank", branch: "Branch", routingCode: "IFSC / routing code" }).filter(([key]) => c.bank[key as keyof typeof c.bank]).map(([key, label]) => [label, c.bank[key as keyof typeof c.bank]]), [160, 351])

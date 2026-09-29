@@ -1,5 +1,4 @@
 import { ApplicationCrmProvider } from "@/application/crm/provider"
-import { CrmNavigation } from "@/modules/crm/components/crm-navigation"
 import Link from "next/link"
 import { redirect } from "next/navigation"
 import { auth } from "@/auth"
@@ -16,11 +15,10 @@ export default async function CrmLayout({ children }: { children: React.ReactNod
     const user = await prisma.user.findFirst({ where: { id: session.user.id, tenantId: tenant.id, status: "ACTIVE" }, select: { role: true } })
     if (!user || !canUseCrm(user.role)) return null
     const enabledModule = await prisma.tenantModule.findUnique({ where: { tenantId_key: { tenantId: tenant.id, key: "crm" } } })
-    const realEstate = await prisma.tenantModule.findUnique({ where: { tenantId_key: { tenantId: tenant.id, key: "realEstate" } } })
-    return { enabled: !!enabledModule?.enabled, realEstateEnabled: !!realEstate?.enabled, role: user.role }
+    return { enabled: !!enabledModule?.enabled, role: user.role }
   })
   if (!access) redirect("/dashboard")
   if (!access.enabled) return <div className="space-y-3"><h1 className="text-2xl font-semibold">CRM is not enabled</h1><p>Ask your business administrator to enable CRM for this workspace.</p>{access.role === "ADMIN" && <Link className="underline" href="/settings/modules">Manage business modules</Link>}</div>
   // Keep CRM tables/boards from setting the surrounding app shell's intrinsic width.
-  return <ApplicationCrmProvider><div className="mx-auto w-full min-w-0 max-w-6xl space-y-6 [contain:inline-size]"><CrmNavigation extensionLinks={access.realEstateEnabled ? [["Projects", "/crm/projects"]] : []} /><WorkReminders />{children}</div></ApplicationCrmProvider>
+  return <ApplicationCrmProvider><div className="mx-auto w-full min-w-0 max-w-6xl space-y-6 [contain:inline-size]"><WorkReminders />{children}</div></ApplicationCrmProvider>
 }

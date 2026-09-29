@@ -42,7 +42,7 @@ export function PropertyChoiceList({ kind }: { kind: ChoiceKind }) {
     }, 150)
     return () => { clearTimeout(timer); controller.abort() }
   }, [query, kind, revision])
-  return <div className={crmPageClass}><CrmPageHeader title={choiceTitles[kind]} description="Manage names, display order and defaults. Archive choices to stop new selections while preserving saved records." backHref="/crm/configuration" actions={data.canManage && <Button asChild><Link href={`${href}/new`}>New choice</Link></Button>} />
+  return <div className={crmPageClass}><CrmPageHeader title={choiceTitles[kind]} description="Manage names, display order and defaults. Archive choices to stop new selections while preserving saved records." backHref="/crm/configuration/real-estate" actions={data.canManage && <Button asChild><Link href={`${href}/new`}>New choice</Link></Button>} />
     <CrmSurface><div className="flex flex-wrap gap-3"><Input className="min-w-0 flex-1 basis-48" aria-label="Search choices" placeholder="Search choices…" value={query.q} onChange={event => setQuery({ ...query, q: event.target.value, page: 1 })} /><CrmSelect aria-label="Choice status" value={query.archived} onValueChange={archived => setQuery({ ...query, archived, page: 1 })}><option value="false">Active</option><option value="true">Archived</option></CrmSelect><Button variant="outline" onClick={() => setRevision(value => value + 1)}>Refresh</Button></div>
       {error && <p role="alert" className="text-destructive">{error}</p>}<DataTable table={table} loading={loading} emptyMessage="No choices found." /><CrmTablePagination table={table} totalRows={data.total} loading={loading} />
     </CrmSurface></div>

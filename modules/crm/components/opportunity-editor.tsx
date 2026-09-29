@@ -1,5 +1,5 @@
 "use client"
-import { QuotationList } from "./quotations"
+import { CrmOpportunityPanels } from "./extension-provider"
 import { SalesTeamSelect } from "./sales-teams"
 import { useCustomFields } from "./custom-fields"
 import { LostReasonFields } from "./lost-reason-fields"
@@ -118,5 +118,5 @@ export function OpportunityEditor({ id, enquiryId, initialProjectId = "", initia
     {(record?.enquiryId || enquiryId) && <p className="text-sm">Source: <Link className="underline" href={`/crm/enquiries/${record?.enquiryId || enquiryId}`}>original enquiry and follow-ups</Link>. Its records and history are preserved.</p>}
     {extension.fields({ errors, disabled: saving || failed, readOnly: !!enquiryId && !id })}
     {custom.section(saving || failed)}
-  </form>{record && <><QuotationList opportunityId={record.id} /><WorkList contactId={record.contactId} opportunityId={record.id} /><OpportunityTimeline id={record.id} revision={revision} /></>}</div>
+  </form>{record && <><CrmOpportunityPanels opportunityId={record.id} /><WorkList contactId={record.contactId} opportunityId={record.id} /><OpportunityTimeline id={record.id} revision={revision} /></>}</div>
 }

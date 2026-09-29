@@ -5,9 +5,9 @@ const { randomUUID } = require('node:crypto')
 const { Pool } = require('pg')
 const { PrismaClient } = require('@prisma/client')
 const { TenantPgAdapter } = require('../lib/tenant-pg-adapter.ts')
-const { createCrmService } = require('../modules/crm/service.ts')
-const { realEstateCrmExtension } = require('../modules/real-estate/crm-extension.ts')
-const { emptyQuotationContent } = require('../modules/crm/quotation-validation.ts')
+const { createApplicationCrmService: createCrmService } = require('../application/crm/service.ts')
+const { updateBusinessModule } = require('../platform/module-service.ts')
+const { emptyQuotationContent } = require('../modules/sales-documents/quotation-validation.ts')
 require('../lib/logger.ts').logger.info = () => {}
 const url = new URL(process.env.CRM_TEST_DATABASE_URL || 'http://invalid')
 if (!['localhost','127.0.0.1'].includes(url.hostname) || url.pathname !== '/ls_salon_crm_test') throw Error('Use only the isolated local CRM test database.')
@@ -18,15 +18,15 @@ function client(tenantId, root = false) {
  const db = new PrismaClient({adapter:new TenantPgAdapter(pool,{tenantId,bypass:root}), log:[{emit:'event',level:'query'}]});clients.push(db);db.$on('query',event=>queries.push(event.query));return db
 }
 const root = client(undefined,true), db = client(tenant), dbB = client(otherTenant), unscoped = client(undefined)
-let manager,staff,other,adminB,crm,staffCrm,otherCrm,foreign,deal,contact,project
+let admin,manager,staff,other,adminB,crm,staffCrm,otherCrm,foreign,deal,contact,project
 const status = code => error => error.status === code
 const content = (extra={}) => ({...structuredClone(emptyQuotationContent),supplierName:'Example Developer',currency:'INR',lines:[{description:'Plot 29',quantity:'247',unit:'sq. m',rate:'15000'}],...extra})
 before(async()=>{
  await root.tenant.createMany({data:[{id:tenant,slug:tenant,name:'Quotation test'},{id:otherTenant,slug:otherTenant,name:'Other'}]})
  const user=(tenantId,role)=>root.user.create({data:{tenantId,role,name:role,email:`${randomUUID()}@example.test`}})
- manager=await user(tenant,'MANAGER');staff=await user(tenant,'STAFF');other=await user(tenant,'STAFF');adminB=await user(otherTenant,'ADMIN')
- await root.tenantModule.createMany({data:[tenant,otherTenant].flatMap(tenantId=>['crm','realEstate'].map(key=>({tenantId,key,enabled:true})))})
- const service=(client,user)=>createCrmService(client,{tenantId:user.tenantId,userId:user.id},realEstateCrmExtension)
+ admin=await user(tenant,'ADMIN');manager=await user(tenant,'MANAGER');staff=await user(tenant,'STAFF');other=await user(tenant,'STAFF');adminB=await user(otherTenant,'ADMIN')
+ await root.tenantModule.createMany({data:[tenant,otherTenant].flatMap(tenantId=>['crm','realEstate','salesDocuments','paymentPlans'].map(key=>({tenantId,key,enabled:true})))})
+ const service=(client,user)=>createCrmService(client,{tenantId:user.tenantId,userId:user.id})
  crm=service(db,manager);staffCrm=service(db,staff);otherCrm=service(db,other);foreign=service(dbB,adminB)
  contact=await root.crmContact.create({data:{tenantId:tenant,name:'Buyer Original',ownerUserId:staff.id,email:'buyer@example.test'}})
  const pipeline=await root.crmPipeline.create({data:{tenantId:tenant,name:'Sales'}})
@@ -102,4 +102,59 @@ test('large document list remains paginated and never loads revision payloads',a
  assert.ok(!queries.some(q=>q.includes('CrmQuotationRevision')))
  assert.ok(queries.length<=12,`Unexpected query count: ${queries.length}`)
  console.log(`Quotation list: ${result.total} rows, 5 returned, ${queries.length} SQL statements, no revision payloads.`)
+})
+
+
+test('module migration preserves existing access without enabling new or opted-out businesses', async()=>{
+ const fs=require('node:fs'), ids=['legacy','disabled','optout','new'].map(n=>`${n}_${randomUUID()}`)
+ await root.tenant.createMany({data:ids.map(id=>({id,slug:id,name:id}))})
+ await root.tenantModule.createMany({data:[{tenantId:ids[0],key:'crm',enabled:true},{tenantId:ids[1],key:'crm',enabled:false},{tenantId:ids[2],key:'crm',enabled:true},{tenantId:ids[2],key:'salesDocuments',enabled:false}]})
+ const prior=await root.crmQuotationRevision.findFirst({where:{tenantId:tenant}})
+ await pools[0].query('DROP INDEX "CrmQuotation_tenantId_createdAt_id_idx"')
+ await pools[0].query(fs.readFileSync('prisma/migrations/20260929200000_optional_sales_documents/migration.sql','utf8'))
+ for(const key of ['salesDocuments','paymentPlans']) assert.equal((await root.tenantModule.findUnique({where:{tenantId_key:{tenantId:ids[0],key}}})).enabled,true)
+ assert.equal(await root.tenantModule.count({where:{tenantId:{in:[ids[1],ids[3]]},key:{in:['salesDocuments','paymentPlans']}}}),0)
+ assert.equal((await root.tenantModule.findUnique({where:{tenantId_key:{tenantId:ids[2],key:'salesDocuments'}}})).enabled,false)
+ assert.deepEqual((await root.crmQuotationRevision.findFirst({where:{tenantId:tenant}})).snapshot,prior.snapshot)
+})
+
+test('optional payment plans preserve saved schedules and allow quotation-only business',async()=>{
+ const identity={tenantId:tenant,userId:admin.id}
+ const planned=content({instalments:[{label:'On booking',percent:'100',days:0,note:''}]})
+ const quote=await staffCrm.saveQuotation(deal.id,{content:planned})
+ const template=await crm.saveQuotationTemplate({name:'Saved schedule',content:planned})
+ await assert.rejects(updateBusinessModule(db,{tenantId:tenant,userId:manager.id},{key:'paymentPlans',enabled:false}),status(403))
+ await updateBusinessModule(db,identity,{key:'paymentPlans',enabled:false})
+ const saved=await staffCrm.getQuotation(quote.id)
+ assert.equal(saved.paymentPlansEnabled,false);assert.equal(saved.snapshot.content.instalments.length,1)
+ assert.equal((await crm.getQuotationTemplate(template.id)).content.instalments.length,1)
+ await assert.rejects(staffCrm.saveQuotation(deal.id,{content:planned}),status(403))
+ await assert.rejects(staffCrm.saveQuotation(deal.id,{content:content(),version:1},quote.id),status(403))
+ await assert.rejects(crm.saveQuotationTemplate({name:'Cleared schedule',content:content(),version:1},template.id),status(403))
+ await assert.rejects(crm.saveQuotationTemplate({name:'New scheduled template',content:planned}),status(403))
+ const simple=await staffCrm.saveQuotation(deal.id,{content:content()})
+ assert.deepEqual((await staffCrm.getQuotation(simple.id)).snapshot.calculation.instalments,[])
+ assert.ok((await staffCrm.listQuotations(undefined,{q:'Quotation'})).items.some(row=>row.id===simple.id))
+ assert.equal((await otherCrm.listQuotations(undefined,{})).total,0)
+ await updateBusinessModule(db,identity,{key:'paymentPlans',enabled:true})
+ assert.equal((await staffCrm.saveQuotation(deal.id,{content:planned,version:1},quote.id)).version,2)
+})
+
+test('module switches guard every document operation, dependencies, audit and concurrent changes',async()=>{
+ const identity={tenantId:tenant,userId:admin.id}, quote=await crm.saveQuotation(deal.id,{content:content()})
+ await assert.rejects(updateBusinessModule(db,identity,{key:'salesDocuments',enabled:false}),status(409))
+ await updateBusinessModule(db,identity,{key:'paymentPlans',enabled:false})
+ await updateBusinessModule(db,identity,{key:'salesDocuments',enabled:false})
+ for(const operation of [()=>crm.listQuotations(undefined,{}),()=>crm.getQuotation(quote.id),()=>crm.quotationDefaults(deal.id),()=>crm.listQuotationTemplates({}),()=>crm.getQuotationTemplate('none'),()=>crm.saveQuotationTemplate({name:'Off',content:content()}),()=>crm.saveQuotation(deal.id,{content:content()})]) await assert.rejects(operation(),status(403))
+ await assert.rejects(updateBusinessModule(db,identity,{key:'paymentPlans',enabled:true}),status(409))
+ await updateBusinessModule(db,identity,{key:'salesDocuments',enabled:true})
+ await Promise.allSettled([updateBusinessModule(db,identity,{key:'salesDocuments',enabled:false}),updateBusinessModule(db,identity,{key:'paymentPlans',enabled:true})])
+ const flags=await root.tenantModule.findMany({where:{tenantId:tenant}}), on=key=>!!flags.find(f=>f.key===key)?.enabled
+ assert.ok(!on('paymentPlans')||on('salesDocuments'))
+ await updateBusinessModule(db,identity,{key:'salesDocuments',enabled:true})
+ await updateBusinessModule(db,identity,{key:'paymentPlans',enabled:true})
+ assert.equal((await crm.getQuotation(quote.id)).version,1)
+ const broken={$transaction:(fn,options)=>db.$transaction(tx=>fn(new Proxy(tx,{get(target,key){if(key==='auditLog')return {create:async()=>{throw Error('audit unavailable')}};return target[key]}})),options)}
+ await assert.rejects(updateBusinessModule(broken,identity,{key:'paymentPlans',enabled:false}),/audit unavailable/)
+ assert.equal((await root.tenantModule.findUnique({where:{tenantId_key:{tenantId:tenant,key:'paymentPlans'}}})).enabled,true)
 })
