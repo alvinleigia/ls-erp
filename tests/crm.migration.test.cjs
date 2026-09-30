@@ -11,8 +11,8 @@ if (process.env.CRM_VERIFY_CONFIGURED_DATABASE !== "1" || !process.env.DATABASE_
   throw new Error("Set CRM_VERIFY_CONFIGURED_DATABASE=1 and load DATABASE_URL to run read-only deployment checks.")
 }
 const db = new Client({ connectionString: process.env.DATABASE_URL, connectionTimeoutMillis: 15000 })
-const migrationNames = ["20260923090000_crm_foundation", "20260923120000_crm_business_accounts", "20260923160000_crm_sales_pipelines", "20260924090000_crm_activity_workspace", "20260924120000_crm_activity_plans", "20260924150000_crm_follow_up_rules", "20260927090000_retire_legacy_default_tenant", "20260928120000_crm_lead_intake", "20260928160000_real_estate_projects", "20260928190000_real_estate_sales", "20260928220000_crm_lost_reasons", "20260928230000_crm_activity_types"]
-const tables = ["TenantModule", "CrmContact", "CrmEnquiry", "CrmTask", "CrmActivity", "CrmAccount", "CrmAccountContact", "CrmPipeline", "CrmStage", "CrmOpportunity", "CrmOpportunityActivity", "CrmTaskEvent", "CrmActivityPlan", "CrmPlanLaunch", "CrmFollowUpRule", "CrmLeadSource", "CrmLostReason", "CrmActivityType", "RealEstateProject", "RealEstateProjectMember", "RealEstateEnquiryContext", "RealEstateOpportunityContext"]
+const migrationNames = ["20260923090000_crm_foundation", "20260923120000_crm_business_accounts", "20260923160000_crm_sales_pipelines", "20260924090000_crm_activity_workspace", "20260924120000_crm_activity_plans", "20260924150000_crm_follow_up_rules", "20260927090000_retire_legacy_default_tenant", "20260928120000_crm_lead_intake", "20260928160000_real_estate_projects", "20260928190000_real_estate_sales", "20260928220000_crm_lost_reasons", "20260928230000_crm_activity_types", "20260929090000_real_estate_choices", "20260929120000_crm_custom_fields", "20260929160000_crm_sales_teams", "20260929180000_crm_quotations", "20260929200000_optional_sales_documents", "20260929210000_crm_conversion_default", "20260930090000_module_allowances", "20260930120000_tenant_access_roles"]
+const tables = ["TenantModule", "CrmContact", "CrmEnquiry", "CrmTask", "CrmActivity", "CrmAccount", "CrmAccountContact", "CrmPipeline", "CrmStage", "CrmOpportunity", "CrmOpportunityActivity", "CrmTaskEvent", "CrmActivityPlan", "CrmPlanLaunch", "CrmFollowUpRule", "CrmLeadSource", "CrmLostReason", "CrmActivityType", "RealEstateProject", "RealEstateProjectMember", "RealEstateEnquiryContext", "RealEstateOpportunityContext", "TenantAccessRole", "TenantRoleAssignment"]
 
 before(async () => {
   await db.connect()
@@ -49,9 +49,9 @@ test("all CRM tables force RLS and use tenant checks on reads and writes", async
   }
 })
 
-test("tenant-safe relationships are backed by fifty-one validated composite foreign keys", async () => {
+test("tenant-safe relationships are backed by validated composite foreign keys", async () => {
   const constraints = await db.query("SELECT c.conname, c.convalidated FROM pg_constraint c JOIN pg_class t ON t.oid=c.conrelid WHERE t.relnamespace='public'::regnamespace AND t.relname=ANY($1::text[]) AND c.contype='f' AND cardinality(c.conkey) IN (2,3) AND cardinality(c.confkey)=cardinality(c.conkey)", [tables])
-  assert.equal(constraints.rowCount, 51)
+  assert.equal(constraints.rowCount, 60)
   for (const row of constraints.rows) assert.equal(row.convalidated, true, row.conname)
 })
 
@@ -76,4 +76,15 @@ test("the legacy default tenant is absent and the active platform tenant remains
   assert.equal((await db.query('SELECT id FROM "Tenant" WHERE id=$1', ["tenant_default"])).rowCount, 0)
   const platform = await db.query('SELECT id FROM "Tenant" WHERE slug=$1 AND status=$2', [(process.env.PLATFORM_ADMIN_TENANT_SLUG || "platform").trim().toLowerCase(), "ACTIVE"])
   assert.equal(platform.rowCount, 1)
+})
+
+
+test("conversion defaults and module allowances have their database guards", async () => {
+  const checks = await db.query("SELECT conname, convalidated FROM pg_constraint WHERE conname = ANY($1::text[])", [["CrmStage_conversion_default_open_check", "TenantModule_enabled_requires_allowance", "TenantAccessRole_valid"]])
+  assert.equal(checks.rowCount, 3)
+  for (const row of checks.rows) assert.equal(row.convalidated, true, row.conname)
+  const index = await db.query("SELECT indisunique, indisvalid, pg_get_expr(indpred, indrelid) AS predicate FROM pg_index WHERE indexrelid='public.\"CrmStage_one_conversion_default\"'::regclass")
+  assert.equal(index.rows[0].indisunique, true)
+  assert.equal(index.rows[0].indisvalid, true)
+  assert.match(index.rows[0].predicate, /isConversionDefault/)
 })

@@ -1,3 +1,5 @@
+import { guardUserWrite, auditUserSecurity, assignInitialRole } from "@/platform/access/user-security"
+import { BusinessError } from "@/platform/policy"
 import { NextResponse } from "next/server"
 import bcrypt from "bcryptjs"
 import { z } from "zod"
@@ -163,7 +165,7 @@ export async function POST(request: Request) {
     logApiRequestSuccess(logContext, tenantSession.error.status, { reason: "tenant_or_auth_failed" })
     return withRequestId(tenantSession.error, logContext.requestId)
   }
-  const { tenantId, role } = tenantSession.context
+  const { tenantId, role, sessionUserId } = tenantSession.context
 
   return runWithTenantDbContext(tenantId, async () => {
     if (!canInvite(role as Role)) {
@@ -226,7 +228,10 @@ export async function POST(request: Request) {
           ? Array.from(new Set(eligibleServiceIds))
           : []
 
-      const user = await prisma.user.create({
+      const identity = { tenantId, userId: sessionUserId!, requestId: logContext.requestId }
+      const user = await prisma.$transaction(async tx => {
+        await guardUserWrite(tx, identity)
+        const created = await tx.user.create({
         data: {
           name: name || undefined,
           tenantId,
@@ -280,10 +285,16 @@ export async function POST(request: Request) {
         },
       })
 
+      await assignInitialRole(tx, identity, created, parsed.data.accessRoleId)
+        await auditUserSecurity(tx, identity, created.id, null, created)
+        return created
+      })
+
       const response = NextResponse.json({ user })
       logApiRequestSuccess(logContext, 200, { userId: user.id, role: user.role })
       return withRequestId(response, logContext.requestId)
     } catch (error) {
+      if (error instanceof BusinessError) return withRequestId(NextResponse.json({ error: error.message }, { status: error.status }), logContext.requestId)
       logApiRequestError(logContext, error, 500)
       const response = NextResponse.json({ error: "Unable to create user." }, { status: 500 })
       return withRequestId(response, logContext.requestId)

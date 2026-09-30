@@ -1,3 +1,7 @@
+import { requireWriteFields, permits } from "@/platform/access/policy"
+import type { Requirement } from "@/platform/access/catalog"
+import { findAccessUser, assignedPermissions } from "@/platform/access/server"
+import { requirePermission } from "@/platform/access/policy"
 import { splitCustomFields } from "@/platform/custom-fields/validation"
 import { readCustomFields, saveCustomFields, customFieldFilter, customFieldExport } from "@/platform/custom-fields/values"
 import { projectFields } from "./custom-fields"
@@ -24,15 +28,16 @@ const pageResult = <T>(items: T[], total: number, page: number, pageSize: number
 // Module operations own permissions, tenant scope and audited writes. Callers
 // establish the tenant database context, as for CRM services.
 export function createRealEstateService(db: PrismaClient, identity: Pick<BusinessActor, "tenantId" | "userId" | "requestId">) {
-  async function run<T>(operation: (tx: Tx, actor: BusinessActor) => Promise<T>): Promise<T> {
+  async function run<T>(requirement: Requirement, operation: (tx: Tx, actor: BusinessActor) => Promise<T>): Promise<T> {
     for (let attempt = 0; ; attempt++) {
       try {
         return await db.$transaction(async tx => {
-          const user = await tx.user.findFirst({ where: { tenantId: identity.tenantId, id: identity.userId, status: "ACTIVE" }, include: { tenant: true } })
+          const user = await findAccessUser(tx, identity.tenantId, identity.userId)
           if (!user || !hasBusinessAccess(user.role) || user.tenant?.status !== "ACTIVE" || user.tenant.slug === (process.env.PLATFORM_ADMIN_TENANT_SLUG?.trim().toLowerCase() || "platform")) throw new BusinessError(403, "Business workspace access is not permitted.")
-          const enabled = await tx.tenantModule.count({ where: { tenantId: identity.tenantId, key: { in: ["crm", "realEstate"] }, enabled: true } })
+          const enabled = await tx.tenantModule.count({ where: { tenantId: identity.tenantId, key: { in: ["crm", "realEstate"] }, enabled: true, allowed: true } })
           if (enabled !== 2) throw new BusinessError(403, "Real Estate and CRM must be enabled for this business.")
-          return operation(tx, { ...identity, role: user.role })
+          const actor = { ...identity, role: user.role, permissions: assignedPermissions(user) }; requirePermission(actor, requirement)
+          return operation(tx, actor)
         }, { isolationLevel: "Serializable", maxWait: 20000, timeout: 20000 })
       } catch (error) {
         const code = (error as { code?: string }).code
@@ -77,7 +82,7 @@ export function createRealEstateService(db: PrismaClient, identity: Pick<Busines
     ...createPropertyChoiceService(run),
     listProjects(input: unknown, exporting = false) {
       const query = projectListSchema.parse(input)
-      return run(async (tx, actor) => {
+      return run(exporting ? ["projects.read", "projects.export"] : "projects.read", async (tx, actor) => {
         if (query.parentId) await find(tx, actor, query.parentId)
         const where: Prisma.RealEstateProjectWhereInput = { AND: [scope(actor), {
           ...await customFieldFilter(tx, actor, projectFields, query),
@@ -87,21 +92,21 @@ export function createRealEstateService(db: PrismaClient, identity: Pick<Busines
         const [items, total] = await Promise.all([tx.realEstateProject.findMany({ where, orderBy: [{ name: "asc" }, { id: "asc" }], skip: exporting ? 0 : (query.page - 1) * query.pageSize, take: exporting ? CRM_EXPORT_LIMIT : query.pageSize,
           select: { id: true, parentId: true, name: true, code: true, location: true, lifecycle: true, lifecycleName: true, categoryNames: true, archived: true, version: true, categories: true, priceMin: true, priceMax: true, currency: true } }), tx.realEstateProject.count({ where })])
         if (exporting) checkExportLimit(total)
-        return { ...pageResult(items, total, query.page, query.pageSize), canManage: manage(actor), customFieldExport: exporting ? await customFieldExport(tx, actor, projectFields, items.map(item => item.id)) : undefined }
+        return { ...pageResult(items, total, query.page, query.pageSize), canManage: manage(actor) && permits(actor, "projects.edit"), customFieldExport: exporting ? await customFieldExport(tx, actor, projectFields, items.map(item => item.id)) : undefined }
       })
     },
     getProject(id: string) {
-      return run(async (tx, actor) => {
+      return run("projects.read", async (tx, actor) => {
         const record = await find(tx, actor, id)
         const developerAccount = record.developerAccountId ? await tx.crmAccount.findFirst({ where: { AND: [accountScope(actor), { id: record.developerAccountId }] }, select: { id: true, name: true } }) : null
         const parent = record.parentId ? await tx.realEstateProject.findFirst({ where: { tenantId: actor.tenantId, id: record.parentId }, select: { id: true, name: true, archived: true } }) : null
-        return { ...record, customFields: await readCustomFields(tx, actor, projectFields, record), developerAccountId: developerAccount?.id || null, developerAccount, developerRestricted: !!record.developerAccountId && !developerAccount, parent, canManage: manage(actor) }
+        return { ...record, customFields: await readCustomFields(tx, actor, projectFields, record), developerAccountId: developerAccount?.id || null, developerAccount, developerRestricted: !!record.developerAccountId && !developerAccount, parent, canManage: manage(actor) && permits(actor, "projects.edit") }
       })
     },
     createProject(input: unknown) {
       const custom = splitCustomFields(input)
       const data = projectSchema.parse(custom.core)
-      return run(async (tx, actor) => {
+      return run("projects.create", async (tx, actor) => { requireWriteFields(actor, "projects", undefined, data);
         requireManager(actor)
         const record = await tx.realEstateProject.create({ data: { ...await values(tx, actor, data), tenantId: actor.tenantId } })
         await saveCustomFields(tx, actor, projectFields, record, custom.patch, true)
@@ -112,9 +117,10 @@ export function createRealEstateService(db: PrismaClient, identity: Pick<Busines
     updateProject(id: string, input: unknown) {
       const custom = splitCustomFields(input)
       const { version, ...data } = projectUpdateSchema.parse(custom.core)
-      return run(async (tx, actor) => {
+      return run("projects.edit", async (tx, actor) => {
         requireManager(actor)
         const before = await find(tx, actor, id)
+        requireWriteFields(actor, "projects", before ?? undefined, data)
         const next = await values(tx, actor, data, before)
         const changed = await tx.realEstateProject.updateMany({ where: { tenantId: actor.tenantId, id, version }, data: { ...next, version: { increment: 1 } } })
         if (!changed.count) throw new BusinessError(409, "This project changed. Refresh before saving.")
@@ -126,7 +132,7 @@ export function createRealEstateService(db: PrismaClient, identity: Pick<Busines
     },
     listMembers(id: string, input: unknown) {
       const query = projectListSchema.parse(input)
-      return run(async (tx, actor) => {
+      return run("projects.read", async (tx, actor) => {
         requireManager(actor)
         const project = await find(tx, actor, id)
         const where = { tenantId: actor.tenantId, projectId: project.parentId || project.id }
@@ -136,7 +142,7 @@ export function createRealEstateService(db: PrismaClient, identity: Pick<Busines
     },
     changeMember(id: string, input: unknown) {
       const { userId, version, remove } = memberSchema.parse(input)
-      return run(async (tx, actor) => {
+      return run("projects.assign", async (tx, actor) => {
         requireManager(actor)
         const project = await find(tx, actor, id)
         if (project.parentId || project.archived) throw new BusinessError(409, "Manage staff access on an active top-level project.")

@@ -1,5 +1,6 @@
 "use client"
 
+import { RecordSelect } from "@/modules/crm/components/record-select"
 import * as React from "react"
 
 import { FormField } from "@/components/form-field"
@@ -33,12 +34,13 @@ export function UserFormFields({
 }: UserFormFieldsProps) {
   const canSelfEdit = mode === "create" ? true : canManage || canEditProfile
   const update = <K extends keyof UserFormValues>(key: K, value: UserFormValues[K]) => {
-    onChange({ ...values, [key]: value })
+    onChange({ ...values, [key]: value, ...(key === "role" ? { accessRoleId: "" } : {}) })
   }
   const stateOptions = getStateOptionsByCountry(values.country)
 
   return (
     <div className="grid gap-4 sm:grid-cols-2">
+      {mode === "create" && canManage && ["STAFF", "MANAGER"].includes(values.role) && <div className="space-y-2 sm:col-span-2"><Label htmlFor="new-user-access-role">Access role (optional)</Label><RecordSelect id="new-user-access-role" endpoint="/api/access/roles" value={values.accessRoleId || ""} onChange={value => update("accessRoleId", value)} placeholder="Existing account permissions" /><p className="text-xs text-muted-foreground">Restrict CRM, projects and sales documents. Manage roles in Settings &gt; Access roles.</p></div>}
       <FormField id={`${mode}-name`} label="Full name" error={errors.name}>
         <Input
           id={`${mode}-name`}

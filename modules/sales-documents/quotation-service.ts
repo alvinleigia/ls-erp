@@ -1,3 +1,5 @@
+import { requireWriteFields } from "@/platform/access/policy"
+import type { Requirement } from "@/platform/access/catalog"
 import { moduleEnabled } from "@/platform/modules"
 import type { CrmServiceContext } from "@/modules/crm/service-context"
 import type { Prisma } from "@prisma/client"
@@ -20,8 +22,8 @@ const json = (value: unknown): Prisma.InputJsonValue => JSON.parse(JSON.stringif
 const page = <T>(items: T[], total: number, q: { page: number; pageSize: number }) => ({ items, total, page: q.page, pageSize: q.pageSize, totalPages: Math.max(1, Math.ceil(total / q.pageSize)) })
 function calculate(content: QuotationContent) { try { return calculateQuotation(content) } catch (error) { throw new CrmError(400, (error as Error).message) } }
 export function createQuotationService({ run: checkedRun, audit }: CrmServiceContext, extensions: CrmExtensions) {
-  function run<T>(operation: (tx: Tx, actor: CrmActor, paymentPlans: boolean) => Promise<T>) {
-    return checkedRun(async (tx, actor) => {
+  function run<T>(requirement: Requirement, operation: (tx: Tx, actor: CrmActor, paymentPlans: boolean) => Promise<T>) {
+    return checkedRun(requirement, async (tx, actor) => {
       const flags = await tx.tenantModule.findMany({ where: { tenantId: actor.tenantId } })
       if (!moduleEnabled(flags, "salesDocuments")) throw new CrmError(403, "Sales Documents is not enabled for this business.")
       return operation(tx, actor, moduleEnabled(flags, "paymentPlans"))
@@ -43,7 +45,7 @@ export function createQuotationService({ run: checkedRun, audit }: CrmServiceCon
   }
   return {
     quotationDefaults(opportunityId: string) {
-      return run(async (tx, actor, paymentPlans) => {
+      return run("quotations.create", async (tx, actor, paymentPlans) => {
         const row = await opportunity(tx, actor, opportunityId)
         const tenant = await tx.tenant.findUniqueOrThrow({ where: { id: actor.tenantId }, select: { name: true } })
         const context = await extensions.quotationContext?.(tx, actor, row.id) || []
@@ -52,14 +54,14 @@ export function createQuotationService({ run: checkedRun, audit }: CrmServiceCon
     },
     listQuotationTemplates(input: unknown) {
       const q = crmListSchema.parse(input)
-      return run(async (tx, actor, paymentPlans) => {
+      return run("quotationTemplates.read", async (tx, actor, paymentPlans) => {
         const where = { tenantId: actor.tenantId, archived: canManageCrm(actor.role) && q.archived === "true", name: { contains: q.q, mode: "insensitive" as const } }
         const [items, total] = await Promise.all([tx.crmQuotationTemplate.findMany({ where, select: { id: true, name: true, archived: true, version: true }, orderBy: [{ name: "asc" }, { id: "asc" }], skip: (q.page - 1) * q.pageSize, take: q.pageSize }), tx.crmQuotationTemplate.count({ where })])
         return { ...page(items, total, q), canManage: canManageCrm(actor.role), paymentPlansEnabled: paymentPlans }
       })
     },
     getQuotationTemplate(id: string) {
-      return run(async (tx, actor, paymentPlans) => {
+      return run("quotationTemplates.read", async (tx, actor, paymentPlans) => {
         const row = await tx.crmQuotationTemplate.findFirst({ where: { tenantId: actor.tenantId, id, ...(!canManageCrm(actor.role) ? { archived: false } : {}) } })
         if (!row) throw new CrmError(404, "Template not found.")
         return { ...row, canManage: canManageCrm(actor.role), paymentPlansEnabled: paymentPlans }
@@ -69,10 +71,11 @@ export function createQuotationService({ run: checkedRun, audit }: CrmServiceCon
       const data = quotationTemplateSchema.parse(input)
       // Templates may have zero prices; evaluate the percentage schedule when used.
       if (data.content.bookingDate || data.content.validUntil) throw new CrmError(400, "Set dates on individual quotations, not on reusable templates.")
-      return run(async (tx, actor, paymentPlans) => {
+      return run(id ? "quotationTemplates.edit" : "quotationTemplates.create", async (tx, actor, paymentPlans) => {
         let recordId = id
         manage(actor)
         const before = id ? await tx.crmQuotationTemplate.findFirst({ where: { tenantId: actor.tenantId, id } }) : null
+        requireWriteFields(actor, "quotationTemplates", before ?? undefined, data)
         if (id && !before) throw new CrmError(404, "Template not found.")
         assertScheduleWrite(paymentPlans, data.content, before?.content as QuotationContent | undefined)
         const values = { name: data.name, content: json(data.content), archived: data.archived }
@@ -86,15 +89,15 @@ export function createQuotationService({ run: checkedRun, audit }: CrmServiceCon
     },
     listQuotations(opportunityId: string | undefined, input: unknown) {
       const q = crmListSchema.parse(input)
-      return run(async (tx, actor, paymentPlans) => {
+      return run("quotations.read", async (tx, actor, paymentPlans) => {
         if (opportunityId) await opportunity(tx, actor, opportunityId)
         const where = { tenantId: actor.tenantId, ...(opportunityId ? { opportunityId } : {}), opportunity: enquiryScope(actor), title: { contains: q.q, mode: "insensitive" as const } }
         const [items, total] = await Promise.all([tx.crmQuotation.findMany({ where, orderBy: [{ createdAt: "desc" }, { id: "asc" }], skip: (q.page - 1) * q.pageSize, take: q.pageSize }), tx.crmQuotation.count({ where })])
         return { ...page(items, total, q), paymentPlansEnabled: paymentPlans }
       })
     },
-    getQuotation(id: string, revision?: number) {
-      return run(async (tx, actor, paymentPlans) => {
+    getQuotation(id: string, revision?: number, exporting = false) {
+      return run(exporting ? ["quotations.read", "quotations.export"] : "quotations.read", async (tx, actor, paymentPlans) => {
         const row = await find(tx, actor, id)
         const item = await tx.crmQuotationRevision.findUnique({ where: { tenantId_quotationId_number: { tenantId: actor.tenantId, quotationId: id, number: revision ?? row.version } } })
         if (!item) throw new CrmError(404, "Quotation version not found.")
@@ -103,7 +106,7 @@ export function createQuotationService({ run: checkedRun, audit }: CrmServiceCon
     },
     saveQuotation(opportunityId: string, input: unknown, id?: string) {
       const data = quotationSaveSchema.parse(input), calculation = calculate(data.content)
-      return run(async (tx, actor, paymentPlans) => {
+      return run(id ? "quotations.edit" : "quotations.create", async (tx, actor, paymentPlans) => {
         let recordId = id
         const row = await opportunity(tx, actor, opportunityId)
         if (row.contact.archived) throw new CrmError(409, "Restore the contact before saving a new quotation version.")

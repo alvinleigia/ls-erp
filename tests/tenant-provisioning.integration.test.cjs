@@ -22,28 +22,42 @@ logger.info = () => {}
 logger.warn = () => {}
 logger.error = (_event, context) => { errors.push(context.error?.message || "Unknown server error") }
 const { POST, GET } = require("../app/api/tenants/route.ts")
+const { GET: moduleGet, PATCH: modulePatch } = require("../app/api/tenants/[id]/modules/route.ts")
 const platformSession = { user: { id: "provision_platform_admin", tenantId: "provision_platform", role: "ADMIN" } }
 const input = (slug, extra = {}) => ({ name: "Provision test", slug, adminName: "Business admin", adminEmail: `${slug}@example.test`, adminPassword: "SyntheticTest!2026", ...extra })
 const request = (method, data, hostname = "platform.localhost") => new Request(`http://${hostname}/api/tenants`, { method, headers: { "Content-Type": "application/json", host: hostname }, ...(data ? { body: JSON.stringify(data) } : {}) })
 
+async function cleanupFixtures() {
+  for (const table of ["RealEstateProjectStatus", "RealEstatePropertyCategory", "RealEstateBuyingTimeframe"]) {
+    await root.query(`DELETE FROM "${table}" WHERE "tenantId" IN (SELECT id FROM "Tenant" WHERE slug LIKE $1 OR id=$2)`, ["provision-%", "provision_platform"])
+  }
+  await root.query('DELETE FROM "Tenant" WHERE slug LIKE $1 OR id=$2', ["provision-%", "provision_platform"])
+  await root.query('DELETE FROM "Organization" WHERE id IN ($1,$2)', ["provision_org_a", "provision_org_b"])
+}
+
 before(async () => {
   await root.connect()
+  await cleanupFixtures()
   await root.query('INSERT INTO "Tenant" (id, name, slug, "updatedAt") VALUES ($1,$2,$3,NOW()) ON CONFLICT (id) DO NOTHING', ["provision_platform", "Platform", "platform"])
   await root.query('INSERT INTO "User" (id, name, email, role, "tenantId", "updatedAt") VALUES ($1,$2,$3,$4,$5,NOW()) ON CONFLICT (id) DO NOTHING', ["provision_platform_admin", "Platform admin", "provision-platform@example.test", "ADMIN", "provision_platform"])
 })
 after(async () => {
-  await root.query('DELETE FROM "Tenant" WHERE slug LIKE $1 OR id=$2', ["provision-%", "provision_platform"])
-  await root.query('DELETE FROM "Organization" WHERE id IN ($1,$2)', ["provision_org_a", "provision_org_b"])
-  await root.end()
-  const clients = [global.prisma, global.prismaBypassClient, ...[...(global.prismaScopedClientCache?.values() || [])].map(entry => entry.client)].filter(Boolean)
-  await Promise.all(clients.map(client => client.$disconnect()))
-  await global.prismaPool?.end()
+  try { await cleanupFixtures() }
+  finally {
+    await root.end()
+    const clients = [global.prisma, global.prismaBypassClient, ...[...(global.prismaScopedClientCache?.values() || [])].map(entry => entry.client)].filter(Boolean)
+    await Promise.all(clients.map(client => client.$disconnect()))
+    await global.prismaPool?.end()
+  }
 })
 
 test("platform admin provisions a tenant with admin, settings and audit under enforced RLS", async () => {
-  const response = await sessions.run(platformSession, () => POST(request("POST", input("provision-business"))))
+  const response = await sessions.run(platformSession, () => POST(request("POST", input("provision-business", { modules: ["crm"] }))))
   assert.equal(response.status, 201, JSON.stringify({ body: await response.clone().json(), errors }))
   const { tenant, admin } = await response.json()
+  const flags = (await root.query('SELECT key, allowed, enabled FROM "TenantModule" WHERE "tenantId"=$1', [tenant.id])).rows
+  assert.equal(flags.length, 4)
+  assert.deepEqual(flags.filter(row => row.allowed), [{ key: "crm", allowed: true, enabled: true }])
   assert.equal((await root.query('SELECT id FROM "User" WHERE id=$1 AND "tenantId"=$2 AND role=$3', [admin.id, tenant.id, "ADMIN"])).rowCount, 1)
   assert.equal((await root.query('SELECT id FROM "AppSetting" WHERE "tenantId"=$1', [tenant.id])).rowCount, 1)
   assert.equal((await root.query('SELECT id FROM "AuditLog" WHERE event=$1 AND "entityId"=$2 AND "tenantId"=$3', ["tenant.created", tenant.id, "provision_platform"])).rowCount, 1)
@@ -102,4 +116,28 @@ test("provisioning bypass does not escape into subsequent unscoped database read
   const response = await sessions.run(platformSession, () => POST(request("POST", input("provision-scope-check"))))
   assert.equal(response.status, 201)
   assert.equal(await prisma.user.count(), 0)
+})
+
+
+test("platform module API grants only to authenticated current platform administrators", async () => {
+  const target = (await root.query('SELECT id FROM "Tenant" WHERE slug=$1', ["provision-business"])).rows[0].id
+  const context = { params: Promise.resolve({ id: target }) }
+  const url = `http://platform.localhost/api/tenants/${target}/modules`
+  const req = (method, data) => new Request(url, { method, headers: { host: "platform.localhost", "Content-Type": "application/json" }, ...(data ? { body: JSON.stringify(data) } : {}) })
+  assert.equal((await sessions.run(null, () => moduleGet(req("GET"), context))).status, 401)
+  const orgSession = { user: { id: "provision_org_admin", tenantId: "provision_platform", role: "STAFF" } }
+  assert.equal((await sessions.run(orgSession, () => modulePatch(req("PATCH", { key: "realEstate", allowed: true }), context))).status, 403)
+  const granted = await sessions.run(platformSession, () => modulePatch(req("PATCH", { key: "realEstate", allowed: true }), context))
+  assert.equal(granted.status, 200, JSON.stringify(await granted.clone().json()))
+  assert.equal((await granted.json()).modules.find(row => row.key === "realEstate").enabled, true)
+  const denied = await sessions.run(platformSession, () => modulePatch(req("PATCH", { key: "crm", allowed: false }), context))
+  assert.equal(denied.status, 409)
+  const listed = await sessions.run(platformSession, () => moduleGet(req("GET"), context))
+  assert.equal(listed.headers.get("Cache-Control"), "no-store")
+  await root.query('UPDATE "User" SET role=$1 WHERE id=$2', ["STAFF", platformSession.user.id])
+  try { assert.equal((await sessions.run(platformSession, () => moduleGet(req("GET"), context))).status, 403) }
+  finally { await root.query('UPDATE "User" SET role=$1 WHERE id=$2', ["ADMIN", platformSession.user.id]) }
+  const orgCreate = await sessions.run(orgSession, () => POST(request("POST", input("provision-org-escalation", { organizationId: "provision_org_a", modules: ["crm"] }))))
+  assert.equal(orgCreate.status, 403)
+  assert.equal((await root.query('SELECT id FROM "Tenant" WHERE slug=$1', ["provision-org-escalation"])).rowCount, 0)
 })

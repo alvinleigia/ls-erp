@@ -2,7 +2,7 @@
 import { withCrmRecordView, useCrmRecordView, CrmRecordForm, CrmSummarySection } from "./crm-record-view"
 import { CrmPageHeader, CrmFormActions } from "./crm-page"
 import * as React from "react"
-import Link from "next/link"
+import Link from "@/platform/access/link"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import { Plus, UserRound } from "lucide-react"
@@ -66,9 +66,9 @@ function ContactEditorBody({ id }: { id?: string }) {
       <CrmRecordForm id="contact-details" onSubmit={save} saving={saving} error={error} disabled={!canEdit} fingerprint={values} initialSection="Contact details"
         overview={contact && <CrmSummarySection title="Contact details" canEdit={canEdit} fields={[{ label: "Name", value: contact.name }, { label: "Email", value: contact.email }, { label: "Phone", value: contact.phone }, { label: "Alternate phone", value: contact.alternatePhone }, { label: "WhatsApp", value: contact.whatsappPhone }, { label: "Address", value: [contact.addressLine1, contact.addressLine2, contact.city, contact.region, contact.postalCode, contact.country].filter(Boolean).join(", ") }, { label: "Status", value: contact.archived ? "Archived" : "Active" }]} />}
         tabs={contact ? [
-          { value: "accounts", label: "Business accounts", content: <ContactAccounts contactId={contact.id} canEdit={!!contact.canEdit} archived={contact.archived} /> },
-          { value: "activities", label: "Activities", content: <WorkList contactId={contact.id} /> },
-          { value: "history", label: "Interactions", content: <ContactInteractions contactId={contact.id} /> },
+          { value: "accounts", permission: "accounts.read" as const, label: "Business accounts", content: <ContactAccounts contactId={contact.id} canEdit={!!contact.canEdit} archived={contact.archived} /> },
+          { value: "activities", permission: "activities.read" as const, label: "Activities", content: <WorkList contactId={contact.id} /> },
+          { value: "history", permission: "activities.read" as const, label: "Interactions", content: <ContactInteractions contactId={contact.id} /> },
         ] : []}>
         <CrmSection title="Contact details" description="Basic information and contact status." icon={UserRound}>
           <fieldset disabled={!canEdit || saving} className="grid min-w-0 gap-5 sm:grid-cols-2">

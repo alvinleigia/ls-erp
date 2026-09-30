@@ -1,3 +1,4 @@
+import type { PermissionRun } from "@/platform/access/server"
 import type { Prisma } from "@prisma/client"
 import { CrmError, canManageCrm, type CrmActor } from "./policy"
 import { activityReportSchema, activityReportPageSchema, type ActivityReportInput } from "./report-validation"
@@ -5,7 +6,7 @@ import { businessDate, startOfBusinessDate } from "./work-time"
 import { workTypes } from "./work-validation"
 
 type Tx = Prisma.TransactionClient
-type Context = { run: <T>(operation: (tx: Tx, actor: CrmActor) => Promise<T>) => Promise<T> }
+type Context = { run: PermissionRun }
 const open = ["OPEN", "IN_PROGRESS"] as const
 const dateAfter = (date: string, days: number) => new Date(Date.parse(`${date}T00:00:00Z`) + days * 86400000).toISOString().slice(0, 10)
 const pageResult = <T>(items: T[], total: number, page: number, pageSize: number) => ({ items, total, page, pageSize, totalPages: Math.max(1, Math.ceil(total / pageSize)) })
@@ -29,7 +30,7 @@ export function createReportService({ run }: Context) {
   return {
     activityOverview(input: unknown) {
       const query = activityReportSchema.parse(input)
-      return run(async (tx, actor) => {
+      return run(["reports.read", "activities.read", "opportunities.read"], async (tx, actor) => {
         const c = await context(tx, actor, query)
         const [pending, overdue, dueToday, completed, outcomes, withoutActivity] = await Promise.all([
           tx.crmTask.groupBy({ by: ["type"], where: { AND: [c.base, { status: { in: [...open] } }] }, _count: { _all: true } }),
@@ -47,7 +48,7 @@ export function createReportService({ run }: Context) {
     },
     staffActivityReport(input: unknown) {
       const query = activityReportPageSchema.parse(input)
-      return run(async (tx, actor) => {
+      return run(["reports.read", "activities.read", "opportunities.read"], async (tx, actor) => {
         const c = await context(tx, actor, query)
         // Include former staff who still own activities, so their backlog cannot disappear.
         const where: Prisma.UserWhereInput = { tenantId: actor.tenantId, id: c.owner, OR: [{ role: { in: ["ADMIN", "MANAGER", "STAFF"] } }, { crmAssignedWork: { some: { tenantId: actor.tenantId } } }] }
@@ -59,7 +60,7 @@ export function createReportService({ run }: Context) {
     },
     opportunitiesWithoutActivity(input: unknown) {
       const query = activityReportPageSchema.parse(input)
-      return run(async (tx, actor) => {
+      return run(["reports.read", "activities.read", "opportunities.read"], async (tx, actor) => {
         const c = await context(tx, actor, query)
         const [items, total] = await Promise.all([tx.crmOpportunity.findMany({ where: c.gaps, select: { id: true, title: true, expectedCloseOn: true, contact: { select: { id: true, name: true } }, assignee: { select: { id: true, name: true } }, pipeline: { select: { name: true } }, stage: { select: { name: true } } }, orderBy: [{ expectedCloseOn: "asc" }, { id: "asc" }], skip: (query.page - 1) * query.pageSize, take: query.pageSize }), tx.crmOpportunity.count({ where: c.gaps })])
         return pageResult(items, total, query.page, query.pageSize)

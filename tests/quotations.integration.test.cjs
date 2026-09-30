@@ -25,7 +25,7 @@ before(async()=>{
  await root.tenant.createMany({data:[{id:tenant,slug:tenant,name:'Quotation test'},{id:otherTenant,slug:otherTenant,name:'Other'}]})
  const user=(tenantId,role)=>root.user.create({data:{tenantId,role,name:role,email:`${randomUUID()}@example.test`}})
  admin=await user(tenant,'ADMIN');manager=await user(tenant,'MANAGER');staff=await user(tenant,'STAFF');other=await user(tenant,'STAFF');adminB=await user(otherTenant,'ADMIN')
- await root.tenantModule.createMany({data:[tenant,otherTenant].flatMap(tenantId=>['crm','realEstate','salesDocuments','paymentPlans'].map(key=>({tenantId,key,enabled:true})))})
+ await root.tenantModule.createMany({data:[tenant,otherTenant].flatMap(tenantId=>['crm','realEstate','salesDocuments','paymentPlans'].map(key=>({tenantId,key,allowed:true,enabled:true})))})
  const service=(client,user)=>createCrmService(client,{tenantId:user.tenantId,userId:user.id})
  crm=service(db,manager);staffCrm=service(db,staff);otherCrm=service(db,other);foreign=service(dbB,adminB)
  contact=await root.crmContact.create({data:{tenantId:tenant,name:'Buyer Original',ownerUserId:staff.id,email:'buyer@example.test'}})
@@ -106,16 +106,19 @@ test('large document list remains paginated and never loads revision payloads',a
 
 
 test('module migration preserves existing access without enabling new or opted-out businesses', async()=>{
- const fs=require('node:fs'), ids=['legacy','disabled','optout','new'].map(n=>`${n}_${randomUUID()}`)
- await root.tenant.createMany({data:ids.map(id=>({id,slug:id,name:id}))})
- await root.tenantModule.createMany({data:[{tenantId:ids[0],key:'crm',enabled:true},{tenantId:ids[1],key:'crm',enabled:false},{tenantId:ids[2],key:'crm',enabled:true},{tenantId:ids[2],key:'salesDocuments',enabled:false}]})
- const prior=await root.crmQuotationRevision.findFirst({where:{tenantId:tenant}})
- await pools[0].query('DROP INDEX "CrmQuotation_tenantId_createdAt_id_idx"')
- await pools[0].query(fs.readFileSync('prisma/migrations/20260929200000_optional_sales_documents/migration.sql','utf8'))
- for(const key of ['salesDocuments','paymentPlans']) assert.equal((await root.tenantModule.findUnique({where:{tenantId_key:{tenantId:ids[0],key}}})).enabled,true)
- assert.equal(await root.tenantModule.count({where:{tenantId:{in:[ids[1],ids[3]]},key:{in:['salesDocuments','paymentPlans']}}}),0)
- assert.equal((await root.tenantModule.findUnique({where:{tenantId_key:{tenantId:ids[2],key:'salesDocuments'}}})).enabled,false)
- assert.deepEqual((await root.crmQuotationRevision.findFirst({where:{tenantId:tenant}})).snapshot,prior.snapshot)
+ const fs=require('node:fs'), connection=await pools[0].connect(), schema=`optional_${randomUUID().replaceAll('-','')}`
+ try {
+  await connection.query('BEGIN')
+  await connection.query(`CREATE SCHEMA ${schema}; SET LOCAL search_path TO ${schema};
+   CREATE TABLE "TenantModule" ("tenantId" text, "key" text, "enabled" boolean, "updatedAt" timestamp, PRIMARY KEY ("tenantId","key"));
+   CREATE TABLE "CrmQuotation" ("id" text, "tenantId" text, "createdAt" timestamp);
+   INSERT INTO "TenantModule" VALUES ('legacy','crm',true,now()),('disabled','crm',false,now()),('optout','crm',true,now()),('optout','salesDocuments',false,now())`)
+  await connection.query(fs.readFileSync('prisma/migrations/20260929200000_optional_sales_documents/migration.sql','utf8').replace(/^BEGIN;/,'').replace(/COMMIT;\s*$/,''))
+  const rows=(await connection.query('SELECT * FROM "TenantModule"')).rows
+  for(const key of ['salesDocuments','paymentPlans']) assert.equal(rows.find(row=>row.tenantId==='legacy'&&row.key===key).enabled,true)
+  assert.equal(rows.filter(row=>['disabled','new'].includes(row.tenantId)&&row.key!=='crm').length,0)
+  assert.equal(rows.find(row=>row.tenantId==='optout'&&row.key==='salesDocuments').enabled,false)
+ } finally { await connection.query('ROLLBACK'); connection.release() }
 })
 
 test('optional payment plans preserve saved schedules and allow quotation-only business',async()=>{

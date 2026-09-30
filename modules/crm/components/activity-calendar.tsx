@@ -2,7 +2,7 @@
 import { CrmPageHeader, CrmSurface, CrmFilters, crmPageClass } from "./crm-page"
 import { CrmSelect } from "./crm-controls"
 import * as React from "react"
-import Link from "next/link"
+import Link from "@/platform/access/link"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import { BusinessCalendar, type BusinessCalendarMove } from "@/components/business-calendar"

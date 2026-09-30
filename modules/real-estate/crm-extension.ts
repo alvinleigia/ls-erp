@@ -1,3 +1,4 @@
+import { requirePermission } from "@/platform/access/policy"
 import { Prisma } from "@prisma/client"
 import { z } from "zod"
 import { BusinessError } from "@/platform/policy"
@@ -70,6 +71,7 @@ export const realEstateCrmExtension: CrmExtensions<Omit<Fields, "id">, Metadata>
   },
   async choices(tx, actor, key, input) {
     if (key !== "projects") throw new BusinessError(404, "Unknown Real Estate choice list.")
+    requirePermission(actor, "projects.read")
     return projectFilterChoices(tx, actor, input)
   },
 }

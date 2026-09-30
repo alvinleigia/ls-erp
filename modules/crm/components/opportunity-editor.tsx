@@ -1,4 +1,5 @@
 "use client"
+import { initialOpportunityStage } from "../conversion-stage"
 import { withCrmRecordView, useCrmRecordView, CrmRecordForm, CrmSummarySection, CrmSectionEdit } from "./crm-record-view"
 import { CrmOpportunityPanels } from "./extension-provider"
 import { SalesTeamSelect } from "./sales-teams"
@@ -11,8 +12,9 @@ import { formatDecimalCurrency } from "@/lib/formatting"
 import { CrmSection } from "./crm-section"
 import { CrmPageHeader, CrmFormActions, crmPageClass } from "./crm-page"
 import { CrmSelect, CrmTextarea } from "./crm-controls"
+import { useCurrentResourceAction } from "@/platform/access/view-guard"
 import * as React from "react"
-import Link from "next/link"
+import Link from "@/platform/access/link"
 import { useRouter } from "next/navigation"
 import { useSession } from "next-auth/react"
 import { toast } from "sonner"
@@ -33,6 +35,7 @@ function fields(record: CrmOpportunityRow) {
 }
 export const OpportunityEditor = withCrmRecordView(OpportunityEditorBody)
 function OpportunityEditorBody({ id, enquiryId, initialProjectId = "", initialSubprojectId = "" }: { id?: string; enquiryId?: string; initialProjectId?: string; initialSubprojectId?: string }) {
+  const allowedAssignment = useCurrentResourceAction("assign")
   const extension = useCrmExtensionEditor(initialProjectId, initialSubprojectId)
   const loadExtension = extension.load
   const custom = useCustomFields("opportunity", id, enquiryId)
@@ -84,12 +87,12 @@ function OpportunityEditorBody({ id, enquiryId, initialProjectId = "", initialSu
       setValues(previous => {
         if (previous.pipelineId !== data.id) return previous
         if (previous.stageId && data.stages.some(stage => stage.id === previous.stageId)) return previous
-        const first = data.stages.find(stage => !stage.archived && stage.kind === "OPEN")
+        const first = initialOpportunityStage(data.stages, !id && !!enquiryId)
         return { ...previous, stageId: first?.id || "", probability: first?.probability ?? 10 }
       })
     }).catch(error => { if (!controller.signal.aborted) { setError(error.message); setPipeline(null) } })
     return () => controller.abort()
-  }, [values.pipelineId])
+  }, [values.pipelineId, id, enquiryId])
   const stage = pipeline?.stages.find(stage => stage.id === values.stageId)
   async function save(event: React.FormEvent) {
     event.preventDefault(); setSaving(true); setError(""); clearErrors()
@@ -111,8 +114,8 @@ function OpportunityEditorBody({ id, enquiryId, initialProjectId = "", initialSu
         {extension.summary()} {custom.readOnlySection(<CrmSectionEdit section="Additional information" />)}
       </>}
       tabs={record ? [
-        ...(hasDocumentPanels ? [{ value: "documents", label: "Sales documents", content: <CrmOpportunityPanels opportunityId={record.id} /> }] : []),
-        { value: "activities", label: "Activities", content: <WorkList contactId={record.contactId} opportunityId={record.id} /> },
+        ...(hasDocumentPanels ? [{ value: "documents", permission: "quotations.read" as const, label: "Sales documents", content: <CrmOpportunityPanels opportunityId={record.id} /> }] : []),
+        { value: "activities", permission: "activities.read" as const, label: "Activities", content: <WorkList contactId={record.contactId} opportunityId={record.id} /> },
         { value: "history", label: "History", content: <OpportunityTimeline id={record.id} revision={revision} /> },
       ] : []}>
 
@@ -124,7 +127,7 @@ function OpportunityEditorBody({ id, enquiryId, initialProjectId = "", initialSu
       <FormField id="contactId" label="Contact" error={errors.contactId}><RecordSelect id="contactId" endpoint="/api/crm/contacts" value={values.contactId} selected={contact ? { value: contact.id, label: contact.name } : undefined} onChange={contactId => setValues({ ...values, contactId })} disabled={!!enquiryId || !!record?.enquiryId} /></FormField>
       <FormField id="accountId" label="Business account (optional)" error={errors.accountId}><RecordSelect id="accountId" endpoint="/api/crm/accounts" value={values.accountId} selected={(record?.account || initialAccount) ? { value: (record?.account || initialAccount)!.id, label: (record?.account || initialAccount)!.name } : undefined} onChange={accountId => setValues({ ...values, accountId })} />{values.accountId && <Button type="button" variant="link" size="sm" onClick={() => setValues({ ...values, accountId: "" })}>Clear account</Button>}</FormField>
       <SalesTeamSelect value={values.salesTeamId} selected={record?.salesTeam} disabled={(!!id && !canAssign) || !!enquiryId} onChange={salesTeamId => { setValues({ ...values, salesTeamId }); void custom.changeTeam(salesTeamId) }} />
-      <FormField id="assignedUserId" label="Salesperson" error={errors.assignedUserId}><RecordSelect id="assignedUserId" endpoint={values.salesTeamId ? `/api/crm/assignees?salesTeamId=${values.salesTeamId}` : "/api/crm/assignees"} value={values.assignedUserId} selected={{ value: record?.assignee.id || values.assignedUserId, label: record?.assignee.name || session?.user?.name || "Salesperson" }} onChange={assignedUserId => setValues({ ...values, assignedUserId })} disabled={!canAssign} /></FormField>
+      <FormField id="assignedUserId" label="Salesperson" error={errors.assignedUserId}><RecordSelect id="assignedUserId" endpoint={values.salesTeamId ? `/api/crm/assignees?salesTeamId=${values.salesTeamId}` : "/api/crm/assignees"} value={values.assignedUserId} selected={{ value: record?.assignee.id || values.assignedUserId, label: record?.assignee.name || session?.user?.name || "Salesperson" }} onChange={assignedUserId => setValues({ ...values, assignedUserId })} disabled={!canAssign || !allowedAssignment} /></FormField>
       <FormField id="expectedCloseOn" label="Expected close date" error={errors.expectedCloseOn}><Input id="expectedCloseOn" required type="date" value={values.expectedCloseOn} onChange={event => setValues({ ...values, expectedCloseOn: event.target.value })} /></FormField>
       <FormField id="amount" label="Expected value" error={errors.amount}><Input id="amount" inputMode="decimal" required value={values.amount} onChange={event => setValues({ ...values, amount: event.target.value })} /></FormField>
       <FormField id="currency" label="Currency" error={errors.currency}><SearchableSelect id="currency" options={currencies} value={values.currency} onChange={currency => setValues({ ...values, currency })} placeholder="Choose currency" /></FormField>

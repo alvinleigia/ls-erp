@@ -36,7 +36,7 @@ before(async () => {
   await root.tenant.createMany({ data: [{ id: tenant, slug: tenant, name: "Custom fields" }, { id: otherTenant, slug: otherTenant, name: "Other fields" }] })
   const user = (tenantId, role) => root.user.create({ data: { tenantId, role, name: role, email: `${randomUUID()}@example.test` } })
   manager = await user(tenant, "MANAGER"); staff = await user(tenant, "STAFF"); other = await user(tenant, "STAFF"); adminB = await user(otherTenant, "ADMIN")
-  await root.tenantModule.createMany({ data: [tenant, otherTenant].flatMap(tenantId => ["crm", "realEstate"].map(key => ({ tenantId, key, enabled: true }))) })
+  await root.tenantModule.createMany({ data: [tenant, otherTenant].flatMap(tenantId => ["crm", "realEstate"].map(key => ({ tenantId, key, allowed: true, enabled: true }))) })
   config = createCustomFieldService(db, { tenantId: tenant, userId: manager.id }, resources)
   staffConfig = createCustomFieldService(db, { tenantId: tenant, userId: staff.id }, resources)
   configB = createCustomFieldService(dbB, { tenantId: otherTenant, userId: adminB.id }, resources)

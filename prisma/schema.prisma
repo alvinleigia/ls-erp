@@ -136,6 +136,7 @@ model CrmStage {
   color       String
   position    Int
   archived    Boolean @default(false)
+  isConversionDefault Boolean @default(false)
   tenant      Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   pipeline    CrmPipeline @relation(fields: [tenantId, pipelineId], references: [tenantId, id], onDelete: Restrict)
   opportunities CrmOpportunity[]
@@ -219,6 +220,7 @@ model CrmOpportunityActivity {
 model TenantModule {
   tenantId String
   key      String
+  allowed  Boolean @default(false)
   enabled  Boolean @default(false)
   tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   updatedAt DateTime @updatedAt
@@ -706,6 +708,7 @@ enum StockMovementType {
 }
 
 model User {
+  accessAssignment TenantRoleAssignment?
   crmSalesTeamMemberships CrmSalesTeamMember[]
   realEstateMemberships RealEstateProjectMember[]
   id                    String                    @id @default(cuid())
@@ -797,6 +800,7 @@ model Organization {
 }
 
 model Tenant {
+  accessRoles TenantAccessRole[]
   quotationTemplates CrmQuotationTemplate[]
   quotations CrmQuotation[]
   quotationRevisions CrmQuotationRevision[]
@@ -2319,4 +2323,32 @@ model CrmQuotationRevision {
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   quotation CrmQuotation @relation(fields: [tenantId, quotationId], references: [tenantId, id], onDelete: Restrict)
   @@id([tenantId, quotationId, number])
+}
+
+model TenantAccessRole {
+  id String @id @default(cuid())
+  tenantId String
+  name String
+  nameKey String
+  permissions String[]
+  archived Boolean @default(false)
+  version Int @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  assignments TenantRoleAssignment[]
+  @@unique([tenantId, id])
+  @@unique([tenantId, nameKey])
+  @@index([tenantId, archived, name, id])
+}
+
+model TenantRoleAssignment {
+  tenantId String
+  userId String
+  roleId String
+  updatedAt DateTime @updatedAt
+  user User @relation(fields: [tenantId, userId], references: [tenantId, id], onDelete: Cascade)
+  role TenantAccessRole @relation(fields: [tenantId, roleId], references: [tenantId, id], onDelete: Restrict)
+  @@id([tenantId, userId])
+  @@index([tenantId, roleId])
 }

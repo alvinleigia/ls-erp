@@ -1,5 +1,7 @@
 "use client"
 
+import { useCurrentResourceAction } from "@/platform/access/view-guard"
+import type { Requirement } from "@/platform/access/catalog"
 import * as React from "react"
 import { Button } from "@/components/ui/button"
 import { CrmEditPanel, CrmRecordTabs, CrmReadOnlyFields } from "./crm-record-detail"
@@ -26,7 +28,8 @@ export function withCrmRecordView<P extends { id?: string }>(Editor: React.Compo
 
 export function CrmSectionEdit({ section, allowed = true }: { section: string; allowed?: boolean }) {
   const view = useCrmRecordView()
-  return allowed && view?.existing ? <Button type="button" variant="outline" size="sm" aria-label={`Edit ${section.toLowerCase()}`} onClick={() => view.begin(section)}>Edit</Button> : null
+  const canEdit = useCurrentResourceAction("edit")
+  return allowed && canEdit && view?.existing ? <Button type="button" variant="outline" size="sm" aria-label={`Edit ${section.toLowerCase()}`} onClick={() => view.begin(section)}>Edit</Button> : null
 }
 export function CrmSummarySection({ title, fields, canEdit = true, children }: { title: string; fields: React.ComponentProps<typeof CrmReadOnlyFields>["fields"]; canEdit?: boolean; children?: React.ReactNode }) {
   return <CrmSection title={title} actions={<CrmSectionEdit section={title} allowed={canEdit} />}><CrmReadOnlyFields fields={fields} />{children}</CrmSection>
@@ -36,7 +39,7 @@ type RecordFormProps = {
   id: string; children: React.ReactNode; overview: React.ReactNode; initialSection: string; createSection?: string;
   onSubmit: React.FormEventHandler<HTMLFormElement>; saving: boolean; disabled?: boolean;
   error?: string; fingerprint: unknown; saveLabel?: string; className?: string;
-  tabs?: { value: string; label: string; content: React.ReactNode }[];
+  tabs?: { value: string; label: string; content: React.ReactNode; permission?: Requirement }[];
 }
 export function CrmRecordForm(props: RecordFormProps) {
   const view = useCrmRecordView()

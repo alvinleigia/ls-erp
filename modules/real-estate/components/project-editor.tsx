@@ -1,7 +1,8 @@
 "use client"
 import { useCustomFields } from "@/modules/crm/components/custom-fields"
+import { useBusinessModules } from "@/platform/module-provider"
 import * as React from "react"
-import Link from "next/link"
+import Link from "@/platform/access/link"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import { formatDecimalCurrency } from "@/lib/formatting"
@@ -25,6 +26,7 @@ import { CrmEditPanel, CrmReadOnlyFields, CrmRecordMenu, CrmRecordTabs } from "@
 
 const empty: Project = { id: "", name: "", code: "", parentId: null, developerAccountId: null, location: "", description: "", categories: [], lifecycle: "", priceMin: "", priceMax: "", currency: "", archived: false, version: 1 }
 export function ProjectEditor({ id, parentId = "" }: { id?: string; parentId?: string }) {
+  const { can } = useBusinessModules()
   const router = useRouter()
   const custom = useCustomFields("project", id)
   const loadCustom = custom.load
@@ -125,7 +127,7 @@ export function ProjectEditor({ id, parentId = "" }: { id?: string; parentId?: s
   return <div className={crmPageClass}>
     <CrmPageHeader title={id ? current.name : record.parentId ? "New subproject" : "New project"} description={current.parent ? <>Part of <Link className="underline" href={`/crm/projects/${current.parent.id}`}>{current.parent.name}</Link>{current.parent.archived && " (archived)"}</> : id ? [current.code, current.location].filter(Boolean).join(" / ") : "Start with the basics. Add pricing and other details after saving."} backHref={cancelHref} badge={id ? <span className="rounded bg-muted px-2 py-1 text-xs">{current.archived ? "Archived" : current.lifecycleName || "Active"}</span> : undefined} actions={id ? <>
       {canManage && <Button onClick={() => begin("details")}>Edit project</Button>}
-      <CrmRecordMenu actions={[{ label: "Refresh", onSelect: () => setRevision(value => value + 1) }, ...(canManage ? [{ label: current.archived ? "Restore project" : "Archive project", onSelect: () => { setError(""); setConfirm(true) } }] : [])]} />
+      <CrmRecordMenu actions={[{ label: "Refresh", onSelect: () => setRevision(value => value + 1) }, ...(canManage && can("projects.archive") ? [{ label: current.archived ? "Restore project" : "Archive project", onSelect: () => { setError(""); setConfirm(true) } }] : [])]} />
     </> : <CrmFormActions form="project-form" cancelHref={cancelHref} canSave={canManage} disabled={custom.blocked} saving={saving} saveLabel="Save project" />} />
     {error && !editing && <p role="alert" className="text-destructive">{error}</p>}
     {!id ? <form id="project-form" onSubmit={event => { event.preventDefault(); void save() }} className="space-y-6"><fieldset disabled={saving} className="min-w-0 space-y-6">{detailsForm}
@@ -134,10 +136,10 @@ export function ProjectEditor({ id, parentId = "" }: { id?: string; parentId?: s
     </fieldset></form> : <>
       <CrmRecordTabs value={tab} onChange={setTab} tabs={[
         { value: "overview", label: "Overview", content: overview },
-        ...(!record.parentId ? [{ value: "subprojects", label: "Subprojects", content: <ProjectList parentId={id} canManage={canManage} parentArchived={record.archived} /> }] : []),
+        ...(!record.parentId ? [{ value: "subprojects", permission: "projects.read" as const, label: "Subprojects", content: <ProjectList parentId={id} canManage={canManage} parentArchived={record.archived} /> }] : []),
         { value: "sales", label: "Sales", content: <ProjectSales project={{ ...record, canManage }} /> },
-        { value: "activities", label: "Activities", content: <ProjectActivities project={record} /> },
-        ...(canManage ? [{ value: "team", label: "Team", content: record.parentId ? <CrmSection title="Staff access"><p className="text-sm text-muted-foreground">Staff access is inherited from the parent project.</p><Button variant="outline" asChild><Link href={`/crm/projects/${record.parentId}`}>Manage parent project</Link></Button></CrmSection> : <ProjectMembers id={id} version={record.version} archived={record.archived} onVersion={version => { change("version", version); setSaved(previous => previous ? { ...previous, version } : previous) }} /> }] : []),
+        { value: "activities", permission: "activities.read" as const, label: "Activities", content: <ProjectActivities project={record} /> },
+        ...(canManage ? [{ value: "team", permission: "projects.assign" as const, label: "Team", content: record.parentId ? <CrmSection title="Staff access"><p className="text-sm text-muted-foreground">Staff access is inherited from the parent project.</p><Button variant="outline" asChild><Link href={`/crm/projects/${record.parentId}`}>Manage parent project</Link></Button></CrmSection> : <ProjectMembers id={id} version={record.version} archived={record.archived} onVersion={version => { change("version", version); setSaved(previous => previous ? { ...previous, version } : previous) }} /> }] : []),
       ]} />
       <CrmEditPanel open={!!editing} title={editing === "pricing" ? "Edit property and pricing" : editing === "custom" ? "Edit additional information" : "Edit project details"} description="Changes apply to this project only." onClose={cancelEdit} onSubmit={() => void save()} saving={saving} disabled={custom.blocked} error={error} dirty={JSON.stringify(record) !== JSON.stringify(saved) || Object.keys(custom.payload.customFields).length > 0}>
         {editing === "details" ? detailsForm : editing === "pricing" ? pricingForm : editing === "custom" ? custom.section(saving) : null}

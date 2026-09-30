@@ -1,3 +1,4 @@
+import { findAccessUser, assignedPermissions } from "./access/server"
 import { NextResponse } from "next/server"
 import { ZodError } from "zod"
 import { prisma, runWithTenantDbContext } from "@/lib/prisma"
@@ -17,15 +18,12 @@ export async function withBusinessApi(request: Request, handler: (actor: Busines
     if (session.error) return withRequestId(session.error, log.requestId)
     const { tenantId, sessionUserId } = session.context
     const result = await runWithTenantDbContext(tenantId, async () => {
-      const user = sessionUserId ? await prisma.user.findFirst({
-        where: { id: sessionUserId, tenantId, status: "ACTIVE" },
-        select: { role: true, tenant: { select: { slug: true, status: true } } },
-      }) : null
+      const user = sessionUserId ? await findAccessUser(prisma, tenantId, sessionUserId) : null
       const platformSlug = process.env.PLATFORM_ADMIN_TENANT_SLUG?.trim().toLowerCase() || "platform"
       if (!user || !hasBusinessAccess(user.role) || user.tenant?.status !== "ACTIVE" || user.tenant.slug === platformSlug) {
         throw new BusinessError(403, "Business workspace access is not permitted.")
       }
-      return handler({ tenantId, userId: sessionUserId!, role: user.role, requestId: log.requestId })
+      return handler({ tenantId, userId: sessionUserId!, role: user.role, permissions: assignedPermissions(user), requestId: log.requestId })
     })
     logApiRequestSuccess(log, result instanceof NextResponse ? result.status : successStatus)
     if (result instanceof NextResponse) { result.headers.set("Cache-Control", "no-store"); return withRequestId(result, log.requestId) }

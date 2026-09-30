@@ -1,3 +1,5 @@
+import { requirePermission, requireWriteFields, permits } from "@/platform/access/policy"
+import type { PermissionRun } from "@/platform/access/server"
 import { resolveActivityType } from "./activity-type-service"
 import type { CrmExtensions } from "./extensions"
 import type { Prisma, CrmTask } from "@prisma/client"
@@ -11,7 +13,7 @@ import { workRulePreviewSchema } from "./work-validation"
 
 type Tx = Prisma.TransactionClient
 type Context = {
-  run: <T>(operation: (tx: Tx, actor: CrmActor) => Promise<T>) => Promise<T>
+  run: PermissionRun
   audit: (tx: Tx, actor: CrmActor, event: string, id: string, before?: Prisma.InputJsonValue, after?: Prisma.InputJsonValue) => Promise<void>
   checkAssignee: (tx: Tx, actor: CrmActor, id: string) => Promise<void>
 }
@@ -29,10 +31,10 @@ export function workScope(actor: CrmActor): Prisma.CrmTaskWhereInput {
 function dto(record: Loaded, actor: CrmActor) {
   const { enquiry, opportunity, ...data } = record
   const source = enquiry || opportunity
-  const canViewParent = !!source && (canManageCrm(actor.role) || source.assignedUserId === actor.userId)
+  const canViewParent = permits(actor, enquiry ? "enquiries.read" : "opportunities.read") && !!source && (canManageCrm(actor.role) || source.assignedUserId === actor.userId)
   return { ...data, enquiryId: canViewParent ? record.enquiryId : null, opportunityId: canViewParent ? record.opportunityId : null,
     parent: canViewParent ? { id: source.id, title: source.title, kind: enquiry ? "enquiry" : "opportunity" } : null,
-    canEdit: canManageCrm(actor.role) || record.assignedUserId === actor.userId }
+    canEdit: permits(actor, "activities.edit") && (canManageCrm(actor.role) || record.assignedUserId === actor.userId) }
 }
 export function createWorkService({ run, audit, checkAssignee }: Context, extensions: Pick<CrmExtensions, "filters">) {
   async function zone(tx: Tx, actor: CrmActor) {
@@ -52,12 +54,14 @@ export function createWorkService({ run, audit, checkAssignee }: Context, extens
     await audit(tx, actor, event, id, before ? snapshot(before) : undefined, after ? snapshot(after) : undefined)
   }
   async function schedule(tx: Tx, actor: CrmActor, data: WorkScheduleInput, before?: CrmTask) {
+    requireWriteFields(actor, "activities", before, data)
     await checkAssignee(tx, actor, data.assignedUserId)
     const timeZone = await zone(tx, actor)
     if (data.startsAt && businessDate(new Date(data.startsAt), timeZone) !== data.dueOn) throw new CrmError(400, "The due date must match the start date in the business time zone.")
     return { ...data, ...await resolveActivityType(tx, actor, data, before), dueOn: new Date(`${data.dueOn}T00:00:00Z`), startsAt: data.startsAt ? new Date(data.startsAt) : null, endsAt: data.endsAt ? new Date(data.endsAt) : null, reminderAt: data.reminderAt ? new Date(data.reminderAt) : null }
   }
   async function create(tx: Tx, actor: CrmActor, data: WorkCreateInput, previous?: Loaded, origin?: { planLaunchId: string; planPosition: number } | { followUpRuleId: string; followUpRuleName: string; followUpRuleVersion: number; automationDepth: number }) {
+    requirePermission(actor, "activities.create")
     const { contactId, enquiryId, opportunityId, completion, ...fields } = data
     const contact = await tx.crmContact.findFirst({ where: { ...contactScope(actor), id: contactId, archived: false } })
     if (!contact) throw new CrmError(404, "Active contact not found.")
@@ -109,16 +113,18 @@ export function createWorkService({ run, audit, checkAssignee }: Context, extens
     ...createPlanService({ run, audit, checkAssignee, createWork: (tx, actor, data, origin) => create(tx, actor, data, undefined, origin) }),
     previewWorkFollowUp(id: string, input: unknown) {
       const query = workRulePreviewSchema.parse(input)
-      return run(async (tx, actor) => {
+      return run("activities.read", async (tx, actor) => {
         const record = await find(tx, actor, id, true); requireOpen(record)
         if (record.version !== query.version) throw new CrmError(409, "This activity changed. Refresh before reviewing its next step.")
         if (!(workOutcomes[record.type] as readonly string[]).includes(query.outcome)) throw new CrmError(400, "Choose an outcome appropriate for this activity type.")
-        return prepareRuleFollowUp(tx, actor, record, query.outcome)
+        const preview = await prepareRuleFollowUp(tx, actor, record, query.outcome)
+        if (preview.rule && (!permits(actor, "activities.create") || (record.assignedUserId !== actor.userId && !permits(actor, "activities.assign")))) return { ...preview, schedule: null, blockedReason: "Your access role cannot create this follow-up. Skip the suggestion with a reason or ask your administrator." }
+        return preview
       })
     },
     listWork(input: unknown) {
       const query = workListSchema.parse(input)
-      return run(async (tx, actor) => {
+      return run("activities.read", async (tx, actor) => {
         const timeZone = await zone(tx, actor), now = new Date(), today = businessDate(now, timeZone)
         const filter: Prisma.CrmTaskWhereInput = {
           contactId: query.contactId, enquiryId: query.enquiryId, opportunityId: query.opportunityId, type: query.type, activityTypeId: query.activityTypeId, planLaunchId: query.planLaunchId,
@@ -149,11 +155,11 @@ export function createWorkService({ run, audit, checkAssignee }: Context, extens
         return { ...page(items.map(item => dto(item, actor)), total, query.page, query.pageSize), timeZone, currentUserId: actor.userId, canManage: canManageCrm(actor.role), serverTime: now.toISOString() }
       })
     },
-    getWork(id: string) { return run(async (tx, actor) => ({ ...dto(await find(tx, actor, id), actor), timeZone: await zone(tx, actor) })) },
-    createWork(input: unknown) { const data = workCreateSchema.parse(input); return run(async (tx, actor) => dto(await create(tx, actor, data), actor)) },
+    getWork(id: string) { return run("activities.read", async (tx, actor) => ({ ...dto(await find(tx, actor, id), actor), timeZone: await zone(tx, actor) })) },
+    createWork(input: unknown) { const data = workCreateSchema.parse(input); return run("activities.create", async (tx, actor) => dto(await create(tx, actor, data), actor)) },
     updateWork(id: string, input: unknown) {
       const { version, status, ...data } = workUpdateSchema.parse(input)
-      return run(async (tx, actor) => {
+      return run("activities.edit", async (tx, actor) => {
         const before = await find(tx, actor, id, true); requireOpen(before)
         const prepared = await schedule(tx, actor, data, before)
         const resetReminder = before.assignedUserId !== data.assignedUserId || before.reminderAt?.getTime() !== prepared.reminderAt?.getTime() || before.startsAt?.getTime() !== prepared.startsAt?.getTime() || before.dueOn.getTime() !== prepared.dueOn.getTime()
@@ -164,10 +170,10 @@ export function createWorkService({ run, audit, checkAssignee }: Context, extens
         return dto(after, actor)
       })
     },
-    completeWork(id: string, input: unknown) { const data = workCompleteSchema.parse(input); return run(async (tx, actor) => dto(await complete(tx, actor, await find(tx, actor, id, true), data), actor)) },
+    completeWork(id: string, input: unknown) { const data = workCompleteSchema.parse(input); return run("activities.edit", async (tx, actor) => dto(await complete(tx, actor, await find(tx, actor, id, true), data), actor)) },
     cancelWork(id: string, input: unknown) {
       const data = workCancelSchema.parse(input)
-      return run(async (tx, actor) => {
+      return run("activities.archive", async (tx, actor) => {
         const before = await find(tx, actor, id, true); requireOpen(before)
         const updated = await tx.crmTask.updateMany({ where: { tenantId: actor.tenantId, id, version: data.version }, data: { status: "CANCELLED", cancellationReason: data.reason, version: { increment: 1 } } })
         if (!updated.count) throw new CrmError(409, "This activity changed. Refresh before cancelling.")
@@ -177,7 +183,7 @@ export function createWorkService({ run, audit, checkAssignee }: Context, extens
     },
     updateWorkReminder(id: string, input: unknown) {
       const data = workReminderSchema.parse(input)
-      return run(async (tx, actor) => {
+      return run("activities.edit", async (tx, actor) => {
         const before = await find(tx, actor, id, true); requireOpen(before)
         if (before.assignedUserId !== actor.userId) throw new CrmError(403, "Reminder actions belong to the assigned staff member.")
         if (!before.reminderAt) throw new CrmError(409, "This activity has no reminder.")
@@ -191,7 +197,7 @@ export function createWorkService({ run, audit, checkAssignee }: Context, extens
     },
     listWorkHistory(id: string, input: unknown) {
       const query = crmListSchema.parse(input)
-      return run(async (tx, actor) => {
+      return run("activities.read", async (tx, actor) => {
         await find(tx, actor, id)
         const where = { tenantId: actor.tenantId, taskId: id }
         const [items, total] = await Promise.all([tx.crmTaskEvent.findMany({ where, include: { actor: { select: { name: true } } }, orderBy: [{ createdAt: "desc" }, { id: "asc" }], skip: (query.page - 1) * query.pageSize, take: query.pageSize }), tx.crmTaskEvent.count({ where })])
@@ -200,11 +206,11 @@ export function createWorkService({ run, audit, checkAssignee }: Context, extens
     },
     addWorkNote(id: string, input: unknown) {
       const data = crmNoteSchema.parse(input)
-      return run(async (tx, actor) => { await find(tx, actor, id, true); await log(tx, actor, id, "crm.work.note.added", data.message, undefined, data); return { success: true } })
+      return run("activities.edit", async (tx, actor) => { await find(tx, actor, id, true); await log(tx, actor, id, "crm.work.note.added", data.message, undefined, data); return { success: true } })
     },
     listContactInteractions(contactId: string, input: unknown) {
       const query = crmListSchema.parse(input)
-      return run(async (tx, actor) => {
+      return run("activities.read", async (tx, actor) => {
         if (!await tx.crmContact.findFirst({ where: { ...contactScope(actor), id: contactId }, select: { id: true } })) throw new CrmError(404, "Contact not found.")
         // Shared customer-facing summaries only. Never expose private deal notes or task instructions.
         const where = { tenantId: actor.tenantId, contactId, status: "COMPLETED" as const, summary: { not: null } }

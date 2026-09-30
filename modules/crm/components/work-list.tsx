@@ -2,7 +2,7 @@
 import { CrmPageHeader, CrmSurface, CrmFilters, crmPageClass } from "./crm-page"
 import { CrmTablePagination } from "./crm-pagination"
 import * as React from "react"
-import Link from "next/link"
+import Link from "@/platform/access/link"
 import { CalendarClock, ChevronDown, Plus, RefreshCw, Search } from "lucide-react"
 import { getCoreRowModel, useReactTable, type ColumnDef } from "@tanstack/react-table"
 import { Button } from "@/components/ui/button"

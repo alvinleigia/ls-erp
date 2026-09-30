@@ -4,7 +4,7 @@ import { CrmError } from "@/modules/crm/policy"
 import { fieldSchema } from "@/platform/custom-fields/validation"
 
 const field = (code: string, name: string): PresetItem => ({
-  key: `field.${code}`, label: name, description: "Optional text field on enquiries and opportunities; copied during conversion.",
+  resource: "customFields", key: `field.${code}`, label: name, description: "Optional text field on enquiries and opportunities; copied during conversion.",
   inspect: (tx, tenantId, id) => tx.customFieldDefinition.findFirst({ where: { tenantId, OR: [{ id }, { scope: "SALES", code }] } }),
   async create(tx, tenantId, id) {
     const count = await tx.customFieldDefinition.count({ where: { tenantId, scope: { in: ["SALES", "ENQUIRY", "OPPORTUNITY"] } } })
@@ -17,17 +17,17 @@ const field = (code: string, name: string): PresetItem => ({
   },
 })
 const activity = (name: string, baseType: "MEETING" | "TASK", instructions: string): PresetItem => ({
-  key: `activity.${name}`, label: name, description: `${baseType === "MEETING" ? "Meeting" : "Task"} activity: ${instructions}`,
+  resource: "activityTypes", key: `activity.${name}`, label: name, description: `${baseType === "MEETING" ? "Meeting" : "Task"} activity: ${instructions}`,
   inspect: (tx, tenantId, id) => tx.crmActivityType.findFirst({ where: { tenantId, OR: [{ id }, { nameKey: name.toLowerCase() }] } }),
   create: (tx, tenantId, id) => tx.crmActivityType.create({ data: { id, tenantId, name, nameKey: name.toLowerCase(), baseType, defaultInstructions: instructions } }),
 })
 const source = (name: string): PresetItem => ({
-  key: `source.${name}`, label: name, description: "Lead source choice.",
+  resource: "leadSources", key: `source.${name}`, label: name, description: "Lead source choice.",
   inspect: (tx, tenantId, id) => tx.crmLeadSource.findFirst({ where: { tenantId, OR: [{ id }, { nameKey: name.toLowerCase() }] } }),
   create: (tx, tenantId, id) => tx.crmLeadSource.create({ data: { id, tenantId, name, nameKey: name.toLowerCase() } }),
 })
 const category = (name: string): PresetItem => ({
-  key: `category.${name}`, label: name, description: "Property category for projects and buyer requirements.",
+  resource: "projectSettings", key: `category.${name}`, label: name, description: "Property category for projects and buyer requirements.",
   inspect: (tx, tenantId, id) => tx.realEstatePropertyCategory.findFirst({ where: { tenantId, OR: [{ id }, { nameKey: name.toLowerCase() }] } }),
   create: (tx, tenantId, id) => tx.realEstatePropertyCategory.create({ data: { id, tenantId, name, nameKey: name.toLowerCase() } }),
 })

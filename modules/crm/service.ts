@@ -1,3 +1,7 @@
+import { requireWriteFields, permits, requirePermission } from "@/platform/access/policy"
+import type { Requirement } from "@/platform/access/catalog"
+import { findAccessUser, assignedPermissions } from "@/platform/access/server"
+import { workspaceRead } from "@/platform/access/catalog"
 import type { CrmServiceContext } from "./service-context"
 import { createPresetService, type CrmPreset } from "./preset-service"
 import { createTeamService, resolveSalesTeam, teamSelect } from "./team-service"
@@ -37,17 +41,14 @@ function pageResult<T>(items: T[], total: number, page: number, pageSize: number
 // No HTTP or Lia dependencies. Every operation checks current membership and
 // module access, then runs in a transaction. Caller must establish DB tenant context.
 export function createCrmService<Fields extends object = object, Metadata extends object = object, Addons extends object = object>(db: PrismaClient, identity: Pick<CrmActor, "tenantId" | "userId" | "requestId">, extensions: CrmExtensions<Fields, Metadata> = noCrmExtensions as CrmExtensions<Fields, Metadata>, presets: readonly CrmPreset[] = [], install?: (context: CrmServiceContext) => Addons) {
-  async function run<T>(operation: (tx: Tx, actor: CrmActor) => Promise<T>): Promise<T> {
+  async function run<T>(requirement: Requirement, operation: (tx: Tx, actor: CrmActor) => Promise<T>): Promise<T> {
     for (let attempt = 0; ; attempt++) {
       try {
         // A page loads several CRM panels concurrently through the small tenant
         // pool. Allow bounded queueing beyond Prisma's two-second default while
         // retaining the execution limit for up to 12 audited plan activities.
         return await db.$transaction(async tx => {
-          const user = await tx.user.findFirst({
-            where: { id: identity.userId, tenantId: identity.tenantId, status: "ACTIVE" },
-            select: { role: true, tenant: { select: { status: true, slug: true } } },
-          })
+          const user = await findAccessUser(tx, identity.tenantId, identity.userId)
           const platformSlug = process.env.PLATFORM_ADMIN_TENANT_SLUG?.trim().toLowerCase() || "platform"
           if (!user || !canUseCrm(user.role) || user.tenant?.status !== "ACTIVE" || user.tenant.slug === platformSlug) {
             throw new CrmError(403, "CRM access is not permitted.")
@@ -55,8 +56,9 @@ export function createCrmService<Fields extends object = object, Metadata extend
           const enabledModule = await tx.tenantModule.findUnique({
             where: { tenantId_key: { tenantId: identity.tenantId, key: "crm" } },
           })
-          if (!enabledModule?.enabled) throw new CrmError(403, "CRM is not enabled for this business.")
-          return operation(tx, { ...identity, role: user.role })
+          if (!enabledModule?.allowed || !enabledModule.enabled) throw new CrmError(403, "CRM is not enabled for this business.")
+          const actor = { ...identity, role: user.role, permissions: assignedPermissions(user) }; requirePermission(actor, requirement)
+          return operation(tx, actor)
         }, { isolationLevel: "Serializable", maxWait: 20000, timeout: 20000 })
       } catch (error) {
         const code = (error as { code?: string })?.code
@@ -109,7 +111,7 @@ export function createCrmService<Fields extends object = object, Metadata extend
 
   return {
     ...(install ? install({ run, audit }) : {} as Addons),
-    listExtensionChoices(key: string, input: unknown) { return run((tx, actor) => extensions.choices(tx, actor, key, input)) },
+    listExtensionChoices(key: string, input: unknown) { return run(workspaceRead, (tx, actor) => extensions.choices(tx, actor, key, input)) },
     ...createSalesService({ run, audit, checkAssignee }, extensions),
     ...createActivityTypeService({ run, audit }),
     ...createWorkService({ run, audit, checkAssignee }, extensions),
@@ -122,7 +124,7 @@ export function createCrmService<Fields extends object = object, Metadata extend
     ...createPresetService({ run, audit }, presets),
     listAccounts(input: unknown) {
       const query = crmListSchema.parse(input)
-      return run(async (tx, actor) => {
+      return run("accounts.read", async (tx, actor) => {
         const where: Prisma.CrmAccountWhereInput = { AND: [accountScope(actor), {
           archived: query.archived === "true",
           ...(query.q ? { OR: ["name", "email", "phone"].map(field => ({ [field]: { contains: query.q, mode: "insensitive" } })) } : {}),
@@ -136,15 +138,15 @@ export function createCrmService<Fields extends object = object, Metadata extend
       })
     },
     getAccount(id: string) {
-      return run(async (tx, actor) => {
+      return run("accounts.read", async (tx, actor) => {
         const account = await tx.crmAccount.findFirst({ where: { ...accountScope(actor), id } })
         if (!account) throw new CrmError(404, "Business account not found.")
-        return { ...account, canEdit: canManageCrm(actor.role) || account.ownerUserId === actor.userId }
+        return { ...account, canEdit: permits(actor, "accounts.edit") && (canManageCrm(actor.role) || account.ownerUserId === actor.userId) }
       })
     },
     createAccount(input: unknown) {
       const data = crmAccountSchema.parse(input)
-      return run(async (tx, actor) => {
+      return run("accounts.create", async (tx, actor) => { requireWriteFields(actor, "accounts", undefined, data);
         const account = await tx.crmAccount.create({ data: { ...data, email: data.email || null, phone: data.phone || null, website: data.website || null, notes: data.notes || null, tenantId: actor.tenantId, ownerUserId: actor.userId } })
         await audit(tx, actor, "crm.account.created", account.id, undefined, data)
         return account
@@ -152,9 +154,10 @@ export function createCrmService<Fields extends object = object, Metadata extend
     },
     updateAccount(id: string, input: unknown) {
       const { version, ...data } = crmAccountUpdateSchema.parse(input)
-      return run(async (tx, actor) => {
+      return run("accounts.edit", async (tx, actor) => {
         const where = { tenantId: actor.tenantId, id, ...(!canManageCrm(actor.role) ? { ownerUserId: actor.userId } : {}) }
         const before = await tx.crmAccount.findFirst({ where })
+        requireWriteFields(actor, "accounts", before ?? undefined, data)
         if (!before) throw new CrmError(404, "Editable business account not found.")
         const changed = await tx.crmAccount.updateMany({ where: { ...where, version }, data: { ...data, email: data.email || null, phone: data.phone || null, website: data.website || null, notes: data.notes || null, version: { increment: 1 } } })
         if (!changed.count) throw new CrmError(409, "This account changed. Refresh before saving.")
@@ -164,7 +167,7 @@ export function createCrmService<Fields extends object = object, Metadata extend
     },
     listAccountContacts(accountId: string, input: unknown) {
       const query = crmListSchema.parse(input)
-      return run(async (tx, actor) => {
+      return run(["accounts.read", "contacts.read"], async (tx, actor) => {
         const account = await tx.crmAccount.findFirst({ where: { ...accountScope(actor), id: accountId }, select: { id: true } })
         if (!account) throw new CrmError(404, "Business account not found.")
         // Account visibility must never grant access to unrelated contacts.
@@ -181,7 +184,7 @@ export function createCrmService<Fields extends object = object, Metadata extend
     },
     listContactAccounts(contactId: string, input: unknown) {
       const query = crmListSchema.parse(input)
-      return run(async (tx, actor) => {
+      return run(["contacts.read", "accounts.read"], async (tx, actor) => {
         const contact = await tx.crmContact.findFirst({ where: { ...contactScope(actor), id: contactId }, select: { id: true } })
         if (!contact) throw new CrmError(404, "Contact not found.")
         const where: Prisma.CrmAccountWhereInput = { AND: [accountScope(actor), { contacts: { some: { tenantId: actor.tenantId, contactId } },
@@ -197,7 +200,7 @@ export function createCrmService<Fields extends object = object, Metadata extend
     },
     linkContactAccount(contactId: string, input: unknown) {
       const { accountId } = crmAccountLinkSchema.parse(input)
-      return run(async (tx, actor) => {
+      return run("contacts.edit", async (tx, actor) => {
         const contact = await tx.crmContact.findFirst({ where: { tenantId: actor.tenantId, id: contactId, ...(!canManageCrm(actor.role) ? { ownerUserId: actor.userId } : {}) } })
         if (!contact) throw new CrmError(404, "Editable contact not found.")
         const account = await tx.crmAccount.findFirst({ where: { ...accountScope(actor), id: accountId } })
@@ -213,7 +216,7 @@ export function createCrmService<Fields extends object = object, Metadata extend
       })
     },
     unlinkContactAccount(contactId: string, accountId: string) {
-      return run(async (tx, actor) => {
+      return run("contacts.edit", async (tx, actor) => {
         const contact = await tx.crmContact.findFirst({ where: { tenantId: actor.tenantId, id: contactId, ...(!canManageCrm(actor.role) ? { ownerUserId: actor.userId } : {}) } })
         if (!contact) throw new CrmError(404, "Editable contact not found.")
         const removed = await tx.crmAccountContact.deleteMany({ where: { tenantId: actor.tenantId, contactId, accountId } })
@@ -226,7 +229,7 @@ export function createCrmService<Fields extends object = object, Metadata extend
     },
     listContacts(input: unknown) {
       const query = crmListSchema.parse(input)
-      return run(async (tx, actor) => {
+      return run("contacts.read", async (tx, actor) => {
         const where: Prisma.CrmContactWhereInput = { AND: [contactScope(actor), {
           archived: query.archived === "true",
           ...(query.q ? { OR: ["name", "email", "phone"].map(field => ({ [field]: { contains: query.q, mode: "insensitive" } })) } : {}),
@@ -240,15 +243,15 @@ export function createCrmService<Fields extends object = object, Metadata extend
       })
     },
     getContact(id: string) {
-      return run(async (tx, actor) => {
+      return run("contacts.read", async (tx, actor) => {
         const contact = await tx.crmContact.findFirst({ where: { ...contactScope(actor), id } })
         if (!contact) throw new CrmError(404, "Contact not found.")
-        return { ...contact, canEdit: canManageCrm(actor.role) || contact.ownerUserId === actor.userId }
+        return { ...contact, canEdit: permits(actor, "contacts.edit") && (canManageCrm(actor.role) || contact.ownerUserId === actor.userId) }
       })
     },
     createContact(input: unknown) {
       const data = crmContactSchema.parse(input)
-      return run(async (tx, actor) => {
+      return run("contacts.create", async (tx, actor) => { requireWriteFields(actor, "contacts", undefined, data);
         const contact = await tx.crmContact.create({ data: { ...data, email: data.email || null, phone: data.phone || null, tenantId: actor.tenantId, ownerUserId: actor.userId } })
         await audit(tx, actor, "crm.contact.created", contact.id, undefined, data)
         return contact
@@ -256,9 +259,10 @@ export function createCrmService<Fields extends object = object, Metadata extend
     },
     updateContact(id: string, input: unknown) {
       const { version, ...data } = crmContactUpdateSchema.parse(input)
-      return run(async (tx, actor) => {
+      return run("contacts.edit", async (tx, actor) => {
         const where = { tenantId: actor.tenantId, id, ...(!canManageCrm(actor.role) ? { ownerUserId: actor.userId } : {}) }
         const before = await tx.crmContact.findFirst({ where })
+        requireWriteFields(actor, "contacts", before ?? undefined, data)
         if (!before) throw new CrmError(404, "Editable contact not found.")
         const changed = await tx.crmContact.updateMany({ where: { ...where, version }, data: { ...data, email: data.email || null, phone: data.phone || null, version: { increment: 1 } } })
         if (!changed.count) throw new CrmError(409, "This contact changed. Refresh before saving.")
@@ -268,7 +272,7 @@ export function createCrmService<Fields extends object = object, Metadata extend
     },
     listEnquiries(input: unknown, exporting = false) {
       const query = crmListSchema.parse(input)
-      return run(async (tx, actor) => {
+      return run(exporting ? ["enquiries.read", "enquiries.export"] : "enquiries.read", async (tx, actor) => {
         const extensionFilter = await extensions.filters(tx, actor, query)
         const phoneQuery = query.q.replace(/[\s().-]/g, "")
         const where: Prisma.CrmEnquiryWhereInput = { AND: [enquiryScope(actor), {
@@ -290,20 +294,21 @@ export function createCrmService<Fields extends object = object, Metadata extend
       })
     },
     getEnquiry(id: string) {
-      return run(async (tx, actor) => {
+      return run("enquiries.read", async (tx, actor) => {
         const { items: [record] } = await extensions.decorate(tx, actor, "enquiry", await maskReferrals(tx, actor, [await findEnquiry(tx, actor, id)]))
         const events = await Promise.all(["created", "updated", "assigned"].map(event => tx.crmActivity.findFirst({ where: { tenantId: actor.tenantId, enquiryId: id, event }, orderBy: [{ createdAt: "desc" }, { id: "desc" }], select: { createdAt: true, actor: { select: personSelect } } })))
-        return { ...record, customFields: await readCustomFields(tx, actor, enquiryFields, record), metadata: { created: events[0], updated: events[1] || events[0], assigned: events[2] }, canAssign: canManageCrm(actor.role), opportunity: await tx.crmOpportunity.findFirst({ where: { ...enquiryScope(actor), enquiryId: id }, select: { id: true } }) }
+        return { ...record, customFields: await readCustomFields(tx, actor, enquiryFields, record), metadata: { created: events[0], updated: events[1] || events[0], assigned: events[2] }, canAssign: canManageCrm(actor.role) && permits(actor, "enquiries.assign"), opportunity: await tx.crmOpportunity.findFirst({ where: { ...enquiryScope(actor), enquiryId: id }, select: { id: true } }) }
       })
     },
     createEnquiry(input: unknown) {
       const custom = splitCustomFields(input)
       const { core, extension } = extensions.splitWrite(custom.core)
       const data = crmEnquiryCreateSchema.parse(core)
-      return run(async (tx, actor) => {
+      return run("enquiries.create", async (tx, actor) => { requireWriteFields(actor, "enquiries", undefined, data);
         await checkAssignee(tx, actor, data.assignedUserId)
         const team = await resolveSalesTeam(tx, actor, data.salesTeamId, data.assignedUserId)
         if (team?.workflow === "DIRECT") throw new CrmError(400, "This team starts with opportunities. Create an opportunity instead.")
+        if (data.newContact) requirePermission(actor, "contacts.create")
         const contact = data.newContact
           ? await tx.crmContact.create({ data: { ...data.newContact, email: data.newContact.email || null, phone: data.newContact.phone || null, tenantId: actor.tenantId, ownerUserId: actor.userId } })
           : await tx.crmContact.findFirst({ where: { ...contactScope(actor), id: data.contactId, archived: false } })
@@ -332,14 +337,16 @@ export function createCrmService<Fields extends object = object, Metadata extend
       const custom = splitCustomFields(input)
       const { core, extension } = extensions.splitWrite(custom.core)
       const { version, ...data } = crmEnquiryUpdateSchema.parse(core)
-      return run(async (tx, actor) => {
+      return run("enquiries.edit", async (tx, actor) => {
         const before = await findEnquiry(tx, actor, id)
+        requireWriteFields(actor, "enquiries", before ?? undefined, data)
         await checkAssignee(tx, actor, data.assignedUserId)
         const team = await resolveSalesTeam(tx, actor, data.salesTeamId, data.assignedUserId, before)
         if (before.salesTeamId !== (team?.id ?? null) && await tx.crmOpportunity.count({ where: { tenantId: actor.tenantId, enquiryId: id } })) throw new CrmError(409, "A converted enquiry keeps its original sales team.")
         const fieldRecord = { ...before, salesTeamId: team?.id ?? null }
         const context = await enquiryContext(tx, actor, before.contactId, data, before)
         const lost = await resolveLostReason(tx, actor, data.status === "CLOSED", data.lostReasonId, before.status === "CLOSED" ? before : undefined)
+        if (before.assignedUserId !== data.assignedUserId && await tx.crmTask.count({ where: { tenantId: actor.tenantId, enquiryId: id, followParentAssignment: true, status: { in: ["OPEN", "IN_PROGRESS"] } } })) requirePermission(actor, ["activities.edit", "activities.assign"])
         const changed = await tx.crmEnquiry.updateMany({ where: { ...enquiryScope(actor), id, version }, data: { ...data, salesTeamId: team?.id ?? null, ...context, ...lost, version: { increment: 1 } } })
         if (!changed.count) throw new CrmError(409, "This enquiry changed. Refresh before saving.")
         await extensions.save(tx, actor, "enquiry", id, extension)
@@ -359,7 +366,7 @@ export function createCrmService<Fields extends object = object, Metadata extend
     },
     listTasks(input: unknown, enquiryId?: string) {
       const query = crmListSchema.parse(input)
-      return run(async (tx, actor) => {
+      return run("activities.read", async (tx, actor) => {
         if (enquiryId) await findEnquiry(tx, actor, enquiryId)
         const settings = await tx.appSetting.findUnique({ where: { tenantId: actor.tenantId }, select: { timeZone: true } })
         const today = new Intl.DateTimeFormat("en-CA", { timeZone: settings?.timeZone || "UTC", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date())
@@ -378,9 +385,10 @@ export function createCrmService<Fields extends object = object, Metadata extend
     },
     createTask(enquiryId: string, input: unknown) {
       const data = crmTaskSchema.parse(input)
-      return run(async (tx, actor) => {
+      return run("activities.create", async (tx, actor) => {
         const enquiry = await findEnquiry(tx, actor, enquiryId)
         if (enquiry.status === "CLOSED") throw new CrmError(409, "Reopen the enquiry before adding follow-ups.")
+        requireWriteFields(actor, "activities", undefined, { assignedUserId: enquiry.assignedUserId })
         const task = await tx.crmTask.create({ data: { ...data, dueOn: new Date(`${data.dueOn}T00:00:00Z`), tenantId: actor.tenantId, enquiryId, contactId: enquiry.contactId, assignedUserId: enquiry.assignedUserId, createdByUserId: actor.userId, followParentAssignment: true } })
         await activity(tx, actor, enquiryId, "task.created", `Follow-up: ${data.title} (due ${data.dueOn}).`)
         await audit(tx, actor, "crm.task.created", enquiryId, undefined, { taskId: task.id, ...data })
@@ -388,7 +396,7 @@ export function createCrmService<Fields extends object = object, Metadata extend
       })
     },
     completeTask(id: string) {
-      return run(async (tx, actor) => {
+      return run("activities.edit", async (tx, actor) => {
         const task = await tx.crmTask.findFirst({ where: { id, tenantId: actor.tenantId, followParentAssignment: true, enquiry: enquiryScope(actor) } })
         if (!task || !task.enquiryId) throw new CrmError(404, "Follow-up not found.")
         if (task.completedAt) return task
@@ -401,7 +409,7 @@ export function createCrmService<Fields extends object = object, Metadata extend
     },
     addNote(enquiryId: string, input: unknown) {
       const { message } = crmNoteSchema.parse(input)
-      return run(async (tx, actor) => {
+      return run("enquiries.edit", async (tx, actor) => {
         await findEnquiry(tx, actor, enquiryId)
         await activity(tx, actor, enquiryId, "note", message)
         await audit(tx, actor, "crm.note.created", enquiryId)
@@ -410,7 +418,7 @@ export function createCrmService<Fields extends object = object, Metadata extend
     },
     listActivity(enquiryId: string, input: unknown) {
       const query = crmListSchema.parse(input)
-      return run(async (tx, actor) => {
+      return run("enquiries.read", async (tx, actor) => {
         await findEnquiry(tx, actor, enquiryId)
         const where = { tenantId: actor.tenantId, enquiryId }
         const [items, total] = await Promise.all([
@@ -422,7 +430,7 @@ export function createCrmService<Fields extends object = object, Metadata extend
     },
     listAssignees(input: unknown) {
       const query = crmListSchema.parse(input)
-      return run(async (tx, actor) => {
+      return run(workspaceRead, async (tx, actor) => {
         const where: Prisma.UserWhereInput = { tenantId: actor.tenantId, status: "ACTIVE", role: { in: ["ADMIN", "MANAGER", "STAFF"] },
           ...(!canManageCrm(actor.role) ? { id: actor.userId } : {}),
           ...(query.salesTeamId ? { crmSalesTeamMemberships: { some: { tenantId: actor.tenantId, teamId: query.salesTeamId } } } : {}),

@@ -30,7 +30,7 @@ export type CrmTaskRow = {
   enquiry: { id: string; title: string };
 }
 export type CrmActivityRow = { id: string; event: string; message: string; createdAt: string; actor: { name: string | null } }
-export type CrmStageRow = { id: string; name: string; kind: "OPEN" | "WON" | "LOST"; color: string; probability: number; archived: boolean; position: number }
+export type CrmStageRow = { isConversionDefault?: boolean; id: string; name: string; kind: "OPEN" | "WON" | "LOST"; color: string; probability: number; archived: boolean; position: number }
 export type CrmPipelineRow = { id: string; name: string; archived: boolean; version: number; stages: CrmStageRow[]; canManage?: boolean }
 export type CrmOpportunityRow = {
   salesTeamId?: string | null; salesTeam?: { id: string; name: string; workflow: string; archived: boolean } | null;

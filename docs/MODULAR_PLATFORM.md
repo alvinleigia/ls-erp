@@ -776,3 +776,26 @@ plans, rules, configuration, quotations and templates. See CRM_RECORD_VIEWS.md.
 Optional document tabs are selected in application composition; core CRM keeps
 its extension boundary. No database migration or permission-policy change.
 Local UI verification is separate from hosted acceptance after deployment.
+
+
+## Default enquiry conversion stage (2026-09-29)
+
+Pipeline configuration now supports one active open default for enquiry
+conversion, using the shared edit panel and dropdown. Existing records and
+direct opportunity creation retain their behavior. See CRM_CONVERSION_DEFAULT.md
+for migration, constraints and local verification. Hosted deployment is pending.
+
+
+## Platform allowances and tenant module activation (2026-09-30)
+
+Stage 1 adds platform-controlled module allowances above tenant activation for
+CRM, Real Estate, Sales Documents and Payment Plans. Shared controls cover
+provisioning and existing tenants; server checks, dependencies and required audit
+records enforce both layers. Existing activation choices are preserved.
+See TENANT_ACCESS_CONTROL.md for migration, verification and remaining role/scope
+stages. Changes and both pending migrations are local; not deployed.
+
+
+## Tenant access Stage 2 (local, 2026-09-30)
+
+Tenant access roles now restrict the existing Staff/Manager account authority across CRM, projects and sales documents. Settings > Access roles provides templates, an action matrix and user assignment; new staff creation supports an initial access role. Typed server requirements cover reads, mutations, exports and generated work, with indexed current-role resolution, forced RLS and transactional audits. Existing users retain legacy access until assigned. The last active tenant administrator is protected. See docs/TENANT_ACCESS_CONTROL.md for configuration, migration and validation details. Not pushed or deployed. Next: indexed own/assigned, managed-team and all-tenant record scopes.

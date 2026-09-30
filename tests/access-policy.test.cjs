@@ -1,0 +1,15 @@
+/* eslint-disable @typescript-eslint/no-require-imports */
+const {test}=require('node:test'),assert=require('node:assert/strict')
+const {businessNavigation}=require('../application/navigation.ts')
+const {permits}=require('../platform/access/policy.ts')
+const {moduleKeys}=require('../platform/modules.ts')
+const flags=moduleKeys.map(key=>({key,enabled:true,allowed:true}))
+test('roles hide denied navigation, reports require source reads, legacy access remains',()=>{
+ const limited=businessNavigation(flags,['enquiries.read'])
+ assert.deepEqual(limited.flatMap(g=>g.items.map(i=>i.href)),['/crm/enquiries'])
+ assert.ok(businessNavigation(flags).length>4)
+ assert.equal(businessNavigation(flags,[]).length,0)
+ assert.equal(permits({permissions:['contacts.edit']},'contacts.edit'),false)
+ assert.equal(permits({},'contacts.edit'),true)
+ assert.equal(businessNavigation(flags,['reports.read']).length,0)
+})

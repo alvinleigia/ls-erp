@@ -1,3 +1,4 @@
+import type { PermissionRun } from "@/platform/access/server"
 import { Prisma } from "@prisma/client"
 import { CrmError, canManageCrm, type CrmActor } from "./policy"
 import { salesReportSchema, type SalesReportQuery } from "./sales-report-validation"
@@ -7,7 +8,7 @@ import { checkExportLimit, CRM_EXPORT_LIMIT, crmCsv } from "./csv"
 import type { SalesReportRecord, SalesLeadGroup, SalesValueGroup, SalesReportView } from "@/types/crm-sales-report"
 
 type Tx = Prisma.TransactionClient
-type Context = { run: <T>(operation: (tx: Tx, actor: CrmActor) => Promise<T>) => Promise<T> }
+type Context = { run: PermissionRun }
 const nextDay = (day: string, offset = 1) => new Date(Date.parse(`${day}T00:00:00Z`) + offset * 86400000).toISOString().slice(0, 10)
 const pageResult = <T>(items: T[], total: number, q: SalesReportQuery) => ({ items, total, page: q.page, pageSize: q.pageSize, totalPages: Math.max(1, Math.ceil(total / q.pageSize)) })
 
@@ -96,7 +97,7 @@ export function createSalesReportService({ run }: Context, extensions: Pick<CrmE
   return {
     salesOverview(input: unknown) {
       const q = salesReportSchema.parse(input)
-      return run(async (tx, actor) => {
+      return run(["reports.read", "enquiries.read", "opportunities.read", "activities.read"], async (tx, actor) => {
         const c = await context(tx, actor, q)
         const [totals] = await tx.$queryRaw<Record<SalesReportView, number>[]>(Prisma.sql`${c.cte} SELECT
           (SELECT COUNT(*)::int FROM leads) AS leads, (SELECT COUNT(*)::int FROM leads WHERE converted) AS converted,
@@ -107,7 +108,7 @@ export function createSalesReportService({ run }: Context, extensions: Pick<CrmE
     },
     salesLeadBreakdown(input: unknown) {
       const q = salesReportSchema.parse(input)
-      return run(async (tx, actor) => {
+      return run(["reports.read", "enquiries.read", "opportunities.read", "activities.read"], async (tx, actor) => {
         const c = await context(tx, actor, q), key = dimension(q)
         const label = q.dimension === "lostReason" ? Prisma.sql`"lostReasonName"` : q.dimension === "source" ? Prisma.sql`source` : q.dimension === "project" ? Prisma.sql`project` : Prisma.sql`owner`
         const grouped = Prisma.sql`${c.cte}, groups AS (SELECT COALESCE(${key}, '__none__') AS id,
@@ -121,7 +122,7 @@ export function createSalesReportService({ run }: Context, extensions: Pick<CrmE
     salesValueBreakdown(input: unknown) {
       const q = salesReportSchema.parse(input)
       if (!["pipeline", "won", "lost"].includes(q.view)) throw new CrmError(400, "Choose pipeline, won or lost values.")
-      return run(async (tx, actor) => {
+      return run(["reports.read", "enquiries.read", "opportunities.read", "activities.read"], async (tx, actor) => {
         const c = await context(tx, actor, q)
         const grouped = Prisma.sql`${c.cte}, groups AS (SELECT "stageId", stage, pipeline, currency, COUNT(*)::int AS count, SUM(amount)::text AS amount FROM ${table(q.view)} GROUP BY "stageId", stage, pipeline, currency)`
         const [{ total }] = await tx.$queryRaw<{ total: number }[]>(Prisma.sql`${grouped} SELECT COUNT(*)::int AS total FROM groups`)
@@ -131,11 +132,11 @@ export function createSalesReportService({ run }: Context, extensions: Pick<CrmE
     },
     salesReportRecords(input: unknown) {
       const q = salesReportSchema.parse(input)
-      return run(async (tx, actor) => records(tx, (await context(tx, actor, q)).cte, q, false))
+      return run(["reports.read", "enquiries.read", "opportunities.read", "activities.read"], async (tx, actor) => records(tx, (await context(tx, actor, q)).cte, q, false))
     },
     exportSalesReport(input: unknown) {
       const q = salesReportSchema.parse(input)
-      return run(async (tx, actor) => {
+      return run(["reports.read", "reports.export", "enquiries.read", "opportunities.read", "activities.read", q.view === "leads" || q.view === "converted" ? "enquiries.export" : q.view === "overdue" ? "activities.export" : "opportunities.export"], async (tx, actor) => {
         const c = await context(tx, actor, q), result = await records(tx, c.cte, q, true)
         return crmCsv(["ID", "Title", "Record type", "Customer", "Assigned staff", "Source", ...(c.metadata.realEstateEnabled ? ["Project", "Subproject"] : []), "Status / outcome", "Lost reason", "Deal value", "Currency", "Created (UTC)", "Closed (UTC)", "Due date"],
           result.items.map(r => [r.id, r.title, r.recordKind, r.customer, r.owner, r.source, ...(c.metadata.realEstateEnabled ? [r.project, r.subproject] : []), r.status === "CLOSED" ? "Lost" : r.status, r.lostReasonName, r.amount, r.currency, r.createdAt, r.closedAt, r.dueOn]))

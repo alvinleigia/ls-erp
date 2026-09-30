@@ -1,4 +1,4 @@
-export type BusinessActor = { tenantId: string; userId: string; role: string; requestId?: string }
+export type BusinessActor = { tenantId: string; userId: string; role: string; requestId?: string; permissions?: import("./access/catalog").Permission[] }
 export class BusinessError extends Error {
   constructor(public status: number, message: string) { super(message) }
 }

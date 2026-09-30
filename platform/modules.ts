@@ -25,16 +25,18 @@ export const businessModules = {
 } as const satisfies Record<string, ModuleDefinition>
 
 export type BusinessModuleKey = keyof typeof businessModules
-export type ModuleFlag = { key: string; enabled: boolean }
+export type ModuleFlag = { key: string; enabled: boolean; allowed?: boolean }
 export const moduleKeys = Object.keys(businessModules) as [BusinessModuleKey, ...BusinessModuleKey[]]
 
 export function moduleEnabled(flags: readonly ModuleFlag[], key: BusinessModuleKey): boolean {
-  return (flags.find(row => row.key === key)?.enabled ?? businessModules[key].defaultEnabled) &&
+  const flag = flags.find(row => row.key === key)
+  return flag?.allowed === true && flag.enabled &&
     businessModules[key].requires.every(required => moduleEnabled(flags, required as BusinessModuleKey))
 }
 
 export function moduleChangeProblem(flags: readonly ModuleFlag[], key: BusinessModuleKey, enabled: boolean): string | null {
   if (enabled) {
+    if (!flags.some(row => row.key === key && row.allowed)) return `${businessModules[key].name} has not been allowed by the platform administrator.`
     const missing = businessModules[key].requires.filter(required => !moduleEnabled(flags, required as BusinessModuleKey))
     if (missing.length) return `Enable ${missing.map(required => businessModules[required as BusinessModuleKey].name).join(", ")} before enabling ${businessModules[key].name}.`
   } else {
@@ -42,4 +44,19 @@ export function moduleChangeProblem(flags: readonly ModuleFlag[], key: BusinessM
     if (dependents.length) return `Disable ${dependents.map(other => businessModules[other].name).join(", ")} before disabling ${businessModules[key].name}.`
   }
   return null
+}
+
+export function moduleAllowanceProblem(flags: readonly ModuleFlag[], key: BusinessModuleKey, allowed: boolean): string | null {
+  // Platform dependencies concern allowances; a tenant may keep an allowed module off.
+  const allowances = moduleKeys.map(key => ({ key, allowed: true, enabled: flags.some(row => row.key === key && row.allowed) }))
+  const problem = moduleChangeProblem(allowances, key, allowed)
+  return problem?.replace(/^Enable /, "Allow ").replace(" before enabling ", " before allowing ").replace(/^Disable /, "Remove the allowance for ").replace(" before disabling ", " before removing the allowance for ") ?? null
+}
+
+export function moduleSettings(flags: readonly ModuleFlag[]) {
+  return moduleKeys.map(key => ({
+    ...businessModules[key], key,
+    allowed: flags.some(row => row.key === key && row.allowed),
+    enabled: moduleEnabled(flags, key),
+  }))
 }

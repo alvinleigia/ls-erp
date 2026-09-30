@@ -1,5 +1,7 @@
 "use client"
 
+import { useBusinessModules } from "@/platform/module-provider"
+import type { Requirement } from "@/platform/access/catalog"
 import * as React from "react"
 import { MoreHorizontal } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -10,10 +12,13 @@ import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuIte
 // Record-local navigation. Inactive panels are not mounted, so embedded lists
 // fetch only when opened. Business components retain their own permissions.
 export function CrmRecordTabs({ tabs, value, onChange }: {
-  tabs: { value: string; label: string; content: React.ReactNode }[];
+  tabs: { value: string; label: string; content: React.ReactNode; permission?: Requirement }[];
   value: string; onChange: (value: string) => void;
 }) {
   const id = React.useId()
+  const { can } = useBusinessModules()
+  tabs = tabs.filter(tab => !tab.permission || can(tab.permission))
+  if (!tabs.some(tab => tab.value === value)) value = tabs[0]?.value || ""
   return <div className="min-w-0 space-y-5">
     <div role="tablist" aria-label="Record sections" className="flex max-w-full gap-1 overflow-x-auto border-b pb-2" onKeyDown={event => {
       const index = tabs.findIndex(tab => tab.value === value)

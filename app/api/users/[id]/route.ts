@@ -1,3 +1,5 @@
+import { guardUserWrite, auditUserSecurity } from "@/platform/access/user-security"
+import { BusinessError } from "@/platform/policy"
 import { NextResponse } from "next/server"
 import bcrypt from "bcryptjs"
 
@@ -147,6 +149,8 @@ export async function PATCH(
 
     try {
       const user = await prisma.$transaction(async (tx) => {
+        const identity = { tenantId, userId: sessionUserId!, requestId: logContext.requestId }
+        const priorSecurity = await guardUserWrite(tx, identity, id, data, role === "ADMIN")
         const updated = await tx.user.update({
         where: { id },
         data,
@@ -348,6 +352,7 @@ export async function PATCH(
         }
       }
 
+        await auditUserSecurity(tx, identity, id, priorSecurity, updated)
         return updated
       })
 
@@ -360,6 +365,7 @@ export async function PATCH(
       logApiRequestSuccess(logContext, 200, { targetUserId: id })
       return withRequestId(response, logContext.requestId)
     } catch (error) {
+      if (error instanceof BusinessError) return withRequestId(NextResponse.json({ error: error.message }, { status: error.status }), logContext.requestId)
       if (error instanceof Error) {
         logApiRequestError(logContext, error, 400, { targetUserId: id })
         const response = NextResponse.json({ error: error.message }, { status: 400 })

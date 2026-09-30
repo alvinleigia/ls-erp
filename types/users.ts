@@ -49,6 +49,7 @@ export type UserProfile = UserCore & {
 }
 
 export type UserFormValues = {
+  accessRoleId?: string
   name: string
   email: string
   phone: string

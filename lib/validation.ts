@@ -1,4 +1,5 @@
 import { z } from "zod"
+import { tenantModuleSelection } from "@/platform/module-validation"
 // Module-owned schemas are re-exported here for the existing validation convention.
 export * from "@/modules/crm/validation"
 import { INVENTORY_UNIT_OPTIONS } from "@/lib/constants/inventory"
@@ -125,6 +126,7 @@ export const signUpSchema = addCountryStateValidation(z.object({
 }))
 
 export const createUserSchema = addCountryStateValidation(z.object({
+  accessRoleId: z.string().trim().max(100).optional(),
   name: z.string().trim().min(1).max(100).optional().or(z.literal("")),
   email: z.string().trim().email(),
   role: roleSchema.optional(),
@@ -1457,6 +1459,7 @@ export const updateOrganizationMemberSchema = z
   })
 
 export const createTenantSchema = z.object({
+  modules: tenantModuleSelection,
   name: z.string().trim().min(2).max(120),
   slug: z
     .string()

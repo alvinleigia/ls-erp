@@ -16,7 +16,7 @@ async function main() {
   try {
     const tables = await db.query("SELECT 1 FROM pg_tables WHERE schemaname = 'public' LIMIT 1")
     if (tables.rowCount) throw new Error("Database is not empty. Refusing to modify it; use a fresh disposable instance.")
-    const migrationNames = ["20260923090000_crm_foundation", "20260923120000_crm_business_accounts", "20260923160000_crm_sales_pipelines", "20260924090000_crm_activity_workspace", "20260924120000_crm_activity_plans", "20260924150000_crm_follow_up_rules", "20260928120000_crm_lead_intake", "20260928160000_real_estate_projects", "20260928190000_real_estate_sales", "20260928220000_crm_lost_reasons", "20260928230000_crm_activity_types", "20260929090000_real_estate_choices", "20260929120000_crm_custom_fields", "20260929160000_crm_sales_teams", "20260929180000_crm_quotations"]
+    const migrationNames = ["20260923090000_crm_foundation", "20260923120000_crm_business_accounts", "20260923160000_crm_sales_pipelines", "20260924090000_crm_activity_workspace", "20260924120000_crm_activity_plans", "20260924150000_crm_follow_up_rules", "20260928120000_crm_lead_intake", "20260928160000_real_estate_projects", "20260928190000_real_estate_sales", "20260928220000_crm_lost_reasons", "20260928230000_crm_activity_types", "20260929090000_real_estate_choices", "20260929120000_crm_custom_fields", "20260929160000_crm_sales_teams", "20260929180000_crm_quotations", "20260930120000_tenant_access_roles"]
     const firstPending = process.env.CRM_TEST_FROM_MIGRATION || migrationNames[0]
     if (!migrationNames.includes(firstPending)) throw new Error("Unknown CRM_TEST_FROM_MIGRATION.")
     const basePath = process.env.CRM_TEST_BASE_SQL
@@ -42,6 +42,10 @@ async function main() {
       await db.query(basePath && name >= firstPending ? migration : `BEGIN;\n${migration.slice(policyStart).replace(/\nCOMMIT;\s*$/, "")}\nCOMMIT;`)
     }
     if (basePath) await db.query(fs.readFileSync("prisma/migrations/20260929200000_optional_sales_documents/migration.sql", "utf8"))
+    const conversionMigration = fs.readFileSync("prisma/migrations/20260929210000_crm_conversion_default/migration.sql", "utf8")
+    await db.query(basePath ? conversionMigration : conversionMigration.slice(conversionMigration.indexOf('ALTER TABLE "CrmStage" ADD CONSTRAINT')))
+    const allowancesMigration = fs.readFileSync("prisma/migrations/20260930090000_module_allowances/migration.sql", "utf8")
+    await db.query(basePath ? allowancesMigration : allowancesMigration.slice(allowancesMigration.indexOf('ALTER TABLE "TenantModule" ADD CONSTRAINT')).replace(/COMMIT;\s*$/, ""))
     // Roles are cluster-wide and may outlive a recreated disposable database.
     const runtimeRole = await db.query("SELECT rolsuper, rolbypassrls FROM pg_roles WHERE rolname = 'crm_test_runtime'")
     if (!runtimeRole.rowCount) await db.query("CREATE ROLE crm_test_runtime LOGIN NOSUPERUSER NOBYPASSRLS")

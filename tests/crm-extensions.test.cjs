@@ -55,7 +55,7 @@ test("extension decoration batches one scoped lookup, including empty and module
   let flags = 0, contexts = 0, enabled = true
   const records = Array.from({ length: 100 }, (_, i) => ({ id: `lead-${i}`, title: `Lead ${i}` }))
   const tx = {
-    tenantModule: { findUnique: async ({ where }) => { flags++; assert.equal(where.tenantId_key.tenantId, actor.tenantId); return { enabled } } },
+    tenantModule: { findUnique: async ({ where }) => { flags++; assert.equal(where.tenantId_key.tenantId, actor.tenantId); return { allowed: true, enabled } } },
     realEstateEnquiryContext: { findMany: async ({ where }) => { contexts++; assert.equal(where.tenantId, actor.tenantId); assert.deepEqual(where.enquiryId.in, records.map(row => row.id)); return [{ enquiryId: "lead-99", bedrooms: 3 }] } },
   }
   const decorated = await extension.decorate(tx, actor, "enquiry", records)
@@ -73,7 +73,7 @@ test("extension decoration batches one scoped lookup, including empty and module
 
 test("report joins disappear when disabled and enabled filters remain parameterized", async () => {
   let enabled = false
-  const tx = { tenantModule: { findUnique: async () => ({ enabled }) } }
+  const tx = { tenantModule: { findUnique: async () => ({ allowed: true, enabled }) } }
   const hidden = await extension.report(tx, actor, {})
   assert.equal(hidden.enquiryJoins.text, "")
   assert.equal(hidden.opportunityJoins.text, "")

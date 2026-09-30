@@ -8,6 +8,7 @@ export const stageSchema = z.object({
   id: id.optional(), name: z.string().trim().min(1).max(80),
   kind: z.enum(stageKinds), probability: z.number().int().min(0).max(100),
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/), archived: z.boolean().default(false),
+  isConversionDefault: z.boolean().optional(),
 }).strict().refine(stage => stage.kind === "WON" ? stage.probability === 100 : stage.kind === "LOST" ? stage.probability === 0 : stage.probability < 100,
   { path: ["probability"], message: "Won must be 100%, lost 0%, and open stages below 100%." })
 export const pipelineSchema = z.object({
@@ -15,6 +16,8 @@ export const pipelineSchema = z.object({
   stages: z.array(stageSchema).min(3).max(30),
 }).strict().superRefine((value, ctx) => {
   const active = value.stages.filter(stage => !stage.archived)
+  const defaults = value.stages.filter(stage => stage.isConversionDefault)
+  if (defaults.length > 1 || defaults.some(stage => stage.archived || stage.kind !== "OPEN")) ctx.addIssue({ code: "custom", path: ["stages"], message: "Choose only one active open stage as the default conversion stage." })
   for (const kind of stageKinds) if (!active.some(stage => stage.kind === kind)) ctx.addIssue({ code: "custom", path: ["stages"], message: `Keep at least one active ${kind.toLowerCase()} stage.` })
   if (new Set(value.stages.map(stage => stage.name.toLowerCase())).size !== value.stages.length) ctx.addIssue({ code: "custom", path: ["stages"], message: "Stage names must be unique within the pipeline." })
   const ids = value.stages.flatMap(stage => stage.id ? [stage.id] : [])

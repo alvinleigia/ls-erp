@@ -1,5 +1,5 @@
 "use client"
-import Link from "next/link"
+import Link from "@/platform/access/link"
 import { FormField } from "@/components/form-field"
 import { RecordSelect } from "./record-select"
 import { CrmTextarea } from "./crm-controls"

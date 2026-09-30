@@ -1,6 +1,7 @@
 "use client"
+import { useBusinessModules } from "@/platform/module-provider"
 import * as React from "react"
-import Link from "next/link"
+import Link from "@/platform/access/link"
 import { Button } from "@/components/ui/button"
 import { DataTable } from "@/components/data-table"
 import { getCoreRowModel, useReactTable, type ColumnDef } from "@tanstack/react-table"
@@ -13,6 +14,7 @@ import type { CrmOpportunityRow } from "@/types/crm"
 import type { Project } from "@/types/real-estate"
 
 export function ProjectSales({ project }: { project: Project }) {
+  const { can } = useBusinessModules()
   const projectId = project.parentId || project.id, subprojectId = project.parentId ? project.id : undefined
   const query = new URLSearchParams({ projectId, ...(subprojectId ? { subprojectId } : {}) }).toString()
   const active = !project.archived && !project.parent?.archived
@@ -20,8 +22,8 @@ export function ProjectSales({ project }: { project: Project }) {
     <CrmSection title="Sales work" description="Only records you can access are shown. Project membership does not grant access to other salespeople's leads or deals.">
       <div className="flex flex-wrap gap-2">{active && <><Button asChild><Link href={`/crm/enquiries/new?${query}`}>New lead</Link></Button><Button variant="outline" asChild><Link href={`/crm/opportunities/new?${query}`}>New opportunity</Link></Button></>}{project.canManage && <Button variant="outline" asChild><Link href="/crm/pipelines/new?template=property">Create property sales pipeline</Link></Button>}</div>
     </CrmSection>
-    <RecordList key={`leads-${query}`} kind="enquiries" projectId={projectId} subprojectId={subprojectId} />
-    <RelatedOpportunities key={`deals-${query}`} query={query} />
+    {can("enquiries.read") && <RecordList key={`leads-${query}`} kind="enquiries" projectId={projectId} subprojectId={subprojectId} />}
+    {can("opportunities.read") && <RelatedOpportunities key={`deals-${query}`} query={query} />}
 
   </>
 }

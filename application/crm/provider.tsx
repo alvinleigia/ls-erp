@@ -8,8 +8,8 @@ import { realEstateCrmView } from "@/modules/real-estate/components/crm-extensio
 import { OpportunityDocuments } from "@/modules/sales-documents/components/quotations"
 
 export function ApplicationCrmProvider({ children }: { children: React.ReactNode }) {
-  const { enabled } = useBusinessModules()
-  const documents = enabled("salesDocuments")
+  const { enabled, can } = useBusinessModules()
+  const documents = enabled("salesDocuments") && can("quotations.read")
   const view = useMemo(() => ({ ...realEstateCrmView, OpportunityPanels: documents ? OpportunityDocuments : undefined }), [documents])
   return <CrmExtensionProvider view={view}>{children}</CrmExtensionProvider>
 }

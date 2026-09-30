@@ -14,6 +14,10 @@ write("tsconfig.json", JSON.stringify({ compilerOptions: { target: "ES2017", lib
 write("app/layout.tsx", `import '../../../app/globals.css'; export default function Layout({children}:{children:React.ReactNode}) { return <html lang="en" className="dark"><body style={{fontFamily:'Arial,sans-serif'}}><div className="flex min-h-screen"><aside className="hidden w-64 shrink-0 border-r p-6 lg:block">Real Estate</aside><main className="min-w-0 flex-1 p-4 sm:p-8" style={{containerType:'inline-size'}}>{children}</main></div></body></html> }`)
 write("app/[[...route]]/page.tsx", `"use client";
 import {Suspense} from 'react'; import {usePathname,useSearchParams} from 'next/navigation';
+import { AccessRoles } from '@/platform/access/role-controls';
+import { BusinessViewGuard } from '@/platform/access/view-guard';
+import { ModuleControls } from '@/platform/module-controls';
+import TenantsPageClient from '@/app/(protected)/settings/tenants/tenants-page-client';
 import {ProjectEditor} from '@/modules/real-estate/components/project-editor';
 import { SessionProvider } from 'next-auth/react';
 import { BusinessModuleProvider } from '@/platform/module-provider';
@@ -35,10 +39,13 @@ import { PropertyChoiceEditor } from '@/modules/real-estate/components/choice-ed
 import { ActivityTypeList } from '@/modules/crm/components/activity-type-list';
 function Preview(){
  const path=usePathname().split('/'), query=useSearchParams(), key=path[2]==='configuration'?path[3]:path[2], raw=path[2]==='configuration'?path[4]:path[3], id=raw==='new'?undefined:raw;
- if(key==='projects')return <ProjectEditor key={id || query.get('parentId') || 'new'} id={id} parentId={query.get('parentId') || undefined}/>;
+ if(key==='roles')return <AccessRoles/>;
+ if(key==='modules')return <ModuleControls tenantId={query.get('tenant') || undefined}/>;
+ if(key==='tenants')return <TenantsPageClient rootDomain='example.test' platformAccessMode='SUPER_ADMIN'/>;
+ if(key==='projects')return <BusinessModuleProvider><ProjectEditor key={id || query.get('parentId') || 'new'} id={id} parentId={query.get('parentId') || undefined}/></BusinessModuleProvider>;
  const editors:any={enquiries:EnquiryEditor,opportunities:OpportunityEditor,contacts:ContactEditor,accounts:AccountEditor,activities:WorkEditor,'activity-plans':ActivityPlanEditor,'follow-up-rules':FollowUpRuleEditor,pipelines:PipelineEditor,'sales-teams':SalesTeamEditor,'custom-fields':CustomFieldEditor,quotations:QuotationEditor,'quotation-templates':QuotationEditor,'lead-sources':LeadSourceList,'lost-reasons':LostReasonList,'activity-types':ActivityTypeList};
  const Editor=key==='real-estate'?PropertyChoiceEditor:editors[key];
- return <SessionProvider session={{user:{id:'admin',name:'Test Admin',role:'ADMIN'},expires:'2099-01-01'}}><BusinessModuleProvider><ApplicationCrmProvider>{Editor && <Editor key={key+raw} id={key==='real-estate'?path[5]:id} kind={path[4]} template={key==='quotation-templates'} revision={Number(query.get('revision'))||undefined}/>}</ApplicationCrmProvider></BusinessModuleProvider></SessionProvider>
+ return <SessionProvider session={{user:{id:'admin',name:'Test Admin',role:'ADMIN'},expires:'2099-01-01'}}><BusinessModuleProvider><ApplicationCrmProvider><BusinessViewGuard>{Editor && <Editor key={key+raw} id={key==='real-estate'?path[5]:id} kind={path[4]} enquiryId={query.get('enquiryId') || undefined} template={key==='quotation-templates'} revision={Number(query.get('revision'))||undefined}/>}</BusinessViewGuard></ApplicationCrmProvider></BusinessModuleProvider></SessionProvider>
 }
 export default function Page(){return <Suspense><Preview/></Suspense>}`)
 const cli = path.join(root, "node_modules/next/dist/bin/next")

@@ -3,7 +3,7 @@ import { withCrmRecordView, useCrmRecordView, CrmRecordForm } from "@/modules/cr
 import { QuotationSummary } from "./quotation-summary"
 import * as React from "react"
 import { useBusinessModules } from "@/platform/module-provider"
-import Link from "next/link"
+import Link from "@/platform/access/link"
 import { useRouter } from "next/navigation"
 import { getCoreRowModel, useReactTable, type ColumnDef } from "@tanstack/react-table"
 import { DataTable } from "@/components/data-table"
@@ -119,7 +119,7 @@ function QuotationEditorBody({ id, opportunityId: initialOpportunityId, template
   const editable = !failed && !unavailable && !scheduleLocked && !oldVersion && (!template || canManage)
   if (loading) return <p>Loading document…</p>
   return <div className={crmPageClass}>
-    <CrmPageHeader title={template ? id ? name || "Quotation template" : "New quotation template" : id ? `${document?.title || "Quotation"} · version ${document?.revision}` : "New quotation"} backHref={back} actions={<CrmFormActions form="quotation-form" cancelHref={back} saving={saving} disabled={failed || unavailable || scheduleLocked || oldVersion} canSave={!template || canManage} saveLabel={template ? "Save template" : id ? "Save new version" : "Save document"}>{document && <Button asChild variant="outline"><a href={`/api/crm/quotations/${document.id}/pdf?revision=${document.revision}`} target="_blank" rel="noreferrer">Download saved PDF</a></Button>}</CrmFormActions>} />
+    <CrmPageHeader title={template ? id ? name || "Quotation template" : "New quotation template" : id ? `${document?.title || "Quotation"} · version ${document?.revision}` : "New quotation"} backHref={back} actions={<CrmFormActions form="quotation-form" cancelHref={back} saving={saving} disabled={failed || unavailable || scheduleLocked || oldVersion} canSave={!template || canManage} saveLabel={template ? "Save template" : id ? "Save new version" : "Save document"}>{document && modules.can("quotations.export") && <Button asChild variant="outline"><a href={`/api/crm/quotations/${document.id}/pdf?revision=${document.revision}`} target="_blank" rel="noreferrer">Download saved PDF</a></Button>}</CrmFormActions>} />
 
     {scheduleLocked && <p className="rounded-lg border p-4 text-sm">Payment Plans is disabled. This saved schedule is read-only. Enable Payment Plans to make changes.</p>}
     {unavailable && !modules.loading && <p role="alert">Sales Documents is not enabled.</p>}

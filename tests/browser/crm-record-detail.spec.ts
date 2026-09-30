@@ -4,14 +4,15 @@ import { calculateQuotation } from "../../modules/sales-documents/quotation-calc
 
 test.beforeEach(({ baseURL }) => { test.skip(baseURL !== "http://127.0.0.1:3012", "Isolated component host only; all APIs intercepted.") })
 
-async function fixture(page: Page, options: { manager?: boolean; documents?: boolean; plans?: boolean } = {}) {
+async function fixture(page: Page, options: { manager?: boolean; documents?: boolean; plans?: boolean; conversionDefault?: boolean } = {}) {
   const manager = options.manager !== false
   const common = { id: "test", version: 2, archived: false, canManage: manager, canEdit: manager }
   const contact = { ...common, name: "Alex Taylor", email: "alex@example.com", phone: "+919876543210" }
   const account = { ...common, name: "Taylor Enterprises", email: "office@example.com", phone: "", website: "", notes: "Development partner" }
   const assignee = { id: "admin", name: "Test Admin" }
-  const stage = { id: "stage", name: "Qualified", kind: "OPEN", probability: 30, color: "#64748b", archived: false }
+  const stage = { isConversionDefault: options.conversionDefault || false, id: "stage", name: "Qualified", kind: "OPEN", probability: 30, color: "#64748b", archived: false }
   const pipeline = { ...common, name: "Property sales", stages: [stage, { ...stage, id: "won", name: "Won", kind: "WON", probability: 100 }, { ...stage, id: "lost", name: "Lost", kind: "LOST", probability: 0 }] }
+  if (options.conversionDefault) pipeline.stages.unshift({ ...stage, id: "first", name: "Discovery", probability: 10, isConversionDefault: false })
   const enquiry = { ...common, title: "Apartment enquiry", contact, contactId: "test", assignedUserId: "admin", assignee, status: "QUALIFIED", requirements: "Three bedrooms", sourceId: null, source: "Referral", sourceChoice: null, customFields: [], createdAt: "2026-09-28T10:00:00Z", updatedAt: "2026-09-28T10:00:00Z", creator: assignee, realEstateEnabled: false }
   const opportunity = { ...enquiry, title: "Apartment opportunity", amount: "5000000", currency: "INR", pipelineId: "test", pipeline, stageId: "stage", stage, probability: 30, expectedCloseOn: "2026-10-30", outcome: "OPEN" }
   const step = { title: "Follow up", type: "CALL", callDirection: "OUTBOUND", dayOffset: 1, description: "Discuss requirements", priority: 2, reminderTime: "10:00" }
@@ -44,14 +45,15 @@ async function fixture(page: Page, options: { manager?: boolean; documents?: boo
     reads.push(path)
     if (row) return route.fulfill({ json: match![1] === "quotations" && url.searchParams.has("revision") ? { ...quote, revision: Number(url.searchParams.get("revision")) } : row })
     if (path === "/api/real-estate/choices/property-categories/test") return route.fulfill({ json: { ...common, name: "Apartment", position: 0, isDefault: true } })
-    if (path === "/api/modules") return route.fulfill({ json: { modules: [{ key: "crm", enabled: true }, { key: "salesDocuments", enabled: options.documents !== false }, { key: "paymentPlans", enabled: options.plans !== false }] } })
+    if (path === "/api/crm/pipelines") return route.fulfill({ json: { ...list, items: [pipeline], total: 1 } })
+    if (path === "/api/modules") return route.fulfill({ json: { permissions: null, modules: [{ key: "crm", allowed: true, enabled: true }, { key: "salesDocuments", allowed: true, enabled: options.documents !== false }, { key: "paymentPlans", allowed: true, enabled: options.plans !== false }] } })
     if (path === "/api/settings/display") return route.fulfill({ json: { settings: { currency: "INR", locale: "en-IN", dateFormat: "dd/MM/yyyy", timeZone: "Asia/Kolkata" } } })
     if (path.includes("custom-fields/form")) return route.fulfill({ json: [] })
     if (["lead-sources", "lost-reasons", "activity-types"].some(key => path === `/api/crm/${key}`)) return route.fulfill({ json: { ...list, items: [{ ...common, name: "Configured choice", baseType: "CALL", defaultInstructions: "Call customer" }], total: 1 } })
     if (path.endsWith("/follow-up-preview")) return route.fulfill({ json: { rule: null } })
     return route.fulfill({ json: list })
   })
-  return { reads, writes, conflict: () => { conflict = true } }
+  return { reads, writes, pipeline, conflict: () => { conflict = true } }
 }
 
 for (const [route, field, section] of [
@@ -143,7 +145,7 @@ test("optional document modules and staff permissions remain enforced", async ({
 
 for (const route of ["lead-sources", "lost-reasons", "activity-types"]) test(`${route}: shared configuration panel guards discard`, async ({ page }) => {
   const state = await fixture(page)
-  await page.goto(`/crm/configuration/${route}`)
+  await page.goto(`/crm/${route}`)
   await page.getByRole("button", { name: "Edit Configured choice" }).click()
   await page.getByRole("dialog").getByRole("textbox").first().fill("Uncommitted change")
   await page.getByRole("button", { name: "Cancel", exact: true }).click()
@@ -188,4 +190,46 @@ test("failed record loads stay visible outside the closed editor", async ({ page
   await expect(page.getByRole("main").getByRole("alert")).toHaveText("Enquiry not found.")
   await expect(page.getByRole("button", { name: "Edit details", exact: true })).toBeDisabled()
   await expect(page.getByRole("textbox")).toHaveCount(0)
+})
+
+
+test("pipeline conversion default can be selected, reordered, saved and cleared", async ({ page }, info) => {
+  const state = await fixture(page, { conversionDefault: true })
+  await page.goto("/crm/pipelines/test")
+  await page.getByRole("button", { name: "Edit pipeline configuration", exact: true }).click()
+  const selector = page.getByLabel("Default conversion stage", { exact: true })
+  await expect(selector).toContainText("Qualified")
+  await page.getByRole("button", { name: "Move Qualified up", exact: true }).click()
+  await expect(selector).toContainText("Qualified")
+  await selector.click()
+  await expect(page.getByRole("menuitemradio", { name: "Won", exact: true })).toHaveCount(0)
+  await page.getByRole("menuitemradio", { name: "Discovery", exact: true }).click()
+  await page.screenshot({ path: info.outputPath("conversion-default.png"), fullPage: true })
+  await page.getByRole("button", { name: "Save changes", exact: true }).click()
+  await expect(page.getByRole("dialog")).toHaveCount(0)
+  const stages = state.writes[0].body.stages as { name: string; isConversionDefault: boolean }[]
+  expect(stages.filter(s => s.isConversionDefault).map(s => s.name)).toEqual(["Discovery"])
+  await page.reload()
+  await page.getByRole("button", { name: "Edit pipeline configuration", exact: true }).click()
+  await expect(selector).toContainText("Discovery")
+  await selector.click()
+  await page.getByRole("menuitemradio", { name: "Automatic (first active open stage)", exact: true }).click()
+  await page.getByRole("button", { name: "Save changes", exact: true }).click()
+  await expect(page.getByRole("dialog")).toHaveCount(0)
+  expect((state.writes[1].body.stages as typeof stages).some(s => s.isConversionDefault)).toBe(false)
+})
+
+test("enquiry conversion prefills configured stage and probability while respecting overrides and direct creation", async ({ page }) => {
+  await fixture(page, { conversionDefault: true, documents: false })
+  await page.goto("/crm/opportunities/new?enquiryId=test")
+  await expect(page.getByLabel("Stage", { exact: true })).toContainText("Qualified")
+  await expect(page.getByLabel("Probability %", { exact: true })).toHaveValue("30")
+  await page.getByLabel("Stage", { exact: true }).click()
+  await page.getByRole("menuitemradio", { name: "Discovery", exact: true }).click()
+  await expect(page.getByLabel("Probability %", { exact: true })).toHaveValue("10")
+  await page.getByLabel("Opportunity title", { exact: true }).fill("Manual override")
+  await expect(page.getByLabel("Stage", { exact: true })).toContainText("Discovery")
+  await page.goto("/crm/opportunities/new")
+  await expect(page.getByLabel("Stage", { exact: true })).toContainText("Discovery")
+  await expect(page.getByLabel("Probability %", { exact: true })).toHaveValue("10")
 })

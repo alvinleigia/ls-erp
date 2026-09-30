@@ -1,3 +1,5 @@
+import { requireWriteFields, requirePermission } from "@/platform/access/policy"
+import type { PermissionRun } from "@/platform/access/server"
 import { resolveSalesTeam, teamSelect } from "./team-service"
 import { splitCustomFields } from "@/platform/custom-fields/validation"
 import { readCustomFields, saveCustomFields, customFieldFilter, customFieldExport, copySharedFields } from "@/platform/custom-fields/values"
@@ -15,7 +17,7 @@ import type { CrmExtensions } from "./extensions"
 
 type Tx = Prisma.TransactionClient
 type Context = {
-  run: <T>(operation: (tx: Tx, actor: CrmActor) => Promise<T>) => Promise<T>
+  run: PermissionRun
   audit: (tx: Tx, actor: CrmActor, event: string, id: string, before?: Prisma.InputJsonValue, after?: Prisma.InputJsonValue) => Promise<void>
   checkAssignee: (tx: Tx, actor: CrmActor, id: string) => Promise<void>
 }
@@ -60,7 +62,7 @@ export function createSalesService<Fields extends object, Metadata extends objec
   return {
     listPipelines(input: unknown) {
       const query = crmListSchema.parse(input)
-      return run(async (tx, actor) => {
+      return run("pipelines.read", async (tx, actor) => {
         const where = { tenantId: actor.tenantId, archived: query.archived === "true", name: { contains: query.q, mode: "insensitive" as const } }
         const [items, total] = await Promise.all([
           tx.crmPipeline.findMany({ where, orderBy: [{ name: "asc" }, { id: "asc" }], skip: (query.page - 1) * query.pageSize, take: query.pageSize }), tx.crmPipeline.count({ where }),
@@ -69,7 +71,7 @@ export function createSalesService<Fields extends object, Metadata extends objec
       })
     },
     getPipeline(id: string) {
-      return run(async (tx, actor) => {
+      return run("pipelines.read", async (tx, actor) => {
         const record = await tx.crmPipeline.findFirst({ where: { tenantId: actor.tenantId, id }, include: { stages } })
         if (!record) throw new CrmError(404, "Pipeline not found.")
         return { ...record, canManage: canManageCrm(actor.role) }
@@ -77,10 +79,11 @@ export function createSalesService<Fields extends object, Metadata extends objec
     },
     createPipeline(input: unknown) {
       const data = pipelineSchema.parse(input)
-      return run(async (tx, actor) => {
+      return run("pipelines.create", async (tx, actor) => { requireWriteFields(actor, "pipelines", undefined, data);
         manage(actor)
         if (data.stages.some(stage => stage.id)) throw new CrmError(400, "New stages must not supply IDs.")
         const pipeline = await tx.crmPipeline.create({ data: { tenantId: actor.tenantId, name: data.name, archived: data.archived } })
+        for (const stage of data.stages) requireWriteFields(actor, "pipelines", undefined, stage)
         for (const [position, stage] of data.stages.entries()) await tx.crmStage.create({ data: { ...stage, position, tenantId: actor.tenantId, pipelineId: pipeline.id } })
         await audit(tx, actor, "crm.pipeline.created", pipeline.id, undefined, data)
         return tx.crmPipeline.findFirstOrThrow({ where: { tenantId: actor.tenantId, id: pipeline.id }, include: { stages } })
@@ -88,12 +91,14 @@ export function createSalesService<Fields extends object, Metadata extends objec
     },
     updatePipeline(id: string, input: unknown) {
       const data = pipelineUpdateSchema.parse(input)
-      return run(async (tx, actor) => {
+      return run("pipelines.edit", async (tx, actor) => {
         manage(actor)
         const before = await tx.crmPipeline.findFirst({ where: { tenantId: actor.tenantId, id }, include: { stages } })
+        requireWriteFields(actor, "pipelines", before ?? undefined, data)
         if (!before) throw new CrmError(404, "Pipeline not found.")
         if (before.stages.some(stage => !data.stages.some(next => next.id === stage.id))) throw new CrmError(409, "Archive existing stages instead of removing them, so history is preserved.")
         for (const stage of data.stages) {
+          requireWriteFields(actor, "pipelines", before.stages.find(item => item.id === stage.id), stage)
           if (!stage.id) continue
           const old = before.stages.find(item => item.id === stage.id)
           if (!old) throw new CrmError(400, "A stage belongs to another pipeline.")
@@ -101,6 +106,9 @@ export function createSalesService<Fields extends object, Metadata extends objec
         }
         const updated = await tx.crmPipeline.updateMany({ where: { tenantId: actor.tenantId, id, version: data.version }, data: { name: data.name, archived: data.archived, version: { increment: 1 } } })
         if (!updated.count) throw new CrmError(409, "This pipeline changed. Refresh before saving.")
+        // Clear first so switching defaults is independent of stage order. The
+        // pipeline version lock and transaction keep this change atomic.
+        await tx.crmStage.updateMany({ where: { tenantId: actor.tenantId, pipelineId: id, isConversionDefault: true }, data: { isConversionDefault: false } })
         for (const [position, stage] of data.stages.entries()) {
           const { id: stageId, ...fields } = stage
           if (stageId) await tx.crmStage.updateMany({ where: { tenantId: actor.tenantId, pipelineId: id, id: stageId }, data: { ...fields, position } })
@@ -112,7 +120,7 @@ export function createSalesService<Fields extends object, Metadata extends objec
     },
     listOpportunities(input: unknown, exporting = false) {
       const query = opportunityListSchema.parse(input)
-      return run(async (tx, actor) => {
+      return run(exporting ? ["opportunities.read", "opportunities.export"] : "opportunities.read", async (tx, actor) => {
         const extensionFilter = await extensions.filters(tx, actor, query)
         const where: Prisma.CrmOpportunityWhereInput = { AND: [scope(actor), {
           salesTeamId: query.salesTeamId, pipelineId: query.pipelineId, stageId: query.stageId, assignedUserId: query.assignedUserId, sourceId: query.sourceId, lostReasonId: query.lostReasonId,
@@ -134,14 +142,15 @@ export function createSalesService<Fields extends object, Metadata extends objec
         return { ...page(decorated.items.map(item => ({ ...item, overdueActivityCount: counts.get(item.id) || 0 })), total, query.page, query.pageSize), ...decorated.metadata, customFieldExport: exporting ? await customFieldExport(tx, actor, opportunityFields, items.map(item => item.id)) : undefined }
       })
     },
-    getOpportunity(id: string) { return run((tx, actor) => find(tx, actor, id)) },
+    getOpportunity(id: string) { return run("opportunities.read", (tx, actor) => find(tx, actor, id)) },
     createOpportunity(input: unknown) {
       const custom = splitCustomFields(input)
       const { core, extension } = extensions.splitWrite(custom.core)
       const { enquiryVersion, ...data } = opportunitySchema.parse(core)
-      return run(async (tx, actor) => {
+      return run("opportunities.create", async (tx, actor) => { requireWriteFields(actor, "opportunities", undefined, data);
         let sourceEnquiry: CrmEnquiry | null = null
         if (data.enquiryId) {
+          requirePermission(actor, "enquiries.read")
           const enquiry = await tx.crmEnquiry.findFirst({ where: { ...enquiryScope(actor), id: data.enquiryId } })
           if (!enquiry) throw new CrmError(404, "Enquiry not found.")
           const existing = await tx.crmOpportunity.findFirst({ where: { tenantId: actor.tenantId, enquiryId: enquiry.id } })
@@ -185,8 +194,9 @@ export function createSalesService<Fields extends object, Metadata extends objec
       const custom = splitCustomFields(input)
       const { core, extension } = extensions.splitWrite(custom.core)
       const { version, ...data } = opportunityUpdateSchema.parse(core)
-      return run(async (tx, actor) => {
+      return run("opportunities.edit", async (tx, actor) => {
         const before = await find(tx, actor, id)
+        requireWriteFields(actor, "opportunities", before ?? undefined, data)
         if (before.enquiryId && before.contactId !== data.contactId) throw new CrmError(409, "A converted opportunity keeps the enquiry's contact.")
         if (before.contactId !== data.contactId && await tx.crmTask.count({ where: { tenantId: actor.tenantId, opportunityId: id } })) throw new CrmError(409, "This opportunity has activities. Keep its contact to preserve interaction history.")
         await checkAssignee(tx, actor, data.assignedUserId)
@@ -211,8 +221,9 @@ export function createSalesService<Fields extends object, Metadata extends objec
     },
     moveOpportunity(id: string, input: unknown) {
       const data = opportunityMoveSchema.parse(input)
-      return run(async (tx, actor) => {
+      return run("opportunities.edit", async (tx, actor) => {
         const before = await find(tx, actor, id)
+        requireWriteFields(actor, "opportunities", before ?? undefined, data)
         if (before.version !== data.version) throw new CrmError(409, "This opportunity changed. Refresh before moving it.")
         const stage = await destination(tx, actor, data.pipelineId, data.stageId)
         if (before.stageId === stage.id) return before
@@ -228,7 +239,7 @@ export function createSalesService<Fields extends object, Metadata extends objec
     },
     listOpportunityActivity(id: string, input: unknown) {
       const query = crmListSchema.parse(input)
-      return run(async (tx, actor) => {
+      return run("opportunities.read", async (tx, actor) => {
         await find(tx, actor, id)
         const where = { tenantId: actor.tenantId, opportunityId: id }
         const [items, total] = await Promise.all([
@@ -239,7 +250,7 @@ export function createSalesService<Fields extends object, Metadata extends objec
     },
     addOpportunityNote(id: string, input: unknown) {
       const data = crmNoteSchema.parse(input)
-      return run(async (tx, actor) => {
+      return run("opportunities.edit", async (tx, actor) => {
         await find(tx, actor, id)
         await history(tx, actor, id, "crm.opportunity.note.added", data.message, undefined, data)
         return { success: true }

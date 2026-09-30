@@ -1,5 +1,5 @@
 "use client"
-import Link from "next/link"
+import Link from "@/platform/access/link"
 import { ArrowRight } from "lucide-react"
 import { CrmSection } from "@/modules/crm/components/crm-section"
 import { choiceKinds, choiceTitles } from "../choices"

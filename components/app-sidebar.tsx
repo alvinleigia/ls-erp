@@ -111,7 +111,7 @@ export function AppSidebar() {
     platformAccessMode === "SUPER_ADMIN"
   const [openSections, setOpenSections] = React.useState<Record<string, boolean>>({})
   const [logoLoadFailed, setLogoLoadFailed] = React.useState(false)
-  const { flags } = useBusinessModules()
+  const { flags, permissions } = useBusinessModules()
 
   const name = user?.name?.trim() || user?.email?.trim() || "Guest"
   const initials = name
@@ -123,7 +123,7 @@ export function AppSidebar() {
 
   const sections = React.useMemo<NavSection[]>(() => {
     const list: NavSection[] = []
-    if (!isPlatformConsoleUser && canUseCrm(role)) list.push(...businessNavigation(flags))
+    if (!isPlatformConsoleUser && canUseCrm(role)) list.push(...businessNavigation(flags, permissions))
 
     if (!isPlatformSuperAdmin && (canManage || role === "STAFF")) {
       const leavesItems: SubNavItem[] = []
@@ -331,6 +331,7 @@ export function AppSidebar() {
               ]
           : [
               { title: "General", href: "/settings", icon: SettingsIcon, isActive: (current) => current === "/settings" },
+              { title: "Access roles", href: "/settings/roles", icon: UsersIcon, isActive: (current) => current.startsWith("/settings/roles") },
               { title: "Modules", href: "/settings/modules", icon: PackageIcon, isActive: (current) => current === "/settings/modules" },
               { title: "Taxes", href: "/settings/taxes", icon: TagIcon, isActive: (current) => current === "/settings/taxes" },
               { title: "Seeds", href: "/settings/seeds", icon: PackageIcon, isActive: (current) => current === "/settings/seeds" },
@@ -339,7 +340,7 @@ export function AppSidebar() {
     }
 
     return list
-  }, [canManage, isPlatformConsoleUser, isPlatformSuperAdmin, role, flags])
+  }, [canManage, isPlatformConsoleUser, isPlatformSuperAdmin, role, flags, permissions])
 
   const menuButtonClass = (active: boolean) =>
     cn("transition-colors", active && "bg-sidebar-primary/20 text-sidebar-primary font-semibold")

@@ -1,3 +1,5 @@
+import { requireWriteFields } from "@/platform/access/policy"
+import type { PermissionRun } from "@/platform/access/server"
 import type { Prisma } from "@prisma/client"
 import { z } from "zod"
 import { crmListSchema } from "./validation"
@@ -5,7 +7,7 @@ import { CrmError, canManageCrm, type CrmActor } from "./policy"
 
 type Tx = Prisma.TransactionClient
 type Context = {
-  run: <T>(operation: (tx: Tx, actor: CrmActor) => Promise<T>) => Promise<T>
+  run: PermissionRun
   audit: (tx: Tx, actor: CrmActor, event: string, id: string, before?: Prisma.InputJsonValue, after?: Prisma.InputJsonValue) => Promise<void>
 }
 export const salesTeamSchema = z.object({
@@ -42,7 +44,7 @@ export function createTeamService({ run, audit }: Context) {
   return {
     listSalesTeams(input: unknown) {
       const q = crmListSchema.parse(input)
-      return run(async (tx, actor) => {
+      return run("salesTeams.read", async (tx, actor) => {
         const where = { ...teamScope(actor), ...(q.includeArchived === "true" ? {} : { archived: q.archived === "true" }), name: { contains: q.q, mode: "insensitive" as const } }
         const [items, total] = await Promise.all([
           tx.crmSalesTeam.findMany({ where, orderBy: [{ name: "asc" }, { id: "asc" }], skip: (q.page - 1) * q.pageSize, take: q.pageSize, include: { _count: { select: { members: true } } } }), tx.crmSalesTeam.count({ where }),
@@ -51,7 +53,7 @@ export function createTeamService({ run, audit }: Context) {
       })
     },
     getSalesTeam(id: string) {
-      return run(async (tx, actor) => {
+      return run("salesTeams.read", async (tx, actor) => {
         const team = await tx.crmSalesTeam.findFirst({ where: { ...teamScope(actor), id } })
         if (!team) throw new CrmError(404, "Sales team not found.")
         return { ...team, canManage: canManageCrm(actor.role) }
@@ -59,9 +61,10 @@ export function createTeamService({ run, audit }: Context) {
     },
     saveSalesTeam(input: unknown, id?: string) {
       const { version, ...data } = salesTeamSchema.parse(input)
-      return run(async (tx, actor) => {
+      return run(id ? "salesTeams.edit" : "salesTeams.create", async (tx, actor) => {
         manage(actor)
         const before = id ? await tx.crmSalesTeam.findUnique({ where: { tenantId_id: { tenantId: actor.tenantId, id } } }) : null
+        requireWriteFields(actor, "salesTeams", before ?? undefined, data)
         if (id && !before) throw new CrmError(404, "Sales team not found.")
         if (before && before.version !== version) throw new CrmError(409, "This team changed. Refresh before saving.")
         const record = before
@@ -73,7 +76,7 @@ export function createTeamService({ run, audit }: Context) {
     },
     listSalesTeamMembers(id: string, input: unknown) {
       const q = crmListSchema.parse(input)
-      return run(async (tx, actor) => {
+      return run("salesTeams.read", async (tx, actor) => {
         manage(actor)
         if (!await tx.crmSalesTeam.findUnique({ where: { tenantId_id: { tenantId: actor.tenantId, id } } })) throw new CrmError(404, "Sales team not found.")
         const where = { tenantId: actor.tenantId, teamId: id, user: { name: { contains: q.q, mode: "insensitive" as const } } }
@@ -83,7 +86,7 @@ export function createTeamService({ run, audit }: Context) {
     },
     changeSalesTeamMember(id: string, input: unknown) {
       const data = memberSchema.parse(input)
-      return run(async (tx, actor) => {
+      return run("salesTeams.assign", async (tx, actor) => {
         manage(actor)
         const team = await tx.crmSalesTeam.findUnique({ where: { tenantId_id: { tenantId: actor.tenantId, id } } })
         if (!team) throw new CrmError(404, "Sales team not found.")

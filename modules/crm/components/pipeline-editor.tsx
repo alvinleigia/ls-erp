@@ -41,11 +41,11 @@ function PipelineEditorBody({ id, template }: { id?: string; template?: Pipeline
       const data = await response.json()
       if (!response.ok) throw new Error(data.error || "Unable to load pipeline.")
       setCanManage(data.canManage)
-      if (id) { setRecord(data); setValues({ name: data.name, archived: data.archived, stages: data.stages.map(({ id, name, kind, probability, color, archived }: CrmPipelineRow["stages"][number]) => ({ id, name, kind, probability, color, archived })) }) }
+      if (id) { setRecord(data); setValues({ name: data.name, archived: data.archived, stages: data.stages.map(({ id, name, kind, probability, color, archived, isConversionDefault }: CrmPipelineRow["stages"][number]) => ({ id, name, kind, probability, color, archived, isConversionDefault })) }) }
     }).catch(error => { if (!controller.signal.aborted) setError(error.message) }).finally(() => { if (!controller.signal.aborted) setLoading(false) })
     return () => controller.abort()
   }, [id])
-  const updateStage = (index: number, fields: Partial<PipelineInput["stages"][number]>) => setValues(previous => ({ ...previous, stages: previous.stages.map((stage, at) => at === index ? { ...stage, ...fields } : stage) }))
+  const updateStage = (index: number, fields: Partial<PipelineInput["stages"][number]>) => setValues(previous => ({ ...previous, stages: previous.stages.map((stage, at) => at === index ? { ...stage, ...fields, isConversionDefault: (fields.archived ?? stage.archived) || (fields.kind ?? stage.kind) !== "OPEN" ? false : stage.isConversionDefault } : stage) }))
   function reorder(index: number, offset: number) {
     setValues(previous => { const stages = [...previous.stages]; [stages[index], stages[index + offset]] = [stages[index + offset], stages[index]]; return { ...previous, stages } })
   }
@@ -57,19 +57,26 @@ function PipelineEditorBody({ id, template }: { id?: string; template?: Pipeline
       if (!response.ok) { setErrorsFromResponse(data); throw new Error(data.error || "Unable to save pipeline.") }
       view.done(); toast.success("Pipeline saved."); setConfirm(false)
       if (!id) router.push(`/crm/pipelines/${data.id}`)
-      else { setRecord(data); setValues({ name: data.name, archived: data.archived, stages: data.stages.map(({ id, name, kind, probability, color, archived }: CrmPipelineRow["stages"][number]) => ({ id, name, kind, probability, color, archived })) }) }
+      else { setRecord(data); setValues({ name: data.name, archived: data.archived, stages: data.stages.map(({ id, name, kind, probability, color, archived, isConversionDefault }: CrmPipelineRow["stages"][number]) => ({ id, name, kind, probability, color, archived, isConversionDefault })) }) }
     } catch (error) { setError((error as Error).message); setConfirm(false) } finally { setSaving(false) }
   }
   if (loading) return <p>Loading pipeline…</p>
   return <div className={crmPageClass}>
       <CrmPageHeader title={id ? "Configure pipeline" : "New pipeline"} backHref="/crm/pipelines" backLabel="Back to pipelines" actions={<CrmFormActions form="pipeline-form" cancelHref="/crm/pipelines" saving={saving} disabled={false} canSave={canManage} saveLabel="Save pipeline" />} />
     <CrmRecordForm id="pipeline-form" saving={saving} error={error} disabled={!canManage} fingerprint={values} initialSection="Pipeline configuration"
-      overview={record && <CrmSummarySection title="Pipeline configuration" canEdit={canManage} fields={[{ label: "Name", value: record.name }, { label: "Status", value: record.archived ? "Archived" : "Active" }]}><ol className="divide-y">{record.stages.map(stage => <li key={stage.id} className="flex flex-wrap justify-between gap-2 py-3 text-sm"><span>{stage.name}{stage.archived ? " (archived)" : ""}</span><span>{stage.kind} / {stage.probability}%</span></li>)}</ol></CrmSummarySection>} onSubmit={event => { event.preventDefault(); if (record && ((!record.archived && values.archived) || values.stages.some(stage => stage.archived && record.stages.some(old => old.id === stage.id && !old.archived)))) setConfirm(true); else void persist() }}>
+      overview={record && <CrmSummarySection title="Pipeline configuration" canEdit={canManage} fields={[{ label: "Name", value: record.name }, { label: "Status", value: record.archived ? "Archived" : "Active" }, { label: "Default conversion stage", value: record.stages.find(stage => stage.isConversionDefault)?.name || "Automatic (first active open stage)" }]}><ol className="divide-y">{record.stages.map(stage => <li key={stage.id} className="flex flex-wrap justify-between gap-2 py-3 text-sm"><span>{stage.name}{stage.archived ? " (archived)" : ""}</span><span>{stage.kind} / {stage.probability}%</span></li>)}</ol></CrmSummarySection>} onSubmit={event => { event.preventDefault(); if (record && ((!record.archived && values.archived) || values.stages.some(stage => stage.archived && record.stages.some(old => old.id === stage.id && !old.archived)))) setConfirm(true); else void persist() }}>
 
 
       {!canManage && <p>Only managers and administrators can configure pipelines.</p>}
       <CrmSection title="Pipeline configuration" description="Stages define your board. Keep at least one open, won and lost stage."><fieldset disabled={!canManage || saving} className="space-y-5">
         <FormField id="pipeline-name" label="Pipeline name" error={errors.name}><Input id="pipeline-name" required maxLength={100} value={values.name} onChange={event => setValues({ ...values, name: event.target.value })} /></FormField>
+        <FormField id="conversion-stage" label="Default conversion stage" error={errors.stages}>
+          <CrmSelect id="conversion-stage" className="w-full" value={String(values.stages.findIndex(stage => stage.isConversionDefault))} onValueChange={selected => setValues(previous => ({ ...previous, stages: previous.stages.map((stage, index) => ({ ...stage, isConversionDefault: index === Number(selected) })) }))}>
+            <option value="-1">Automatic (first active open stage)</option>
+            {values.stages.map((stage, index) => !stage.archived && stage.kind === "OPEN" ? <option key={stage.id || index} value={String(index)}>{stage.name || "New stage"}</option> : null)}
+          </CrmSelect>
+          <p className="text-xs text-muted-foreground">Used when converting enquiries into this pipeline. The salesperson can choose another stage. Archiving this stage or changing its outcome resets the default to Automatic.</p>
+        </FormField>
         <label className="flex items-center gap-2 text-sm"><CrmCheckbox  checked={values.archived} onChange={event => setValues({ ...values, archived: event.target.checked })} />Archive pipeline</label>
         <p className="text-sm text-muted-foreground">Stages define the board columns. Keep at least one open, won and lost stage. Existing deals keep their probability until edited or moved; archiving preserves deals and history.</p>
         {errors.stages && <p role="alert" className="text-destructive">{errors.stages}</p>}

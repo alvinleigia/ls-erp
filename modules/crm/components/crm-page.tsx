@@ -1,8 +1,9 @@
 "use client"
+import { useCurrentResourceAction } from "@/platform/access/view-guard"
 import { useCrmRecordView } from "./crm-record-view"
 
 import type { ReactNode } from "react"
-import Link from "next/link"
+import Link from "@/platform/access/link"
 import { useRouter } from "next/navigation"
 import { ArrowLeft, Search, SlidersHorizontal } from "lucide-react"
 import type { Table } from "@tanstack/react-table"
@@ -34,6 +35,8 @@ export function CrmFormActions({ form, cancelHref, saving, disabled, canSave = t
 }) {
   const router = useRouter()
   const view = useCrmRecordView()
+  const canEdit = useCurrentResourceAction("edit"), canCreate = useCurrentResourceAction("create")
+  canSave = canSave && (view?.existing ? canEdit : canCreate)
   if (view?.existing) return <>{children}{canSave && <Button type="button" disabled={disabled || saving} onClick={() => view.begin()}>Edit details</Button>}</>
   return <>{children}{canSave && <><Button type="button" variant="outline" disabled={saving} onClick={() => router.push(cancelHref)}>Cancel</Button><Button type="submit" form={form} loading={saving} loadingText={loadingText} disabled={disabled}>{saveLabel}</Button></>}</>
 }

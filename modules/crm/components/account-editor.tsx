@@ -58,7 +58,7 @@ function AccountEditorBody({ id }: { id?: string }) {
       <CrmPageHeader title={id ? account?.name || "Business account" : "New business account"} backHref="/crm/accounts" backLabel="Back to business accounts" actions={<CrmFormActions form="account-form" cancelHref="/crm/accounts" saving={saving} disabled={false} canSave={canEdit} saveLabel="Save account" />} />
     <CrmRecordForm id="account-form" onSubmit={save} saving={saving} error={error} disabled={!canEdit} fingerprint={values} initialSection="Account details"
       overview={account && <CrmSummarySection title="Account details" canEdit={canEdit} fields={[{ label: "Company", value: account.name }, { label: "Email", value: account.email }, { label: "Phone", value: account.phone }, { label: "Website", value: account.website }, { label: "Notes", value: account.notes }, { label: "Status", value: account.archived ? "Archived" : "Active" }]} />}
-      tabs={account ? [{ value: "contacts", label: "Contacts", content: <><p className="text-sm text-muted-foreground">Manage company links from the contact&apos;s page.</p><RecordList kind="contacts" accountId={account.id} /></> }] : []}>
+      tabs={account ? [{ value: "contacts", permission: "contacts.read" as const, label: "Contacts", content: <><p className="text-sm text-muted-foreground">Manage company links from the contact&apos;s page.</p><RecordList kind="contacts" accountId={account.id} /></> }] : []}>
 
 
       <CrmSection title="Account details" description="Company information and contact details."><fieldset disabled={!canEdit || saving} className="grid min-w-0 gap-5 sm:grid-cols-2">

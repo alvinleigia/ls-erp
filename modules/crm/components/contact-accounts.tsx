@@ -1,7 +1,7 @@
 "use client"
 import { CrmTablePagination } from "./crm-pagination"
 import * as React from "react"
-import Link from "next/link"
+import Link from "@/platform/access/link"
 import { type ColumnDef, getCoreRowModel, useReactTable } from "@tanstack/react-table"
 import { toast } from "sonner"
 import { Building2, Plus } from "lucide-react"

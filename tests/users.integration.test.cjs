@@ -25,12 +25,13 @@ logger.error = (_event, context) => { errors.push(context.error?.message || "Unk
 const users = require("../app/api/users/route.ts")
 const detail = require("../app/api/users/[id]/route.ts")
 const { prisma } = require("../lib/prisma.ts")
-const tenantA = "users_test_a", tenantB = "users_test_b"
+const suffix = require("node:crypto").randomUUID().replaceAll("-", "")
+const tenantA = `users_test_a_${suffix}`, tenantB = `users_test_b_${suffix}`
 const session = (tenantId = tenantA, role = "ADMIN") => ({ user: { tenantId, role, id: `${tenantId}_${role.toLowerCase()}` } })
 const request = (method, body, tenantId = tenantA, suffix = "") => new Request(`http://${tenantId}.localhost/api/users${suffix}`, {
   method, headers: { host: `${tenantId}.localhost`, "Content-Type": "application/json" }, ...(body ? { body: JSON.stringify(body) } : {}),
 })
-const input = { name: "CRM Test Staff", email: "new-staff@example.test", role: "STAFF", status: "ACTIVE", gender: "PREFER_NOT_TO_SAY", password: "SyntheticTest!2026", phone: "", image: "", marketingOptIn: false }
+const input = { name: "CRM Test Staff", email: `new-staff-${suffix}@example.test`, role: "STAFF", status: "ACTIVE", gender: "PREFER_NOT_TO_SAY", password: "SyntheticTest!2026", phone: "", image: "", marketingOptIn: false }
 const params = id => ({ params: Promise.resolve({ id }) })
 
 before(async () => {
@@ -44,6 +45,8 @@ before(async () => {
   }
 })
 after(async () => {
+  for (const table of ["RealEstateProjectStatus", "RealEstatePropertyCategory", "RealEstateBuyingTimeframe"]) await root.query(`DELETE FROM "${table}" WHERE "tenantId" IN ($1,$2)`, [tenantA, tenantB])
+  await root.query('DELETE FROM "TenantRoleAssignment" WHERE "tenantId" IN ($1,$2)', [tenantA, tenantB])
   await root.query('DELETE FROM "Tenant" WHERE id IN ($1,$2)', [tenantA, tenantB])
   await root.end()
   await Promise.all([global.prisma, global.prismaBypassClient, ...[...(global.prismaScopedClientCache?.values() || [])].map(entry => entry.client)].filter(Boolean).map(client => client.$disconnect()))
@@ -116,4 +119,27 @@ test("anonymous, non-admin and cross-tenant user management remain blocked", asy
 test("user API tenant context does not leak into unscoped database operations", async () => {
   await sessions.run(session(), () => users.GET(request("GET")))
   assert.equal(await prisma.user.count(), 0)
+})
+
+
+test("role APIs reject non-admins, enforce optimistic updates and return current permissions", async () => {
+ const roleApi = require('../app/api/access/roles/route.ts')
+ const roleDetail = require('../app/api/access/roles/[id]/route.ts')
+ const assignmentApi = require('../app/api/access/users/[id]/route.ts')
+ const modulesApi = require('../app/api/modules/route.ts')
+ assert.equal((await sessions.run(session(tenantA,'MANAGER'),()=>roleApi.GET(request('GET')))).status,403)
+ const created = await sessions.run(session(),()=>roleApi.POST(request('POST',{name:'Sales observer',permissions:['enquiries.read']})))
+ assert.equal(created.status,201); const accessRole=await created.json()
+ const assigned=await sessions.run(session(),()=>assignmentApi.PATCH(request('PATCH',{roleId:accessRole.id,previousRoleId:null}),params(`${tenantA}_staff`)))
+ assert.equal(assigned.status,200)
+ const flags=await sessions.run(session(tenantA,'STAFF'),()=>modulesApi.GET(request('GET')))
+ assert.deepEqual((await flags.json()).permissions,['enquiries.read'])
+ assert.equal((await sessions.run(session(),()=>roleDetail.PATCH(request('PATCH',{name:'Stale',permissions:[],version:2}),params(accessRole.id)))).status,409)
+ const saved=await sessions.run(session(),()=>users.POST(request('POST',{...input,email:`with-role-${suffix}@example.test`,accessRoleId:accessRole.id})))
+ assert.equal(saved.status,200); const newUser=(await saved.json()).user
+ assert.equal((await root.query('SELECT "roleId" FROM "TenantRoleAssignment" WHERE "userId"=$1',[newUser.id])).rows[0].roleId,accessRole.id)
+ assert.equal((await sessions.run(session(),()=>detail.PATCH(request('PATCH',{role:'STAFF'}),params(`${tenantA}_admin`)))).status,409)
+ await root.query('UPDATE "User" SET role=\'STAFF\' WHERE id=$1',[`${tenantA}_admin`])
+ assert.equal((await sessions.run(session(),()=>roleApi.GET(request('GET')))).status,403)
+ assert.equal((await sessions.run(session(),()=>users.POST(request('POST',{...input,email:`stale-${suffix}@example.test`})))).status,403)
 })

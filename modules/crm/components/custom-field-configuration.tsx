@@ -2,7 +2,7 @@
 import { withCrmRecordView, useCrmRecordView, CrmRecordForm, CrmSummarySection } from "./crm-record-view"
 import { SalesTeamSelect } from "./sales-teams"
 import * as React from "react"
-import Link from "next/link"
+import Link from "@/platform/access/link"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import { getCoreRowModel, useReactTable, type ColumnDef } from "@tanstack/react-table"

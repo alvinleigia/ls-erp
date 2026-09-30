@@ -19,6 +19,7 @@ async function fixture(page: Page, manager = true, subproject = false) {
       return route.fulfill({ json: project })
     }
     reads.push(req.url())
+    if (path === "/api/modules") return route.fulfill({ json: { permissions: null, modules: [{ key: "crm", allowed: true, enabled: true }, { key: "realEstate", allowed: true, enabled: true }] } })
     if (path === "/api/real-estate/projects/test" || path === "/api/real-estate/projects/parent") return route.fulfill({ json: project })
     if (path === "/api/real-estate/choices/defaults") return route.fulfill({ json: { "project-statuses": { id: "planning", name: "Pre launch" } } })
     if (path === "/api/settings/display") return route.fulfill({ json: { settings: { currency: "INR", dateFormat: "dd/MM/yyyy", timeZone: "Asia/Kolkata" } } })

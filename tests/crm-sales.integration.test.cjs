@@ -32,7 +32,7 @@ before(async () => {
   await root.tenant.createMany({ data: [{ id: a, slug: a, name: "Sales A" }, { id: b, slug: b, name: "Sales B" }] })
   const user = (tenantId, role, name) => root.user.create({ data: { tenantId, role, name, email: `${name}-${suffix}@example.test` } })
   admin = await user(a, "ADMIN", "admin"); manager = await user(a, "MANAGER", "manager"); staff = await user(a, "STAFF", "staff"); other = await user(a, "STAFF", "other"); customer = await user(a, "CUSTOMER", "customer"); adminB = await user(b, "ADMIN", "admin-b")
-  await root.tenantModule.createMany({ data: [a, b].flatMap(tenantId => [{ tenantId, key: "crm", enabled: true }, { tenantId, key: "realEstate", enabled: true }]) })
+  await root.tenantModule.createMany({ data: [a, b].flatMap(tenantId => [{ tenantId, key: "crm", allowed: true, enabled: true }, { tenantId, key: "realEstate", allowed: true, enabled: true }]) })
   await root.appSetting.create({ data: { tenantId: a, timeZone: "Asia/Kolkata" } })
   service = createCrmService(db, { tenantId: a, userId: manager.id }); reader = createCrmService(db, { tenantId: a, userId: staff.id }); second = createCrmService(dbB, { tenantId: b, userId: adminB.id })
   contact = await root.crmContact.create({ data: { tenantId: a, ownerUserId: staff.id, name: "Buyer" } })

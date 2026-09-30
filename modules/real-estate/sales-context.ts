@@ -10,7 +10,10 @@ type Tx = Prisma.TransactionClient
 type Kind = "enquiry" | "opportunity"
 const brief = { id: true, name: true, code: true, archived: true } as const
 const include = { project: { select: brief }, subproject: { select: brief } } as const
-export const realEstateEnabled = async (tx: Tx, tenantId: string) => !!(await tx.tenantModule.findUnique({ where: { tenantId_key: { tenantId, key: "realEstate" } } }))?.enabled
+export const realEstateEnabled = async (tx: Tx, tenantId: string) => {
+  const flag = await tx.tenantModule.findUnique({ where: { tenantId_key: { tenantId, key: "realEstate" } } })
+  return flag?.allowed === true && flag.enabled
+}
 export async function projectFilterChoices(tx: Tx, actor: BusinessActor, input: unknown) {
   if (!await realEstateEnabled(tx, actor.tenantId)) throw new BusinessError(403, "Real Estate is not enabled.")
   const query = projectListSchema.parse(input)

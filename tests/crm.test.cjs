@@ -133,3 +133,23 @@ test("business accounts normalize contact details and allow only safe website pr
   assert.equal(crmAccountSchema.safeParse({ name: "Company", ownerUserId: "other" }).success, false)
   assert.equal(crmAccountLinkSchema.safeParse({ accountId: "account", tenantId: "other" }).success, false)
 })
+
+
+test("conversion defaults accept one active open stage and reject closed, archived or duplicate defaults", () => {
+  const stages = [
+    { id: "first", name: "Discovery", kind: "OPEN", probability: 10, color: "#123456" },
+    { id: "qualified", name: "Qualified", kind: "OPEN", probability: 40, color: "#123456", isConversionDefault: true },
+    { id: "won", name: "Won", kind: "WON", probability: 100, color: "#123456" },
+    { id: "lost", name: "Lost", kind: "LOST", probability: 0, color: "#123456" },
+  ]
+  assert.equal(pipelineSchema.safeParse({ name: "Sales", stages }).success, true)
+  for (const index of [0, 2, 3]) assert.equal(pipelineSchema.safeParse({ name: "Sales", stages: stages.map((s, i) => ({ ...s, isConversionDefault: i === index || i === 1 })) }).success, false)
+  assert.equal(pipelineSchema.safeParse({ name: "Sales", stages: stages.map(s => ({ ...s, archived: s.id === "qualified" })) }).success, false)
+  for (const index of [2, 3]) assert.equal(pipelineSchema.safeParse({ name: "Sales", stages: stages.map((s, i) => ({ ...s, isConversionDefault: i === index })) }).success, false)
+  const { initialOpportunityStage } = require("../modules/crm/conversion-stage.ts")
+  assert.equal(initialOpportunityStage(stages, true).id, "qualified")
+  assert.equal(initialOpportunityStage(stages, false).id, "first")
+  assert.equal(initialOpportunityStage(stages.map(s => ({ ...s, isConversionDefault: false })), true).id, "first")
+  assert.equal(initialOpportunityStage(stages.map(s => ({ ...s, archived: s.id === "qualified" })), true).id, "first")
+  assert.equal(initialOpportunityStage(stages.filter(s => s.kind !== "OPEN"), true), undefined)
+})

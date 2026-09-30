@@ -16,6 +16,8 @@ import { isManagedTenantHostname, normalizeHostname } from "@/lib/tenancy"
 import { createTenantSchema } from "@/lib/validation"
 import { recordDomainAuditEventSafe } from "@/lib/domain-audit"
 import type { ListResponse } from "@/types/api"
+import { provisionTenantModules } from "@/platform/module-service"
+import { BusinessError } from "@/platform/policy"
 
 const PLATFORM_TENANT_SLUG = (
   process.env.PLATFORM_ADMIN_TENANT_SLUG?.trim().toLowerCase() || "platform"
@@ -148,6 +150,7 @@ export async function POST(request: Request) {
     return withRequestId(authorized.error, logContext.requestId)
   }
   const { tenantId: actorTenantId, role: actorRole, sessionUserId } = authorized.context
+  if (!sessionUserId) return withRequestId(NextResponse.json({ error: "Unauthorized." }, { status: 401 }), logContext.requestId)
 
   const payload = await request.json().catch(() => null)
   if (!payload) {
@@ -275,6 +278,8 @@ export async function POST(request: Request) {
           select: { id: true, name: true, email: true, role: true, createdAt: true },
         })
 
+        await provisionTenantModules(tx, { tenantId: actorTenantId, userId: sessionUserId, requestId: logContext.requestId }, tenant.id, data.modules)
+
         // Ensure baseline settings exist for the new tenant.
         await tx.appSetting.create({
           data: { tenantId: tenant.id },
@@ -349,6 +354,7 @@ export async function POST(request: Request) {
       logApiRequestSuccess(logContext, 409, { reason: "p2002_conflict" })
       return withRequestId(response, logContext.requestId)
     }
+    if (error instanceof BusinessError) return withRequestId(NextResponse.json({ error: error.message }, { status: error.status }), logContext.requestId)
     logApiRequestError(logContext, error, 500)
     const response = NextResponse.json({ error: "Unable to provision tenant." }, { status: 500 })
     return withRequestId(response, logContext.requestId)

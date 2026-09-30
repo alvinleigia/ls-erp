@@ -16,12 +16,13 @@
     "test:browser:report": "playwright show-report",
     "test:crm:existing": "playwright test --config playwright.crm-existing.config.ts baseline.spec.ts",
     "test:crm:release": "playwright test --config playwright.crm-existing.config.ts release.spec.ts --output test-results/crm-release-gates --reporter=list",
-    "test:crm": "node --require ./tests/register.cjs --test tests/crm.test.cjs tests/work-history-format.test.cjs tests/crm-extensions.test.cjs tests/module-navigation.test.cjs",
+    "test:crm": "node --require ./tests/register.cjs --test tests/crm.test.cjs tests/work-history-format.test.cjs tests/crm-extensions.test.cjs tests/module-navigation.test.cjs tests/access-policy.test.cjs",
     "test:crm:integration": "node --require ./tests/register.cjs --test tests/crm.integration.test.cjs",
     "test:crm:teams:integration": "node --require ./tests/register.cjs --test tests/crm-teams.integration.test.cjs",
     "test:crm:fields:integration": "node --require ./tests/register.cjs --test tests/custom-fields.integration.test.cjs",
     "test:crm:sales:integration": "node --require ./tests/register.cjs --test tests/crm-sales.integration.test.cjs",
     "test:real-estate:integration": "node --require ./tests/register.cjs --test tests/real-estate.integration.test.cjs",
+    "test:modules:integration": "node --require ./tests/register.cjs --test tests/module-access.integration.test.cjs tests/module-allowance-migration.test.cjs",
     "test:tenants:integration": "node --require ./tests/register.cjs --test tests/tenant-provisioning.integration.test.cjs",
     "test:dashboard:integration": "node --require ./tests/register.cjs --test tests/dashboard.integration.test.cjs",
     "test:settings-work:integration": "node --require ./tests/register.cjs --test tests/settings-work.integration.test.cjs",
@@ -33,7 +34,8 @@
     "db:reset": "prisma migrate reset",
     "bootstrap:admin": "node scripts/bootstrap-admin.mjs",
     "test:crm:quotations": "node --require ./tests/register.cjs --test tests/quotation-calculation.test.cjs",
-    "test:crm:quotations:integration": "node --require ./tests/register.cjs --test --test-force-exit tests/quotations.integration.test.cjs"
+    "test:crm:quotations:integration": "node --require ./tests/register.cjs --test --test-force-exit tests/quotations.integration.test.cjs",
+    "test:access:integration": "node --require ./tests/register.cjs --test --test-force-exit tests/access-roles.integration.test.cjs tests/access-role-migration.test.cjs"
   },
   "dependencies": {
     "@pdf-lib/fontkit": "^1.1.1",

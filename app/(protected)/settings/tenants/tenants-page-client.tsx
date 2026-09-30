@@ -21,6 +21,8 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
 import { useFormErrors } from "@/hooks/use-form-errors"
+import { ModuleControls, TenantModuleSelection } from "@/platform/module-controls"
+import type { BusinessModuleKey } from "@/platform/modules"
 import type { ListResponse } from "@/types/api"
 
 type PaginationState = { pageIndex: number; pageSize: number }
@@ -45,6 +47,7 @@ type OrganizationOption = {
 }
 
 type TenantCreateFormValues = {
+  modules: BusinessModuleKey[]
   name: string
   slug: string
   organizationId: string
@@ -64,6 +67,7 @@ type TenantAdminEditValues = {
 }
 
 const defaultFormValues: TenantCreateFormValues = {
+  modules: [],
   name: "",
   slug: "",
   organizationId: "",
@@ -125,6 +129,7 @@ export default function TenantsPageClient({
   const [search, setSearch] = React.useState("")
   const [statusFilter, setStatusFilter] = React.useState<"all" | TenantStatus>("all")
   const [pagination, setPagination] = React.useState<PaginationState>({ pageIndex: 0, pageSize: 10 })
+  const [moduleTenant, setModuleTenant] = React.useState<TenantRow | null>(null)
   const [createOpen, setCreateOpen] = React.useState(false)
   const [editAdminOpen, setEditAdminOpen] = React.useState(false)
   const [editDomainOpen, setEditDomainOpen] = React.useState(false)
@@ -543,7 +548,7 @@ export default function TenantsPageClient({
           return (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button size="icon" variant="ghost" disabled={!canMutate}>
+                <Button size="icon" variant="ghost" disabled={!canMutate} aria-label={`Actions for ${tenant.name}`}>
                   <MoreHorizontalIcon className="h-4 w-4" />
                 </Button>
               </DropdownMenuTrigger>
@@ -570,6 +575,7 @@ export default function TenantsPageClient({
                     Archive
                   </DropdownMenuItem>
                 ) : null}
+                {platformAccessMode === "SUPER_ADMIN" && <DropdownMenuItem onSelect={() => setModuleTenant(tenant)}>Manage modules</DropdownMenuItem>}
                 <DropdownMenuItem onSelect={() => void openEditAdmin(tenant)}>
                   Edit admin details
                 </DropdownMenuItem>
@@ -597,6 +603,7 @@ export default function TenantsPageClient({
       lifecycleUpdatingId,
       organizationSavingTenantId,
       rootDomain,
+      platformAccessMode,
     ]
   )
 
@@ -678,6 +685,13 @@ export default function TenantsPageClient({
         </div>
       ) : null}
 
+      <Dialog open={!!moduleTenant} onOpenChange={open => { if (!open) setModuleTenant(null) }}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
+          <DialogHeader><DialogTitle>Modules - {moduleTenant?.name}</DialogTitle></DialogHeader>
+          {moduleTenant && <ModuleControls key={moduleTenant.id} tenantId={moduleTenant.id}/>}
+        </DialogContent>
+      </Dialog>
+
       <Dialog
         open={createOpen}
         onOpenChange={(open) => {
@@ -688,7 +702,7 @@ export default function TenantsPageClient({
           }
         }}
       >
-        <DialogContent>
+        <DialogContent className="max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>New tenant</DialogTitle>
           </DialogHeader>
@@ -797,6 +811,7 @@ export default function TenantsPageClient({
                 }
               />
             </FormField>
+            {platformAccessMode === "SUPER_ADMIN" && <TenantModuleSelection value={formValues.modules} disabled={creating} onChange={modules => setFormValues(prev => ({ ...prev, modules }))}/>}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setCreateOpen(false)}>

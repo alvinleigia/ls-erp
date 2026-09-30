@@ -1,3 +1,4 @@
+import { BusinessViewGuard } from "@/platform/access/view-guard"
 import { ApplicationCrmProvider } from "@/application/crm/provider"
 import Link from "next/link"
 import { redirect } from "next/navigation"
@@ -20,5 +21,5 @@ export default async function CrmLayout({ children }: { children: React.ReactNod
   if (!access) redirect("/dashboard")
   if (!access.enabled) return <div className="space-y-3"><h1 className="text-2xl font-semibold">CRM is not enabled</h1><p>Ask your business administrator to enable CRM for this workspace.</p>{access.role === "ADMIN" && <Link className="underline" href="/settings/modules">Manage business modules</Link>}</div>
   // Keep CRM tables/boards from setting the surrounding app shell's intrinsic width.
-  return <ApplicationCrmProvider><div className="mx-auto w-full min-w-0 max-w-6xl space-y-6 [contain:inline-size]"><WorkReminders />{children}</div></ApplicationCrmProvider>
+  return <ApplicationCrmProvider><div className="mx-auto w-full min-w-0 max-w-6xl space-y-6 [contain:inline-size]"><BusinessViewGuard><WorkReminders />{children}</BusinessViewGuard></div></ApplicationCrmProvider>
 }

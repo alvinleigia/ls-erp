@@ -1,4 +1,6 @@
 "use client"
+import { useBusinessModules } from "@/platform/module-provider"
+import { routeResource } from "@/platform/access/routes"
 import { useState } from "react"
 import { Download } from "lucide-react"
 import { toast } from "sonner"
@@ -17,5 +19,10 @@ export function ExportButton({ href, filename, disabled = false }: { href: strin
       setTimeout(() => URL.revokeObjectURL(url), 1000)
     } catch (error) { toast.error((error as Error).message) } finally { setBusy(false) }
   }
+  const { can } = useBusinessModules()
+  const resource = routeResource(href.replace("/api/real-estate/projects", "/crm/projects").replace("/api/crm/reports/sales", "/crm/sales").replace("/api", "").split("?")[0])
+  const view = new URLSearchParams(href.split("?")[1]).get("view") || "leads"
+  if (resource === "reports" && !can(view === "leads" || view === "converted" ? "enquiries.export" : view === "overdue" ? "activities.export" : "opportunities.export")) return null
+  if (resource && !can(`${resource}.export`)) return null
   return <Button type="button" variant="outline" loading={busy} disabled={disabled} onClick={() => void download()} title="Export all matching records, up to 2,000 rows"><Download aria-hidden="true" />Export CSV</Button>
 }

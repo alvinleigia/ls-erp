@@ -7,8 +7,9 @@ import { useCrmExtensionEditor } from "./extension-provider"
 import { CrmSection } from "./crm-section"
 import { CrmPageHeader, CrmFormActions, crmPageClass } from "./crm-page"
 import { CrmSelect, CrmTextarea } from "./crm-controls"
+import { useCurrentResourceAction } from "@/platform/access/view-guard"
 import * as React from "react"
-import Link from "next/link"
+import Link from "@/platform/access/link"
 import { useRouter } from "next/navigation"
 import { useSession } from "next-auth/react"
 import { toast } from "sonner"
@@ -30,6 +31,7 @@ export const textareaClass = "min-h-24 w-full rounded-md border bg-background px
 
 export const EnquiryEditor = withCrmRecordView(EnquiryEditorBody)
 function EnquiryEditorBody({ id, initialContactId, initialProjectId = "", initialSubprojectId = "" }: { id?: string; initialContactId?: string; initialProjectId?: string; initialSubprojectId?: string }) {
+  const allowedAssignment = useCurrentResourceAction("assign")
   const extension = useCrmExtensionEditor(initialProjectId, initialSubprojectId)
   const loadExtension = extension.load
   const custom = useCustomFields("enquiry", id)
@@ -113,7 +115,7 @@ function EnquiryEditorBody({ id, initialContactId, initialProjectId = "", initia
         <CrmSummarySection title="Referral (optional)" canEdit={!enquiry.referralRestricted} fields={[{ label: "Referred by", value: enquiry.referralRestricted ? "Restricted" : enquiry.referralContact?.name || enquiry.referralAccount?.name }]} />
         {extension.summary()} {custom.readOnlySection(<CrmSectionEdit section="Additional information" />)}
       </>}
-      tabs={enquiry ? [{ value: "activities", label: "Activities", content: <WorkList enquiryId={enquiry.id} contactId={enquiry.contact.id} /> }, { value: "history", label: "History", content: <EnquiryTimeline enquiryId={enquiry.id} contactId={enquiry.contact.id} revision={revision} includeWork={false} /> }] : []}>
+      tabs={enquiry ? [{ value: "activities", permission: "activities.read" as const, label: "Activities", content: <WorkList enquiryId={enquiry.id} contactId={enquiry.contact.id} /> }, { value: "history", label: "History", content: <EnquiryTimeline enquiryId={enquiry.id} contactId={enquiry.contact.id} revision={revision} includeWork={false} /> }] : []}>
 
 
       <CrmSection title="Customer" description="Reuse an existing contact or create one with this enquiry."><fieldset disabled={saving || loadFailed} className="grid min-w-0 gap-5 sm:grid-cols-2">
@@ -127,7 +129,7 @@ function EnquiryEditorBody({ id, initialContactId, initialProjectId = "", initia
       </fieldset></CrmSection>
       <CrmSection title="Enquiry details" description="Customer requirements, ownership and progress."><fieldset disabled={saving || loadFailed} className="grid min-w-0 gap-5 sm:grid-cols-2">
         <SalesTeamSelect value={values.salesTeamId} selected={enquiry?.salesTeam} disabled={!!id && !canAssign} onChange={salesTeamId => { setValues({ ...values, salesTeamId }); void custom.changeTeam(salesTeamId) }} />
-      <FormField id="assignedUserId" label="Salesperson" error={errors.assignedUserId}><RecordSelect id="assignedUserId" endpoint={values.salesTeamId ? `/api/crm/assignees?salesTeamId=${values.salesTeamId}` : "/api/crm/assignees"} value={values.assignedUserId} selected={{ value: selectedAssignee.id, label: selectedAssignee.name || "Unnamed user" }} onChange={assignedUserId => setValues({ ...values, assignedUserId })} disabled={!canAssign} /></FormField>
+      <FormField id="assignedUserId" label="Salesperson" error={errors.assignedUserId}><RecordSelect id="assignedUserId" endpoint={values.salesTeamId ? `/api/crm/assignees?salesTeamId=${values.salesTeamId}` : "/api/crm/assignees"} value={values.assignedUserId} selected={{ value: selectedAssignee.id, label: selectedAssignee.name || "Unnamed user" }} onChange={assignedUserId => setValues({ ...values, assignedUserId })} disabled={!canAssign || !allowedAssignment} /></FormField>
         <FormField id="title" label="Enquiry title" error={errors.title} className="sm:col-span-2"><Input id="title" required maxLength={200} value={values.title} onChange={event => setValues({ ...values, title: event.target.value })} /></FormField>
         <FormField id="sourceId" label="Lead source (optional)" error={errors.sourceId}><RecordSelect id="sourceId" endpoint="/api/crm/lead-sources" value={values.sourceId} selected={enquiry?.sourceId ? { value: enquiry.sourceId, label: `${enquiry.source || enquiry.leadSource?.name || "Source"}${enquiry.leadSource?.archived ? " (archived)" : ""}` } : undefined} onChange={sourceId => setValues({ ...values, sourceId })} />{values.sourceId && <Button type="button" variant="link" size="sm" onClick={() => setValues({ ...values, sourceId: "" })}>Clear source</Button>}{canAssign && <Link className="block text-xs underline" href="/crm/lead-sources" target="_blank" rel="noreferrer">Manage lead sources</Link>}</FormField>
         <FormField id="targetCloseOn" label="Target close date (optional)" error={errors.targetCloseOn}><Input id="targetCloseOn" type="date" value={values.targetCloseOn} onChange={event => setValues({ ...values, targetCloseOn: event.target.value })} /></FormField>

@@ -1,3 +1,5 @@
+import { requireWriteFields, permits } from "@/platform/access/policy"
+import type { PermissionRun } from "@/platform/access/server"
 import type { Prisma, CrmEnquiry } from "@prisma/client"
 import { accountScope, canManageCrm, contactScope, CrmError, type CrmActor } from "./policy"
 import { crmLeadSourceSchema, crmLeadSourceUpdateSchema, crmLeadSourceListSchema } from "./validation"
@@ -5,7 +7,7 @@ import { recordDomainAuditEvent } from "@/lib/domain-audit"
 
 type Tx = Prisma.TransactionClient
 type Context = {
-  run: <T>(operation: (tx: Tx, actor: CrmActor) => Promise<T>) => Promise<T>
+  run: PermissionRun
   audit: (tx: Tx, actor: CrmActor, event: string, id: string, before?: Prisma.InputJsonValue, after?: Prisma.InputJsonValue) => Promise<void>
 }
 const sourceKey = (name: string) => name.trim().replace(/\s+/g, " ").toLowerCase()
@@ -72,17 +74,17 @@ export function createIntakeService({ run, audit }: Context) {
   return {
     listLeadSources(input: unknown) {
       const query = crmLeadSourceListSchema.parse(input)
-      return run(async (tx, actor) => {
+      return run("leadSources.read", async (tx, actor) => {
         const where = { tenantId: actor.tenantId, ...(query.includeArchived === "true" ? {} : { archived: query.archived === "true" }), name: { contains: query.q, mode: "insensitive" as const } }
         const [items, total] = await Promise.all([
           tx.crmLeadSource.findMany({ where, orderBy: [{ name: "asc" }, { id: "asc" }], skip: (query.page - 1) * query.pageSize, take: query.pageSize }), tx.crmLeadSource.count({ where }),
         ])
-        return { items, total, page: query.page, pageSize: query.pageSize, totalPages: Math.max(1, Math.ceil(total / query.pageSize)), canManage: canManageCrm(actor.role) }
+        return { items, total, page: query.page, pageSize: query.pageSize, totalPages: Math.max(1, Math.ceil(total / query.pageSize)), canManage: canManageCrm(actor.role) && permits(actor, "leadSources.edit") }
       })
     },
     createLeadSource(input: unknown) {
       const data = crmLeadSourceSchema.parse(input)
-      return run(async (tx, actor) => {
+      return run("leadSources.create", async (tx, actor) => { requireWriteFields(actor, "leadSources", undefined, data);
         manage(actor)
         const record = await tx.crmLeadSource.create({ data: { ...data, nameKey: sourceKey(data.name), tenantId: actor.tenantId } })
         await audit(tx, actor, "crm.source.created", record.id, undefined, data)
@@ -91,9 +93,10 @@ export function createIntakeService({ run, audit }: Context) {
     },
     updateLeadSource(id: string, input: unknown) {
       const { version, ...data } = crmLeadSourceUpdateSchema.parse(input)
-      return run(async (tx, actor) => {
+      return run("leadSources.edit", async (tx, actor) => {
         manage(actor)
         const before = await tx.crmLeadSource.findFirst({ where: { tenantId: actor.tenantId, id } })
+        requireWriteFields(actor, "leadSources", before ?? undefined, data)
         if (!before) throw new CrmError(404, "Lead source not found.")
         const changed = await tx.crmLeadSource.updateMany({ where: { tenantId: actor.tenantId, id, version }, data: { ...data, nameKey: sourceKey(data.name), version: { increment: 1 } } })
         if (!changed.count) throw new CrmError(409, "This source changed. Refresh before saving.")

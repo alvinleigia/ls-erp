@@ -1,6 +1,6 @@
 import { updateBusinessModule } from "@/platform/module-service"
 import { prisma } from "@/lib/prisma"
-import { businessModules } from "@/platform/modules"
+import { moduleSettings } from "@/platform/modules"
 import { readJson, withBusinessApi } from "@/platform/business-api"
 
 export const dynamic = "force-dynamic"
@@ -10,9 +10,8 @@ export function GET(request: Request) {
     const configured = await prisma.tenantModule.findMany({ where: { tenantId: actor.tenantId } })
     return {
       canManage: actor.role === "ADMIN",
-      modules: Object.entries(businessModules).map(([key, module]) => ({
-        key, ...module, enabled: configured.find(row => row.key === key)?.enabled ?? module.defaultEnabled,
-      })),
+      permissions: actor.permissions ?? null,
+      modules: moduleSettings(configured),
     }
   })
 }

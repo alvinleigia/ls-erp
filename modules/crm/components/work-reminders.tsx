@@ -1,9 +1,14 @@
 "use client"
+import { useBusinessModules } from "@/platform/module-provider"
 import * as React from "react"
-import Link from "next/link"
+import Link from "@/platform/access/link"
 import type { WorkListResponse } from "@/types/crm-work"
 
 export function WorkReminders() {
+  const { can } = useBusinessModules()
+  return can("activities.read") ? <AllowedWorkReminders /> : null
+}
+function AllowedWorkReminders() {
   const [data, setData] = React.useState<WorkListResponse | null>(null)
   const [unavailable, setUnavailable] = React.useState(false)
   React.useEffect(() => {

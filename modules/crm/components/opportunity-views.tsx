@@ -7,8 +7,9 @@ import { CrmExtensionCaption, CrmExtensionFilter } from "./extension-provider"
 import { CrmPageHeader, CrmSurface, CrmFilters, crmPageClass } from "./crm-page"
 import { CrmTablePagination, CrmPagination } from "./crm-pagination"
 import { CrmSelect, CrmCheckbox } from "./crm-controls"
+import { useCurrentResourceAction } from "@/platform/access/view-guard"
 import * as React from "react"
-import Link from "next/link"
+import Link from "@/platform/access/link"
 import { getCoreRowModel, useReactTable, type ColumnDef } from "@tanstack/react-table"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
@@ -97,6 +98,7 @@ function OpportunityTable({ params, revision, formatMoney, ...moves }: Moves & M
 }
 
 export function OpportunityViews() {
+  const mayEdit = useCurrentResourceAction("edit")
   const [moneySettings, setMoneySettings] = React.useState<AppSettingsPayload | undefined>(undefined)
   React.useEffect(() => {
     const controller = new AbortController()
@@ -152,10 +154,10 @@ export function OpportunityViews() {
     finally { setBusy(false); setRevision(value => value + 1) }
   }, [])
   const move = React.useCallback((record: CrmOpportunityRow, stage: CrmStageRow) => {
-    if (busy || record.stageId === stage.id) return
+    if (!mayEdit || busy || record.stageId === stage.id) return
     if (stage.kind === "LOST") { setPending({ record, stage }); setLossReason(record.stage.kind === "LOST" ? record.lossReason || "" : ""); setLostReasonId(record.stage.kind === "LOST" ? record.lostReasonId || "" : "") }
     else void persistMove(record, stage)
-  }, [busy, persistMove])
+  }, [busy, persistMove, mayEdit])
   const [salesTeamId, setSalesTeamId] = React.useState("")
   const params = new URLSearchParams({ ...(salesTeamId ? { salesTeamId } : {}), ...(customFilter.customFieldId && customFilter.customFieldValue !== "" ? customFilter : {}), pipelineId, q, sort, order, ...(reasonFilter ? { lostReasonId: reasonFilter } : {}), ...(projectId ? { projectId } : {}), ...(subprojectId ? { subprojectId } : {}), ...(owner ? { assignedUserId: owner } : {}), ...(kind ? { kind } : {}) }).toString()
   const ready = pipeline?.id === pipelineId
@@ -165,7 +167,7 @@ export function OpportunityViews() {
     {error && <p role="alert" className="text-destructive">{error}</p>}
     {!pipelineId && <p>Select a pipeline, or ask a manager to create one under <Link className="underline" href="/crm/pipelines">Pipelines</Link>.</p>}
     {pipelineId && !ready && <p>Loading pipeline…</p>}
-    {ready && pipeline && <>{pipeline.archived && <p className="text-sm">Archived pipeline. Open an opportunity to move it to an active pipeline.</p>}{view === "board" ? <><p className="text-sm text-muted-foreground">Drag cards between stages or use each card’s stage selector. Columns are paginated independently.</p><div className="flex gap-4 overflow-x-auto pb-4">{pipeline.stages.filter(stage => !kind || stage.kind === kind).map(stage => <BoardColumn key={`${stage.id}:${params}:${revision}`} stage={stage} params={params} revision={revision} stages={pipeline.stages} busy={busy || pipeline.archived} move={move} formatMoney={formatMoney} onDrag={setDrag} onDrop={stage => { if (drag && !pipeline.archived) move(drag, stage); setDrag(null) }} />)}</div></> : <CrmSurface><OpportunityTable key={params} params={params} revision={revision} stages={pipeline.stages} busy={busy || pipeline.archived} move={move} formatMoney={formatMoney} /></CrmSurface>}</>}
+    {ready && pipeline && <>{pipeline.archived && <p className="text-sm">Archived pipeline. Open an opportunity to move it to an active pipeline.</p>}{view === "board" ? <><p className="text-sm text-muted-foreground">Drag cards between stages or use each card’s stage selector. Columns are paginated independently.</p><div className="flex gap-4 overflow-x-auto pb-4">{pipeline.stages.filter(stage => !kind || stage.kind === kind).map(stage => <BoardColumn key={`${stage.id}:${params}:${revision}`} stage={stage} params={params} revision={revision} stages={pipeline.stages} busy={busy || pipeline.archived || !mayEdit} move={move} formatMoney={formatMoney} onDrag={setDrag} onDrop={stage => { if (drag && !pipeline.archived) move(drag, stage); setDrag(null) }} />)}</div></> : <CrmSurface><OpportunityTable key={params} params={params} revision={revision} stages={pipeline.stages} busy={busy || pipeline.archived || !mayEdit} move={move} formatMoney={formatMoney} /></CrmSurface>}</>}
     <Dialog open={!!pending} onOpenChange={open => { if (!open && !busy) setPending(null) }}><DialogContent><DialogHeader><DialogTitle>Close as lost</DialogTitle><DialogDescription>Record why {pending?.record.title} was lost. It will remain available in the pipeline and history.</DialogDescription></DialogHeader><form onSubmit={event => { event.preventDefault(); if (pending) void persistMove(pending.record, pending.stage, lossReason, lostReasonId) }} className="space-y-4"><LostReasonFields value={lostReasonId} name={pending?.record.lostReasonName} note={lossReason} onReasonChange={setLostReasonId} onNoteChange={setLossReason} /><DialogFooter><Button type="button" variant="outline" disabled={busy} onClick={() => setPending(null)}>Cancel</Button><Button type="submit" loading={busy} disabled={!lostReasonId}>Close as lost</Button></DialogFooter></form></DialogContent></Dialog>
   </section>
 }

@@ -1,3 +1,5 @@
+import { requireWriteFields } from "@/platform/access/policy"
+import type { PermissionRun } from "@/platform/access/server"
 import { randomUUID } from "node:crypto"
 import { Prisma } from "@prisma/client"
 import { BusinessError, type BusinessActor } from "@/platform/policy"
@@ -5,7 +7,7 @@ import { recordDomainAuditEvent } from "@/lib/domain-audit"
 import { choiceKindSchema, choiceKinds, choiceSchema, choiceUpdateSchema, choiceListSchema, type ChoiceKind, type PropertyChoice } from "./choices"
 
 type Tx = Prisma.TransactionClient
-type Run = <T>(operation: (tx: Tx, actor: BusinessActor) => Promise<T>) => Promise<T>
+type Run = PermissionRun
 // Identifiers come exclusively from this allowlist, never request interpolation.
 const tables = {
   "project-statuses": Prisma.raw('"RealEstateProjectStatus"'),
@@ -39,10 +41,10 @@ export function createPropertyChoiceService(run: Run) {
     return row
   }
   return {
-    choiceDefaults: () => run((tx, actor) => propertyChoiceDefaults(tx, actor.tenantId)),
+    choiceDefaults: () => run("projectSettings.read", (tx, actor) => propertyChoiceDefaults(tx, actor.tenantId)),
     listChoices(kindInput: unknown, input: unknown) {
       const kind = choiceKindSchema.parse(kindInput), query = choiceListSchema.parse(input)
-      return run(async (tx, actor) => {
+      return run("projectSettings.read", async (tx, actor) => {
         const where = Prisma.sql`"tenantId"=${actor.tenantId} AND (${query.includeArchived === "true"} OR archived=${query.archived === "true"}) AND strpos(lower(name),lower(${query.q})) > 0`
         const [items, [count]] = await Promise.all([
           tx.$queryRaw<PropertyChoice[]>(Prisma.sql`SELECT * FROM ${tables[kind]} WHERE ${where} ORDER BY position,name,id LIMIT ${query.pageSize} OFFSET ${(query.page - 1) * query.pageSize}`),
@@ -53,14 +55,15 @@ export function createPropertyChoiceService(run: Run) {
     },
     getChoice(kindInput: unknown, id: string) {
       const kind = choiceKindSchema.parse(kindInput)
-      return run(async (tx, actor) => ({ ...await find(tx, actor, kind, id), canManage: manage(actor) }))
+      return run("projectSettings.read", async (tx, actor) => ({ ...await find(tx, actor, kind, id), canManage: manage(actor) }))
     },
     saveChoice(kindInput: unknown, input: unknown, id?: string) {
       const kind = choiceKindSchema.parse(kindInput)
       const data = id ? choiceUpdateSchema.parse(input) : { ...choiceSchema.parse(input), version: undefined }
-      return run(async (tx, actor) => {
+      return run(id ? "projectSettings.edit" : "projectSettings.create", async (tx, actor) => {
         if (!manage(actor)) throw new BusinessError(403, "Only managers can configure property choices.")
         const before = id ? await find(tx, actor, kind, id) : null
+        requireWriteFields(actor, "projectSettings", before ?? undefined, data)
         if (before && before.version !== data.version) throw new BusinessError(409, "This choice changed. Refresh before saving.")
         const nameKey = data.name.toLowerCase()
         const duplicate = await tx.$queryRaw<{ id: string }[]>(Prisma.sql`SELECT id FROM ${tables[kind]} WHERE "tenantId"=${actor.tenantId} AND "nameKey"=${nameKey} AND id<>${id || ""}`)

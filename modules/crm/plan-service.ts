@@ -1,3 +1,5 @@
+import { requireWriteFields, permits } from "@/platform/access/policy"
+import type { PermissionRun } from "@/platform/access/server"
 import { resolveActivityTypes } from "./activity-type-service"
 import type { Prisma } from "@prisma/client"
 import { CrmError, canManageCrm, contactScope, enquiryScope, type CrmActor } from "./policy"
@@ -8,7 +10,7 @@ import { workCreateSchema, type WorkCreateInput } from "./work-validation"
 
 type Tx = Prisma.TransactionClient
 type Context = {
-  run: <T>(operation: (tx: Tx, actor: CrmActor) => Promise<T>) => Promise<T>
+  run: PermissionRun
   audit: (tx: Tx, actor: CrmActor, event: string, id: string, before?: Prisma.InputJsonValue, after?: Prisma.InputJsonValue) => Promise<void>
   checkAssignee: (tx: Tx, actor: CrmActor, id: string) => Promise<void>
   createWork: (tx: Tx, actor: CrmActor, data: WorkCreateInput, origin: { planLaunchId: string; planPosition: number }) => Promise<{ id: string }>
@@ -46,21 +48,22 @@ export function createPlanService({ run, audit, checkAssignee, createWork }: Con
   return {
     listActivityPlans(input: unknown) {
       const query = crmListSchema.parse(input)
-      return run(async (tx, actor) => {
+      return run("activityPlans.read", async (tx, actor) => {
         const where = { tenantId: actor.tenantId, archived: query.archived === "true", name: { contains: query.q, mode: "insensitive" as const } }
         const [items, total] = await Promise.all([tx.crmActivityPlan.findMany({ where, orderBy: [{ name: "asc" }, { id: "asc" }], skip: (query.page - 1) * query.pageSize, take: query.pageSize }), tx.crmActivityPlan.count({ where })])
-        return { items, total, page: query.page, pageSize: query.pageSize, totalPages: Math.max(1, Math.ceil(total / query.pageSize)), canManage: canManageCrm(actor.role) }
+        return { items, total, page: query.page, pageSize: query.pageSize, totalPages: Math.max(1, Math.ceil(total / query.pageSize)), canManage: canManageCrm(actor.role) && permits(actor, "activityPlans.edit") }
       })
     },
-    getActivityPlan(id: string) { return run(async (tx, actor) => ({ ...await find(tx, actor, id), canManage: canManageCrm(actor.role) })) },
+    getActivityPlan(id: string) { return run("activityPlans.read", async (tx, actor) => ({ ...await find(tx, actor, id), canManage: canManageCrm(actor.role) && permits(actor, "activityPlans.edit") })) },
     createActivityPlan(input: unknown) {
       const data = activityPlanSchema.parse(input)
-      return run(async (tx, actor) => { manage(actor); await resolveActivityTypes(tx, actor, data.steps); const plan = await tx.crmActivityPlan.create({ data: { ...data, tenantId: actor.tenantId, steps: snapshot(data.steps) } }); await audit(tx, actor, "crm.plan.created", plan.id, undefined, snapshot(data)); return plan })
+      return run("activityPlans.create", async (tx, actor) => { requireWriteFields(actor, "activityPlans", undefined, data); manage(actor); await resolveActivityTypes(tx, actor, data.steps); const plan = await tx.crmActivityPlan.create({ data: { ...data, tenantId: actor.tenantId, steps: snapshot(data.steps) } }); await audit(tx, actor, "crm.plan.created", plan.id, undefined, snapshot(data)); return plan })
     },
     updateActivityPlan(id: string, input: unknown) {
       const { version, ...data } = activityPlanUpdateSchema.parse(input)
-      return run(async (tx, actor) => {
+      return run("activityPlans.edit", async (tx, actor) => {
         manage(actor); const before = await find(tx, actor, id)
+        requireWriteFields(actor, "activityPlans", before ?? undefined, data)
         if (!data.archived) await resolveActivityTypes(tx, actor, data.steps)
         const updated = await tx.crmActivityPlan.updateMany({ where: { tenantId: actor.tenantId, id, version }, data: { ...data, steps: snapshot(data.steps), version: { increment: 1 } } })
         if (!updated.count) throw new CrmError(409, "This plan changed. Refresh before saving.")
@@ -70,11 +73,11 @@ export function createPlanService({ run, audit, checkAssignee, createWork }: Con
     },
     previewActivityPlan(id: string, input: unknown) {
       const data = applyPlanSchema.parse(input)
-      return run(async (tx, actor) => { const { steps, timeZone, plan } = await prepare(tx, actor, id, data); return { steps, timeZone, planName: plan.name, version: plan.version } })
+      return run("activities.create", async (tx, actor) => { const { steps, timeZone, plan } = await prepare(tx, actor, id, data); return { steps, timeZone, planName: plan.name, version: plan.version } })
     },
     applyActivityPlan(id: string, input: unknown) {
       const data = applyPlanSchema.parse(input)
-      return run(async (tx, actor) => {
+      return run("activities.create", async (tx, actor) => {
         const existing = await tx.crmPlanLaunch.findUnique({ where: { tenantId_requestKey: { tenantId: actor.tenantId, requestKey: data.requestKey } } })
         if (existing) {
           const same = existing.actorUserId === actor.userId && existing.planId === id && Object.entries(data).every(([key, value]) => (existing.input as Record<string, unknown>)[key] === value)

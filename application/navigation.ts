@@ -1,3 +1,6 @@
+import type { Permission } from "@/platform/access/catalog"
+import { satisfies } from "@/platform/access/policy"
+import { routeRequirement } from "@/platform/access/routes"
 import { BarChart3Icon, Building2Icon, CalendarClockIcon, FileTextIcon, MailIcon, SettingsIcon, UsersIcon } from "lucide-react"
 import { businessModules, moduleEnabled, type ModuleFlag } from "@/platform/modules"
 import { crmConfigurationGroups } from "@/modules/crm/configuration"
@@ -7,7 +10,7 @@ const configMatches = (group: typeof crmConfigurationGroups[number], current: st
 const entry = (title: string, href: string, icon: typeof UsersIcon, isActive = (current: string) => matches(href, current)) => ({ title, href, icon, isActive })
 
 // Navigation groups share capability definitions, but are not separate databases/modules.
-export function businessNavigation(flags: ModuleFlag[]) {
+export function businessNavigation(flags: ModuleFlag[], permissions?: Permission[]) {
   if (!moduleEnabled(flags, "crm")) return []
   const groups = [
     { key: "crm", title: "CRM", icon: UsersIcon, items: [
@@ -24,5 +27,5 @@ export function businessNavigation(flags: ModuleFlag[]) {
   ]
   if (moduleEnabled(flags, "salesDocuments")) groups.push({ key: "salesDocuments", title: businessModules.salesDocuments.name, icon: FileTextIcon, items: [entry("Quotations", businessModules.salesDocuments.href, FileTextIcon), entry("Templates", "/crm/configuration/quotation-templates", SettingsIcon)] })
   if (moduleEnabled(flags, "realEstate")) groups.push({ key: "realEstate", title: businessModules.realEstate.name, icon: Building2Icon, items: [entry("Projects", businessModules.realEstate.href, Building2Icon), entry("Configuration", "/crm/configuration/real-estate", SettingsIcon)] })
-  return groups.map(group => ({ ...group, href: group.items[0].href, isActive: (current: string) => group.items.some(item => item.isActive(current)) }))
+  return groups.map(group => ({ ...group, items: group.items.filter(item => { const requirement = routeRequirement(item.href); return !!requirement && satisfies({ permissions }, requirement) }) })).filter(group => group.items.length).map(group => ({ ...group, href: group.items[0].href, isActive: (current: string) => group.items.some(item => item.isActive(current)) }))
 }
