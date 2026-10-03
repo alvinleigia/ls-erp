@@ -1,14 +1,15 @@
+import { businessDisplayName, escapeEmailHtml } from "@/lib/branding"
+
 type InviteEmailArgs = {
   inviteUrl: string
+  businessName?: string | null
 }
 
-export function inviteEmail({ inviteUrl }: InviteEmailArgs) {
-  const text = `You've been invited to join LS Salon. Set your password: ${inviteUrl}`
-  const html = `<p>You've been invited to join LS Salon.</p><p><a href="${inviteUrl}">Set your password</a></p>`
-
+export function inviteEmail({ inviteUrl, businessName }: InviteEmailArgs) {
+  const name = businessDisplayName(businessName)
   return {
-    subject: "You've been invited to LS Salon",
-    text,
-    html,
+    subject: `You've been invited to ${name}`,
+    text: `You've been invited to join ${name}. Set your password: ${inviteUrl}`,
+    html: `<p>You've been invited to join ${escapeEmailHtml(name)}.</p><p><a href="${escapeEmailHtml(inviteUrl)}">Set your password</a></p>`,
   }
 }

@@ -60,6 +60,7 @@ export async function GET(
 
     const pdf = await buildAppointmentOrderInvoicePdf({
       order: serializeAppointmentOrder(order),
+    businessName: tenantSession.context.tenantName,
       settings: settings ?? undefined,
     })
 

@@ -1,3 +1,4 @@
+import { businessDisplayName } from "@/lib/branding"
 import { NextResponse } from "next/server"
 
 import {
@@ -51,7 +52,7 @@ export async function POST(
       logApiRequestSuccess(logContext, 400, { reason: "missing_customer_email", orderId: id })
       return withRequestId(response, logContext.requestId)
     }
-    if (!(await canSendConfiguredEmail(prisma))) {
+    if (!mailFrom || !(await canSendConfiguredEmail(prisma, tenantId))) {
       const response = NextResponse.json(
         { error: "Email notifications are disabled or SMTP is not configured." },
         { status: 400 }
@@ -74,18 +75,20 @@ export async function POST(
 
   const pdf = await buildAppointmentOrderInvoicePdf({
     order: serializeAppointmentOrder(order),
+    businessName: tenantSession.context.tenantName,
     settings: settings ?? undefined,
   })
 
   const subject = `Invoice ${order.id.slice(-6)}`
   const customerName = order.customer?.name || "customer"
-  const from = mailFrom || "no-reply@ls-salon.com"
+  const from = mailFrom
+  const businessName = businessDisplayName(tenantSession.context.tenantName)
 
     await mailer.sendMail({
       to: order.customer.email,
       from,
       subject,
-      text: `Hi ${customerName},\n\nPlease find your invoice attached.\n\nThanks,\nLS Salon`,
+      text: `Hi ${customerName},\n\nPlease find your invoice attached.\n\nThanks,\n${businessName}`,
       attachments: [
         {
           filename: `invoice-${order.id}.pdf`,

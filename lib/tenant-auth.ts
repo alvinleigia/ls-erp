@@ -5,6 +5,7 @@ import { enterTenantDbContext } from "@/lib/prisma"
 import { resolveTenantFromRequest } from "@/lib/tenancy"
 
 export type TenantSessionContext = {
+  tenantName: string
   tenantId: string
   role: string | null
   sessionUserId: string | null
@@ -30,6 +31,7 @@ export const requireTenantSession = async (request: Request) => {
   return {
     context: {
       tenantId: tenant.id,
+      tenantName: tenant.name,
       role: (session.user as { role?: string | null }).role ?? null,
       sessionUserId: (session.user as { id?: string | null }).id ?? null,
     } satisfies TenantSessionContext,

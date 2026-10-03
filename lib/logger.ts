@@ -1,3 +1,4 @@
+import { APPLICATION_ID } from "@/lib/branding"
 type LogLevel = "debug" | "info" | "warn" | "error"
 
 type LogContext = Record<string, unknown>
@@ -46,7 +47,7 @@ const writeLog = (level: LogLevel, event: string, context?: LogContext) => {
     timestamp: new Date().toISOString(),
     level,
     event,
-    service: "salon-booking",
+    service: APPLICATION_ID,
     env: process.env.NODE_ENV ?? "development",
     ...(context ? (sanitizeValue(context) as LogContext) : {}),
   }

@@ -95,7 +95,7 @@ This is the baseline for new modules (API + UI) in this codebase.
 - Keep search and the main status filter visible. Group additional filters in `CrmFilters` with reset controls and an active-filter count.
 - Use `CrmTablePagination` with DataTable, or `CrmPagination` for reports, board columns and timelines. Show the record range on the left, centered Previous / Page / Next controls, and page size on the right. Narrow sections move centered page controls to a second row. Keep server-side paging and reset to page one when filters or page size change.
 - Render customer interactions and record history through `CrmTimeline`, with actor, event, timestamp and message. Keep internal-note forms within the history section.
-- These wrappers are CRM-specific; other modules retain their existing layout and pagination.
+- Shared presentation components live in `components/erp`. CRM wrappers retain permission and edit-context behavior. New ERP views use the neutral components directly; existing legacy views migrate one module at a time.
 - Keep inline-size containment on the CRM layout boundary. The surrounding app shell is a flex item; wide tables and board columns must scroll inside CRM instead of expanding the document on mobile. Verify layouts within that shell as well as isolated previews.
 
 ## Record detail views
@@ -260,3 +260,12 @@ Use the shared record view/form boundary for saved CRM records. Keep related
 lists in lazy record tabs, show read-only summary sections, and open the shared
 edit panel from section actions. Reuse CrmSection for collapsible form sections
 and CrmDraftPanel for small configuration editors. See CRM_RECORD_VIEWS.md.
+
+
+## ERP shared UI foundation (2026-10-03)
+
+- Use `components/erp/page` for headers, surfaces, action bars, filters, toolbars and creation Save/Cancel controls.
+- Use `components/erp/section`, `controls`, `pagination`, `record-select` and `record-detail` for common presentation.
+- Neutral components must not import business modules or authorization hooks. Callers determine allowed actions and tabs; APIs enforce them.
+- CRM compatibility wrappers use the same implementations and keep existing permission checks. Do not copy the components into each module.
+- The focused edit-panel pattern supersedes the earlier dedicated-edit-page-only guidance when migrating large record views.

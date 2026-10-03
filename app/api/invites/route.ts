@@ -96,7 +96,7 @@ export async function POST(request: Request) {
       return withRequestId(response, logContext.requestId)
     }
 
-    const emailTemplate = inviteEmail({ inviteUrl })
+    const emailTemplate = inviteEmail({ inviteUrl, businessName: tenantSession.context.tenantName })
 
     await mailer.sendMail({
       from: mailFrom,

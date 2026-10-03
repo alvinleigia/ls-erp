@@ -1,3 +1,4 @@
+import { APPLICATION_NAME } from "@/lib/branding"
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Toaster } from "sonner";
@@ -15,7 +16,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Leiweissen ERP",
+  title: APPLICATION_NAME,
   description: "Leiweissen business management",
 };
 

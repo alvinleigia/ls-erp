@@ -1,3 +1,4 @@
+import { businessDisplayName } from "@/lib/branding"
 import { PDFDocument, StandardFonts } from "pdf-lib"
 import fontkit from "@pdf-lib/fontkit"
 import fs from "fs"
@@ -12,6 +13,7 @@ import {
 import { DEFAULT_DATE_FORMAT, formatDateForDisplay } from "@/lib/date"
 
 type InvoiceInput = {
+  businessName?: string | null
   order: AppointmentOrderRow
   settings?: Pick<
     AppSettingsPayload,
@@ -39,6 +41,7 @@ const formatDateTime = (
 export const buildAppointmentOrderInvoicePdf = async ({
   order,
   settings,
+  businessName,
 }: InvoiceInput): Promise<Buffer> => {
   const pdf = await PDFDocument.create()
   pdf.registerFontkit(fontkit)
@@ -171,7 +174,7 @@ export const buildAppointmentOrderInvoicePdf = async ({
     return lines
   }
 
-  const headerLines = (process.env.INVOICE_HEADER_LINES ?? "LS Salon").split("|")
+  const headerLines = (businessName?.trim() || process.env.INVOICE_HEADER_LINES || businessDisplayName()).split("|")
   headerLines.filter(Boolean).forEach((line, index) => {
     drawCentered(line.trim(), index === 0 ? 12 : 9, index === 0)
   })

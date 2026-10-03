@@ -799,3 +799,10 @@ stages. Changes and both pending migrations are local; not deployed.
 ## Tenant access Stage 2 (local, 2026-09-30)
 
 Tenant access roles now restrict the existing Staff/Manager account authority across CRM, projects and sales documents. Settings > Access roles provides templates, an action matrix and user assignment; new staff creation supports an initial access role. Typed server requirements cover reads, mutations, exports and generated work, with indexed current-role resolution, forced RLS and transactional audits. Existing users retain legacy access until assigned. The last active tenant administrator is protected. See docs/TENANT_ACCESS_CONTROL.md for configuration, migration and validation details. Not pushed or deployed. Next: indexed own/assigned, managed-team and all-tenant record scopes.
+
+
+## ERP identity and shared UI foundation (2026-10-03)
+
+Repository renamed to alvinleigia/ls-erp. Neutral presentation components now live in components/erp; CRM adapters preserve authorization and existing workflows. Product branding and tenant-specific invitation/invoice defaults were updated locally. Build, TypeScript, lint, 30 browser regressions and 20 unit checks passed. Legacy module migration remains incremental. See ERP_STANDARDIZATION.md for scope and the pending Vercel Git reconnection, which requires the account GitHub Login Connection. Application changes are not pushed or deployed.
+
+Vercel Git reconnection follow-up (2026-10-03): user reconnected the project; API verification confirms alvinleigia/ls-erp, repository ID 1279282190 and production branch main. The earlier connection blocker is resolved.

@@ -1,6 +1,8 @@
-# LS Salon
+# LS ERP
 
-Multi-tenant salon SaaS built with Next.js, Prisma, Postgres, and tenant-scoped host routing.
+Leiweissen ERP: a modular, multi-tenant business management application built with Next.js, Prisma, Postgres, and tenant-scoped host routing.
+
+Repository: https://github.com/alvinleigia/ls-erp
 
 ## Local setup
 

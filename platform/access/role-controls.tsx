@@ -5,10 +5,10 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { DropdownSelect } from "@/components/ui/dropdown-select"
-import { CrmPageHeader, CrmSurface, crmPageClass } from "@/modules/crm/components/crm-page"
-import { CrmDraftPanel } from "@/modules/crm/components/crm-record-detail"
-import { CrmPagination } from "@/modules/crm/components/crm-pagination"
-import { RecordSelect } from "@/modules/crm/components/record-select"
+import { PageHeader, Surface, pageClass } from "@/components/erp/page"
+import { DraftPanel } from "@/components/erp/record-detail"
+import { Pagination } from "@/components/erp/pagination"
+import { RecordSelect } from "@/components/erp/record-select"
 import { accessResources, resourceKeys, permissionActions, roleTemplates, type Permission, type Resource } from "./catalog"
 
 type AccessRole = { id?: string; name: string; permissions: Permission[]; archived: boolean; version?: number }
@@ -41,14 +41,14 @@ export function AccessRoles() {
     return () => { clearTimeout(timer); controller.abort() }
   }, [q, page, pageSize, archived, revision])
   async function edit(id: string) { try { setDraft(await request<AccessRole>(`/api/access/roles/${id}`)) } catch (e) { setError((e as Error).message) } }
-  return <div className={crmPageClass}>
-    <CrmPageHeader title="Access roles" description="Control access to CRM, projects and sales documents. Account roles still determine which records a user can manage." actions={<><Button variant="outline" disabled={loading || !!error} onClick={() => setAssign(true)}>Assign role</Button><Button disabled={loading || !!error} onClick={() => setDraft({ name: "", permissions: [], archived: false })}>New role</Button></>} />
-    <CrmSurface><p className="text-sm text-muted-foreground">Tenant administrators retain full access. Users without a custom role keep their existing permissions. These roles restrict the user&apos;s Staff or Manager account role; they do not grant access to other ERP modules.</p></CrmSurface>
-    <CrmSurface>
+  return <div className={pageClass}>
+    <PageHeader title="Access roles" description="Control access to CRM, projects and sales documents. Account roles still determine which records a user can manage." actions={<><Button variant="outline" disabled={loading || !!error} onClick={() => setAssign(true)}>Assign role</Button><Button disabled={loading || !!error} onClick={() => setDraft({ name: "", permissions: [], archived: false })}>New role</Button></>} />
+    <Surface><p className="text-sm text-muted-foreground">Tenant administrators retain full access. Users without a custom role keep their existing permissions. These roles restrict the user&apos;s Staff or Manager account role; they do not grant access to other ERP modules.</p></Surface>
+    <Surface>
       <div className="flex flex-wrap gap-2"><Input className="min-w-0 flex-1" aria-label="Search access roles" placeholder="Search roles..." value={q} onChange={e => { setQ(e.target.value); setPage(1) }} /><DropdownSelect label="Role status" value={archived} options={[{ value: "false", label: "Active roles" }, { value: "true", label: "Archived roles" }]} onValueChange={value => { setArchived(value); setPage(1) }} /><Button variant="outline" onClick={refresh}>Refresh</Button></div>
       {error ? <p role="alert" className="text-destructive">{error}</p> : loading ? <p>Loading roles...</p> : rows.length ? <div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead><tr className="border-b"><th className="p-3">Role</th><th className="p-3">Assigned users</th></tr></thead><tbody>{rows.map(row => <tr key={row.id} className="border-b"><td className="p-3"><button className="font-medium underline" onClick={() => edit(row.id)}>{row.name}</button></td><td className="p-3">{row._count.assignments}</td></tr>)}</tbody></table></div> : <p className="py-6 text-center text-muted-foreground">No access roles found. Create a role from a template to start.</p>}
-      <CrmPagination page={page} pageSize={pageSize} total={total} loading={loading} onPageChange={setPage} onPageSizeChange={size => { setPageSize(size); setPage(1) }} />
-    </CrmSurface>
+      <Pagination page={page} pageSize={pageSize} total={total} loading={loading} onPageChange={setPage} onPageSizeChange={size => { setPageSize(size); setPage(1) }} />
+    </Surface>
     {draft && <RoleEditor initial={draft} onClose={() => setDraft(null)} onSaved={() => { setDraft(null); refresh() }} />}
     {assign && <AssignmentEditor onClose={() => setAssign(false)} onSaved={() => { setAssign(false); refresh() }} />}
   </div>
@@ -70,12 +70,12 @@ function RoleEditor({ initial, onClose, onSaved }: { initial: AccessRole; onClos
       toast.success("Access role saved."); onSaved()
     } catch (e) { setError((e as Error).message) } finally { setSaving(false) }
   }
-  return <CrmDraftPanel title={initial.id ? "Edit access role" : "New access role"} description="Read allows the view. Other actions require Read. Clearing Read removes all actions for that entity." fingerprint={value} saving={saving} error={error} onClose={onClose} onSubmit={save}>
+  return <DraftPanel title={initial.id ? "Edit access role" : "New access role"} description="Read allows the view. Other actions require Read. Clearing Read removes all actions for that entity." fingerprint={value} saving={saving} error={error} onClose={onClose} onSubmit={save}>
     <div className="space-y-2"><Label htmlFor="role-name">Role name</Label><Input id="role-name" required minLength={2} maxLength={80} value={value.name} onChange={e => setValue({ ...value, name: e.target.value })} /></div>
     {!initial.id && <DropdownSelect label="Copy template" value="choose" options={[{ value: "choose", label: "Copy permissions from a template", disabled: true }, ...roleTemplates.map(template => ({ value: template.key, label: template.name }))]} onValueChange={key => { const template = roleTemplates.find(item => item.key === key)!; setValue({ ...value, name: value.name || template.name, permissions: [...template.permissions] }) }} />}
     <div className="overflow-x-auto rounded-lg border"><table className="w-full text-sm"><thead><tr className="border-b"><th className="p-2 text-left">Entity</th>{permissionActions.map(action => <th className="p-2 capitalize" key={action}>{action}</th>)}</tr></thead><tbody>{resourceKeys.map(resource => <tr key={resource} className="border-b"><th className="p-2 text-left font-normal">{accessResources[resource].name}</th>{permissionActions.map(action => { const permission = `${resource}.${action}` as Permission; return <td key={action} className="p-2 text-center">{(accessResources[resource].actions as readonly string[]).includes(action) ? <input type="checkbox" className="size-4 accent-primary" aria-label={`${accessResources[resource].name}: ${action}`} checked={value.permissions.includes(permission)} onChange={e => toggle(resource, permission, e.target.checked)} /> : <span aria-label="Not applicable">—</span>}</td> })}</tr>)}</tbody></table></div>
     {initial.id && <label className="flex items-center gap-2"><input type="checkbox" checked={value.archived} onChange={e => setValue({ ...value, archived: e.target.checked })} />Archived (reassign users first)</label>}
-  </CrmDraftPanel>
+  </DraftPanel>
 }
 
 function AssignmentEditor({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
@@ -88,12 +88,12 @@ function AssignmentEditor({ onClose, onSaved }: { onClose: () => void; onSaved: 
     return () => { cancelled = true }
   }, [userId])
   const eligible = current && ["STAFF", "MANAGER"].includes(current.role)
-  return <CrmDraftPanel title="Assign access role" description="Choose a staff member or manager. Existing record ownership and team access remain in force." fingerprint={{ userId, roleId }} saving={saving} disabled={!eligible} error={error} onClose={onClose} onSubmit={async () => {
+  return <DraftPanel title="Assign access role" description="Choose a staff member or manager. Existing record ownership and team access remain in force." fingerprint={{ userId, roleId }} saving={saving} disabled={!eligible} error={error} onClose={onClose} onSubmit={async () => {
     setSaving(true); setError("")
     try { await request(`/api/access/users/${userId}`, { roleId: roleId || null, previousRoleId: current?.accessAssignment?.roleId ?? null }); toast.success("Access role assigned."); window.dispatchEvent(new Event("business-modules-changed")); onSaved() } catch (e) { setError((e as Error).message) } finally { setSaving(false) }
   }}>
     <div className="space-y-2"><Label htmlFor="access-user">User</Label><RecordSelect id="access-user" endpoint="/api/users" value={userId} onChange={setUserId} /></div>
     {current && !eligible && <p role="alert">Choose a Staff or Manager account. Tenant administrators retain full access.</p>}
     {eligible && <><div className="space-y-2"><Label htmlFor="assigned-role">Access role</Label><RecordSelect id="assigned-role" endpoint="/api/access/roles" value={roleId} selected={current.accessAssignment ? { value: current.accessAssignment.roleId, label: current.accessAssignment.role.name } : undefined} onChange={setRoleId} placeholder="Existing account permissions" /></div><Button type="button" variant="outline" onClick={() => setRoleId("")}>Use existing account permissions</Button><p className="text-sm text-muted-foreground">{roleId ? "The selected role will restrict this user's access." : "No custom restrictions: use this user's existing account permissions."}</p></>}
-  </CrmDraftPanel>
+  </DraftPanel>
 }
