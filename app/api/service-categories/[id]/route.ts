@@ -1,3 +1,5 @@
+import { withServicesApi } from "@/modules/services/api"
+import type { BusinessActor } from "@/platform/policy"
 import { NextResponse } from "next/server"
 
 import {
@@ -9,29 +11,17 @@ import {
 } from "@/lib/api-logging"
 import { prisma } from "@/lib/prisma"
 import { updateServiceCategorySchema } from "@/lib/validation"
-import { canManageUsers, type Role } from "@/lib/permissions"
-import { requireTenantSession } from "@/lib/tenant-auth"
 
-export async function PATCH(
+async function handlePATCH(
   request: Request,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
+  actor: BusinessActor
 ) {
   const logContext = createApiLogContext(request)
   logApiRequestStart(logContext, request)
 
   const { id } = await params
-  const tenantSession = await requireTenantSession(request)
-  if (tenantSession.error) {
-    logApiRequestSuccess(logContext, tenantSession.error.status, { reason: "tenant_or_auth_failed", categoryId: id })
-    return withRequestId(tenantSession.error, logContext.requestId)
-  }
-  const { tenantId, role } = tenantSession.context
-
-  if (!canManageUsers(role as Role)) {
-    const response = NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    logApiRequestSuccess(logContext, 401, { reason: "unauthorized", categoryId: id })
-    return withRequestId(response, logContext.requestId)
-  }
+  const { tenantId } = actor
 
   const body = await request.json().catch(() => null)
   if (!body) {
@@ -98,26 +88,16 @@ export async function PATCH(
   }
 }
 
-export async function DELETE(
+async function handleDELETE(
   request: Request,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
+  actor: BusinessActor
 ) {
   const logContext = createApiLogContext(request)
   logApiRequestStart(logContext, request)
 
   const { id } = await params
-  const tenantSession = await requireTenantSession(request)
-  if (tenantSession.error) {
-    logApiRequestSuccess(logContext, tenantSession.error.status, { reason: "tenant_or_auth_failed", categoryId: id })
-    return withRequestId(tenantSession.error, logContext.requestId)
-  }
-  const { tenantId, role } = tenantSession.context
-
-  if (!canManageUsers(role as Role)) {
-    const response = NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    logApiRequestSuccess(logContext, 401, { reason: "unauthorized", categoryId: id })
-    return withRequestId(response, logContext.requestId)
-  }
+  const { tenantId } = actor
 
   try {
     const linkedServices = await prisma.service.count({
@@ -143,4 +123,14 @@ export async function DELETE(
     const response = NextResponse.json({ error: "Unable to delete category." }, { status: 500 })
     return withRequestId(response, logContext.requestId)
   }
+}
+
+export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
+  const { id } = await context.params
+  return withServicesApi(request, "serviceCategories", "edit", actor => handlePATCH(request, context, actor), id)
+}
+
+export async function DELETE(request: Request, context: { params: Promise<{ id: string }> }) {
+  const { id } = await context.params
+  return withServicesApi(request, "serviceCategories", "archive", actor => handleDELETE(request, context, actor), id)
 }

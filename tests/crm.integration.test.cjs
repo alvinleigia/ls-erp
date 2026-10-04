@@ -16,13 +16,15 @@ const suffix = randomUUID().replaceAll("-", "")
 const a = `crm_a_${suffix}`
 const b = `crm_b_${suffix}`
 const clients = []
+const pools = []
 function client(tenantId, admin = false) {
   const connection = new URL(rawUrl)
   if (!admin) { connection.username = "crm_test_runtime"; connection.password = "" }
   const pool = new Pool({ connectionString: connection.toString(), max: 4,
     ...(!admin ? { options: `-c app.tenant_id=${tenantId || ""} -c app.rls_bypass=off` } : {}),
   })
-  const db = new PrismaClient({ adapter: new PrismaPg(pool, { disposeExternalPool: true }) })
+  pools.push(pool)
+  const db = new PrismaClient({ adapter: new PrismaPg(pool) })
   clients.push(db)
   return db
 }
@@ -69,7 +71,10 @@ before(async () => {
   await manager.createLeadSource({ name: "Website" })
   defaultLostReason = await manager.createLostReason({ name: "Not proceeding" })
 })
-after(async () => { await Promise.all(clients.map(db => db.$disconnect())) })
+after(async () => {
+  await Promise.all(clients.map(db => db.$disconnect()))
+  await Promise.all(pools.map(pool => pool.end()))
+})
 
 test("lost reason catalog enforces permissions, tenant RLS, duplicates and optimistic locking", async () => {
   const reason = await manager.createLostReason({ name: " Spam   enquiries " })

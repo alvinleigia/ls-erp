@@ -1,4 +1,5 @@
 "use client"
+import { useCurrentResourceAction } from "@/platform/access/view-guard"
 
 import * as React from "react"
 import {
@@ -48,6 +49,7 @@ const SortIndicator = ({ value }: { value: false | "asc" | "desc" }) => {
 }
 
 export default function SettingsTaxesPage() {
+  const canCreate = useCurrentResourceAction("create"), canEdit = useCurrentResourceAction("edit"), canArchive = useCurrentResourceAction("archive")
   const [items, setItems] = React.useState<TaxRow[]>([])
   const [totalRows, setTotalRows] = React.useState(0)
   const [loading, setLoading] = React.useState(true)
@@ -187,10 +189,10 @@ export default function SettingsTaxesPage() {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem onSelect={() => openEdit(row.original)}>Edit</DropdownMenuItem>
+              <DropdownMenuItem disabled={!canEdit} onSelect={() => openEdit(row.original)}>Edit</DropdownMenuItem>
               <DropdownMenuItem
                 className="text-destructive"
-                onSelect={() => void removeTax(row.original)}
+                disabled={!canArchive} onSelect={() => void removeTax(row.original)}
               >
                 Delete
               </DropdownMenuItem>
@@ -199,7 +201,7 @@ export default function SettingsTaxesPage() {
         ),
       },
     ],
-    [openEdit, removeTax]
+    [openEdit, removeTax, canEdit, canArchive]
   )
 
   // eslint-disable-next-line react-hooks/incompatible-library
@@ -230,7 +232,7 @@ export default function SettingsTaxesPage() {
             Create tax definitions and apply them to booking orders.
           </p>
         </div>
-        <Button onClick={openCreate}>
+        <Button disabled={!canCreate} onClick={openCreate}>
           <PlusIcon className="mr-2 h-4 w-4" />
           New tax
         </Button>
@@ -293,7 +295,8 @@ export default function SettingsTaxesPage() {
             <label className="inline-flex items-center gap-2 text-sm">
               <input
                 type="checkbox"
-                checked={formValues.isActive}
+                disabled={!canArchive}
+                  checked={formValues.isActive}
                 onChange={(event) =>
                   setFormValues((prev) => ({ ...prev, isActive: event.target.checked }))
                 }
@@ -305,7 +308,7 @@ export default function SettingsTaxesPage() {
             <Button variant="outline" onClick={() => setFormOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={save} loading={saving} loadingText="Saving...">
+            <Button disabled={editing ? !canEdit : !canCreate} onClick={save} loading={saving} loadingText="Saving...">
               {editing ? "Save changes" : "Create tax"}
             </Button>
           </DialogFooter>

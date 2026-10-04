@@ -1,4 +1,16 @@
 "use client"
+import { useBusinessModules } from "@/platform/module-provider"
+import { useCurrentResourceAction } from "@/platform/access/view-guard"
+import { DraftPanel, RecordPanel, ReadOnlyFields } from "@/components/erp/record-detail"
+import { RecurringPlanSummary } from "./recurring-plan-summary"
+import { Section } from "@/components/erp/section"
+
+import { ActionDialogContent } from "@/components/erp/action-dialog"
+
+import { PageHeader, pageClass, Surface, TableToolbar, Filters } from "@/components/erp/page"
+import { TablePagination } from "@/components/erp/pagination"
+
+import { Select, Checkbox } from "@/components/erp/controls"
 
 import * as React from "react"
 import Link from "next/link"
@@ -12,18 +24,11 @@ import {
 import { ArrowDownIcon, ArrowUpDownIcon, ArrowUpIcon, MoreHorizontalIcon } from "lucide-react"
 import { toast } from "sonner"
 
-import { DataTable, DataTablePagination, DataTableToolbar } from "@/components/data-table"
+import { DataTable } from "@/components/data-table"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
+import { Dialog } from "@/components/ui/dialog"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -100,6 +105,12 @@ const SortIndicator = ({ value }: { value: false | "asc" | "desc" }) => {
 }
 
 export default function ShiftRecurringPlansPage() {
+  const { can } = useBusinessModules()
+  const canCreate = useCurrentResourceAction("create")
+  const canEdit = useCurrentResourceAction("edit")
+  const canArchive = useCurrentResourceAction("archive")
+
+  const [viewing, setViewing] = React.useState<StaffFlexiblePatternListItem | null>(null)
   const { formatDate } = useDateFormatter()
   const [items, setItems] = React.useState<StaffFlexiblePatternListItem[]>([])
   const [loading, setLoading] = React.useState(true)
@@ -130,6 +141,7 @@ export default function ShiftRecurringPlansPage() {
   })
   const [deactivateTarget, setDeactivateTarget] = React.useState<StaffFlexiblePatternListItem | null>(null)
   const [cloneTarget, setCloneTarget] = React.useState<StaffFlexiblePatternListItem | null>(null)
+  const [formError, setFormError] = React.useState("")
   const [actionLoading, setActionLoading] = React.useState(false)
   const [cloneName, setCloneName] = React.useState("")
   const [cloneValidFrom, setCloneValidFrom] = React.useState("")
@@ -174,7 +186,7 @@ export default function ShiftRecurringPlansPage() {
 
   const loadStaff = React.useCallback(async () => {
     try {
-      const response = await fetch("/api/users?role=STAFF&pageSize=100", { cache: "no-store" })
+      const response = await fetch("/api/directory?role=STAFF&pageSize=100", { cache: "no-store" })
       if (!response.ok) {
         throw new Error("Failed to load staff list.")
       }
@@ -268,6 +280,7 @@ export default function ShiftRecurringPlansPage() {
   )
 
   const openCreateDialog = React.useCallback(() => {
+    setFormError("")
     setCreateOpen(true)
     setCreateStaffId("")
     setCreateName("")
@@ -307,6 +320,7 @@ export default function ShiftRecurringPlansPage() {
   )
 
   const openEditDialog = React.useCallback(async (item: StaffFlexiblePatternListItem) => {
+    setFormError("")
     setEditOpen(true)
     setEditLoading(true)
     setEditPreview(null)
@@ -987,6 +1001,7 @@ export default function ShiftRecurringPlansPage() {
       return
     }
 
+    setFormError("")
     setActionLoading(true)
     try {
       const response = await fetch("/api/shifts/flexible-patterns", {
@@ -1030,6 +1045,7 @@ export default function ShiftRecurringPlansPage() {
       await loadPlans()
     } catch (error) {
       console.error(error)
+      setFormError(error instanceof Error ? error.message : "Unable to save recurring plan.")
       toast.error(error instanceof Error ? error.message : "Unable to update recurring pattern.")
     } finally {
       setActionLoading(false)
@@ -1059,6 +1075,7 @@ export default function ShiftRecurringPlansPage() {
       return
     }
 
+    setFormError("")
     setActionLoading(true)
     try {
       const response = await fetch("/api/shifts/flexible-patterns", {
@@ -1100,6 +1117,7 @@ export default function ShiftRecurringPlansPage() {
       await loadPlans()
     } catch (error) {
       console.error(error)
+      setFormError(error instanceof Error ? error.message : "Unable to save recurring plan.")
       toast.error(error instanceof Error ? error.message : "Unable to create recurring pattern.")
     } finally {
       setActionLoading(false)
@@ -1121,7 +1139,7 @@ export default function ShiftRecurringPlansPage() {
         header: () => <div>Pattern</div>,
         cell: ({ row }) => (
           <div className="space-y-0.5">
-            <div className="font-medium">{row.original.name?.trim() || "Untitled pattern"}</div>
+            <button type="button" className="font-medium underline underline-offset-4" onClick={() => setViewing(row.original)}>{row.original.name?.trim() || "Untitled pattern"}</button>
             <div className="text-xs text-muted-foreground">{row.original.id.slice(-8)}</div>
           </div>
         ),
@@ -1185,27 +1203,27 @@ export default function ShiftRecurringPlansPage() {
         cell: ({ row }) => (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-8 w-8 p-0">
+              <Button type="button" variant="ghost" size="icon" className="h-8 w-8 p-0" aria-label="Record actions">
                 <MoreHorizontalIcon className="h-4 w-4" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-44">
-              <DropdownMenuItem onClick={() => void openEditDialog(row.original)}>
-                View / Edit
+              <DropdownMenuItem disabled={!canEdit} onClick={() => void openEditDialog(row.original)}>
+                Edit
               </DropdownMenuItem>
-              <DropdownMenuItem asChild>
+              <DropdownMenuItem disabled={!can("shiftRoster.read")} asChild>
                 <Link href={`/shifts/roster?staffId=${row.original.staffId ?? ""}`}>Open roster</Link>
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => openCloneDialog(row.original)}>
+              <DropdownMenuItem disabled={!canCreate} onClick={() => openCloneDialog(row.original)}>
                 Clone pattern
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => openAssignDialog(row.original)}>
+              <DropdownMenuItem disabled={!canCreate} onClick={() => openAssignDialog(row.original)}>
                 Assign to staff
               </DropdownMenuItem>
               <DropdownMenuItem
                 className="text-destructive focus:text-destructive"
                 onClick={() => setDeactivateTarget(row.original)}
-                disabled={!row.original.isActive}
+                disabled={!canArchive || !row.original.isActive}
               >
                 Deactivate
               </DropdownMenuItem>
@@ -1215,7 +1233,7 @@ export default function ShiftRecurringPlansPage() {
         enableSorting: false,
       },
     ],
-    [formatDate, openAssignDialog, openCloneDialog, openEditDialog]
+    [formatDate, openAssignDialog, openCloneDialog, openEditDialog, canCreate, canEdit, canArchive, can]
   )
 
   const table = useReactTable({
@@ -1235,28 +1253,32 @@ export default function ShiftRecurringPlansPage() {
   })
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Recurring Plans</h1>
-          <p className="text-sm text-muted-foreground">
-            Manage flexible recurring availability patterns across staff.
-          </p>
-        </div>
-        <Button onClick={openCreateDialog}>New recurring plan</Button>
-      </div>
+    <div className={pageClass}>
+      <PageHeader title={<> Recurring Plans </>} description={<> Manage flexible recurring availability patterns across staff. </>} actions={<> <Button disabled={!canCreate} type="button" onClick={openCreateDialog}>New recurring plan</Button> </>} />
 
-      <DataTableToolbar table={table} showSearch={false}>
+      {viewing && <RecordPanel title={viewing.name || "Recurring plan"} description="Saved recurring availability." onClose={() => setViewing(null)} actions={<Button disabled={!canEdit} type="button" onClick={() => { void openEditDialog(viewing); setViewing(null) }}>Edit details</Button>}><Section title="Pattern details"><ReadOnlyFields fields={[{label:"Staff",value:viewing.staffName || viewing.staffEmail},{label:"Cycle weeks",value:viewing.cycleLengthWeeks},{label:"Valid from",value:formatDate(viewing.validFrom)},{label:"Valid to",value:viewing.validTo?formatDate(viewing.validTo):"Open ended"},{label:"Status",value:viewing.isActive?"Active":"Inactive"},{label:"Effective now",value:viewing.isCurrentlyEffective?"Yes":"No"}]} /></Section><RecurringPlanSummary key={viewing.id} id={viewing.id} /></RecordPanel>}
+      <Surface>
+      <TableToolbar table={table} showSearch={false}>
         <Input
           className="max-w-sm"
-          placeholder="Search pattern or staff"
+          aria-label="Search pattern or staff" placeholder="Search pattern or staff"
           value={search}
           onChange={(event) => setSearch(event.target.value)}
         />
-        <select
+        <Select
+          className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+          value={statusFilter}
+          onValueChange={(value) => setStatusFilter(value as "all" | "active" | "inactive")}
+        >
+          <option value="all">All status</option>
+          <option value="active">Active</option>
+          <option value="inactive">Inactive</option>
+        </Select>
+        <Filters activeCount={Number(staffFilter !== "all") + Number(Boolean(effectiveOn))} onReset={() => { setStaffFilter("all"); setEffectiveOn("") }}>
+        <Select
           className="h-9 rounded-md border border-input bg-background px-3 text-sm"
           value={staffFilter}
-          onChange={(event) => setStaffFilter(event.target.value)}
+          onValueChange={(value) => setStaffFilter(value)}
         >
           <option value="all">All staff</option>
           {staffOptions.map((staff) => (
@@ -1264,42 +1286,26 @@ export default function ShiftRecurringPlansPage() {
               {staff.name?.trim() || staff.email}
             </option>
           ))}
-        </select>
-        <select
-          className="h-9 rounded-md border border-input bg-background px-3 text-sm"
-          value={statusFilter}
-          onChange={(event) => setStatusFilter(event.target.value as "all" | "active" | "inactive")}
-        >
-          <option value="all">All status</option>
-          <option value="active">Active</option>
-          <option value="inactive">Inactive</option>
-        </select>
+        </Select>
         <Input
-          type="date"
+          type="date" aria-label="Effective on"
           className="w-[170px]"
           value={effectiveOn}
           onChange={(event) => setEffectiveOn(event.target.value)}
         />
-      </DataTableToolbar>
+        </Filters>
+      </TableToolbar>
 
       <DataTable table={table} loading={loading} emptyMessage="No recurring plans found." />
-      <DataTablePagination table={table} totalRows={totalRows} totalPages={totalPages} />
+      <TablePagination table={table} totalRows={totalRows} />
+      </Surface>
 
-      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent className="max-w-3xl">
-          <DialogHeader>
-            <DialogTitle>New recurring plan</DialogTitle>
-            <DialogDescription>
-              Create a recurring availability pattern and assign it to a flexible staff member.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-1">
+      {canCreate && createOpen && <DraftPanel title="New recurring plan" description="Configure repeating availability, then review the impact before saving." fingerprint={{staffId:createStaffId,name:createName,validFrom:createValidFrom,validTo:createValidTo,cycle:createCycleLength,weeks:createDraftWeeks}} saving={actionLoading || previewLoading} error={formError} saveLabel="Create pattern" onClose={() => setCreateOpen(false)} onSubmit={() => void createPattern()} ><div className="space-y-5"><Section title="Pattern details"><div className="space-y-1">
               <Label className="text-xs text-muted-foreground">Staff</Label>
-              <select
+              <Select aria-label="Staff"
                 className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
                 value={createStaffId}
-                onChange={(event) => setCreateStaffId(event.target.value)}
+                onValueChange={(value) => setCreateStaffId(value)}
               >
                 <option value="">Select staff</option>
                 {staffOptions
@@ -1309,20 +1315,20 @@ export default function ShiftRecurringPlansPage() {
                       {staff.name?.trim() || staff.email}
                     </option>
                   ))}
-              </select>
+              </Select>
             </div>
-            <div className="space-y-1">
+<div className="space-y-1">
               <Label className="text-xs text-muted-foreground">Pattern name</Label>
-              <Input
+              <Input aria-label="Pattern name"
                 value={createName}
                 onChange={(event) => setCreateName(event.target.value)}
                 placeholder="Optional pattern name"
               />
             </div>
-            <div className="grid gap-3 sm:grid-cols-2">
+<div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-1">
                 <Label className="text-xs text-muted-foreground">Valid from</Label>
-                <Input
+                <Input aria-label="Valid from"
                   type="date"
                   value={createValidFrom}
                   onChange={(event) => setCreateValidFrom(event.target.value)}
@@ -1330,17 +1336,17 @@ export default function ShiftRecurringPlansPage() {
               </div>
               <div className="space-y-1">
                 <Label className="text-xs text-muted-foreground">Valid to</Label>
-                <Input
+                <Input aria-label="Valid to"
                   type="date"
                   value={createValidTo}
                   onChange={(event) => setCreateValidTo(event.target.value)}
                 />
               </div>
             </div>
-            <div className="grid gap-3 sm:grid-cols-2">
+<div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-1">
                 <Label className="text-xs text-muted-foreground">Cycle weeks</Label>
-                <Input
+                <Input aria-label="Cycle weeks"
                   type="number"
                   min={1}
                   max={12}
@@ -1369,28 +1375,25 @@ export default function ShiftRecurringPlansPage() {
               </div>
               <div className="space-y-1">
                 <Label className="text-xs text-muted-foreground">Editing week</Label>
-                <select
+                <Select aria-label="Editing week"
                   className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
                   value={createSelectedWeekIndex}
-                  onChange={(event) => setCreateSelectedWeekIndex(Number(event.target.value) || 1)}
+                  onValueChange={(value) => setCreateSelectedWeekIndex(Number(value) || 1)}
                 >
                   {Array.from({ length: createCycleLength }, (_, index) => (
                     <option key={`create-week-${index + 1}`} value={index + 1}>
                       Week {index + 1}
                     </option>
                   ))}
-                </select>
+                </Select>
               </div>
-            </div>
-
-            <div className="max-h-72 space-y-3 overflow-y-auto pr-1">
+            </div></Section><Section title="Weekly availability"><div className="space-y-3">
               {createCurrentDays.map((day) => (
                 <div key={day.day} className="rounded-md border p-2">
                   <div className="mb-2 flex items-center justify-between">
                     <div className="text-sm font-medium">{day.day}</div>
                     <label className="flex items-center gap-2 text-xs">
-                      <input
-                        type="checkbox"
+                      <Checkbox
                         checked={day.isOff}
                         onChange={(event) => setCreateDayOff(day.day, event.target.checked)}
                       />
@@ -1481,45 +1484,17 @@ export default function ShiftRecurringPlansPage() {
                   )}
                 </div>
               ))}
-            </div>
-          </div>
-          <DialogFooter className="pt-2 sm:flex-wrap">
-            <Button variant="outline" onClick={() => setCreateOpen(false)} disabled={actionLoading}>
-              Cancel
-            </Button>
-            <Button onClick={createPattern} disabled={actionLoading}>
-              Create recurring plan
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+            </div></Section></div></DraftPanel>}
 
-      <Dialog
-        open={editOpen}
-        onOpenChange={(open) => {
-          setEditOpen(open)
-          if (!open) {
-            setEditPreview(null)
-          }
-        }}
-      >
-        <DialogContent className="max-w-3xl">
-          <DialogHeader>
-            <DialogTitle>Edit recurring plan</DialogTitle>
-            <DialogDescription>
-              Update recurring availability pattern details for the selected staff member.
-            </DialogDescription>
-          </DialogHeader>
-          {editLoading ? (
+      {editOpen && !editLoading && <DraftPanel title="Edit recurring plan" description="Configure repeating availability, then review the impact before saving." fingerprint={{staffId:editStaffId,name:editName,validFrom:editValidFrom,validTo:editValidTo,cycle:editCycleLength,weeks:editDraftWeeks}} saving={actionLoading || previewLoading} error={formError} saveLabel="Save changes" onClose={() => setEditOpen(false)} onSubmit={() => void saveEditPattern()} footerActions={<Button type="button" variant="outline" disabled={actionLoading || previewLoading} onClick={() => void previewEditImpact()}>Preview impact</Button>}>{editLoading ? (
             <div className="py-8 text-sm text-muted-foreground">Loading pattern details...</div>
           ) : (
-            <div className="space-y-4">
-              <div className="space-y-1">
+            <div className="space-y-5"><Section title="Pattern details"><div className="space-y-1">
                 <Label className="text-xs text-muted-foreground">Staff</Label>
-                <select
+                <Select aria-label="Staff"
                   className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
                   value={editStaffId}
-                  onChange={(event) => setEditStaffId(event.target.value)}
+                  onValueChange={(value) => setEditStaffId(value)}
                   disabled
                 >
                   <option value="">Select staff</option>
@@ -1530,20 +1505,20 @@ export default function ShiftRecurringPlansPage() {
                         {staff.name?.trim() || staff.email}
                       </option>
                     ))}
-                </select>
+                </Select>
               </div>
-              <div className="space-y-1">
+<div className="space-y-1">
                 <Label className="text-xs text-muted-foreground">Pattern name</Label>
-                <Input
+                <Input aria-label="Pattern name"
                   value={editName}
                   onChange={(event) => setEditName(event.target.value)}
                   placeholder="Optional pattern name"
                 />
               </div>
-              <div className="grid gap-3 sm:grid-cols-2">
+<div className="grid gap-3 sm:grid-cols-2">
                 <div className="space-y-1">
                   <Label className="text-xs text-muted-foreground">Valid from</Label>
-                  <Input
+                  <Input aria-label="Valid from"
                     type="date"
                     value={editValidFrom}
                     onChange={(event) => setEditValidFrom(event.target.value)}
@@ -1551,17 +1526,17 @@ export default function ShiftRecurringPlansPage() {
                 </div>
                 <div className="space-y-1">
                   <Label className="text-xs text-muted-foreground">Valid to</Label>
-                  <Input
+                  <Input aria-label="Valid to"
                     type="date"
                     value={editValidTo}
                     onChange={(event) => setEditValidTo(event.target.value)}
                   />
                 </div>
               </div>
-              <div className="grid gap-3 sm:grid-cols-2">
+<div className="grid gap-3 sm:grid-cols-2">
                 <div className="space-y-1">
                   <Label className="text-xs text-muted-foreground">Cycle weeks</Label>
-                  <Input
+                  <Input aria-label="Cycle weeks"
                     type="number"
                     min={1}
                     max={12}
@@ -1590,28 +1565,25 @@ export default function ShiftRecurringPlansPage() {
                 </div>
                 <div className="space-y-1">
                   <Label className="text-xs text-muted-foreground">Editing week</Label>
-                  <select
+                  <Select aria-label="Editing week"
                     className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
                     value={editSelectedWeekIndex}
-                    onChange={(event) => setEditSelectedWeekIndex(Number(event.target.value) || 1)}
+                    onValueChange={(value) => setEditSelectedWeekIndex(Number(value) || 1)}
                   >
                     {Array.from({ length: editCycleLength }, (_, index) => (
                       <option key={`edit-week-${index + 1}`} value={index + 1}>
                         Week {index + 1}
                       </option>
                     ))}
-                  </select>
+                  </Select>
                 </div>
-              </div>
-
-              <div className="max-h-72 space-y-3 overflow-y-auto pr-1">
+              </div></Section><Section title="Weekly availability"><div className="space-y-3">
                 {editCurrentDays.map((day) => (
                   <div key={day.day} className="rounded-md border p-2">
                     <div className="mb-2 flex items-center justify-between">
                       <div className="text-sm font-medium">{day.day}</div>
                       <label className="flex items-center gap-2 text-xs">
-                        <input
-                          type="checkbox"
+                        <Checkbox
                           checked={day.isOff}
                           onChange={(event) => setEditDayOff(day.day, event.target.checked)}
                         />
@@ -1702,8 +1674,7 @@ export default function ShiftRecurringPlansPage() {
                     )}
                   </div>
                 ))}
-              </div>
-              {editPreview ? (
+              </div></Section>{editPreview ? (
                 <div className="space-y-2 rounded-md border p-3 text-sm">
                   <div className="font-medium">Impact preview</div>
                   <div className="text-muted-foreground">
@@ -1724,28 +1695,8 @@ export default function ShiftRecurringPlansPage() {
                     </div>
                   ))}
                 </div>
-              ) : null}
-            </div>
-          )}
-          <DialogFooter className="pt-2 sm:flex-wrap">
-            <Button variant="outline" onClick={() => setEditOpen(false)} disabled={actionLoading || editLoading}>
-              Cancel
-            </Button>
-            <Button
-              variant="outline"
-              onClick={() => {
-                void previewEditImpact()
-              }}
-              disabled={actionLoading || editLoading || previewLoading}
-            >
-              {previewLoading ? "Previewing..." : "Preview impact"}
-            </Button>
-            <Button onClick={saveEditPattern} disabled={actionLoading || editLoading}>
-              Save changes
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+              ) : null}</div>
+          )}</DraftPanel>}
 
       <Dialog
         open={Boolean(deactivateTarget)}
@@ -1756,20 +1707,26 @@ export default function ShiftRecurringPlansPage() {
           }
         }}
       >
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Deactivate recurring pattern?</DialogTitle>
-            <DialogDescription>
-              This will stop applying this pattern to roster/availability for future dates in its validity window.
-            </DialogDescription>
-          </DialogHeader>
-          {deactivateTarget ? (
+        <ActionDialogContent title={<>Deactivate recurring pattern?</>} description={<>This will stop applying this pattern to roster/availability for future dates in its validity window.
+            </>} className="sm:max-w-md" actions={<> <Button type="button"
+              variant="outline"
+              onClick={() => {
+                setDeactivateTarget(null)
+                setDeactivatePreview(null)
+              }}
+              disabled={actionLoading || previewLoading}
+            >
+              Cancel
+            </Button><Button type="button" variant="outline" onClick={previewDeactivateImpact} disabled={actionLoading || previewLoading}>
+              {previewLoading ? "Previewing..." : "Preview impact"}
+            </Button><Button type="button" variant="destructive" onClick={deactivatePattern} disabled={actionLoading || previewLoading}>
+              Deactivate
+            </Button> </>}>{deactivateTarget ? (
             <div className="rounded-md border p-3 text-sm">
               <div className="font-medium">{deactivateTarget.name?.trim() || "Untitled pattern"}</div>
               <div className="text-muted-foreground">{deactivateTarget.staffName || deactivateTarget.staffEmail}</div>
             </div>
-          ) : null}
-          {deactivatePreview ? (
+          ) : null}{deactivatePreview ? (
             <div className="space-y-2 rounded-md border p-3 text-sm">
               <div className="font-medium">Impact preview</div>
               <div className="text-muted-foreground">
@@ -1789,26 +1746,7 @@ export default function ShiftRecurringPlansPage() {
                 </div>
               ))}
             </div>
-          ) : null}
-          <DialogFooter className="pt-2">
-            <Button
-              variant="outline"
-              onClick={() => {
-                setDeactivateTarget(null)
-                setDeactivatePreview(null)
-              }}
-              disabled={actionLoading || previewLoading}
-            >
-              Cancel
-            </Button>
-            <Button variant="outline" onClick={previewDeactivateImpact} disabled={actionLoading || previewLoading}>
-              {previewLoading ? "Previewing..." : "Preview impact"}
-            </Button>
-            <Button variant="destructive" onClick={deactivatePattern} disabled={actionLoading || previewLoading}>
-              Deactivate
-            </Button>
-          </DialogFooter>
-        </DialogContent>
+          ) : null}</ActionDialogContent>
       </Dialog>
 
       <Dialog
@@ -1820,17 +1758,24 @@ export default function ShiftRecurringPlansPage() {
           }
         }}
       >
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Clone recurring pattern</DialogTitle>
-            <DialogDescription>
-              Create a new version from this pattern with a new validity range.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-3">
+        <ActionDialogContent title={<>Clone recurring pattern</>} description={<>Create a new version from this pattern with a new validity range.
+            </>} className="sm:max-w-md" actions={<> <Button type="button"
+              variant="outline"
+              onClick={() => {
+                setCloneTarget(null)
+                setClonePreview(null)
+              }}
+              disabled={actionLoading || previewLoading}
+            >
+              Cancel
+            </Button><Button type="button" variant="outline" onClick={previewCloneImpact} disabled={actionLoading || previewLoading}>
+              {previewLoading ? "Previewing..." : "Preview impact"}
+            </Button><Button type="button" onClick={clonePattern} disabled={actionLoading || previewLoading}>
+              Create clone
+            </Button> </>}><div className="space-y-3">
             <div className="space-y-1">
               <label className="text-xs text-muted-foreground">Name</label>
-              <Input
+              <Input aria-label="Name"
                 value={cloneName}
                 onChange={(event) => setCloneName(event.target.value)}
                 placeholder="Optional pattern name"
@@ -1839,7 +1784,7 @@ export default function ShiftRecurringPlansPage() {
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-1">
                 <label className="text-xs text-muted-foreground">Valid from</label>
-                <Input
+                <Input aria-label="Valid from"
                   type="date"
                   value={cloneValidFrom}
                   onChange={(event) => setCloneValidFrom(event.target.value)}
@@ -1847,7 +1792,7 @@ export default function ShiftRecurringPlansPage() {
               </div>
               <div className="space-y-1">
                 <label className="text-xs text-muted-foreground">Valid to</label>
-                <Input
+                <Input aria-label="Valid to"
                   type="date"
                   value={cloneValidTo}
                   onChange={(event) => setCloneValidTo(event.target.value)}
@@ -1855,8 +1800,7 @@ export default function ShiftRecurringPlansPage() {
               </div>
             </div>
             <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
+              <Checkbox
                 checked={cloneActivate}
                 onChange={(event) => setCloneActivate(event.target.checked)}
               />
@@ -1884,26 +1828,7 @@ export default function ShiftRecurringPlansPage() {
                 ))}
               </div>
             ) : null}
-          </div>
-          <DialogFooter className="pt-2">
-            <Button
-              variant="outline"
-              onClick={() => {
-                setCloneTarget(null)
-                setClonePreview(null)
-              }}
-              disabled={actionLoading || previewLoading}
-            >
-              Cancel
-            </Button>
-            <Button variant="outline" onClick={previewCloneImpact} disabled={actionLoading || previewLoading}>
-              {previewLoading ? "Previewing..." : "Preview impact"}
-            </Button>
-            <Button onClick={clonePattern} disabled={actionLoading || previewLoading}>
-              Create clone
-            </Button>
-          </DialogFooter>
-        </DialogContent>
+          </div></ActionDialogContent>
       </Dialog>
 
       <Dialog
@@ -1915,20 +1840,27 @@ export default function ShiftRecurringPlansPage() {
           }
         }}
       >
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Assign recurring pattern</DialogTitle>
-            <DialogDescription>
-              Assign this recurring pattern to a staff member in this tenant.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-3">
+        <ActionDialogContent title={<>Assign recurring pattern</>} description={<>Assign this recurring pattern to a staff member in this tenant.
+            </>} className="sm:max-w-md" actions={<> <Button type="button"
+              variant="outline"
+              onClick={() => {
+                setAssignTarget(null)
+                setAssignPreview(null)
+              }}
+              disabled={actionLoading || previewLoading}
+            >
+              Cancel
+            </Button><Button type="button" variant="outline" onClick={previewAssignImpact} disabled={actionLoading || previewLoading}>
+              {previewLoading ? "Previewing..." : "Preview impact"}
+            </Button><Button type="button" onClick={assignPattern} disabled={actionLoading || previewLoading}>
+              Assign pattern
+            </Button> </>}><div className="space-y-3">
             <div className="space-y-1">
               <label className="text-xs text-muted-foreground">Target staff</label>
-              <select
+              <Select aria-label="Target staff"
                 className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
                 value={assignStaffId}
-                onChange={(event) => setAssignStaffId(event.target.value)}
+                onValueChange={(value) => setAssignStaffId(value)}
               >
                 <option value="">Select staff</option>
                 {staffOptions.map((staff) => (
@@ -1936,11 +1868,11 @@ export default function ShiftRecurringPlansPage() {
                     {staff.name?.trim() || staff.email}
                   </option>
                 ))}
-              </select>
+              </Select>
             </div>
             <div className="space-y-1">
               <label className="text-xs text-muted-foreground">Pattern name</label>
-              <Input
+              <Input aria-label="Pattern name"
                 value={assignName}
                 onChange={(event) => setAssignName(event.target.value)}
                 placeholder="Optional pattern name"
@@ -1949,7 +1881,7 @@ export default function ShiftRecurringPlansPage() {
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-1">
                 <label className="text-xs text-muted-foreground">Valid from</label>
-                <Input
+                <Input aria-label="Valid from"
                   type="date"
                   value={assignValidFrom}
                   onChange={(event) => setAssignValidFrom(event.target.value)}
@@ -1957,7 +1889,7 @@ export default function ShiftRecurringPlansPage() {
               </div>
               <div className="space-y-1">
                 <label className="text-xs text-muted-foreground">Valid to</label>
-                <Input
+                <Input aria-label="Valid to"
                   type="date"
                   value={assignValidTo}
                   onChange={(event) => setAssignValidTo(event.target.value)}
@@ -1965,8 +1897,7 @@ export default function ShiftRecurringPlansPage() {
               </div>
             </div>
             <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
+              <Checkbox
                 checked={assignActivate}
                 onChange={(event) => setAssignActivate(event.target.checked)}
               />
@@ -1994,26 +1925,7 @@ export default function ShiftRecurringPlansPage() {
                 ))}
               </div>
             ) : null}
-          </div>
-          <DialogFooter className="pt-2">
-            <Button
-              variant="outline"
-              onClick={() => {
-                setAssignTarget(null)
-                setAssignPreview(null)
-              }}
-              disabled={actionLoading || previewLoading}
-            >
-              Cancel
-            </Button>
-            <Button variant="outline" onClick={previewAssignImpact} disabled={actionLoading || previewLoading}>
-              {previewLoading ? "Previewing..." : "Preview impact"}
-            </Button>
-            <Button onClick={assignPattern} disabled={actionLoading || previewLoading}>
-              Assign pattern
-            </Button>
-          </DialogFooter>
-        </DialogContent>
+          </div></ActionDialogContent>
       </Dialog>
     </div>
   )

@@ -171,3 +171,101 @@ combination, module revocation and concurrent permission changes. Then extend
 the catalog to legacy ERP modules after their service boundaries are covered.
 Quotation discount/approval policies require a separate business decision and
 are not assumed by this access-control rollout.
+
+
+## Phase 3 - CRM sales record scopes implemented locally (2026-10-04)
+
+Settings > Access roles now includes CRM sales record scope: Existing account
+access, Own / assigned records, Own and managed sales teams, or All tenant records.
+Existing roles retain account-based behavior. Tenant ADMIN remains tenant-wide;
+STAFF remains within assigned-record access even if a broader scope is selected.
+Manager accounts can be narrowed through the role. Action permissions still apply.
+
+In CRM > Configuration > Sales teams > Members, a tenant administrator can set
+Team access to Team manager for an active Manager account. Ordinary membership
+does not grant authority. A managed scope covers records explicitly assigned to
+that sales team, plus the manager's own records; it does not expose every record
+owned by a member. Role changes, manager revocation and team archival take effect
+on subsequent requests without another login. Changes are versioned and audited.
+
+Shared predicates cover enquiries, opportunities, related contacts/accounts,
+activities/internal history, quotations/PDF access, selectors, counts, reports and
+exports before pagination/aggregation. Parent/referral labels remain masked when
+outside the scope. Existing customer-facing completed interaction summaries stay
+shared for an accessible contact; private work details/history remain scoped.
+Edits retain the record owner and audit the actual manager. Former team members'
+visible activities remain attributed in reports; existing assignments may be
+preserved on edit, but new assignments still require an allowed active assignee.
+Project access, configuration permissions and other ERP module record scopes are
+unchanged by this sales-specific setting.
+
+Migration 20261004110000_crm_record_scopes adds TenantAccessRole.crmRecordScope
+(default ACCOUNT_ROLE, checked values) and CrmSalesTeamMember.isManager (false).
+It rewrites no ownership and promotes no existing members. Apply this and the
+pending earlier module migrations BEFORE deploying code that selects these
+columns. Only the disposable local database has received this migration.
+
+Validation: 126 database tests passed, including the new scope/migration suite,
+CRM, teams, sales reporting, quotations, roles and core boundaries. Two existing
+legacy migration checks remain skipped (activity upgrade and lead-source intake).
+One contention failure in the parallel run passed in isolation; the complete
+serial rerun passed. Thirty unit/policy checks and five intercepted browser checks
+passed. Role desktop/mobile and team-manager screenshots inspected. The managed
+scope returns five of 10,000 records in 13 SQL statements; authorization is loaded
+once per operation, with no per-row permission queries. Production build and
+TypeScript passed; targeted ESLint and whitespace checks passed.
+
+Run the new suite with npm.cmd run test:crm:scopes:integration, using only the
+local CRM_TEST_DATABASE_URL described in the test guard. No hosted writes,
+commit, push or deployment. Next: the separately planned audit-review and rollout
+increment; this milestone does not claim additional ERP record scopes are done.
+
+
+## Phase 3 - protected audit review implemented locally (2026-10-04)
+
+This completes the audit-review portion of access-control Stage 4; hosted rollout
+remains pending. Reports > Audit logs now provides All permitted / Business /
+Security event filters, exact actor and record IDs, request ID, entity type,
+validated UTC date bounds and search. Standard server pagination and shared
+read-only panels remain in use. View shows actor, target, timestamp, request ID
+and a field-by-field Before/After comparison. Recorded snapshots are expandable.
+Partial audit patches do not imply that omitted fields were deleted.
+
+The list selects summaries only. A separate detail GET repeats current access
+checks and returns recursively redacted credential fields, leaving stored audit
+rows unchanged. Reload/focus clears previous details while rechecking access;
+denied requests cannot fall back to the old snapshot. Neither endpoint mutates
+business data. Current actor permissions, module flags, count and rows use one
+repeatable-read database transaction for a consistent authorization snapshot.
+
+Tenant administrators can review security changes, including access roles,
+assignments, team-manager designations and module allowances/activation. Managers
+require Audit reports Read plus the underlying operational resource Read and
+module activation. They receive only the previously supported operational event
+families. Generic CRM/security/unknown audit snapshots remain excluded for
+managers regardless of CRM record scope; the existing scoped CRM record timelines
+remain available. Disabled modules hide domain audit payloads from administrators
+too, while security changes remain reviewable. Historical saved payment schedules
+retain the established Sales Documents contract.
+
+Migration 20261004120000_audit_review_indexes adds tenant/date, tenant/actor/date
+and tenant/entity/record/date indexes without rewriting rows or changing RLS.
+Only the disposable local database received it. Pending local deployment order:
+20261003090000_inventory_module, 20261003100000_services_module,
+20261004090000_appointments_module, 20261004100000_workforce_modules,
+20261004110000_crm_record_scopes, 20261004120000_audit_review_indexes.
+Verify hosted migration history before applying; earlier existing migrations may
+also be pending. Do not deploy the record-scope queries before their columns exist.
+
+Validation: 19 audit/core API, migration and formatting checks plus 33 appointment,
+workforce, role and CRM-scope regressions passed. Five intercepted browser tests
+passed, with the two audit cases rerun after fixing screenshot animation timing.
+Desktop/mobile audit screenshots inspected. A 10,000-event service list uses six
+SQL statements for five summaries and does not select snapshot columns; EXPLAIN
+confirms the record-history index. Production build/TypeScript, targeted ESLint
+and whitespace checks passed. The local database was stopped after verification.
+Run npm.cmd run test:audit:integration against the guarded disposable database.
+No commit, push, deployment or hosted data changes were made.
+
+Next: deployment-readiness review of the accumulated local changes and pending
+migrations, followed by hosted verification only when deployment is requested.

@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation"
 
 import { auth } from "@/auth"
-import { canManageUsers, type Role } from "@/lib/permissions"
+import { CoreLayout } from "@/platform/core/layout"
 import { getPlatformConsoleAccessFromSession } from "@/lib/platform-console"
 import { resolveTenantFromServerHeaders } from "@/lib/tenancy"
 
@@ -11,7 +11,6 @@ export default async function SettingsLayout({
   children: React.ReactNode
 }) {
   const [session, tenant] = await Promise.all([auth(), resolveTenantFromServerHeaders()])
-  const role = (session?.user as { role?: string })?.role
 
   if (!session?.user) {
     redirect("/auth/signin")
@@ -24,9 +23,5 @@ export default async function SettingsLayout({
     }
   }
 
-  if (!canManageUsers(role as Role)) {
-    redirect("/dashboard")
-  }
-
-  return <>{children}</>
+  return <CoreLayout>{children}</CoreLayout>
 }

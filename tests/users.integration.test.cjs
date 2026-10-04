@@ -88,7 +88,7 @@ test("admin can open and edit a staff profile with tenant context preserved", as
   const id = `${tenantA}_staff`
   const loaded = await sessions.run(session(), () => detail.GET(request("GET"), params(id)))
   assert.equal(loaded.status, 200)
-  assert.equal((await loaded.json()).user.staffProfile.schedulingMode, "STANDARD")
+  assert.equal((await loaded.json()).user.staffProfile, null)
   const updated = await sessions.run(session(), () => detail.PATCH(request("PATCH", { name: "Updated staff", phone: "+919876543210" }), params(id)))
   assert.equal(updated.status, 200)
   assert.equal((await updated.json()).user.name, "Updated staff")
@@ -106,14 +106,14 @@ test("staff self-service does not permit role or status escalation", async () =>
 
 test("anonymous, non-admin and cross-tenant user management remain blocked", async () => {
   assert.equal((await sessions.run(null, () => users.POST(request("POST", input)))).status, 401)
-  for (const role of ["MANAGER", "STAFF", "CUSTOMER"]) assert.equal((await sessions.run(session(tenantA, role), () => users.POST(request("POST", input)))).status, 401)
-  for (const role of ["STAFF", "CUSTOMER"]) assert.equal((await sessions.run(session(tenantA, role), () => users.GET(request("GET")))).status, 401)
+  for (const role of ["MANAGER", "STAFF", "CUSTOMER"]) assert.equal((await sessions.run(session(tenantA, role), () => users.POST(request("POST", input)))).status, 403)
+  for (const role of ["STAFF", "CUSTOMER"]) assert.equal((await sessions.run(session(tenantA, role), () => users.GET(request("GET")))).status, 403)
   assert.equal((await sessions.run(session(), () => users.GET(request("GET", null, tenantB)))).status, 403)
   const otherId = `${tenantB}_staff`
   assert.equal((await sessions.run(session(), () => detail.GET(request("GET"), params(otherId)))).status, 404)
   assert.equal((await sessions.run(session(), () => detail.PATCH(request("PATCH", { name: "Forbidden edit" }), params(otherId)))).status, 404)
   assert.equal((await root.query('SELECT name FROM "User" WHERE id=$1', [otherId])).rows[0].name, otherId)
-  assert.equal((await sessions.run(session(tenantA, "STAFF"), () => detail.PATCH(request("PATCH", { name: "Forbidden edit" }), params(`${tenantA}_admin`)))).status, 401)
+  assert.equal((await sessions.run(session(tenantA, "STAFF"), () => detail.PATCH(request("PATCH", { name: "Forbidden edit" }), params(`${tenantA}_admin`)))).status, 403)
 })
 
 test("user API tenant context does not leak into unscoped database operations", async () => {

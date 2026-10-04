@@ -19,7 +19,7 @@ type Tx = Prisma.TransactionClient
 type Context = {
   run: PermissionRun
   audit: (tx: Tx, actor: CrmActor, event: string, id: string, before?: Prisma.InputJsonValue, after?: Prisma.InputJsonValue) => Promise<void>
-  checkAssignee: (tx: Tx, actor: CrmActor, id: string) => Promise<void>
+  checkAssignee: (tx: Tx, actor: CrmActor, id: string, existingAssigneeId?: string) => Promise<void>
 }
 const include = { salesTeam: { select: teamSelect }, contact: { select: { id: true, name: true } }, account: { select: { id: true, name: true } }, assignee: { select: { id: true, name: true } }, pipeline: true, stage: true, ...referralInclude } as const
 const stages = { orderBy: [{ position: "asc" as const }, { id: "asc" as const }] }
@@ -199,7 +199,7 @@ export function createSalesService<Fields extends object, Metadata extends objec
         requireWriteFields(actor, "opportunities", before ?? undefined, data)
         if (before.enquiryId && before.contactId !== data.contactId) throw new CrmError(409, "A converted opportunity keeps the enquiry's contact.")
         if (before.contactId !== data.contactId && await tx.crmTask.count({ where: { tenantId: actor.tenantId, opportunityId: id } })) throw new CrmError(409, "This opportunity has activities. Keep its contact to preserve interaction history.")
-        await checkAssignee(tx, actor, data.assignedUserId)
+        await checkAssignee(tx, actor, data.assignedUserId, before.assignedUserId)
         const team = await resolveSalesTeam(tx, actor, data.salesTeamId, data.assignedUserId, before)
         await relations(tx, actor, data.contactId, data.accountId, before)
         const changedStage = data.stageId !== before.stageId

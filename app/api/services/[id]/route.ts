@@ -1,3 +1,5 @@
+import { withServicesApi } from "@/modules/services/api"
+import type { BusinessActor } from "@/platform/policy"
 import { NextResponse } from "next/server"
 
 import {
@@ -9,29 +11,17 @@ import {
 } from "@/lib/api-logging"
 import { prisma } from "@/lib/prisma"
 import { updateServiceSchema } from "@/lib/validation"
-import { canManageUsers, type Role } from "@/lib/permissions"
-import { requireTenantSession } from "@/lib/tenant-auth"
 
-export async function PATCH(
+async function handlePATCH(
   request: Request,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
+  actor: BusinessActor
 ) {
   const logContext = createApiLogContext(request)
   logApiRequestStart(logContext, request)
 
   const { id } = await params
-  const tenantSession = await requireTenantSession(request)
-  if (tenantSession.error) {
-    logApiRequestSuccess(logContext, tenantSession.error.status, { reason: "tenant_or_auth_failed", serviceId: id })
-    return withRequestId(tenantSession.error, logContext.requestId)
-  }
-  const { tenantId, role } = tenantSession.context
-
-  if (!canManageUsers(role as Role)) {
-    const response = NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    logApiRequestSuccess(logContext, 401, { reason: "unauthorized", serviceId: id })
-    return withRequestId(response, logContext.requestId)
-  }
+  const { tenantId } = actor
 
   const body = await request.json().catch(() => null)
   if (!body) {
@@ -120,20 +110,17 @@ export async function PATCH(
           ...(data.status ? { status: data.status } : {}),
           ...(data.type ? { type: data.type } : {}),
           ...(data.taxMode ? { taxMode: data.taxMode } : {}),
-          ...(data.taxIds
-            ? {
-                defaultTaxes: {
-                  deleteMany: {},
-                  create: [...new Set(data.taxIds)].map((taxId) => ({ taxId })),
-                },
-              }
-            : {}),
+
         },
       })
       if (!updated.count) {
         return null
       }
 
+      if (data.taxIds) {
+        await tx.serviceTax.deleteMany({ where: { serviceId: id, service: { tenantId } } })
+        if (data.taxIds.length) await tx.serviceTax.createMany({ data: [...new Set(data.taxIds)].map(taxId => ({ serviceId: id, taxId })) })
+      }
       if (data.packageItemIds) {
         await tx.servicePackageItem.deleteMany({
           where: { packageId: id, package: { tenantId } },
@@ -187,35 +174,31 @@ export async function PATCH(
   }
 }
 
-export async function DELETE(
+async function handleDELETE(
   request: Request,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
+  actor: BusinessActor
 ) {
   const logContext = createApiLogContext(request)
   logApiRequestStart(logContext, request)
 
   const { id } = await params
-  const tenantSession = await requireTenantSession(request)
-  if (tenantSession.error) {
-    logApiRequestSuccess(logContext, tenantSession.error.status, { reason: "tenant_or_auth_failed", serviceId: id })
-    return withRequestId(tenantSession.error, logContext.requestId)
-  }
-  const { tenantId, role } = tenantSession.context
-
-  if (!canManageUsers(role as Role)) {
-    const response = NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    logApiRequestSuccess(logContext, 401, { reason: "unauthorized", serviceId: id })
-    return withRequestId(response, logContext.requestId)
-  }
+  const { tenantId } = actor
 
   try {
-    const associations = await prisma.servicePackageItem.count({
+    const packageAssociations = await prisma.servicePackageItem.count({
       where: {
         package: { tenantId },
         OR: [{ packageId: id }, { itemServiceId: id }],
       },
     })
 
+    const [appointments, orderLines, eligibility] = await Promise.all([
+      prisma.appointment.count({ where: { tenantId, serviceId: id } }),
+      prisma.appointmentOrderLine.count({ where: { serviceId: id, order: { tenantId } } }),
+      prisma.staffServiceEligibility.count({ where: { serviceId: id, user: { tenantId } } }),
+    ])
+    const associations = packageAssociations + appointments + orderLines + eligibility
     if (associations > 0) {
       await prisma.service.updateMany({
         where: { id, tenantId },
@@ -236,4 +219,14 @@ export async function DELETE(
     const response = NextResponse.json({ error: "Unable to delete service." }, { status: 500 })
     return withRequestId(response, logContext.requestId)
   }
+}
+
+export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
+  const { id } = await context.params
+  return withServicesApi(request, "services", "edit", actor => handlePATCH(request, context, actor), id)
+}
+
+export async function DELETE(request: Request, context: { params: Promise<{ id: string }> }) {
+  const { id } = await context.params
+  return withServicesApi(request, "services", "archive", actor => handleDELETE(request, context, actor), id)
 }

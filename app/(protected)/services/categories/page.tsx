@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { useCurrentResourceAction } from "@/platform/access/view-guard"
 import {
   ColumnDef,
   ColumnFiltersState,
@@ -14,24 +15,18 @@ import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
-import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import {
-  DataTable,
-  DataTablePagination,
-  DataTableToolbar,
-} from "@/components/data-table"
+import { DataTable } from "@/components/data-table"
+import { PageHeader, Surface, TableToolbar, pageClass } from "@/components/erp/page"
+import { TablePagination } from "@/components/erp/pagination"
+import { DraftPanel, RecordPanel, ReadOnlyFields } from "@/components/erp/record-detail"
+import { Section } from "@/components/erp/section"
+import { ConfirmAction } from "@/components/erp/confirm-action"
+import { Select } from "@/components/erp/controls"
 import { useFormErrors } from "@/hooks/use-form-errors"
 import { useDateFormatter } from "@/hooks/use-date-formatter"
 import type { ListResponse } from "@/types/api"
@@ -49,6 +44,9 @@ const SortIndicator = ({ value }: { value: false | "asc" | "desc" }) => {
 }
 
 export default function ServiceCategoriesPage() {
+  const canCreate = useCurrentResourceAction("create")
+  const canEdit = useCurrentResourceAction("edit")
+  const canArchive = useCurrentResourceAction("archive")
   const { formatDate } = useDateFormatter()
   type PaginationState = { pageIndex: number; pageSize: number }
 
@@ -73,6 +71,9 @@ export default function ServiceCategoriesPage() {
   const [createOpen, setCreateOpen] = React.useState(false)
   const [editOpen, setEditOpen] = React.useState(false)
   const [editingCategory, setEditingCategory] = React.useState<CategoryRow | null>(null)
+  const [viewing, setViewing] = React.useState<CategoryRow | null>(null)
+  const [formError, setFormError] = React.useState("")
+  const listRequest = React.useRef<AbortController | null>(null)
   const [saving, setSaving] = React.useState(false)
   const [deleteOpen, setDeleteOpen] = React.useState(false)
   const [deleteTarget, setDeleteTarget] = React.useState<CategoryRow | null>(null)
@@ -100,32 +101,37 @@ export default function ServiceCategoriesPage() {
   const totalPages = Math.max(1, Math.ceil(totalRows / pagination.pageSize))
 
   const loadCategories = React.useCallback(async () => {
+    listRequest.current?.abort()
+    const controller = new AbortController()
+    listRequest.current = controller
+    const signal = controller.signal
     setLoading(true)
-    const params = new URLSearchParams()
-    params.set("page", String(pagination.pageIndex + 1))
-    params.set("pageSize", String(pagination.pageSize))
-    if (search) {
-      params.set("q", search)
-    }
-    if (statusFilter !== "all") {
-      params.set("status", statusFilter)
-    }
-    if (sorting[0]) {
-      params.set("sort", sorting[0].id)
-      params.set("order", sorting[0].desc ? "desc" : "asc")
-    }
-    const response = await fetch(`/api/service-categories?${params.toString()}`)
-    if (!response.ok) {
-      toast.error("Unable to load categories.")
-      setCategories([])
-      setTotalRows(0)
-      setLoading(false)
-      return
-    }
-    const data = (await response.json()) as ListResponse<CategoryRow>
-    setCategories(data.items)
-    setTotalRows(data.total)
-    setLoading(false)
+    try {
+      const params = new URLSearchParams()
+      params.set("page", String(pagination.pageIndex + 1))
+      params.set("pageSize", String(pagination.pageSize))
+      if (search) {
+        params.set("q", search)
+      }
+      if (statusFilter !== "all") {
+        params.set("status", statusFilter)
+      }
+      if (sorting[0]) {
+        params.set("sort", sorting[0].id)
+        params.set("order", sorting[0].desc ? "desc" : "asc")
+      }
+      const response = await fetch(`/api/service-categories?${params.toString()}`, { signal })
+      if (!response.ok) {
+        toast.error("Unable to load categories.")
+        setCategories([])
+        setTotalRows(0)
+        return
+      }
+      const data = (await response.json()) as ListResponse<CategoryRow>
+      if (signal.aborted) return
+      setCategories(data.items)
+      setTotalRows(data.total)
+    } catch { if (!signal.aborted) toast.error("Unable to load records. Please refresh.") } finally { if (!signal.aborted) setLoading(false) }
   }, [
     pagination.pageIndex,
     pagination.pageSize,
@@ -136,13 +142,9 @@ export default function ServiceCategoriesPage() {
 
   React.useEffect(() => {
     void loadCategories()
+    return () => listRequest.current?.abort()
   }, [loadCategories])
 
-  React.useEffect(() => {
-    setPagination((prev) =>
-      prev.pageIndex === 0 ? prev : { ...prev, pageIndex: 0 }
-    )
-  }, [search, sorting, statusFilter])
 
   const handlePaginationChange = React.useCallback(
     (updater: PaginationState | ((prev: PaginationState) => PaginationState)) => {
@@ -159,32 +161,37 @@ export default function ServiceCategoriesPage() {
 
   const createCategory = async () => {
     setSaving(true)
-    clearCreateErrors()
-    const response = await fetch("/api/service-categories", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(newCategory),
-    })
+    setFormError("")
+    try {
+      clearCreateErrors()
+      const response = await fetch("/api/service-categories", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newCategory),
+      })
 
-    if (!response.ok) {
-      const data = (await response.json()) as {
-        error?: string
-        details?: { fieldErrors?: Record<string, string[]> }
+      if (!response.ok) {
+        const data = (await response.json()) as {
+          error?: string
+          details?: { fieldErrors?: Record<string, string[]> }
+        }
+        setCreateErrorsFromResponse(data)
+        setFormError(data.error ?? "Unable to save. Check the form and try again.")
+        toast.error(data.error ?? "Unable to create category.")
+        return
       }
-      setCreateErrorsFromResponse(data)
-      toast.error(data.error ?? "Unable to create category.")
-      setSaving(false)
-      return
-    }
 
-    toast.success("Category created.")
-    setNewCategory(defaultCategoryFormValues)
-    setSaving(false)
-    setCreateOpen(false)
-    await loadCategories()
+      toast.success("Category created.")
+      setNewCategory(defaultCategoryFormValues)
+      setCreateOpen(false)
+      await loadCategories()
+    } catch { setFormError("Unable to save. Please try again.") } finally { setSaving(false) }
+
   }
 
   const startEdit = React.useCallback((category: CategoryRow) => {
+    setViewing(null)
+    setFormError("")
     setEditingCategory(category)
     clearEditErrors()
     setEditValues({
@@ -199,28 +206,31 @@ export default function ServiceCategoriesPage() {
   const saveEdit = async () => {
     if (!editingCategory) return
     setSaving(true)
-    const response = await fetch(`/api/service-categories/${editingCategory.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(editValues),
-    })
+    setFormError("")
+    try {
+      const response = await fetch(`/api/service-categories/${editingCategory.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(editValues),
+      })
 
-    if (!response.ok) {
-      const data = (await response.json()) as {
-        error?: string
-        details?: { fieldErrors?: Record<string, string[]> }
+      if (!response.ok) {
+        const data = (await response.json()) as {
+          error?: string
+          details?: { fieldErrors?: Record<string, string[]> }
+        }
+        setEditErrorsFromResponse(data)
+        setFormError(data.error ?? "Unable to save. Check the form and try again.")
+        toast.error(data.error ?? "Unable to update category.")
+        return
       }
-      setEditErrorsFromResponse(data)
-      toast.error(data.error ?? "Unable to update category.")
-      setSaving(false)
-      return
-    }
 
-    toast.success("Category updated.")
-    setSaving(false)
-    setEditOpen(false)
-    setEditingCategory(null)
-    await loadCategories()
+      toast.success("Category updated.")
+      setEditOpen(false)
+      setEditingCategory(null)
+      await loadCategories()
+    } catch { setFormError("Unable to save. Please try again.") } finally { setSaving(false) }
+
   }
 
   const requestDelete = React.useCallback((category: CategoryRow) => {
@@ -231,20 +241,21 @@ export default function ServiceCategoriesPage() {
   const confirmDelete = React.useCallback(async () => {
     if (!deleteTarget) return
     setDeleting(true)
-    const response = await fetch(`/api/service-categories/${deleteTarget.id}`, {
-      method: "DELETE",
-    })
-    if (!response.ok) {
-      const data = (await response.json()) as { error?: string }
-      toast.error(data.error ?? "Unable to delete category.")
-      setDeleting(false)
-      return
-    }
-    toast.success("Category deleted.")
-    setDeleting(false)
-    setDeleteOpen(false)
-    setDeleteTarget(null)
-    await loadCategories()
+    try {
+      const response = await fetch(`/api/service-categories/${deleteTarget.id}`, {
+        method: "DELETE",
+      })
+      if (!response.ok) {
+        const data = (await response.json()) as { error?: string }
+        toast.error(data.error ?? "Unable to delete category.")
+        return
+      }
+      toast.success("Category deleted.")
+      setDeleteOpen(false)
+      setDeleteTarget(null)
+      await loadCategories()
+    } catch { toast.error("Unable to delete. Please try again.") } finally { setDeleting(false) }
+
   }, [deleteTarget, loadCategories])
 
   const columns = React.useMemo<ColumnDef<CategoryRow>[]>(
@@ -264,7 +275,7 @@ export default function ServiceCategoriesPage() {
         ),
         cell: ({ row }) => (
           <div className="flex flex-col">
-            <span className="font-medium">{row.original.name}</span>
+            <button type="button" className="text-left font-medium underline underline-offset-4 hover:text-primary" onClick={() => setViewing(row.original)}>{row.original.name}</button>
             {row.original.description ? (
               <span className="text-xs text-muted-foreground">
                 {row.original.description}
@@ -288,11 +299,10 @@ export default function ServiceCategoriesPage() {
         ),
         cell: ({ row }) => (
           <span
-            className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
-              row.original.status === "ACTIVE"
-                ? "bg-emerald-500/10 text-emerald-500"
-                : "bg-muted text-muted-foreground"
-            }`}
+            className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${row.original.status === "ACTIVE"
+              ? "bg-emerald-500/10 text-emerald-500"
+              : "bg-muted text-muted-foreground"
+              }`}
           >
             {row.original.status === "ACTIVE" ? "Active" : "Inactive"}
           </span>
@@ -334,15 +344,15 @@ export default function ServiceCategoriesPage() {
         cell: ({ row }) => (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button size="icon" variant="ghost">
+              <Button size="icon" variant="ghost" aria-label="Record actions">
                 <MoreHorizontalIcon className="h-4 w-4" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem onSelect={() => startEdit(row.original)}>
+              <DropdownMenuItem disabled={!canEdit} onSelect={() => startEdit(row.original)}>
                 Edit
               </DropdownMenuItem>
-              <DropdownMenuItem
+              <DropdownMenuItem disabled={!canArchive}
                 onSelect={() => requestDelete(row.original)}
                 className="text-destructive"
               >
@@ -353,10 +363,9 @@ export default function ServiceCategoriesPage() {
         ),
       },
     ],
-    [requestDelete, startEdit]
+    [canEdit, canArchive, requestDelete, startEdit, formatDate]
   )
 
-  // eslint-disable-next-line react-hooks/incompatible-library
   const table = useReactTable({
     data: categories,
     columns,
@@ -367,10 +376,10 @@ export default function ServiceCategoriesPage() {
       globalFilter: search,
       pagination,
     },
-    onSortingChange: setSorting,
+    onSortingChange: value => { setSorting(value); setPagination(prev => ({ ...prev, pageIndex: 0 })) },
     onColumnFiltersChange: setColumnFilters,
     onColumnVisibilityChange: setColumnVisibility,
-    onGlobalFilterChange: setSearch,
+    onGlobalFilterChange: value => { setSearch(value); setPagination(prev => ({ ...prev, pageIndex: 0 })) },
     onPaginationChange: handlePaginationChange,
     manualPagination: true,
     manualSorting: true,
@@ -380,130 +389,28 @@ export default function ServiceCategoriesPage() {
   })
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold">Service categories</h1>
-          <p className="text-sm text-muted-foreground">
-            Organize services for booking and pricing.
-          </p>
-        </div>
-        <Button onClick={() => setCreateOpen(true)}>New category</Button>
-      </div>
-
-      <DataTableToolbar table={table} searchPlaceholder="Search categories">
-        <select
-          className="h-9 rounded-md border border-input bg-background px-3 text-sm"
-          value={statusFilter}
-          onChange={(event) =>
-            setStatusFilter(event.target.value as "all" | CategoryStatus)
-          }
-        >
-          <option value="all">All statuses</option>
-          {categoryStatusOptions.map((status) => (
-            <option key={status} value={status}>
-              {status === "ACTIVE" ? "Active" : "Inactive"}
-            </option>
-          ))}
-        </select>
-      </DataTableToolbar>
-
-      <DataTable table={table} loading={loading} emptyMessage="No categories found." />
-
-      <DataTablePagination table={table} totalRows={totalRows} />
-
-      <Dialog
-        open={deleteOpen}
-        onOpenChange={(open) => {
-          setDeleteOpen(open)
-          if (!open) {
-            setDeleteTarget(null)
-            setDeleting(false)
-          }
-        }}
-      >
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Delete category</DialogTitle>
-            <DialogDescription>
-              {deleteTarget
-                ? `Delete "${deleteTarget.name}"? This cannot be undone.`
-                : "Delete this category? This cannot be undone."}
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setDeleteOpen(false)}
-              disabled={deleting}
-            >
-              Cancel
-            </Button>
-            <Button variant="destructive" onClick={confirmDelete} disabled={deleting}>
-              {deleting ? "Deleting..." : "Delete"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent className="max-h-[90vh] flex flex-col">
-          <DialogHeader>
-            <DialogTitle>New category</DialogTitle>
-            <DialogDescription>Create a service category.</DialogDescription>
-          </DialogHeader>
-          <div className="flex-1 overflow-y-auto">
-            <CategoryFormFields
-              mode="create"
-              values={newCategory}
-              errors={createErrors}
-              onChange={setNewCategory}
-            />
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setCreateOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={createCategory} loading={saving} loadingText="Saving...">
-              Create category
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog
-        open={editOpen}
-        onOpenChange={(open) => {
-          setEditOpen(open)
-          if (!open) {
-            setEditingCategory(null)
-            clearEditErrors()
-          }
-        }}
-      >
-        <DialogContent className="max-h-[90vh] flex flex-col">
-          <DialogHeader>
-            <DialogTitle>Edit category</DialogTitle>
-            <DialogDescription>Update category details.</DialogDescription>
-          </DialogHeader>
-          <div className="flex-1 overflow-y-auto">
-            <CategoryFormFields
-              mode="edit"
-              values={editValues}
-              errors={editErrors}
-              onChange={setEditValues}
-            />
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setEditOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={saveEdit} loading={saving} loadingText="Saving...">
-              Save changes
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+    <div className={pageClass}>
+      <PageHeader title="Service categories" description="Organize services for booking and pricing." actions={<Button disabled={!canCreate} onClick={() => { setNewCategory(defaultCategoryFormValues); clearCreateErrors(); setFormError(""); setCreateOpen(true) }}>New category</Button>} />
+      <Surface>
+        <TableToolbar table={table} searchPlaceholder="Search categories">
+          <Select aria-label="Status filter" value={statusFilter} onValueChange={value => { setStatusFilter(value as "all" | CategoryStatus); setPagination(prev => ({ ...prev, pageIndex: 0 })) }}>
+            <option value="all">All statuses</option>{categoryStatusOptions.map(status => <option key={status} value={status}>{status === "ACTIVE" ? "Active" : "Inactive"}</option>)}
+          </Select>
+          <Button variant="outline" disabled={loading} onClick={() => void loadCategories()}>Refresh</Button>
+        </TableToolbar>
+        <DataTable table={table} loading={loading} emptyMessage="No categories found." />
+        <TablePagination table={table} totalRows={totalRows} loading={loading} />
+      </Surface>
+      {viewing && <RecordPanel title={viewing.name} description="Service category" onClose={() => setViewing(null)} actions={canEdit ? <Button onClick={() => startEdit(viewing)}>Edit details</Button> : undefined}>
+        <Section title="Category details"><ReadOnlyFields fields={[{ label: "Name", value: viewing.name }, { label: "Status", value: viewing.status === "ACTIVE" ? "Active" : "Inactive" }, { label: "Sort order", value: viewing.sortOrder }, { label: "Description", value: viewing.description }, { label: "Created", value: formatDate(viewing.createdAt) }]} /></Section>
+      </RecordPanel>}
+      {deleteOpen && deleteTarget && <ConfirmAction title="Delete category" description={`Delete "${deleteTarget.name}"? Categories linked to services are made inactive instead.`} label="Delete" destructive busy={deleting} onCancel={() => { setDeleteOpen(false); setDeleteTarget(null) }} onConfirm={() => void confirmDelete()} />}
+      {createOpen && <DraftPanel disabled={!canCreate} title="New category" description="Create a service category." fingerprint={newCategory} error={formError} saving={saving} saveLabel="Create category" onClose={() => setCreateOpen(false)} onSubmit={() => void createCategory()}>
+        <Section title="Category details"><CategoryFormFields mode="create" values={newCategory} errors={createErrors} onChange={setNewCategory} /></Section>
+      </DraftPanel>}
+      {editOpen && editingCategory && <DraftPanel disabled={!canEdit} title="Edit category" description="Update category details." fingerprint={editValues} error={formError} saving={saving} onClose={() => setEditOpen(false)} onSubmit={() => void saveEdit()}>
+        <Section title="Category details"><CategoryFormFields mode="edit" values={editValues} errors={editErrors} onChange={setEditValues} /></Section>
+      </DraftPanel>}
     </div>
   )
 }

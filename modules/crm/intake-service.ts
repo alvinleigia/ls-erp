@@ -1,6 +1,7 @@
 import { requireWriteFields, permits } from "@/platform/access/policy"
 import type { PermissionRun } from "@/platform/access/server"
 import type { Prisma, CrmEnquiry } from "@prisma/client"
+import { salesRecordAccess } from "@/platform/access/record-scope"
 import { accountScope, canManageCrm, contactScope, CrmError, type CrmActor } from "./policy"
 import { crmLeadSourceSchema, crmLeadSourceUpdateSchema, crmLeadSourceListSchema } from "./validation"
 import { recordDomainAuditEvent } from "@/lib/domain-audit"
@@ -19,7 +20,7 @@ export const referralInclude = {
 // Attribution never grants access to an otherwise private referrer. Batch the
 // checks so enquiry/opportunity lists retain server-side pagination efficiency.
 export async function maskReferrals<T extends { referralContactId: string | null; referralAccountId: string | null }>(tx: Tx, actor: CrmActor, rows: T[]) {
-  if (canManageCrm(actor.role)) return rows.map(row => ({ ...row, referralRestricted: false }))
+  if (salesRecordAccess(actor) === "ALL") return rows.map(row => ({ ...row, referralRestricted: false }))
   const contactIds = rows.flatMap(row => row.referralContactId ? [row.referralContactId] : [])
   const accountIds = rows.flatMap(row => row.referralAccountId ? [row.referralAccountId] : [])
   const [contacts, accounts] = await Promise.all([

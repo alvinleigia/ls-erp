@@ -22,6 +22,7 @@ export type InventoryCategoryOption = {
 }
 
 export type SupplierRow = {
+  notes?: string | null
   id: string
   name: string
   contactPerson: string | null
@@ -112,6 +113,7 @@ export type PurchaseOrderItemRow = {
 }
 
 export type PurchaseOrderRow = {
+  notes?: string | null
   id: string
   orderNumber: string
   supplier: { id: string; name: string }

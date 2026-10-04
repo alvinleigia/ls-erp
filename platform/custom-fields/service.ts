@@ -19,7 +19,7 @@ export function createCustomFieldService(db: PrismaClient, identity: Pick<Busine
         if (!user || !hasBusinessAccess(user.role) || user.tenant?.status !== "ACTIVE" || user.tenant.slug === (process.env.PLATFORM_ADMIN_TENANT_SLUG?.trim().toLowerCase() || "platform")) throw new BusinessError(403, "Business workspace access is not permitted.")
         const modules = await tx.tenantModule.findMany({ where: { tenantId: identity.tenantId, enabled: true, allowed: true }, select: { key: true } })
         if (!modules.some(module => module.key === "crm")) throw new BusinessError(403, "CRM must be enabled.")
-        const actor = { ...identity, role: user.role, permissions: assignedPermissions(user) }; requirePermission(actor, requirement)
+        const actor = { ...identity, role: user.role, permissions: assignedPermissions(user), crmRecordScope: user.crmRecordScope, managedTeamIds: user.managedTeamIds }; requirePermission(actor, requirement)
         return operation(tx, actor, resources.filter(resource => modules.some(module => module.key === resource.module)))
       }, { isolationLevel: "Serializable", maxWait: 20000, timeout: 20000 }) } catch (error) {
         const code = (error as { code?: string }).code

@@ -29,8 +29,8 @@ export type AuditLogReportRow = {
   actorName: string | null
   actorEmail: string | null
   requestId: string | null
-  metadata: unknown
-  before: unknown
-  after: unknown
   createdAt: string
 }
+
+export type AuditFieldChange = { field: string; before: unknown; after: unknown }
+export type AuditLogDetail = AuditLogReportRow & { metadata: unknown; before: unknown; after: unknown; changes: AuditFieldChange[] }

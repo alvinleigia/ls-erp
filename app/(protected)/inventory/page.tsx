@@ -1,5 +1,11 @@
 "use client"
 
+import { Select } from "@/components/erp/controls"
+
+import { ProductView } from "@/modules/inventory/record-view"
+
+import { useCurrentResourceAction } from "@/platform/access/view-guard"
+
 import * as React from "react"
 import {
   ColumnDef,
@@ -10,16 +16,13 @@ import {
 import { ArrowDownIcon, ArrowUpDownIcon, ArrowUpIcon, MoreHorizontalIcon } from "lucide-react"
 import { toast } from "sonner"
 
-import { DataTable, DataTablePagination, DataTableToolbar } from "@/components/data-table"
+import { DataTable } from "@/components/data-table"
+import { PageHeader, Surface, TableToolbar, pageClass } from "@/components/erp/page"
+import { TablePagination } from "@/components/erp/pagination"
+import { DraftPanel } from "@/components/erp/record-detail"
+import { ConfirmAction } from "@/components/erp/confirm-action"
 import { Button } from "@/components/ui/button"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
+
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -30,10 +33,8 @@ import { useFormErrors } from "@/hooks/use-form-errors"
 import { formatCurrencyFromCents } from "@/lib/formatting"
 import type { ListResponse } from "@/types/api"
 import type {
-  InventoryCategoryOption,
   InventoryProductFormValues,
   InventoryProductRow,
-  SupplierOption,
 } from "@/types/inventory"
 import type { AppSettingsPayload, TaxRow } from "@/types/scheduling"
 import { ProductFormFields } from "./product-form-fields"
@@ -48,12 +49,16 @@ const SortIndicator = ({ value }: { value: false | "asc" | "desc" }) => {
 }
 
 export default function InventoryProductsPage() {
+  const canCreate = useCurrentResourceAction("create")
+  const canEdit = useCurrentResourceAction("edit")
+  const canArchive = useCurrentResourceAction("archive")
+
   const [items, setItems] = React.useState<InventoryProductRow[]>([])
-  const [categories, setCategories] = React.useState<InventoryCategoryOption[]>([])
-  const [suppliers, setSuppliers] = React.useState<SupplierOption[]>([])
   const [taxes, setTaxes] = React.useState<TaxRow[]>([])
   const [loading, setLoading] = React.useState(true)
   const [totalRows, setTotalRows] = React.useState(0)
+  const [statusFilter, setStatusFilter] = React.useState("all")
+  const listRequest = React.useRef<AbortController | null>(null)
   const [search, setSearch] = React.useState("")
   const [sorting, setSorting] = React.useState<SortingState>([])
   const [pagination, setPagination] = React.useState<PaginationState>({ pageIndex: 0, pageSize: 10 })
@@ -71,11 +76,13 @@ export default function InventoryProductsPage() {
     numberFormat: "US_UK",
   })
 
+  const [viewing, setViewing] = React.useState<InventoryProductRow | null>(null)
   const [formOpen, setFormOpen] = React.useState(false)
   const [editing, setEditing] = React.useState<InventoryProductRow | null>(null)
   const [formValues, setFormValues] = React.useState<InventoryProductFormValues>(
     defaultInventoryProductFormValues
   )
+  const [formError, setFormError] = React.useState("")
   const [saving, setSaving] = React.useState(false)
   const [deleteOpen, setDeleteOpen] = React.useState(false)
   const [deleteTarget, setDeleteTarget] = React.useState<InventoryProductRow | null>(null)
@@ -95,56 +102,49 @@ export default function InventoryProductsPage() {
   )
 
   const loadProducts = React.useCallback(async () => {
+    listRequest.current?.abort()
+    const controller = new AbortController()
+    listRequest.current = controller
+    const signal = controller.signal
     setLoading(true)
-    const params = new URLSearchParams()
-    params.set("page", String(pagination.pageIndex + 1))
-    params.set("pageSize", String(pagination.pageSize))
-    if (search.trim()) params.set("q", search.trim())
-    if (sorting[0]) {
-      params.set("sort", sorting[0].id)
-      params.set("order", sorting[0].desc ? "desc" : "asc")
-    }
+    try {
+      const params = new URLSearchParams()
+      params.set("page", String(pagination.pageIndex + 1))
+      params.set("pageSize", String(pagination.pageSize))
+      if (statusFilter !== "all") params.set("status", statusFilter)
+      if (search.trim()) params.set("q", search.trim())
+      if (sorting[0]) {
+        params.set("sort", sorting[0].id)
+        params.set("order", sorting[0].desc ? "desc" : "asc")
+      }
 
-    const response = await fetch(`/api/inventory/products?${params.toString()}`)
-    if (!response.ok) {
-      toast.error("Unable to load products.")
-      setItems([])
-      setTotalRows(0)
+      const response = await fetch(`/api/inventory/products?${params.toString()}`, { signal })
+      if (!response.ok) {
+        toast.error("Unable to load products.")
+        setItems([])
+        setTotalRows(0)
+        setLoading(false)
+        return
+      }
+      const data = (await response.json()) as ListResponse<InventoryProductRow>
+      if (signal.aborted) return
+      setItems(data.items)
+      setTotalRows(data.total)
       setLoading(false)
-      return
-    }
-    const data = (await response.json()) as ListResponse<InventoryProductRow>
-    setItems(data.items)
-    setTotalRows(data.total)
-    setLoading(false)
-  }, [pagination.pageIndex, pagination.pageSize, search, sorting])
+    } catch { if (!signal.aborted) toast.error("Unable to load records. Please refresh.") } finally { if (!signal.aborted) setLoading(false) }
+  }, [pagination.pageIndex, pagination.pageSize, search, sorting, statusFilter])
 
   React.useEffect(() => {
     void loadProducts()
+    return () => listRequest.current?.abort()
   }, [loadProducts])
 
   React.useEffect(() => {
     const loadDependencies = async () => {
-      const [categoryResponse, supplierResponse, taxResponse, settingsResponse] =
-        await Promise.all([
-          fetch("/api/inventory/categories?page=1&pageSize=100&sort=sortOrder&order=asc", {
-            cache: "no-store",
-          }),
-          fetch("/api/inventory/suppliers?page=1&pageSize=100&sort=name&order=asc", {
-            cache: "no-store",
-          }),
-          fetch("/api/settings/taxes?page=1&pageSize=100", { cache: "no-store" }),
-          fetch("/api/settings", { cache: "no-store" }),
-        ])
-
-      if (categoryResponse.ok) {
-        const data = (await categoryResponse.json()) as ListResponse<InventoryCategoryOption>
-        setCategories(data.items)
-      }
-      if (supplierResponse.ok) {
-        const data = (await supplierResponse.json()) as ListResponse<SupplierOption>
-        setSuppliers(data.items)
-      }
+      const [taxResponse, settingsResponse] = await Promise.all([
+        fetch("/api/lookups/taxes?page=1&pageSize=100", { cache: "no-store" }),
+        fetch("/api/settings/display", { cache: "no-store" }),
+      ])
       if (taxResponse.ok) {
         const data = (await taxResponse.json()) as ListResponse<TaxRow>
         setTaxes(data.items)
@@ -172,10 +172,11 @@ export default function InventoryProductsPage() {
 
   const openCreate = () => {
     resetForm()
-    setFormOpen(true)
+    setFormError(""); setFormOpen(true)
   }
 
   const openEdit = React.useCallback((item: InventoryProductRow) => {
+    setViewing(null)
     setEditing(item)
     clearErrors()
     setFormValues({
@@ -204,82 +205,88 @@ export default function InventoryProductsPage() {
         isPreferred: link.isPreferred,
       })),
     })
-    setFormOpen(true)
+    setFormError(""); setFormOpen(true)
   }, [clearErrors])
 
   const save = async () => {
     setSaving(true)
-    clearErrors()
-    const payload = {
-      sku: formValues.sku,
-      name: formValues.name,
-      description: formValues.description,
-      unit: formValues.unit,
-      categoryId: formValues.categoryId,
-      status: formValues.status,
-      costPriceCents: parseMoney(formValues.costPrice),
-      mrpCents: parseMoney(formValues.mrp),
-      reorderPoint: formValues.reorderPoint,
-      reorderQty: formValues.reorderQty,
-      onHandQty: formValues.onHandQty,
-      isPhysical: formValues.isPhysical,
-      taxIds: formValues.taxIds,
-      supplierLinks: formValues.supplierLinks
-        .filter((link) => link.supplierId)
-        .map((link) => ({
-          supplierId: link.supplierId,
-          supplierSku: link.supplierSku,
-          supplierCostCents: link.supplierCost ? parseMoney(link.supplierCost) : undefined,
-          minOrderQty: link.minOrderQty,
-          leadTimeDays: link.leadTimeDays,
-          isPreferred: link.isPreferred,
-        })),
-    }
-
-    const response = await fetch(
-      editing ? `/api/inventory/products/${editing.id}` : "/api/inventory/products",
-      {
-        method: editing ? "PATCH" : "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+    setFormError("")
+    try {
+      clearErrors()
+      const payload = {
+        sku: formValues.sku,
+        name: formValues.name,
+        description: formValues.description,
+        unit: formValues.unit,
+        categoryId: formValues.categoryId,
+        status: formValues.status,
+        costPriceCents: parseMoney(formValues.costPrice),
+        mrpCents: parseMoney(formValues.mrp),
+        reorderPoint: formValues.reorderPoint,
+        reorderQty: formValues.reorderQty,
+        onHandQty: formValues.onHandQty,
+        isPhysical: formValues.isPhysical,
+        taxIds: formValues.taxIds,
+        supplierLinks: formValues.supplierLinks
+          .filter((link) => link.supplierId)
+          .map((link) => ({
+            supplierId: link.supplierId,
+            supplierSku: link.supplierSku,
+            supplierCostCents: link.supplierCost ? parseMoney(link.supplierCost) : undefined,
+            minOrderQty: link.minOrderQty,
+            leadTimeDays: link.leadTimeDays,
+            isPreferred: link.isPreferred,
+          })),
       }
-    )
 
-    if (!response.ok) {
-      const data = (await response.json()) as {
-        error?: string
-        details?: { fieldErrors?: Record<string, string[]> }
+      const response = await fetch(
+        editing ? `/api/inventory/products/${editing.id}` : "/api/inventory/products",
+        {
+          method: editing ? "PATCH" : "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        }
+      )
+
+      if (!response.ok) {
+        const data = (await response.json()) as {
+          error?: string
+          details?: { fieldErrors?: Record<string, string[]> }
+        }
+        setErrorsFromResponse(data)
+        setFormError(data.error ?? "Unable to save. Check the form and try again.")
+        toast.error(data.error ?? "Unable to save product.")
+        setSaving(false)
+        return
       }
-      setErrorsFromResponse(data)
-      toast.error(data.error ?? "Unable to save product.")
+
+      toast.success(editing ? "Product updated." : "Product created.")
       setSaving(false)
-      return
-    }
-
-    toast.success(editing ? "Product updated." : "Product created.")
-    setSaving(false)
-    setFormOpen(false)
-    resetForm()
-    await loadProducts()
+      setFormOpen(false)
+      resetForm()
+      await loadProducts()
+    } catch { setFormError("Unable to save. Please try again."); toast.error("Unable to save. Please try again.") } finally { setSaving(false) }
   }
 
   const removeProduct = async () => {
     if (!deleteTarget) return
     setDeleting(true)
-    const response = await fetch(`/api/inventory/products/${deleteTarget.id}`, {
-      method: "DELETE",
-    })
-    if (!response.ok) {
-      const data = (await response.json().catch(() => ({}))) as { error?: string }
-      toast.error(data.error ?? "Unable to delete product.")
+    try {
+      const response = await fetch(`/api/inventory/products/${deleteTarget.id}`, {
+        method: "DELETE",
+      })
+      if (!response.ok) {
+        const data = (await response.json().catch(() => ({}))) as { error?: string }
+        toast.error(data.error ?? "Unable to delete product.")
+        setDeleting(false)
+        return
+      }
+      toast.success("Product deleted.")
       setDeleting(false)
-      return
-    }
-    toast.success("Product deleted.")
-    setDeleting(false)
-    setDeleteOpen(false)
-    setDeleteTarget(null)
-    await loadProducts()
+      setDeleteOpen(false)
+      setDeleteTarget(null)
+      await loadProducts()
+    } catch { toast.error("Unable to delete. Please try again.") } finally { setDeleting(false) }
   }
 
   const columns = React.useMemo<ColumnDef<InventoryProductRow>[]>(
@@ -314,7 +321,7 @@ export default function InventoryProductsPage() {
         ),
         cell: ({ row }) => (
           <div className="flex flex-col">
-            <span className="font-medium">{row.original.name}</span>
+            <button type="button" className="text-left font-medium underline underline-offset-4 hover:text-primary" onClick={() => setViewing(row.original)}>{row.original.name}</button>
             <span className="text-xs text-muted-foreground">{row.original.category.name}</span>
           </div>
         ),
@@ -361,15 +368,16 @@ export default function InventoryProductsPage() {
         cell: ({ row }) => (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button size="icon" variant="ghost">
+              <Button size="icon" variant="ghost" aria-label="Record actions">
                 <MoreHorizontalIcon className="h-4 w-4" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem onSelect={() => openEdit(row.original)}>
+              <DropdownMenuItem disabled={!canEdit} onSelect={() => openEdit(row.original)}>
                 Edit
               </DropdownMenuItem>
               <DropdownMenuItem
+                disabled={!canArchive}
                 className="text-destructive"
                 onSelect={() => {
                   setDeleteTarget(row.original)
@@ -383,16 +391,15 @@ export default function InventoryProductsPage() {
         ),
       },
     ],
-    [formatMoney, openEdit]
+    [formatMoney, openEdit, canEdit, canArchive]
   )
 
-  // eslint-disable-next-line react-hooks/incompatible-library
   const table = useReactTable({
     data: items,
     columns,
     state: { sorting, pagination, globalFilter: search },
-    onSortingChange: setSorting,
-    onGlobalFilterChange: setSearch,
+    onSortingChange: value => { setSorting(value); setPagination(prev => ({ ...prev, pageIndex: 0 })) },
+    onGlobalFilterChange: value => { setSearch(value); setPagination(prev => ({ ...prev, pageIndex: 0 })) },
     onPaginationChange: (updater) => {
       setPagination((prev) =>
         typeof updater === "function" ? (updater(prev as never) as PaginationState) : updater
@@ -406,87 +413,31 @@ export default function InventoryProductsPage() {
   })
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold">Inventory products</h1>
-          <p className="text-sm text-muted-foreground">
-            Track products, supplier mapping, taxes, and stock levels.
-          </p>
-        </div>
-        <Button onClick={openCreate}>New product</Button>
-      </div>
+    <div className={pageClass}>
+      <PageHeader title="Inventory products" description="Track products, supplier mapping, taxes, and stock levels." actions={<Button disabled={!canCreate} onClick={openCreate}>New product</Button>} />
 
-      <DataTableToolbar table={table} searchPlaceholder="Search products by name/SKU" />
+      <Surface>
+      <TableToolbar table={table} searchPlaceholder="Search products by name/SKU"><Select aria-label="Status filter" value={statusFilter} onValueChange={value => { setStatusFilter(value); setPagination(prev => ({ ...prev, pageIndex: 0 })) }}><option value="all">All statuses</option><option value="ACTIVE">Active</option><option value="INACTIVE">Inactive</option></Select><Button type="button" variant="outline" disabled={loading} onClick={() => void loadProducts()}>Refresh</Button></TableToolbar>
       <DataTable table={table} loading={loading} emptyMessage="No products found." />
-      <DataTablePagination table={table} totalRows={totalRows} />
+      <TablePagination table={table} totalRows={totalRows} loading={loading} />
+      </Surface>
 
-      <Dialog
-        open={deleteOpen}
-        onOpenChange={(open) => {
-          setDeleteOpen(open)
-          if (!open) {
-            setDeleteTarget(null)
-            setDeleting(false)
-          }
-        }}
-      >
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Delete product</DialogTitle>
-            <DialogDescription>
-              {deleteTarget
-                ? `Delete "${deleteTarget.name}"? Linked records will force inactive status instead.`
-                : "Delete this product?"}
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleteOpen(false)} disabled={deleting}>
-              Cancel
-            </Button>
-            <Button variant="destructive" onClick={removeProduct} disabled={deleting}>
-              {deleting ? "Deleting..." : "Delete"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {deleteOpen && deleteTarget && <ConfirmAction title="Delete product" description={`Delete "${deleteTarget.name}"? If this record is in use, it will be made inactive instead.`} label="Delete" destructive busy={deleting} onCancel={() => { setDeleteOpen(false); setDeleteTarget(null) }} onConfirm={() => void removeProduct()} />}
 
-      <Dialog
-        open={formOpen}
-        onOpenChange={(open) => {
-          setFormOpen(open)
-          if (!open) resetForm()
-        }}
-      >
-        <DialogContent className="max-h-[90vh] flex flex-col max-w-4xl">
-          <DialogHeader>
-            <DialogTitle>{editing ? "Edit product" : "New product"}</DialogTitle>
-            <DialogDescription>
-              {editing
-                ? "Update product, supplier links, and tax defaults."
-                : "Create a physical product with suppliers and taxes."}
-            </DialogDescription>
-          </DialogHeader>
+      {viewing && <ProductView item={viewing} onClose={() => setViewing(null)} onEdit={canEdit ? () => openEdit(viewing) : undefined} formatMoney={formatMoney} taxNames={taxes.filter(tax => viewing.taxIds.includes(tax.id)).map(tax => tax.name)} />}
+
+      {formOpen && <DraftPanel error={formError} fingerprint={formValues} title={editing ? "Edit product" : "New product"} description="Update product details in the sections below." onClose={() => setFormOpen(false)} onSubmit={() => void save()} saving={saving} disabled={!(editing ? canEdit : canCreate)} saveLabel={editing ? "Save changes" : "Create product"}>
           <div className="flex-1 overflow-y-auto px-1">
             <ProductFormFields
               values={formValues}
               errors={errors}
-              categories={categories}
-              suppliers={suppliers}
+              selectedCategory={editing?.category}
+              selectedSuppliers={editing?.supplierLinks ?? []}
               taxes={taxes}
               onChange={setFormValues}
             />
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setFormOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={save} loading={saving} loadingText="Saving...">
-              {editing ? "Save changes" : "Create product"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      </DraftPanel>}
     </div>
   )
 }

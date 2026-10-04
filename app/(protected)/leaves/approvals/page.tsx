@@ -1,4 +1,13 @@
 "use client"
+import { useBusinessModules } from "@/platform/module-provider"
+import { useCurrentResourceAction } from "@/platform/access/view-guard"
+
+import { ActionDialogContent } from "@/components/erp/action-dialog"
+
+import { PageHeader, pageClass, Surface, TableToolbar } from "@/components/erp/page"
+import { TablePagination } from "@/components/erp/pagination"
+
+import { Select, Checkbox } from "@/components/erp/controls"
 
 import * as React from "react"
 import {
@@ -16,17 +25,10 @@ import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 
 import { LeaveRequestDetailsDialog } from "../request-details-dialog"
-import { DataTable, DataTablePagination, DataTableToolbar } from "@/components/data-table"
+import { DataTable } from "@/components/data-table"
 import { FormField } from "@/components/form-field"
 import { Button } from "@/components/ui/button"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
+import { Dialog } from "@/components/ui/dialog"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -97,6 +99,10 @@ const SortIndicator = ({ value }: { value: false | "asc" | "desc" }) => {
 }
 
 export default function LeaveApprovalsPage() {
+  const { can, enabled } = useBusinessModules()
+  const canApprove = useCurrentResourceAction("approve")
+  const canArchive = useCurrentResourceAction("archive")
+
   const { data: session } = useSession()
   const role = (session?.user as { role?: string })?.role
   const canManage = role === "ADMIN" || role === "MANAGER"
@@ -479,16 +485,14 @@ export default function LeaveApprovalsPage() {
         id: "select",
         enableHiding: false,
         header: ({ table }) => (
-          <input
-            type="checkbox"
+          <Checkbox
             checked={table.getIsAllPageRowsSelected()}
             onChange={(event) => table.toggleAllPageRowsSelected(event.target.checked)}
             aria-label="Select all"
           />
         ),
         cell: ({ row }) => (
-          <input
-            type="checkbox"
+          <Checkbox
             checked={row.getIsSelected()}
             disabled={!row.getCanSelect()}
             onChange={(event) => row.toggleSelected(event.target.checked)}
@@ -561,15 +565,16 @@ export default function LeaveApprovalsPage() {
         header: "",
         enableHiding: false,
         cell: ({ row }) => {
-          const canReview = row.original.status === "PENDING"
-          const canRevoke = row.original.status === "APPROVED"
+          const canReview = canApprove && row.original.status === "PENDING"
+          const canRevoke = canArchive && row.original.status === "APPROVED"
           return (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button
                   size="icon"
                   variant="ghost"
-                  disabled={(!canReview && !canRevoke) || processing}
+                  aria-label="Record actions"
+                  disabled={processing}
                 >
                   <MoreHorizontalIcon className="h-4 w-4" />
                 </Button>
@@ -606,7 +611,7 @@ export default function LeaveApprovalsPage() {
         },
       },
     ],
-    [openDetails, openReject, openRevoke, processing, reviewRequest]
+    [openDetails, openReject, openRevoke, processing, reviewRequest, canApprove, canArchive]
   )
 
   const totalPages = Math.max(1, Math.ceil(totalRows / pagination.pageSize))
@@ -623,7 +628,7 @@ export default function LeaveApprovalsPage() {
     manualPagination: true,
     manualSorting: true,
     manualFiltering: true,
-    enableRowSelection: (row) => row.original.status === "PENDING",
+    enableRowSelection: (row) => canApprove && row.original.status === "PENDING",
     pageCount: totalPages,
     getCoreRowModel: getCoreRowModel(),
   })
@@ -637,23 +642,16 @@ export default function LeaveApprovalsPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold">Leave Approvals</h1>
-          <p className="text-sm text-muted-foreground">
-            Review and process pending leave requests.
-          </p>
-        </div>
-        <Button variant="outline" asChild>
+    <div className={pageClass}>
+      <PageHeader title={<> Leave Approvals </>} description={<> Review and process pending leave requests. </>} actions={<> {can("leaveRequests.read") && <Button variant="outline" asChild>
           <Link href="/leaves/requests">My requests</Link>
-        </Button>
-      </div>
+        </Button>} </>} />
 
-      <DataTableToolbar table={table} searchPlaceholder="Search by staff, leave or reason">
+      <Surface>
+      <TableToolbar table={table} searchPlaceholder="Search by staff, leave or reason">
         <Button
           variant="outline"
-          disabled={!selectedPendingRows.length || processing}
+          disabled={!canApprove || !selectedPendingRows.length || processing}
           onClick={() => void reviewBulkRequests(selectedPendingRows, "APPROVED")}
         >
           Approve selected
@@ -661,26 +659,27 @@ export default function LeaveApprovalsPage() {
         <Button
           variant="outline"
           className="text-destructive"
-          disabled={!selectedPendingRows.length || processing}
+          disabled={!canApprove || !selectedPendingRows.length || processing}
           onClick={() => openBulkReject(selectedPendingRows)}
         >
           Reject selected
         </Button>
-        <select
+        <Select
           className="h-9 rounded-md border border-input bg-background px-3 text-sm"
           value={statusFilter}
-          onChange={(event) => setStatusFilter(event.target.value as LeaveRequestStatus | "all")}
+          onValueChange={(value) => setStatusFilter(value as LeaveRequestStatus | "all")}
         >
           {statusOptions.map((item) => (
             <option key={item} value={item}>
               {item === "all" ? "All statuses" : item}
             </option>
           ))}
-        </select>
-      </DataTableToolbar>
+        </Select>
+      </TableToolbar>
 
       <DataTable table={table} loading={loading} emptyMessage="No leave requests found." />
-      <DataTablePagination table={table} totalRows={totalRows} />
+      <TablePagination table={table} totalRows={totalRows} />
+      </Surface>
 
       <Dialog
         open={rejectOpen}
@@ -692,32 +691,19 @@ export default function LeaveApprovalsPage() {
           }
         }}
       >
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>
-              {rejectTargets.length > 1 ? "Reject selected leave requests" : "Reject leave request"}
-            </DialogTitle>
-            <DialogDescription>
-              Add a reason for rejection. This comment will be shared with staff.
-            </DialogDescription>
-          </DialogHeader>
-          <FormField id="reject-comment" label="Comment">
+        <ActionDialogContent title={<>{rejectTargets.length > 1 ? "Reject selected leave requests" : "Reject leave request"}</>} description={<>Add a reason for rejection. This comment will be shared with staff.
+            </>} className="sm:max-w-md" actions={<> <Button variant="outline" onClick={() => setRejectOpen(false)} disabled={processing}>
+              Back
+            </Button><Button variant="destructive" onClick={() => void confirmReject()} disabled={processing}>
+              {processing ? "Rejecting..." : "Reject"}
+            </Button> </>}><FormField id="reject-comment" label="Comment">
             <Input
               id="reject-comment"
               value={rejectComment}
               onChange={(event) => setRejectComment(event.target.value)}
               placeholder="Reason for rejection"
             />
-          </FormField>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setRejectOpen(false)} disabled={processing}>
-              Back
-            </Button>
-            <Button variant="destructive" onClick={() => void confirmReject()} disabled={processing}>
-              {processing ? "Rejecting..." : "Reject"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
+          </FormField></ActionDialogContent>
       </Dialog>
 
       <Dialog
@@ -730,32 +716,20 @@ export default function LeaveApprovalsPage() {
           }
         }}
       >
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Revoke approved leave</DialogTitle>
-            <DialogDescription>
-              {revokeTarget
+        <ActionDialogContent title={<>Revoke approved leave</>} description={<>{revokeTarget
                 ? `Revoke ${revokeTarget.leaveDefinition.code} from ${new Date(revokeTarget.startDate).toLocaleDateString()} to ${new Date(revokeTarget.endDate).toLocaleDateString()}?`
-                : "Revoke this approved leave request?"}
-            </DialogDescription>
-          </DialogHeader>
-          <FormField id="revoke-reason" label="Reason">
+                : "Revoke this approved leave request?"}</>} className="sm:max-w-md" actions={<> <Button variant="outline" onClick={() => setRevokeOpen(false)} disabled={processing}>
+              Back
+            </Button><Button variant="destructive" onClick={() => void confirmRevoke()} disabled={processing}>
+              {processing ? "Revoking..." : "Revoke"}
+            </Button> </>}><FormField id="revoke-reason" label="Reason">
             <Input
               id="revoke-reason"
               value={revokeReason}
               onChange={(event) => setRevokeReason(event.target.value)}
               placeholder="Reason for revocation"
             />
-          </FormField>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setRevokeOpen(false)} disabled={processing}>
-              Back
-            </Button>
-            <Button variant="destructive" onClick={() => void confirmRevoke()} disabled={processing}>
-              {processing ? "Revoking..." : "Revoke"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
+          </FormField></ActionDialogContent>
       </Dialog>
 
       <LeaveRequestDetailsDialog
@@ -778,14 +752,28 @@ export default function LeaveApprovalsPage() {
           }
         }}
       >
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Conflicting appointments found</DialogTitle>
-            <DialogDescription>
-              Leave approval overlaps active appointments. Cancel conflicts to proceed with approval.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="max-h-80 space-y-3 overflow-y-auto pr-1">
+        <ActionDialogContent title={<>Conflicting appointments found</>} description={<>Leave approval overlaps active appointments. Cancel conflicts to proceed with approval.
+            </>} className="sm:max-w-2xl" actions={<> <Button
+              variant="outline"
+              onClick={() => {
+                setConflictDialogOpen(false)
+                setConflictResolution(null)
+              }}
+              disabled={processing}
+            >
+              Close
+            </Button><Button
+              variant="destructive"
+              onClick={() => void resolveConflictsAndApprove("cancel")}
+              disabled={!canApprove || !enabled("appointments") || !can("appointments.archive") || processing}
+            >
+              {processing ? "Processing..." : "Cancel conflicts and approve"}
+            </Button><Button
+              onClick={() => void resolveConflictsAndApprove("reschedule")}
+              disabled={!canApprove || !enabled("appointments") || !enabled("services") || !can("services.read") || !can("appointments.edit") || processing}
+            >
+              {processing ? "Processing..." : "Reschedule conflicts and approve"}
+            </Button> </>}><div className="max-h-80 space-y-3 overflow-y-auto pr-1">
             {(conflictResolution?.conflicts ?? []).map((conflict) => (
               <div key={conflict.requestId} className="rounded-md border p-3">
                 <p className="text-sm font-medium">
@@ -803,8 +791,7 @@ export default function LeaveApprovalsPage() {
                 </div>
               </div>
             ))}
-          </div>
-          <div className="grid gap-3 sm:grid-cols-2">
+          </div><div className="grid gap-3 sm:grid-cols-2">
             <FormField id="reschedule-date" label="Reschedule date">
               <Input
                 id="reschedule-date"
@@ -821,8 +808,7 @@ export default function LeaveApprovalsPage() {
                 onChange={(event) => setRescheduleTime(event.target.value)}
               />
             </FormField>
-          </div>
-          {reschedulePreview.length > 0 ? (
+          </div>{reschedulePreview.length > 0 ? (
             <div className="rounded-md border p-3">
               <p className="text-sm font-medium">Proposed reschedule preview</p>
               <div className="mt-2 max-h-40 space-y-1 overflow-y-auto text-sm text-muted-foreground">
@@ -835,33 +821,7 @@ export default function LeaveApprovalsPage() {
                 ))}
               </div>
             </div>
-          ) : null}
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setConflictDialogOpen(false)
-                setConflictResolution(null)
-              }}
-              disabled={processing}
-            >
-              Close
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={() => void resolveConflictsAndApprove("cancel")}
-              disabled={processing}
-            >
-              {processing ? "Processing..." : "Cancel conflicts and approve"}
-            </Button>
-            <Button
-              onClick={() => void resolveConflictsAndApprove("reschedule")}
-              disabled={processing}
-            >
-              {processing ? "Processing..." : "Reschedule conflicts and approve"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
+          ) : null}</ActionDialogContent>
       </Dialog>
     </div>
   )

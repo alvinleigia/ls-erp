@@ -36,7 +36,7 @@ export function createRealEstateService(db: PrismaClient, identity: Pick<Busines
           if (!user || !hasBusinessAccess(user.role) || user.tenant?.status !== "ACTIVE" || user.tenant.slug === (process.env.PLATFORM_ADMIN_TENANT_SLUG?.trim().toLowerCase() || "platform")) throw new BusinessError(403, "Business workspace access is not permitted.")
           const enabled = await tx.tenantModule.count({ where: { tenantId: identity.tenantId, key: { in: ["crm", "realEstate"] }, enabled: true, allowed: true } })
           if (enabled !== 2) throw new BusinessError(403, "Real Estate and CRM must be enabled for this business.")
-          const actor = { ...identity, role: user.role, permissions: assignedPermissions(user) }; requirePermission(actor, requirement)
+          const actor = { ...identity, role: user.role, permissions: assignedPermissions(user), crmRecordScope: user.crmRecordScope, managedTeamIds: user.managedTeamIds }; requirePermission(actor, requirement)
           return operation(tx, actor)
         }, { isolationLevel: "Serializable", maxWait: 20000, timeout: 20000 })
       } catch (error) {

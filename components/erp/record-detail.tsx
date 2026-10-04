@@ -34,13 +34,23 @@ export function ReadOnlyFields({ fields }: { fields: { label: string; value: Rea
   return <dl className="grid gap-x-8 gap-y-5 sm:grid-cols-2">{fields.map(field => <div key={field.label} className="min-w-0"><dt className="text-sm text-muted-foreground">{field.label}</dt><dd className="mt-1 whitespace-pre-wrap break-words text-sm font-medium">{field.value === null || field.value === undefined || field.value === "" ? "Not specified" : field.value}</dd></div>)}</dl>
 }
 
+export function RecordPanel({ title, description, onClose, actions, children }: {
+  title: string; description: string; onClose: () => void; actions?: React.ReactNode; children: React.ReactNode;
+}) {
+  return <Sheet open onOpenChange={open => { if (!open) onClose() }}><SheetContent className="w-full gap-0 sm:max-w-2xl">
+    <SheetHeader className="shrink-0 border-b p-5 pr-12"><SheetTitle>{title}</SheetTitle><SheetDescription>{description}</SheetDescription></SheetHeader>
+    <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-5">{children}</div>
+    <SheetFooter className="shrink-0 flex-row flex-wrap justify-end border-t bg-background p-4"><Button type="button" variant="outline" onClick={onClose}>Close</Button>{actions}</SheetFooter>
+  </SheetContent></Sheet>
+}
+
 export function RecordMenu({ actions }: { actions: { label: string; onSelect: () => void; disabled?: boolean }[] }) {
   return <DropdownMenu><DropdownMenuTrigger asChild><Button type="button" variant="outline" size="icon" aria-label="More actions"><MoreHorizontal /></Button></DropdownMenuTrigger><DropdownMenuContent align="end">{actions.map(action => <DropdownMenuItem key={action.label} disabled={action.disabled} onSelect={action.onSelect}>{action.label}</DropdownMenuItem>)}</DropdownMenuContent></DropdownMenu>
 }
 
-export function EditPanel({ open, title, description, onClose, onSubmit, saving, disabled, dirty, error, children, saveLabel = "Save changes" }: {
+export function EditPanel({ open, title, description, onClose, onSubmit, saving, disabled, dirty, error, children, footerActions, saveLabel = "Save changes" }: {
   open: boolean; title: string; description: string; onClose: () => void; onSubmit: React.FormEventHandler<HTMLFormElement>;
-  saving: boolean; disabled?: boolean; dirty: boolean; error?: string; children: React.ReactNode; saveLabel?: string;
+  saving: boolean; disabled?: boolean; dirty: boolean; error?: string; children: React.ReactNode; footerActions?: React.ReactNode; saveLabel?: string;
 }) {
   const formId = React.useId()
   const [discard, setDiscard] = React.useState(false)
@@ -51,7 +61,7 @@ export function EditPanel({ open, title, description, onClose, onSubmit, saving,
       {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
       <fieldset disabled={saving} className="min-w-0 space-y-5">{children}</fieldset>
     </form>
-    <SheetFooter className="shrink-0 flex-row justify-end border-t bg-background p-4"><Button type="button" variant="outline" disabled={saving} onClick={close}>Cancel</Button><Button type="submit" form={formId} loading={saving} loadingText="Saving..." disabled={disabled}>{saveLabel}</Button></SheetFooter>
+    <SheetFooter className="shrink-0 flex-row flex-wrap justify-end border-t bg-background p-4"><Button type="button" variant="outline" disabled={saving} onClick={close}>Cancel</Button>{footerActions}<Button type="submit" form={formId} loading={saving} loadingText="Saving..." disabled={disabled}>{saveLabel}</Button></SheetFooter>
   </SheetContent></Sheet>
   <Dialog open={discard} onOpenChange={setDiscard}><DialogContent><DialogHeader><DialogTitle>Discard unsaved changes?</DialogTitle><DialogDescription>Your changes in this section have not been saved.</DialogDescription></DialogHeader><DialogFooter><Button variant="outline" onClick={() => setDiscard(false)}>Keep editing</Button><Button onClick={() => { setDiscard(false); onClose() }}>Discard changes</Button></DialogFooter></DialogContent></Dialog>
   </>

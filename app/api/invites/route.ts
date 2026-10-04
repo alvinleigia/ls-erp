@@ -10,12 +10,14 @@ import {
   withRequestId,
 } from "@/lib/api-logging"
 import { Prisma } from "@prisma/client"
+import { recordDomainAuditEventSafe } from "@/lib/domain-audit"
 import { prisma } from "@/lib/prisma"
 import { inviteUserSchema } from "@/lib/validation"
 import { canSendConfiguredEmail, mailer, mailFrom } from "@/lib/mailer"
 import { inviteEmail } from "@/lib/emails/invite"
 import { canInvite, type Role } from "@/lib/permissions"
-import { requireTenantSession } from "@/lib/tenant-auth"
+import { withCoreApi, actorSession } from "@/platform/core/api"
+import type { BusinessActor } from "@/platform/policy"
 
 const paginationSchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
@@ -28,11 +30,11 @@ const paginationSchema = z.object({
   status: z.enum(["pending", "accepted", "expired"]).optional(),
 })
 
-export async function POST(request: Request) {
+async function handlePOST(request: Request, actor: BusinessActor) {
   const logContext = createApiLogContext(request)
   logApiRequestStart(logContext, request)
 
-  const tenantSession = await requireTenantSession(request)
+  const tenantSession = actorSession(actor)
   if (tenantSession.error) {
     logApiRequestSuccess(logContext, tenantSession.error.status, { reason: "tenant_or_auth_failed" })
     return withRequestId(tenantSession.error, logContext.requestId)
@@ -66,7 +68,7 @@ export async function POST(request: Request) {
     const token = crypto.randomUUID()
     const expiresAt = new Date(Date.now() + 1000 * 60 * 60 * 24 * 7)
 
-    await prisma.invitation.create({
+    const invitation = await prisma.invitation.create({
       data: {
         email,
         tenantId,
@@ -76,6 +78,8 @@ export async function POST(request: Request) {
         invitedById: sessionUserId,
       },
     })
+
+    await recordDomainAuditEventSafe(prisma, { tenantId, actorUserId: actor.userId, actorRole: actor.role, requestId: actor.requestId, event: "core.invitations.create", entityType: "Invitation", entityId: invitation.id, after: { email, role: invitation.role, expiresAt: expiresAt.toISOString() } })
 
     const inviteUrl = new URL(`/auth/invite?token=${token}`, request.url).toString()
 
@@ -96,7 +100,7 @@ export async function POST(request: Request) {
       return withRequestId(response, logContext.requestId)
     }
 
-    const emailTemplate = inviteEmail({ inviteUrl, businessName: tenantSession.context.tenantName })
+    const emailTemplate = inviteEmail({ inviteUrl, businessName: (await prisma.tenant.findUnique({ where: { id: tenantId }, select: { name: true } }))?.name })
 
     await mailer.sendMail({
       from: mailFrom,
@@ -116,11 +120,11 @@ export async function POST(request: Request) {
   }
 }
 
-export async function GET(request: Request) {
+async function handleGET(request: Request, actor: BusinessActor) {
   const logContext = createApiLogContext(request)
   logApiRequestStart(logContext, request)
 
-  const tenantSession = await requireTenantSession(request)
+  const tenantSession = actorSession(actor)
   if (tenantSession.error) {
     logApiRequestSuccess(logContext, tenantSession.error.status, { reason: "tenant_or_auth_failed" })
     return withRequestId(tenantSession.error, logContext.requestId)
@@ -194,4 +198,12 @@ export async function GET(request: Request) {
     const response = NextResponse.json({ error: "Unable to load invites." }, { status: 500 })
     return withRequestId(response, logContext.requestId)
   }
+}
+
+export async function POST(request: Request) {
+  return withCoreApi(request, "invitations", "create", actor => handlePOST(request, actor))
+}
+
+export async function GET(request: Request) {
+  return withCoreApi(request, "invitations", "read", actor => handleGET(request, actor))
 }

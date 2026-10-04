@@ -1,4 +1,9 @@
 "use client"
+import { useCurrentResourceAction } from "@/platform/access/view-guard"
+
+import { Section } from "@/components/erp/section"
+
+import { Select, Checkbox } from "@/components/erp/controls"
 
 import * as React from "react"
 
@@ -27,6 +32,7 @@ export function LeaveDefinitionFormFields({
   leaveOptions,
   disableCode = false,
 }: LeaveDefinitionFormFieldsProps) {
+  const canArchive = useCurrentResourceAction("archive")
   const handleCheckbox =
     (field: keyof LeaveDefinitionFormValues) =>
     (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -42,8 +48,7 @@ export function LeaveDefinitionFormFields({
     }
 
   return (
-    <div className="grid gap-4">
-      <div className="grid gap-4 md:grid-cols-2">
+    <div className="space-y-5"><Section title="Leave details"><div className="grid gap-4 md:grid-cols-2">
         <FormField id="code" label="Leave code" error={errors.code}>
           <Input
             id="code"
@@ -64,15 +69,14 @@ export function LeaveDefinitionFormFields({
           />
         </FormField>
       </div>
-
-      <div className="grid gap-4 md:grid-cols-3">
+<div className="grid gap-4 md:grid-cols-3">
         <FormField id="leaveType" label="Leave type" error={errors.leaveType}>
-          <select
+          <Select
             id="leaveType"
             className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
             value={values.leaveType}
-            onChange={(event) =>
-              onChange((prev) => ({ ...prev, leaveType: event.target.value as LeaveDefinitionFormValues["leaveType"] }))
+            onValueChange={(value) =>
+              onChange((prev) => ({ ...prev, leaveType: value as LeaveDefinitionFormValues["leaveType"] }))
             }
           >
             {leaveDefinitionTypeOptions.map((item) => (
@@ -80,15 +84,15 @@ export function LeaveDefinitionFormFields({
                 {item}
               </option>
             ))}
-          </select>
+          </Select>
         </FormField>
         <FormField id="allowedUsers" label="Allowed users" error={errors.allowedUsers}>
-          <select
+          <Select
             id="allowedUsers"
             className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
             value={values.allowedUsers}
-            onChange={(event) =>
-              onChange((prev) => ({ ...prev, allowedUsers: event.target.value as LeaveDefinitionFormValues["allowedUsers"] }))
+            onValueChange={(value) =>
+              onChange((prev) => ({ ...prev, allowedUsers: value as LeaveDefinitionFormValues["allowedUsers"] }))
             }
           >
             {leaveAllowedUsersOptions.map((item) => (
@@ -96,15 +100,14 @@ export function LeaveDefinitionFormFields({
                 {item}
               </option>
             ))}
-          </select>
+          </Select>
         </FormField>
         <FormField id="status" label="Status" error={errors.status}>
-          <select
-            id="status"
+          <Select disabled={!canArchive} id="status"
             className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
             value={values.status}
-            onChange={(event) =>
-              onChange((prev) => ({ ...prev, status: event.target.value as LeaveDefinitionFormValues["status"] }))
+            onValueChange={(value) =>
+              onChange((prev) => ({ ...prev, status: value as LeaveDefinitionFormValues["status"] }))
             }
           >
             {leaveDefinitionStatusOptions.map((item) => (
@@ -112,11 +115,10 @@ export function LeaveDefinitionFormFields({
                 {item}
               </option>
             ))}
-          </select>
+          </Select>
         </FormField>
-      </div>
-
-      <div className="grid gap-4 md:grid-cols-3">
+      </div></Section>
+<Section title="Request limits"><div className="grid gap-4 md:grid-cols-3">
         <FormField
           id="minDaysPerRequest"
           label="Minimum allowed at a time"
@@ -156,8 +158,7 @@ export function LeaveDefinitionFormFields({
           />
         </FormField>
       </div>
-
-      <div className="grid gap-4 md:grid-cols-2">
+<div className="grid gap-4 md:grid-cols-2">
         <FormField id="noticeDays" label="Prior leave entry days" error={errors.noticeDays}>
           <Input
             id="noticeDays"
@@ -178,14 +179,12 @@ export function LeaveDefinitionFormFields({
             onChange={handleNumber("sortOrder")}
           />
         </FormField>
-      </div>
-
-      <div className="grid gap-4 md:grid-cols-2">
+      </div></Section>
+<Section title="Combination and carry forward rules"><div className="grid gap-4 md:grid-cols-2">
         <FormField id="allowWithOtherLeaves" label="Allowed with other leaves" error={errors.allowWithOtherLeaves}>
           <label className="inline-flex h-9 items-center gap-2 text-sm">
-            <input
+            <Checkbox
               id="allowWithOtherLeaves"
-              type="checkbox"
               checked={values.allowWithOtherLeaves}
               onChange={handleCheckbox("allowWithOtherLeaves")}
             />
@@ -194,9 +193,8 @@ export function LeaveDefinitionFormFields({
         </FormField>
         <FormField id="priorEntryAllowed" label="Prior leave entry allowed" error={errors.priorEntryAllowed}>
           <label className="inline-flex h-9 items-center gap-2 text-sm">
-            <input
+            <Checkbox
               id="priorEntryAllowed"
-              type="checkbox"
               checked={values.priorEntryAllowed}
               onChange={handleCheckbox("priorEntryAllowed")}
             />
@@ -204,13 +202,11 @@ export function LeaveDefinitionFormFields({
           </label>
         </FormField>
       </div>
-
-      <div className="grid gap-4 md:grid-cols-2">
+<div className="grid gap-4 md:grid-cols-2">
         <FormField id="allowCarryForward" label="Balance carried to next year" error={errors.allowCarryForward}>
           <label className="inline-flex h-9 items-center gap-2 text-sm">
-            <input
+            <Checkbox
               id="allowCarryForward"
-              type="checkbox"
               checked={values.allowCarryForward}
               onChange={handleCheckbox("allowCarryForward")}
             />
@@ -227,10 +223,8 @@ export function LeaveDefinitionFormFields({
             searchPlaceholder="Search leave definitions..."
           />
         </FormField>
-      </div>
-
-      <div className="rounded-md border p-4 space-y-3">
-        <h3 className="text-sm font-semibold">Week Off / Holiday Club & Cover Rules</h3>
+      </div></Section>
+<Section title="Week off and holiday rules"><div className="space-y-3">
         <div className="grid gap-4 md:grid-cols-2">
           <FormField
             id="weekOffSingleSideAllowed"
@@ -238,9 +232,8 @@ export function LeaveDefinitionFormFields({
             error={errors.weekOffSingleSideAllowed}
           >
             <label className="inline-flex h-9 items-center gap-2 text-sm">
-              <input
+              <Checkbox
                 id="weekOffSingleSideAllowed"
-                type="checkbox"
                 checked={values.weekOffSingleSideAllowed}
                 onChange={handleCheckbox("weekOffSingleSideAllowed")}
               />
@@ -253,9 +246,8 @@ export function LeaveDefinitionFormFields({
             error={errors.holidaySingleSideAllowed}
           >
             <label className="inline-flex h-9 items-center gap-2 text-sm">
-              <input
+              <Checkbox
                 id="holidaySingleSideAllowed"
-                type="checkbox"
                 checked={values.holidaySingleSideAllowed}
                 onChange={handleCheckbox("holidaySingleSideAllowed")}
               />
@@ -268,9 +260,8 @@ export function LeaveDefinitionFormFields({
             error={errors.weekOffBothSideAllowed}
           >
             <label className="inline-flex h-9 items-center gap-2 text-sm">
-              <input
+              <Checkbox
                 id="weekOffBothSideAllowed"
-                type="checkbox"
                 checked={values.weekOffBothSideAllowed}
                 onChange={handleCheckbox("weekOffBothSideAllowed")}
               />
@@ -283,9 +274,8 @@ export function LeaveDefinitionFormFields({
             error={errors.holidayBothSideAllowed}
           >
             <label className="inline-flex h-9 items-center gap-2 text-sm">
-              <input
+              <Checkbox
                 id="holidayBothSideAllowed"
-                type="checkbox"
                 checked={values.holidayBothSideAllowed}
                 onChange={handleCheckbox("holidayBothSideAllowed")}
               />
@@ -293,7 +283,6 @@ export function LeaveDefinitionFormFields({
             </label>
           </FormField>
         </div>
-      </div>
-    </div>
+      </div></Section></div>
   )
 }

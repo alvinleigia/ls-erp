@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { useBusinessModules } from "@/platform/module-provider"
 import { useParams, useRouter } from "next/navigation"
 import { useSession } from "next-auth/react"
 import { toast } from "sonner"
@@ -17,6 +18,10 @@ export default function StaffProfilePage() {
   const params = useParams<{ id: string }>()
   const { data: session } = useSession()
   const currentRole = (session?.user as { role?: Role })?.role
+  const { enabled, can, loading: accessLoading } = useBusinessModules()
+  const editScheduling = enabled("shifts") && can("shiftRoster.edit") && currentRole === "ADMIN"
+  const serviceAccess = enabled("services") && can("services.read")
+  const editEligibility = serviceAccess && can("services.edit") && currentRole === "ADMIN"
   const canManage = canManageUsers(currentRole as Role)
 
   const [loading, setLoading] = React.useState(true)
@@ -29,16 +34,16 @@ export default function StaffProfilePage() {
   const [profile, setProfile] = React.useState<StaffProfileForm>(emptyStaffProfileForm)
 
   React.useEffect(() => {
-    if (!params.id) return
+    if (!params.id || accessLoading) return
 
     const load = async () => {
       setLoading(true)
       const [userRes, servicesRes, managersRes] = await Promise.all([
         fetch(`/api/users/${params.id}`, { cache: "no-store" }),
-        fetch("/api/services?page=1&pageSize=100&sort=name&order=asc&status=ACTIVE", {
+        serviceAccess ? fetch("/api/services?page=1&pageSize=100&sort=name&order=asc&status=ACTIVE", {
           cache: "no-store",
-        }),
-        fetch("/api/users?page=1&pageSize=100&sort=name&order=asc&role=MANAGER&status=ACTIVE", {
+        }) : Promise.resolve(null),
+        fetch("/api/directory?page=1&pageSize=100&sort=name&order=asc&role=MANAGER&status=ACTIVE", {
           cache: "no-store",
         }),
       ])
@@ -55,7 +60,7 @@ export default function StaffProfilePage() {
       setSelectedIds(userRecord?.eligibleServiceIds ?? [])
       setProfile(toStaffProfileForm(userRecord))
 
-      if (servicesRes.ok) {
+      if (servicesRes?.ok) {
         const data = (await servicesRes.json()) as {
           items?: { id: string; name: string }[]
         }
@@ -83,7 +88,7 @@ export default function StaffProfilePage() {
     }
 
     void load()
-  }, [params.id])
+  }, [params.id, accessLoading, serviceAccess])
 
   const save = async () => {
     if (!user) return
@@ -93,10 +98,10 @@ export default function StaffProfilePage() {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        eligibleServiceIds: selectedIds,
+        ...(editEligibility ? { eligibleServiceIds: selectedIds } : {}),
         staffProfile: {
           managerUserId: profile.managerUserId,
-          schedulingMode: profile.schedulingMode,
+          ...(editScheduling ? { schedulingMode: profile.schedulingMode } : {}),
           documents: profile.documents.map((doc) => ({
             id: doc.id,
             type: doc.type,
@@ -169,13 +174,17 @@ export default function StaffProfilePage() {
           <Button variant="outline" onClick={() => router.push(`/users/${user.id}`)}>
             Back to profile
           </Button>
-          <Button onClick={save} loading={saving} loadingText="Saving...">
+          <Button disabled={currentRole !== "ADMIN"} onClick={save} loading={saving} loadingText="Saving...">
             Save
           </Button>
         </div>
       </div>
 
-      <StaffFormFields
+      {currentRole !== "ADMIN" && <p className="text-sm text-muted-foreground">Staff profiles can only be changed by an administrator.</p>}
+      <fieldset disabled={currentRole !== "ADMIN"}>
+      <StaffFormFields editScheduling={editScheduling}
+        showEligibility={serviceAccess}
+        editEligibility={editEligibility}
         profile={profile}
         setProfile={setProfile}
         serviceOptions={serviceOptions}
@@ -185,6 +194,7 @@ export default function StaffProfilePage() {
         query={query}
         setQuery={setQuery}
       />
+      </fieldset>
     </div>
   )
 }

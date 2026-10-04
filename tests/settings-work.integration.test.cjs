@@ -29,29 +29,33 @@ const request = (id, route, body) => new Request(`http://${id}.localhost/api/${r
 })
 before(async () => {
   await root.connect()
+  for (const table of ["RealEstateProjectStatus", "RealEstatePropertyCategory", "RealEstateBuyingTimeframe"]) await root.query(`DELETE FROM "${table}" WHERE "tenantId" IN ($1,$2)`, ["settings_work_a", "settings_work_b"])
+  await root.query('DELETE FROM "Tenant" WHERE id IN ($1,$2)', ["settings_work_a", "settings_work_b"])
+
   for (const id of ["settings_work_a", "settings_work_b"]) {
     await root.query('INSERT INTO "Tenant" (id,name,slug,"updatedAt") VALUES ($1,$1,$1,NOW())', [id])
     await root.query('INSERT INTO "User" (id,name,email,role,"tenantId","updatedAt") VALUES ($1,$1,$2,$3,$4,NOW())', [`${id}_admin`, `${id}@example.test`, "ADMIN", id])
     await root.query('INSERT INTO "AppSetting" (id,"tenantId","timeZone","updatedAt") VALUES ($1,$1,$2,NOW())', [id, id.endsWith("a") ? "Asia/Kolkata" : "Europe/London"])
-    await root.query('INSERT INTO "TenantModule" ("tenantId",key,enabled,"updatedAt") VALUES ($1,$2,true,NOW())', [id, "crm"])
+    await root.query('INSERT INTO "TenantModule" ("tenantId",key,allowed,enabled,"updatedAt") VALUES ($1,$2,true,true,NOW())', [id, "crm"])
     for (const role of ["STAFF", "CUSTOMER"]) {
       await root.query('INSERT INTO "User" (id,name,email,role,"tenantId","updatedAt") VALUES ($1,$1,$2,$3,$4,NOW())', [`${id}_${role}`, `${id}_${role}@example.test`, role, id])
     }
   }
 })
 after(async () => {
+  for (const table of ["RealEstateProjectStatus", "RealEstatePropertyCategory", "RealEstateBuyingTimeframe"]) await root.query(`DELETE FROM "${table}" WHERE "tenantId" IN ($1,$2)`, ["settings_work_a", "settings_work_b"])
   await root.query('DELETE FROM "Tenant" WHERE id IN ($1,$2)', ["settings_work_a", "settings_work_b"])
   await root.end()
   await Promise.all([global.prisma, global.prismaBypassClient, ...[...(global.prismaScopedClientCache?.values() || [])].map(entry => entry.client)].filter(Boolean).map(client => client.$disconnect()))
   await global.prismaPool?.end()
 })
 
-test("new-business settings load and initialize working hours inside their own tenant scope", async () => {
+test("settings reads preserve existing preferences without initializing working hours", async () => {
   const responses = await Promise.all(["settings_work_a", "settings_work_b"].map(id => sessions.run(session(id), () => settings.GET(request(id, "settings")))))
   assert.deepEqual(responses.map(response => response.status), [200, 200])
   const [a, b] = await Promise.all(responses.map(response => response.json()))
   assert.equal(a.settings.timeZone, "Asia/Kolkata"); assert.equal(b.settings.timeZone, "Europe/London")
-  assert.equal(a.settings.workingHours.length, 7); assert.equal(b.settings.workingHours.length, 7)
+  assert.equal(a.settings.workingHours.length, 0); assert.equal(b.settings.workingHours.length, 0)
   assert.ok(a.settings.workingHours.every(day => day.periods.length === 1))
   assert.equal(await prisma.appSetting.count(), 0)
 })
@@ -113,8 +117,8 @@ test("staff can read only their business display preferences without administrat
 
 test("staff display access does not grant administrative settings read/write access", async () => {
   const id = "settings_work_a"
-  assert.equal((await sessions.run(staffSession(), () => settings.GET(request(id, "settings")))).status, 401)
-  assert.equal((await sessions.run(staffSession(), () => settings.PATCH(request(id, "settings", { locale: "en-IN", currency: "INR", timeZone: "Asia/Kolkata", dateFormat: "dd/MM/yyyy" })))).status, 401)
+  assert.equal((await sessions.run(staffSession(), () => settings.GET(request(id, "settings")))).status, 403)
+  assert.equal((await sessions.run(staffSession(), () => settings.PATCH(request(id, "settings", { locale: "en-IN", currency: "INR", timeZone: "Asia/Kolkata", dateFormat: "dd/MM/yyyy" })))).status, 403)
   assert.equal((await root.query('SELECT "timeZone" FROM "AppSetting" WHERE "tenantId"=$1', [id])).rows[0].timeZone, "America/New_York")
 })
 

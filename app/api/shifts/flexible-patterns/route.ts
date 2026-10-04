@@ -1,3 +1,6 @@
+import { requirePermission } from "@/platform/access/policy"
+import { BusinessError } from "@/platform/policy"
+import { recordDomainAuditEvent } from "@/lib/domain-audit"
 import { NextResponse } from "next/server"
 import { Weekday } from "@prisma/client"
 import { z } from "zod"
@@ -11,7 +14,8 @@ import {
 } from "@/lib/api-logging"
 import { canManageUsers, type Role } from "@/lib/permissions"
 import { prisma } from "@/lib/prisma"
-import { requireTenantSession } from "@/lib/tenant-auth"
+import { withWorkforceApi, workforceSession } from "@/modules/workforce/api"
+import type { BusinessActor } from "@/platform/policy"
 import { flexiblePatternSchema } from "@/lib/validation"
 import type { StaffFlexiblePattern } from "@/types/shifts"
 
@@ -128,11 +132,11 @@ const mapPattern = (
     })),
 })
 
-export async function GET(request: Request) {
+async function handleGET(request: Request, actor: BusinessActor) {
   const logContext = createApiLogContext(request)
   logApiRequestStart(logContext, request)
 
-  const tenantSession = await requireTenantSession(request)
+  const tenantSession = workforceSession(actor)
   if (tenantSession.error) {
     logApiRequestSuccess(logContext, tenantSession.error.status, { reason: "tenant_or_auth_failed" })
     return withRequestId(tenantSession.error, logContext.requestId)
@@ -228,17 +232,18 @@ export async function GET(request: Request) {
     logApiRequestSuccess(logContext, 200, { itemCount: items.length })
     return withRequestId(response, logContext.requestId)
   } catch (error) {
+    if (error instanceof BusinessError) throw error
     logApiRequestError(logContext, error, 500)
     const response = NextResponse.json({ error: "Unable to load flexible patterns." }, { status: 500 })
     return withRequestId(response, logContext.requestId)
   }
 }
 
-export async function PUT(request: Request) {
+async function handlePUT(request: Request, actor: BusinessActor) {
   const logContext = createApiLogContext(request)
   logApiRequestStart(logContext, request)
 
-  const tenantSession = await requireTenantSession(request)
+  const tenantSession = workforceSession(actor)
   if (tenantSession.error) {
     logApiRequestSuccess(logContext, tenantSession.error.status, { reason: "tenant_or_auth_failed" })
     return withRequestId(tenantSession.error, logContext.requestId)
@@ -314,6 +319,8 @@ export async function PUT(request: Request) {
           )
           .map((existing) => existing.id)
         if (overlappingIds.length) {
+          requirePermission(actor, "shiftPlans.archive")
+          await recordDomainAuditEvent(tx, { tenantId: actor.tenantId, actorUserId: actor.userId, actorRole: actor.role, requestId: actor.requestId, event: "workforce.shiftPlans.archive", entityType: "shiftPlans", before: { activePatternIds: overlappingIds }, after: { inactivePatternIds: overlappingIds } })
           await tx.staffFlexiblePattern.updateMany({
             where: { id: { in: overlappingIds } },
             data: { isActive: false },
@@ -415,17 +422,18 @@ export async function PUT(request: Request) {
     logApiRequestSuccess(logContext, 200, { patternId: saved.id })
     return withRequestId(response, logContext.requestId)
   } catch (error) {
+    if (error instanceof BusinessError) throw error
     logApiRequestError(logContext, error, 500)
     const response = NextResponse.json({ error: "Unable to save flexible pattern." }, { status: 500 })
     return withRequestId(response, logContext.requestId)
   }
 }
 
-export async function DELETE(request: Request) {
+async function handleDELETE(request: Request, actor: BusinessActor) {
   const logContext = createApiLogContext(request)
   logApiRequestStart(logContext, request)
 
-  const tenantSession = await requireTenantSession(request)
+  const tenantSession = workforceSession(actor)
   if (tenantSession.error) {
     logApiRequestSuccess(logContext, tenantSession.error.status, { reason: "tenant_or_auth_failed" })
     return withRequestId(tenantSession.error, logContext.requestId)
@@ -474,6 +482,7 @@ export async function DELETE(request: Request) {
     logApiRequestSuccess(logContext, 200, { patternId: parsed.data.patternId })
     return withRequestId(response, logContext.requestId)
   } catch (error) {
+    if (error instanceof BusinessError) throw error
     logApiRequestError(logContext, error, 500)
     const response = NextResponse.json(
       { error: "Unable to deactivate flexible recurring pattern." },
@@ -481,4 +490,16 @@ export async function DELETE(request: Request) {
     )
     return withRequestId(response, logContext.requestId)
   }
+}
+
+export async function DELETE(request: Request) {
+  return withWorkforceApi(request, "shifts", "shiftPlans", "archive", actor => handleDELETE(request, actor), "flexible-patterns")
+}
+
+export async function PUT(request: Request) {
+  return withWorkforceApi(request, "shifts", "shiftPlans", "edit", actor => handlePUT(request, actor), "flexible-patterns")
+}
+
+export async function GET(request: Request) {
+  return withWorkforceApi(request, "shifts", "shiftPlans", "read", actor => handleGET(request, actor), "flexible-patterns")
 }

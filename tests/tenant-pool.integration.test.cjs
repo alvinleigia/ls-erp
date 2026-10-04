@@ -21,6 +21,9 @@ before(async () => {
   }
 })
 after(async () => {
+  for (const table of ["RealEstateProjectStatus", "RealEstatePropertyCategory", "RealEstateBuyingTimeframe"]) {
+    await root.query(`DELETE FROM "${table}" WHERE "tenantId" = ANY($1)`, [ids])
+  }
   await root.query('DELETE FROM "Tenant" WHERE id = ANY($1)', [ids])
   await root.end()
   await Promise.all([global.prisma, global.prismaBypassClient, ...[...(global.prismaScopedClientCache?.values() || [])].map(entry => entry.client)].filter(Boolean).map(client => client.$disconnect()))

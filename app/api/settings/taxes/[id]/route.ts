@@ -10,12 +10,13 @@ import {
 } from "@/lib/api-logging"
 import { prisma } from "@/lib/prisma"
 import { canManageUsers, type Role } from "@/lib/permissions"
-import { requireTenantSession } from "@/lib/tenant-auth"
+import { withCoreApi, actorSession } from "@/platform/core/api"
+import type { BusinessActor } from "@/platform/policy"
 import { taxUpdateSchema } from "@/lib/validation"
 import type { TaxRow } from "@/types/scheduling"
 
-const ensureAuthorized = async (request: Request) => {
-  const tenantSession = await requireTenantSession(request)
+const ensureAuthorized = async (actor: BusinessActor) => {
+  const tenantSession = actorSession(actor)
   if (tenantSession.error) {
     return { error: tenantSession.error }
   }
@@ -43,14 +44,12 @@ const serializeTax = (tax: {
   updatedAt: tax.updatedAt.toISOString(),
 })
 
-export async function PATCH(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
+async function handlePATCH(request: Request,
+  { params }: { params: Promise<{ id: string }> }, actor: BusinessActor) {
   const logContext = createApiLogContext(request)
   logApiRequestStart(logContext, request)
 
-  const authorized = await ensureAuthorized(request)
+  const authorized = await ensureAuthorized(actor)
   if (authorized.error) {
     logApiRequestSuccess(logContext, authorized.error.status, { reason: "unauthorized_or_tenant_failed" })
     return withRequestId(authorized.error, logContext.requestId)
@@ -110,14 +109,12 @@ export async function PATCH(
   }
 }
 
-export async function DELETE(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
+async function handleDELETE(request: Request,
+  { params }: { params: Promise<{ id: string }> }, actor: BusinessActor) {
   const logContext = createApiLogContext(request)
   logApiRequestStart(logContext, request)
 
-  const authorized = await ensureAuthorized(request)
+  const authorized = await ensureAuthorized(actor)
   if (authorized.error) {
     logApiRequestSuccess(logContext, authorized.error.status, { reason: "unauthorized_or_tenant_failed" })
     return withRequestId(authorized.error, logContext.requestId)
@@ -154,4 +151,12 @@ export async function DELETE(
     const response = NextResponse.json({ error: "Unable to delete tax." }, { status: 500 })
     return withRequestId(response, logContext.requestId)
   }
+}
+
+export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
+  return withCoreApi(request, "taxRates", "edit", actor => handlePATCH(request, context, actor), (await context.params).id)
+}
+
+export async function DELETE(request: Request, context: { params: Promise<{ id: string }> }) {
+  return withCoreApi(request, "taxRates", "archive", actor => handleDELETE(request, context, actor), (await context.params).id)
 }

@@ -10,7 +10,10 @@ export async function readJson(request: Request): Promise<unknown> {
   try { return await request.json() } catch { throw new BusinessError(400, "Invalid JSON body.") }
 }
 
-export async function withBusinessApi(request: Request, handler: (actor: BusinessActor) => Promise<unknown>, successStatus = 200) {
+export function withBusinessApi(request: Request, handler: (actor: BusinessActor) => Promise<unknown>, successStatus = 200) {
+  return withCurrentAccountApi(request, handler, successStatus, false)
+}
+export async function withCurrentAccountApi(request: Request, handler: (actor: BusinessActor) => Promise<unknown>, successStatus = 200, allowCustomer = true) {
   const log = createApiLogContext(request)
   logApiRequestStart(log, request)
   try {
@@ -20,10 +23,10 @@ export async function withBusinessApi(request: Request, handler: (actor: Busines
     const result = await runWithTenantDbContext(tenantId, async () => {
       const user = sessionUserId ? await findAccessUser(prisma, tenantId, sessionUserId) : null
       const platformSlug = process.env.PLATFORM_ADMIN_TENANT_SLUG?.trim().toLowerCase() || "platform"
-      if (!user || !hasBusinessAccess(user.role) || user.tenant?.status !== "ACTIVE" || user.tenant.slug === platformSlug) {
+      if (!user || (!hasBusinessAccess(user.role) && !(allowCustomer && user.role === "CUSTOMER")) || user.tenant?.status !== "ACTIVE" || user.tenant.slug === platformSlug) {
         throw new BusinessError(403, "Business workspace access is not permitted.")
       }
-      return handler({ tenantId, userId: sessionUserId!, role: user.role, permissions: assignedPermissions(user), requestId: log.requestId })
+      return handler({ tenantId, userId: sessionUserId!, role: user.role, permissions: assignedPermissions(user), crmRecordScope: user.crmRecordScope, managedTeamIds: user.managedTeamIds, requestId: log.requestId })
     })
     logApiRequestSuccess(log, result instanceof NextResponse ? result.status : successStatus)
     if (result instanceof NextResponse) { result.headers.set("Cache-Control", "no-store"); return withRequestId(result, log.requestId) }

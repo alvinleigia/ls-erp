@@ -1,7 +1,7 @@
 import { defineConfig, devices } from "@playwright/test"
 
 export default defineConfig({
-  testDir: "./tests/browser", testMatch: ["project-detail.spec.ts", "crm-record-detail.spec.ts", "module-controls.spec.ts", "access-roles.spec.ts"], workers: 1,
+  testDir: "./tests/browser", testMatch: ["project-detail.spec.ts", "crm-record-detail.spec.ts", "module-controls.spec.ts", "access-roles.spec.ts", "inventory-access.spec.ts", "inventory-ui.spec.ts", "services-ui.spec.ts", "services-access.spec.ts", "appointments-ui.spec.ts", "appointments-access.spec.ts", "leaves-shifts-ui.spec.ts", "workforce-access.spec.ts", "dashboard-reports-ui.spec.ts", "core-access.spec.ts"], workers: 1,
   timeout: 60_000, expect: { timeout: 15_000 },
   outputDir: "test-results/project-detail", reporter: "list",
   use: { ...devices["Desktop Chrome"], channel: "chrome", baseURL: "http://127.0.0.1:3012", screenshot: "only-on-failure", trace: "retain-on-failure" },

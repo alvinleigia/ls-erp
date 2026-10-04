@@ -1,4 +1,12 @@
 "use client"
+import { useCurrentResourceAction } from "@/platform/access/view-guard"
+
+import { ActionDialogContent } from "@/components/erp/action-dialog"
+
+import { PageHeader, pageClass, Surface, TableToolbar, Filters } from "@/components/erp/page"
+import { TablePagination } from "@/components/erp/pagination"
+
+import { Select } from "@/components/erp/controls"
 
 import * as React from "react"
 import Link from "next/link"
@@ -12,16 +20,9 @@ import {
 import { ArrowDownIcon, ArrowUpDownIcon, ArrowUpIcon, MoreHorizontalIcon } from "lucide-react"
 import { toast } from "sonner"
 
-import { DataTable, DataTablePagination, DataTableToolbar } from "@/components/data-table"
+import { DataTable } from "@/components/data-table"
 import { Button } from "@/components/ui/button"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
+import { Dialog } from "@/components/ui/dialog"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -67,6 +68,9 @@ const SortIndicator = ({ value }: { value: false | "asc" | "desc" }) => {
 }
 
 export default function LeavesPage() {
+  const canCreate = useCurrentResourceAction("create")
+  const canArchive = useCurrentResourceAction("archive")
+
   const [loading, setLoading] = React.useState(true)
   const [rows, setRows] = React.useState<LeaveDefinitionRow[]>([])
   const [totalRows, setTotalRows] = React.useState(0)
@@ -162,20 +166,26 @@ export default function LeavesPage() {
   const confirmDelete = React.useCallback(async () => {
     if (!deleteTarget) return
     setDeleting(true)
-    const response = await fetch(`/api/leaves/definitions/${deleteTarget.id}`, {
-      method: "DELETE",
-    })
-    if (!response.ok) {
-      const data = (await response.json().catch(() => ({}))) as { error?: string }
-      toast.error(data.error ?? "Unable to delete leave definition.")
+    try {
+      const response = await fetch(`/api/leaves/definitions/${deleteTarget.id}`, {
+        method: "DELETE",
+      })
+      if (!response.ok) {
+        const data = (await response.json().catch(() => ({}))) as { error?: string }
+        toast.error(data.error ?? "Unable to delete leave definition.")
+        setDeleting(false)
+        return
+      }
+      toast.success("Leave definition deleted.")
       setDeleting(false)
-      return
+      setDeleteOpen(false)
+      setDeleteTarget(null)
+      await loadRows()
+    } catch {
+      toast.error("Unable to complete this action. Please try again.")
+    } finally {
+      setDeleting(false)
     }
-    toast.success("Leave definition deleted.")
-    setDeleting(false)
-    setDeleteOpen(false)
-    setDeleteTarget(null)
-    await loadRows()
   }, [deleteTarget, loadRows])
 
   const columns = React.useMemo<ColumnDef<LeaveDefinitionRow>[]>(
@@ -207,7 +217,7 @@ export default function LeavesPage() {
             <SortIndicator value={column.getIsSorted()} />
           </button>
         ),
-        cell: ({ row }) => <span className="font-medium">{row.original.name}</span>,
+        cell: ({ row }) => <Link className="font-medium underline underline-offset-4" href={`/leaves/${row.original.id}`}>{row.original.name}</Link>,
       },
       {
         accessorKey: "leaveType",
@@ -242,17 +252,17 @@ export default function LeavesPage() {
         cell: ({ row }) => (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button size="icon" variant="ghost">
+              <Button size="icon" variant="ghost" aria-label="Record actions">
                 <MoreHorizontalIcon className="h-4 w-4" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
               <DropdownMenuItem asChild>
-                <Link href={`/leaves/${row.original.id}`}>Edit</Link>
+                <Link href={`/leaves/${row.original.id}`}>View details</Link>
               </DropdownMenuItem>
               <DropdownMenuItem
                 className="text-destructive"
-                onSelect={() => requestDelete(row.original)}
+                disabled={!canArchive} onSelect={() => requestDelete(row.original)}
               >
                 Delete
               </DropdownMenuItem>
@@ -261,12 +271,10 @@ export default function LeavesPage() {
         ),
       },
     ],
-    [requestDelete]
+    [requestDelete, canArchive]
   )
 
   const totalPages = Math.max(1, Math.ceil(totalRows / pagination.pageSize))
-
-  // eslint-disable-next-line react-hooks/incompatible-library
   const table = useReactTable({
     data: rows,
     columns,
@@ -283,29 +291,23 @@ export default function LeavesPage() {
   })
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold">Leave Definitions</h1>
-          <p className="text-sm text-muted-foreground">
-            Configure leave types and rules.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
+    <div className={pageClass}>
+      <PageHeader title={<> Leave Definitions </>} description={<> Configure leave types and rules. </>} actions={<> <div className="flex items-center gap-2">
           <Button variant="outline" asChild>
             <Link href="/leaves/groups">Leave groups</Link>
           </Button>
-          <Button asChild>
+          {canCreate && <Button asChild>
             <Link href="/leaves/new">New leave definition</Link>
-          </Button>
-        </div>
-      </div>
+          </Button>}
+        </div> </>} />
 
-      <DataTableToolbar table={table} searchPlaceholder="Search by code or name">
-        <select
+      <Surface>
+      <TableToolbar table={table} searchPlaceholder="Search by code or name">
+        <Filters activeCount={Number(leaveTypeFilter !== "all") + Number(allowedUsersFilter !== "all")} onReset={() => { setLeaveTypeFilter("all"); setAllowedUsersFilter("all") }}>
+        <Select
           className="h-9 rounded-md border border-input bg-background px-3 text-sm"
           value={leaveTypeFilter}
-          onChange={(event) => setLeaveTypeFilter(event.target.value as LeaveDefinitionType | "all")}
+          onValueChange={(value) => setLeaveTypeFilter(value as LeaveDefinitionType | "all")}
         >
           <option value="all">All leave types</option>
           {leaveTypeOptions.map((item) => (
@@ -313,12 +315,12 @@ export default function LeavesPage() {
               {item}
             </option>
           ))}
-        </select>
-        <select
+        </Select>
+        <Select
           className="h-9 rounded-md border border-input bg-background px-3 text-sm"
           value={allowedUsersFilter}
-          onChange={(event) =>
-            setAllowedUsersFilter(event.target.value as LeaveDefinitionAllowedUsers | "all")
+          onValueChange={(value) =>
+            setAllowedUsersFilter(value as LeaveDefinitionAllowedUsers | "all")
           }
         >
           <option value="all">All users</option>
@@ -327,11 +329,12 @@ export default function LeavesPage() {
               {item}
             </option>
           ))}
-        </select>
-        <select
+        </Select>
+        </Filters>
+        <Select
           className="h-9 rounded-md border border-input bg-background px-3 text-sm"
           value={statusFilter}
-          onChange={(event) => setStatusFilter(event.target.value as LeaveDefinitionStatus | "all")}
+          onValueChange={(value) => setStatusFilter(value as LeaveDefinitionStatus | "all")}
         >
           <option value="all">All status</option>
           {statusOptions.map((item) => (
@@ -339,11 +342,12 @@ export default function LeavesPage() {
               {item}
             </option>
           ))}
-        </select>
-      </DataTableToolbar>
+        </Select>
+      </TableToolbar>
 
       <DataTable table={table} loading={loading} emptyMessage="No leave definitions found." />
-      <DataTablePagination table={table} totalRows={totalRows} />
+      <TablePagination table={table} totalRows={totalRows} />
+      </Surface>
 
       <Dialog
         open={deleteOpen}
@@ -355,24 +359,13 @@ export default function LeavesPage() {
           }
         }}
       >
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Delete leave definition</DialogTitle>
-            <DialogDescription>
-              {deleteTarget
+        <ActionDialogContent title={<>Delete leave definition</>} description={<>{deleteTarget
                 ? `Delete "${deleteTarget.name}"? This cannot be undone.`
-                : "Delete this leave definition? This cannot be undone."}
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleteOpen(false)} disabled={deleting}>
+                : "Delete this leave definition? This cannot be undone."}</>} className="sm:max-w-md" actions={<> <Button variant="outline" onClick={() => setDeleteOpen(false)} disabled={deleting}>
               Cancel
-            </Button>
-            <Button variant="destructive" onClick={confirmDelete} disabled={deleting}>
+            </Button><Button variant="destructive" onClick={confirmDelete} disabled={deleting}>
               {deleting ? "Deleting..." : "Delete"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
+            </Button> </>}></ActionDialogContent>
       </Dialog>
     </div>
   )

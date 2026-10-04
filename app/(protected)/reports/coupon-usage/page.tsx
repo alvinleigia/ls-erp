@@ -1,4 +1,5 @@
 "use client"
+import { BusinessViewGuard } from "@/platform/access/view-guard"
 
 import * as React from "react"
 import {
@@ -7,7 +8,10 @@ import {
   getCoreRowModel,
   useReactTable,
 } from "@tanstack/react-table"
-import { DataTable, DataTablePagination, DataTableToolbar } from "@/components/data-table"
+import { DataTable } from "@/components/data-table"
+import { PageHeader, pageClass, Surface, TableToolbar, Filters } from "@/components/erp/page"
+import { TablePagination } from "@/components/erp/pagination"
+import { Select } from "@/components/erp/controls"
 import { FormField } from "@/components/form-field"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -37,8 +41,10 @@ const formatDateTime = (value: string | null) => {
   return date.toLocaleString()
 }
 
-export default function CouponUsageReportPage() {
+function CouponUsageContent() {
   const [items, setItems] = React.useState<CouponUsageReportRow[]>([])
+  const [error, setError] = React.useState("")
+  const [refresh, setRefresh] = React.useState(0)
   const [loading, setLoading] = React.useState(true)
   const [search, setSearch] = React.useState("")
   const [status, setStatus] = React.useState<CouponUsageReportStatus>("used")
@@ -52,7 +58,7 @@ export default function CouponUsageReportPage() {
     pageSize: 10,
   })
 
-  const loadReport = React.useCallback(async () => {
+  const loadReport = React.useCallback(async (signal: AbortSignal) => {
     setLoading(true)
     const params = new URLSearchParams()
     params.set("page", String(pagination.pageIndex + 1))
@@ -63,27 +69,34 @@ export default function CouponUsageReportPage() {
     if (dateFrom) params.set("dateFrom", dateFrom)
     if (dateTo) params.set("dateTo", dateTo)
 
-    const response = await fetch(`/api/reports/coupon-usage?${params.toString()}`, {
-      cache: "no-store",
-    })
-    if (!response.ok) {
+    setError("")
+    try {
+      const response = await fetch(`/api/reports/coupon-usage?${params.toString()}`, { cache: "no-store", signal })
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({})) as { error?: string }
+        throw new Error(body.error || "Unable to load report.")
+      }
+      const data = await response.json() as CouponUsageResponse
+      if (signal.aborted) return
+      setItems(data.items)
+      setTotalRows(data.total)
+      setSummary(data.summary)
+    } catch (error) {
+      if (signal.aborted) return
+      setError(error instanceof Error ? error.message : "Unable to load report.")
       setItems([])
       setTotalRows(0)
       setSummary(defaultSummary)
-      setLoading(false)
-      return
+    } finally {
+      if (!signal.aborted) setLoading(false)
     }
-
-    const data = (await response.json()) as CouponUsageResponse
-    setItems(data.items)
-    setTotalRows(data.total)
-    setSummary(data.summary)
-    setLoading(false)
   }, [couponCode, dateFrom, dateTo, pagination.pageIndex, pagination.pageSize, search, status])
 
   React.useEffect(() => {
-    void loadReport()
-  }, [loadReport])
+    const controller = new AbortController()
+    void loadReport(controller.signal)
+    return () => controller.abort()
+  }, [loadReport, refresh])
 
   const columns = React.useMemo<ColumnDef<CouponUsageReportRow>[]>(
     () => [
@@ -131,7 +144,10 @@ export default function CouponUsageReportPage() {
     data: items,
     columns,
     state: { pagination, globalFilter: search },
-    onPaginationChange: setPagination,
+    onPaginationChange: updater => setPagination(previous => {
+      const next = typeof updater === "function" ? updater(previous) : updater
+      return next.pageSize !== previous.pageSize ? { ...next, pageIndex: 0 } : next
+    }),
     onGlobalFilterChange: (value) => {
       setSearch(String(value))
       setPagination((prev) => ({ ...prev, pageIndex: 0 }))
@@ -143,50 +159,38 @@ export default function CouponUsageReportPage() {
   })
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold">Coupon usage report</h1>
-        <p className="text-sm text-muted-foreground">
-          Track which customers used coupons and who has never used one.
-        </p>
-      </div>
+    <div className={pageClass}>
+      <PageHeader title="Coupon usage report" description="Track which customers used coupons and who has never used one." actions={<Button variant="outline" disabled={loading} onClick={() => setRefresh(value => value + 1)}>Refresh</Button>} />
 
-      <div className="grid gap-3 rounded-xl border bg-card p-4 sm:grid-cols-2 lg:grid-cols-4">
-        <div>
-          <div className="text-xs uppercase text-muted-foreground">Total customers</div>
-          <div className="text-2xl font-semibold">{summary.totalCustomers}</div>
-        </div>
-        <div>
-          <div className="text-xs uppercase text-muted-foreground">Used coupons</div>
-          <div className="text-2xl font-semibold">{summary.usedCustomers}</div>
-        </div>
-        <div>
-          <div className="text-xs uppercase text-muted-foreground">Not used coupons</div>
-          <div className="text-2xl font-semibold">{summary.notUsedCustomers}</div>
-        </div>
-        <div>
-          <div className="text-xs uppercase text-muted-foreground">Total redemptions</div>
-          <div className="text-2xl font-semibold">{summary.totalRedemptions}</div>
-        </div>
-      </div>
+      {!loading && !error && <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        {[
+          { label: "Total customers", value: summary.totalCustomers }, { label: "Used coupons", value: summary.usedCustomers },
+          { label: "Not used coupons", value: summary.notUsedCustomers }, { label: "Total redemptions", value: summary.totalRedemptions },
+        ].map(item => <Surface key={item.label}><p className="text-sm text-muted-foreground">{item.label}</p><p className="text-2xl font-semibold">{item.value}</p></Surface>)}
+      </div>}
 
-      <DataTableToolbar table={table} searchPlaceholder="Search customer name, email, or phone">
-        <div className="flex flex-wrap items-end gap-2">
-          <FormField id="report-status" label="Status">
-            <select
+      <Surface>
+      <TableToolbar table={table} searchPlaceholder="Search customer name, email, or phone"><FormField id="report-status" label="Status">
+            <Select
               id="report-status"
               className="h-9 rounded-md border border-input bg-background px-3 text-sm"
               value={status}
-              onChange={(event) => {
-                setStatus(event.target.value as CouponUsageReportStatus)
+              onValueChange={(value) => {
+                setStatus(value as CouponUsageReportStatus)
                 setPagination((prev) => ({ ...prev, pageIndex: 0 }))
               }}
             >
               <option value="used">Used coupons</option>
               <option value="not_used">Not used coupons</option>
-            </select>
-          </FormField>
-          <FormField id="report-coupon-code" label="Coupon code">
+            </Select>
+          </FormField><Filters activeCount={[couponCode, dateFrom, dateTo].filter(Boolean).length} onReset={() => {
+              setCouponCode("")
+              setDateFrom("")
+              setDateTo("")
+              setSearch("")
+              setStatus("used")
+              setPagination({ pageIndex: 0, pageSize: 10 })
+            }}><FormField id="report-coupon-code" label="Coupon code">
             <Input
               id="report-coupon-code"
               value={couponCode}
@@ -195,10 +199,10 @@ export default function CouponUsageReportPage() {
                 setPagination((prev) => ({ ...prev, pageIndex: 0 }))
               }}
               placeholder="Any code"
-              className="w-36"
+              className="w-full"
             />
           </FormField>
-          <FormField id="report-date-from" label="Date from">
+<FormField id="report-date-from" label="Date from">
             <Input
               id="report-date-from"
               type="date"
@@ -209,7 +213,7 @@ export default function CouponUsageReportPage() {
               }}
             />
           </FormField>
-          <FormField id="report-date-to" label="Date to">
+<FormField id="report-date-to" label="Date to">
             <Input
               id="report-date-to"
               type="date"
@@ -219,30 +223,20 @@ export default function CouponUsageReportPage() {
                 setPagination((prev) => ({ ...prev, pageIndex: 0 }))
               }}
             />
-          </FormField>
-          <Button
-            variant="outline"
-            onClick={() => {
-              setCouponCode("")
-              setDateFrom("")
-              setDateTo("")
-              setSearch("")
-              setStatus("used")
-              setPagination({ pageIndex: 0, pageSize: 10 })
-            }}
-          >
-            Reset
-          </Button>
-        </div>
-      </DataTableToolbar>
+          </FormField></Filters></TableToolbar>
 
-      <DataTable
+      {error ? <p role="alert" className="text-sm text-destructive">{error}</p> : <DataTable
         table={table}
         loading={loading}
         emptyMessage={status === "used" ? "No coupon usage found." : "All customers have used coupons."}
-      />
-      <DataTablePagination table={table} totalRows={totalRows} />
+      />}
+      <TablePagination table={table} totalRows={totalRows} loading={loading} />
+      </Surface>
     </div>
   )
 }
 
+
+export default function CouponUsageReportPage() {
+  return <BusinessViewGuard module="appointments"><CouponUsageContent /></BusinessViewGuard>
+}

@@ -8,35 +8,12 @@ import {
   withRequestId,
 } from "@/lib/api-logging"
 import { prisma, runWithTenantDbContext } from "@/lib/prisma"
-import { Weekday } from "@prisma/client"
 import { appSettingsSchema } from "@/lib/validation"
 import { toISODate } from "@/lib/date"
 import { canManageUsers, type Role } from "@/lib/permissions"
 import { getEmailDeliveryStatus } from "@/lib/mailer"
-import { requireTenantSession } from "@/lib/tenant-auth"
-
-const DEFAULT_PERIOD = {
-  kind: "WORK" as const,
-  startTime: "09:00",
-  endTime: "18:00",
-}
-const DEFAULT_WORKING_HOURS: {
-  day: Weekday
-  isOpen: boolean
-  periods: typeof DEFAULT_PERIOD[]
-}[] = [
-  "MONDAY",
-  "TUESDAY",
-  "WEDNESDAY",
-  "THURSDAY",
-  "FRIDAY",
-  "SATURDAY",
-  "SUNDAY",
-].map((day) => ({
-  day: day as Weekday,
-  isOpen: true,
-  periods: [DEFAULT_PERIOD],
-}))
+import { withCoreApi, actorSession } from "@/platform/core/api"
+import type { BusinessActor } from "@/platform/policy"
 
 export const dynamic = "force-dynamic"
 
@@ -110,37 +87,11 @@ const mapSettingsResponse = (settings: {
   }
 }
 
-const seedWorkingHours = async (settingId: string) => {
-  await prisma.$transaction(async (tx) => {
-    for (const day of DEFAULT_WORKING_HOURS) {
-      const dayRecord = await tx.appSettingDay.upsert({
-        where: { settingId_day: { settingId, day: day.day } },
-        update: { isOpen: day.isOpen },
-        create: {
-          settingId,
-          day: day.day,
-          isOpen: day.isOpen,
-        },
-      })
-      await tx.appSettingPeriod.deleteMany({ where: { dayId: dayRecord.id } })
-      await tx.appSettingPeriod.createMany({
-        data: day.periods.map((period, index) => ({
-          dayId: dayRecord.id,
-          kind: period.kind,
-          startTime: period.startTime,
-          endTime: period.endTime,
-          sortOrder: index,
-        })),
-      })
-    }
-  })
-}
-
-export async function GET(request: Request) {
+async function handleGET(request: Request, actor: BusinessActor) {
   const logContext = createApiLogContext(request)
   logApiRequestStart(logContext, request)
 
-  const tenantSession = await requireTenantSession(request)
+  const tenantSession = actorSession(actor)
   if (tenantSession.error) {
     logApiRequestSuccess(logContext, tenantSession.error.status, { reason: "tenant_or_auth_failed" })
     return withRequestId(tenantSession.error, logContext.requestId)
@@ -160,61 +111,8 @@ export async function GET(request: Request) {
         include: includeWorkingHours,
       })
 
-      if (settings) {
-        if (settings.workingDays.length === 0) {
-          await seedWorkingHours(settings.id)
-          const seeded = await prisma.appSetting.findFirst({
-            where: { tenantId },
-            include: includeWorkingHours,
-          })
-          if (seeded) {
-            const response = NextResponse.json({
-              settings: mapSettingsResponse(seeded),
-              emailDelivery: getEmailDeliveryStatus(),
-            })
-            logApiRequestSuccess(logContext, 200, { result: "settings_seeded_working_hours" })
-            return withRequestId(response, logContext.requestId)
-          }
-          const response = NextResponse.json({
-            settings: mapSettingsResponse(settings),
-            emailDelivery: getEmailDeliveryStatus(),
-          })
-          logApiRequestSuccess(logContext, 200, { result: "settings_existing_after_seed_attempt" })
-          return withRequestId(response, logContext.requestId)
-        }
-        const response = NextResponse.json({
-          settings: mapSettingsResponse(settings),
-          emailDelivery: getEmailDeliveryStatus(),
-        })
-        logApiRequestSuccess(logContext, 200, { result: "settings_existing" })
-        return withRequestId(response, logContext.requestId)
-      }
-
-      const created = await prisma.appSetting.create({
-        data: { tenantId },
-      })
-
-      await seedWorkingHours(created.id)
-      const seeded = await prisma.appSetting.findFirst({
-        where: { tenantId },
-        include: includeWorkingHours,
-      })
-
-      if (seeded) {
-        const response = NextResponse.json({
-          settings: mapSettingsResponse(seeded),
-          emailDelivery: getEmailDeliveryStatus(),
-        })
-        logApiRequestSuccess(logContext, 200, { result: "settings_created_seeded" })
-        return withRequestId(response, logContext.requestId)
-      }
-
-      const response = NextResponse.json({
-        settings: created,
-        emailDelivery: getEmailDeliveryStatus(),
-      })
-      logApiRequestSuccess(logContext, 200, { result: "settings_created" })
-      return withRequestId(response, logContext.requestId)
+      if (!settings) return NextResponse.json({ error: "Business settings are not configured. Save Settings to initialize them." }, { status: 503 })
+      return NextResponse.json({ settings: mapSettingsResponse(settings), emailDelivery: getEmailDeliveryStatus() })
     })
   } catch (error) {
     logApiRequestError(logContext, error, 500)
@@ -223,11 +121,11 @@ export async function GET(request: Request) {
   }
 }
 
-export async function PATCH(request: Request) {
+async function handlePATCH(request: Request, actor: BusinessActor) {
   const logContext = createApiLogContext(request)
   logApiRequestStart(logContext, request)
 
-  const tenantSession = await requireTenantSession(request)
+  const tenantSession = actorSession(actor)
   if (tenantSession.error) {
     logApiRequestSuccess(logContext, tenantSession.error.status, { reason: "tenant_or_auth_failed" })
     return withRequestId(tenantSession.error, logContext.requestId)
@@ -383,4 +281,12 @@ export async function PATCH(request: Request) {
     const response = NextResponse.json({ error: "Unable to update settings." }, { status: 500 })
     return withRequestId(response, logContext.requestId)
   }
+}
+
+export async function GET(request: Request) {
+  return withCoreApi(request, "businessSettings", "read", actor => handleGET(request, actor))
+}
+
+export async function PATCH(request: Request) {
+  return withCoreApi(request, "businessSettings", "edit", actor => handlePATCH(request, actor))
 }

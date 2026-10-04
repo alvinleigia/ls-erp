@@ -1,5 +1,11 @@
 "use client"
 
+import { CategoryView } from "@/modules/inventory/record-view"
+
+import { Select, Textarea } from "@/components/erp/controls"
+
+import { useCurrentResourceAction } from "@/platform/access/view-guard"
+
 import * as React from "react"
 import {
   ColumnDef,
@@ -10,10 +16,14 @@ import {
 import { ArrowDownIcon, ArrowUpDownIcon, ArrowUpIcon, MoreHorizontalIcon, PlusIcon } from "lucide-react"
 import { toast } from "sonner"
 
-import { DataTable, DataTablePagination, DataTableToolbar } from "@/components/data-table"
+import { DataTable } from "@/components/data-table"
+import { PageHeader, Surface, TableToolbar, pageClass } from "@/components/erp/page"
+import { TablePagination } from "@/components/erp/pagination"
+import { DraftPanel } from "@/components/erp/record-detail"
+import { Section } from "@/components/erp/section"
+import { ConfirmAction } from "@/components/erp/confirm-action"
 import { FormField } from "@/components/form-field"
 import { Button } from "@/components/ui/button"
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -48,87 +58,115 @@ const SortIndicator = ({ value }: { value: false | "asc" | "desc" }) => {
 }
 
 export default function InventoryCategoriesPage() {
+  const canCreate = useCurrentResourceAction("create")
+  const canEdit = useCurrentResourceAction("edit")
+  const canArchive = useCurrentResourceAction("archive")
+
   const [items, setItems] = React.useState<InventoryCategoryRow[]>([])
   const [totalRows, setTotalRows] = React.useState(0)
   const [loading, setLoading] = React.useState(true)
+  const [statusFilter, setStatusFilter] = React.useState("all")
+  const listRequest = React.useRef<AbortController | null>(null)
   const [search, setSearch] = React.useState("")
   const [sorting, setSorting] = React.useState<SortingState>([])
   const [pagination, setPagination] = React.useState<PaginationState>({ pageIndex: 0, pageSize: 10 })
+  const [deleteTarget, setDeleteTarget] = React.useState<InventoryCategoryRow | null>(null)
+  const [deleting, setDeleting] = React.useState(false)
+  const [viewing, setViewing] = React.useState<InventoryCategoryRow | null>(null)
   const [formOpen, setFormOpen] = React.useState(false)
   const [editing, setEditing] = React.useState<InventoryCategoryRow | null>(null)
   const [formValues, setFormValues] = React.useState<CategoryFormValues>(defaultValues)
+  const [formError, setFormError] = React.useState("")
   const [saving, setSaving] = React.useState(false)
   const { errors, setErrorsFromResponse, clearErrors } = useFormErrors()
 
   const loadItems = React.useCallback(async () => {
+    listRequest.current?.abort()
+    const controller = new AbortController()
+    listRequest.current = controller
+    const signal = controller.signal
     setLoading(true)
-    const params = new URLSearchParams()
-    params.set("page", String(pagination.pageIndex + 1))
-    params.set("pageSize", String(pagination.pageSize))
-    if (search.trim()) params.set("q", search.trim())
-    if (sorting[0]) {
-      params.set("sort", sorting[0].id)
-      params.set("order", sorting[0].desc ? "desc" : "asc")
-    }
-    const response = await fetch(`/api/inventory/categories?${params.toString()}`)
-    if (!response.ok) {
-      toast.error("Unable to load categories.")
-      setItems([])
-      setTotalRows(0)
+    try {
+      const params = new URLSearchParams()
+      params.set("page", String(pagination.pageIndex + 1))
+      params.set("pageSize", String(pagination.pageSize))
+      if (statusFilter !== "all") params.set("status", statusFilter)
+      if (search.trim()) params.set("q", search.trim())
+      if (sorting[0]) {
+        params.set("sort", sorting[0].id)
+        params.set("order", sorting[0].desc ? "desc" : "asc")
+      }
+      const response = await fetch(`/api/inventory/categories?${params.toString()}`, { signal })
+      if (!response.ok) {
+        toast.error("Unable to load categories.")
+        setItems([])
+        setTotalRows(0)
+        setLoading(false)
+        return
+      }
+      const data = (await response.json()) as ListResponse<InventoryCategoryRow>
+      if (signal.aborted) return
+      setItems(data.items)
+      setTotalRows(data.total)
       setLoading(false)
-      return
-    }
-    const data = (await response.json()) as ListResponse<InventoryCategoryRow>
-    setItems(data.items)
-    setTotalRows(data.total)
-    setLoading(false)
-  }, [pagination.pageIndex, pagination.pageSize, search, sorting])
+    } catch { if (!signal.aborted) toast.error("Unable to load records. Please refresh.") } finally { if (!signal.aborted) setLoading(false) }
+  }, [pagination.pageIndex, pagination.pageSize, search, sorting, statusFilter])
 
   React.useEffect(() => {
     void loadItems()
+    return () => listRequest.current?.abort()
   }, [loadItems])
 
   const save = async () => {
     setSaving(true)
-    clearErrors()
-    const response = await fetch(
-      editing ? `/api/inventory/categories/${editing.id}` : "/api/inventory/categories",
-      {
-        method: editing ? "PATCH" : "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formValues),
+    setFormError("")
+    try {
+      clearErrors()
+      const response = await fetch(
+        editing ? `/api/inventory/categories/${editing.id}` : "/api/inventory/categories",
+        {
+          method: editing ? "PATCH" : "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(formValues),
+        }
+      )
+      if (!response.ok) {
+        const data = (await response.json()) as {
+          error?: string
+          details?: { fieldErrors?: Record<string, string[]> }
+        }
+        setErrorsFromResponse(data)
+        setFormError(data.error ?? "Unable to save. Check the form and try again.")
+        toast.error(data.error ?? "Unable to save category.")
+        setSaving(false)
+        return
       }
-    )
-    if (!response.ok) {
-      const data = (await response.json()) as {
-        error?: string
-        details?: { fieldErrors?: Record<string, string[]> }
-      }
-      setErrorsFromResponse(data)
-      toast.error(data.error ?? "Unable to save category.")
+      toast.success(editing ? "Category updated." : "Category created.")
       setSaving(false)
-      return
-    }
-    toast.success(editing ? "Category updated." : "Category created.")
-    setSaving(false)
-    setFormOpen(false)
-    setEditing(null)
-    setFormValues(defaultValues)
-    await loadItems()
+      setFormOpen(false)
+      setEditing(null)
+      setFormValues(defaultValues)
+      await loadItems()
+    } catch { setFormError("Unable to save. Please try again."); toast.error("Unable to save. Please try again.") } finally { setSaving(false) }
   }
 
   const removeItem = React.useCallback(async (item: InventoryCategoryRow) => {
-    const response = await fetch(`/api/inventory/categories/${item.id}`, { method: "DELETE" })
-    if (!response.ok) {
-      const data = (await response.json().catch(() => ({}))) as { error?: string }
-      toast.error(data.error ?? "Unable to delete category.")
-      return
-    }
-    toast.success("Category deleted.")
-    await loadItems()
+    setDeleting(true)
+    try {
+      const response = await fetch(`/api/inventory/categories/${item.id}`, { method: "DELETE" })
+      if (!response.ok) {
+        const data = (await response.json().catch(() => ({}))) as { error?: string }
+        toast.error(data.error ?? "Unable to delete category.")
+        return
+      }
+      toast.success("Category deleted.")
+      await loadItems()
+      setDeleteTarget(null)
+    } catch { toast.error("Unable to delete. Please try again.") } finally { setDeleting(false) }
   }, [loadItems])
 
   const openEdit = React.useCallback((item: InventoryCategoryRow) => {
+    setViewing(null)
     setEditing(item)
     setFormValues({
       name: item.name,
@@ -137,7 +175,7 @@ export default function InventoryCategoriesPage() {
       sortOrder: item.sortOrder,
     })
     clearErrors()
-    setFormOpen(true)
+    setFormError(""); setFormOpen(true)
   }, [clearErrors])
 
   const columns = React.useMemo<ColumnDef<InventoryCategoryRow>[]>(
@@ -157,7 +195,7 @@ export default function InventoryCategoriesPage() {
         ),
         cell: ({ row }) => (
           <div className="flex flex-col">
-            <span className="font-medium">{row.original.name}</span>
+            <button type="button" className="text-left font-medium underline underline-offset-4 hover:text-primary" onClick={() => setViewing(row.original)}>{row.original.name}</button>
             {row.original.description ? (
               <span className="text-xs text-muted-foreground">{row.original.description}</span>
             ) : null}
@@ -178,15 +216,16 @@ export default function InventoryCategoriesPage() {
         cell: ({ row }) => (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button size="icon" variant="ghost">
+              <Button size="icon" variant="ghost" aria-label="Record actions">
                 <MoreHorizontalIcon className="h-4 w-4" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem onSelect={() => openEdit(row.original)}>Edit</DropdownMenuItem>
+              <DropdownMenuItem disabled={!canEdit} onSelect={() => openEdit(row.original)}>Edit</DropdownMenuItem>
               <DropdownMenuItem
+                disabled={!canArchive}
                 className="text-destructive"
-                onSelect={() => void removeItem(row.original)}
+                onSelect={() => setDeleteTarget(row.original)}
               >
                 Delete
               </DropdownMenuItem>
@@ -195,16 +234,15 @@ export default function InventoryCategoriesPage() {
         ),
       },
     ],
-    [openEdit, removeItem]
+    [openEdit, canEdit, canArchive]
   )
 
-  // eslint-disable-next-line react-hooks/incompatible-library
   const table = useReactTable({
     data: items,
     columns,
     state: { sorting, pagination, globalFilter: search },
-    onSortingChange: setSorting,
-    onGlobalFilterChange: setSearch,
+    onSortingChange: value => { setSorting(value); setPagination(prev => ({ ...prev, pageIndex: 0 })) },
+    onGlobalFilterChange: value => { setSearch(value); setPagination(prev => ({ ...prev, pageIndex: 0 })) },
     onPaginationChange: (updater) => {
       setPagination((prev) =>
         typeof updater === "function" ? (updater(prev as never) as PaginationState) : updater
@@ -218,55 +256,42 @@ export default function InventoryCategoriesPage() {
   })
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold">Inventory categories</h1>
-          <p className="text-sm text-muted-foreground">
-            Organize products for stock and purchasing.
-          </p>
-        </div>
-        <Button
+    <div className={pageClass}>
+      <PageHeader title="Inventory categories" description="Organize products for stock and purchasing." actions={<Button
+          disabled={!canCreate}
           onClick={() => {
             setEditing(null)
             setFormValues(defaultValues)
             clearErrors()
-            setFormOpen(true)
+            setFormError(""); setFormOpen(true)
           }}
         >
           <PlusIcon className="mr-2 h-4 w-4" />
           New category
-        </Button>
-      </div>
+        </Button>} />
 
-      <DataTableToolbar table={table} searchPlaceholder="Search categories" />
+      <Surface>
+      <TableToolbar table={table} searchPlaceholder="Search categories"><Select aria-label="Status filter" value={statusFilter} onValueChange={value => { setStatusFilter(value); setPagination(prev => ({ ...prev, pageIndex: 0 })) }}><option value="all">All statuses</option><option value="ACTIVE">Active</option><option value="INACTIVE">Inactive</option></Select><Button type="button" variant="outline" disabled={loading} onClick={() => void loadItems()}>Refresh</Button></TableToolbar>
       <DataTable table={table} loading={loading} emptyMessage="No categories found." />
-      <DataTablePagination table={table} totalRows={totalRows} />
+      <TablePagination table={table} totalRows={totalRows} loading={loading} />
+      </Surface>
 
-      <Dialog
-        open={formOpen}
-        onOpenChange={(open) => {
-          setFormOpen(open)
-          if (!open) {
-            setEditing(null)
-            setFormValues(defaultValues)
-          }
-        }}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{editing ? "Edit category" : "New category"}</DialogTitle>
-          </DialogHeader>
-          <div className="grid gap-3">
+      {deleteTarget && <ConfirmAction title="Delete category" description={`Delete "${deleteTarget.name}"? If this record is in use, it will be made inactive instead.`} label="Delete" destructive busy={deleting} onCancel={() => setDeleteTarget(null)} onConfirm={() => void removeItem(deleteTarget)} />}
+
+      {viewing && <CategoryView item={viewing} onClose={() => setViewing(null)} onEdit={canEdit ? () => openEdit(viewing) : undefined} />}
+
+      {formOpen && <DraftPanel error={formError} fingerprint={formValues} title={editing ? "Edit category" : "New category"} description="Update category details in the sections below." onClose={() => setFormOpen(false)} onSubmit={() => void save()} saving={saving} disabled={!(editing ? canEdit : canCreate)} saveLabel={editing ? "Save changes" : "Create category"}>
+          <Section title="Category details"><div className="grid gap-3">
             <FormField id="cat-name" label="Name" error={errors.name}>
               <Input
                 id="cat-name"
+                required minLength={2}
                 value={formValues.name}
                 onChange={(event) => setFormValues((prev) => ({ ...prev, name: event.target.value }))}
               />
             </FormField>
             <FormField id="cat-description" label="Description" error={errors.description}>
-              <Input
+              <Textarea
                 id="cat-description"
                 value={formValues.description}
                 onChange={(event) =>
@@ -289,32 +314,25 @@ export default function InventoryCategoriesPage() {
               />
             </FormField>
             <FormField id="cat-status" label="Status" error={errors.status}>
-              <select
+              <Select
                 id="cat-status"
-                className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+                disabled={!canArchive}
+                className="w-full"
                 value={formValues.status}
-                onChange={(event) =>
+                onValueChange={(value) =>
                   setFormValues((prev) => ({
                     ...prev,
-                    status: event.target.value as CategoryFormValues["status"],
+                    status: value as CategoryFormValues["status"],
                   }))
                 }
               >
                 <option value="ACTIVE">Active</option>
                 <option value="INACTIVE">Inactive</option>
-              </select>
+              </Select>
             </FormField>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setFormOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={save} loading={saving} loadingText="Saving...">
-              {editing ? "Save changes" : "Create category"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      </Section>
+      </DraftPanel>}
     </div>
   )
 }

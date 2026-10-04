@@ -21,7 +21,7 @@ import { createReportService } from "./report-service"
 import { createFollowUpService } from "./follow-up-service"
 import { createIntakeService, enquiryContext, maskReferrals, referralInclude } from "./intake-service"
 import { noCrmExtensions, type CrmExtensions } from "./extensions"
-import { CrmError, canManageCrm, canUseCrm, contactScope, accountScope, enquiryScope, type CrmActor } from "./policy"
+import { CrmError, canManageCrm, canUseCrm, contactScope, accountScope, enquiryScope, assigneeScope, type CrmActor } from "./policy"
 import {
   crmContactSchema, crmContactUpdateSchema, crmEnquiryCreateSchema,
   crmEnquiryUpdateSchema, crmListSchema, crmNoteSchema, crmTaskSchema,
@@ -57,7 +57,7 @@ export function createCrmService<Fields extends object = object, Metadata extend
             where: { tenantId_key: { tenantId: identity.tenantId, key: "crm" } },
           })
           if (!enabledModule?.allowed || !enabledModule.enabled) throw new CrmError(403, "CRM is not enabled for this business.")
-          const actor = { ...identity, role: user.role, permissions: assignedPermissions(user) }; requirePermission(actor, requirement)
+          const actor = { ...identity, role: user.role, permissions: assignedPermissions(user), crmRecordScope: user.crmRecordScope, managedTeamIds: user.managedTeamIds }; requirePermission(actor, requirement)
           return operation(tx, actor)
         }, { isolationLevel: "Serializable", maxWait: 20000, timeout: 20000 })
       } catch (error) {
@@ -100,10 +100,11 @@ export function createCrmService<Fields extends object = object, Metadata extend
     return enquiry
   }
 
-  async function checkAssignee(tx: Tx, actor: CrmActor, assignedUserId: string) {
+  // Existing IDs come only from a scoped record lookup; preserve ownership on edits.
+  async function checkAssignee(tx: Tx, actor: CrmActor, assignedUserId: string, existingAssigneeId?: string) {
     if (!canManageCrm(actor.role) && assignedUserId !== actor.userId) throw new CrmError(403, "Only a manager can assign another salesperson.")
     const assignee = await tx.user.findFirst({
-      where: { id: assignedUserId, tenantId: actor.tenantId, status: "ACTIVE", role: { in: ["ADMIN", "MANAGER", "STAFF"] } },
+      where: { ...(existingAssigneeId === assignedUserId ? { tenantId: actor.tenantId } : assigneeScope(actor)), id: assignedUserId, status: "ACTIVE", role: { in: ["ADMIN", "MANAGER", "STAFF"] } },
       select: { id: true },
     })
     if (!assignee) throw new CrmError(400, "Choose an active salesperson in this business.")
@@ -155,7 +156,7 @@ export function createCrmService<Fields extends object = object, Metadata extend
     updateAccount(id: string, input: unknown) {
       const { version, ...data } = crmAccountUpdateSchema.parse(input)
       return run("accounts.edit", async (tx, actor) => {
-        const where = { tenantId: actor.tenantId, id, ...(!canManageCrm(actor.role) ? { ownerUserId: actor.userId } : {}) }
+        const where = { ...accountScope(actor), id, ...(!canManageCrm(actor.role) ? { ownerUserId: actor.userId } : {}) }
         const before = await tx.crmAccount.findFirst({ where })
         requireWriteFields(actor, "accounts", before ?? undefined, data)
         if (!before) throw new CrmError(404, "Editable business account not found.")
@@ -201,7 +202,7 @@ export function createCrmService<Fields extends object = object, Metadata extend
     linkContactAccount(contactId: string, input: unknown) {
       const { accountId } = crmAccountLinkSchema.parse(input)
       return run("contacts.edit", async (tx, actor) => {
-        const contact = await tx.crmContact.findFirst({ where: { tenantId: actor.tenantId, id: contactId, ...(!canManageCrm(actor.role) ? { ownerUserId: actor.userId } : {}) } })
+        const contact = await tx.crmContact.findFirst({ where: { ...contactScope(actor), id: contactId, ...(!canManageCrm(actor.role) ? { ownerUserId: actor.userId } : {}) } })
         if (!contact) throw new CrmError(404, "Editable contact not found.")
         const account = await tx.crmAccount.findFirst({ where: { ...accountScope(actor), id: accountId } })
         if (!account) throw new CrmError(404, "Business account not found.")
@@ -217,7 +218,7 @@ export function createCrmService<Fields extends object = object, Metadata extend
     },
     unlinkContactAccount(contactId: string, accountId: string) {
       return run("contacts.edit", async (tx, actor) => {
-        const contact = await tx.crmContact.findFirst({ where: { tenantId: actor.tenantId, id: contactId, ...(!canManageCrm(actor.role) ? { ownerUserId: actor.userId } : {}) } })
+        const contact = await tx.crmContact.findFirst({ where: { ...contactScope(actor), id: contactId, ...(!canManageCrm(actor.role) ? { ownerUserId: actor.userId } : {}) } })
         if (!contact) throw new CrmError(404, "Editable contact not found.")
         const removed = await tx.crmAccountContact.deleteMany({ where: { tenantId: actor.tenantId, contactId, accountId } })
         if (removed.count) {
@@ -260,7 +261,7 @@ export function createCrmService<Fields extends object = object, Metadata extend
     updateContact(id: string, input: unknown) {
       const { version, ...data } = crmContactUpdateSchema.parse(input)
       return run("contacts.edit", async (tx, actor) => {
-        const where = { tenantId: actor.tenantId, id, ...(!canManageCrm(actor.role) ? { ownerUserId: actor.userId } : {}) }
+        const where = { ...contactScope(actor), id, ...(!canManageCrm(actor.role) ? { ownerUserId: actor.userId } : {}) }
         const before = await tx.crmContact.findFirst({ where })
         requireWriteFields(actor, "contacts", before ?? undefined, data)
         if (!before) throw new CrmError(404, "Editable contact not found.")
@@ -340,7 +341,7 @@ export function createCrmService<Fields extends object = object, Metadata extend
       return run("enquiries.edit", async (tx, actor) => {
         const before = await findEnquiry(tx, actor, id)
         requireWriteFields(actor, "enquiries", before ?? undefined, data)
-        await checkAssignee(tx, actor, data.assignedUserId)
+        await checkAssignee(tx, actor, data.assignedUserId, before.assignedUserId)
         const team = await resolveSalesTeam(tx, actor, data.salesTeamId, data.assignedUserId, before)
         if (before.salesTeamId !== (team?.id ?? null) && await tx.crmOpportunity.count({ where: { tenantId: actor.tenantId, enquiryId: id } })) throw new CrmError(409, "A converted enquiry keeps its original sales team.")
         const fieldRecord = { ...before, salesTeamId: team?.id ?? null }
@@ -431,8 +432,8 @@ export function createCrmService<Fields extends object = object, Metadata extend
     listAssignees(input: unknown) {
       const query = crmListSchema.parse(input)
       return run(workspaceRead, async (tx, actor) => {
-        const where: Prisma.UserWhereInput = { tenantId: actor.tenantId, status: "ACTIVE", role: { in: ["ADMIN", "MANAGER", "STAFF"] },
-          ...(!canManageCrm(actor.role) ? { id: actor.userId } : {}),
+        const where: Prisma.UserWhereInput = { status: "ACTIVE", role: { in: ["ADMIN", "MANAGER", "STAFF"] },
+          ...assigneeScope(actor),
           ...(query.salesTeamId ? { crmSalesTeamMemberships: { some: { tenantId: actor.tenantId, teamId: query.salesTeamId } } } : {}),
           ...(query.q ? { name: { contains: query.q, mode: "insensitive" } } : {}),
         }

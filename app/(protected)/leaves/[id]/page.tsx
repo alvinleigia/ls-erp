@@ -1,4 +1,12 @@
 "use client"
+import { useCurrentResourceAction } from "@/platform/access/view-guard"
+
+import { DraftPanel } from "@/components/erp/record-detail"
+import { LeaveDefinitionSummary } from "@/app/(protected)/leaves/leave-record-summary"
+
+import { ActionDialogContent } from "@/components/erp/action-dialog"
+
+import { PageHeader, pageClass } from "@/components/erp/page"
 
 import * as React from "react"
 import Link from "next/link"
@@ -7,14 +15,7 @@ import { toast } from "sonner"
 
 import { LeaveDefinitionFormFields } from "@/app/(protected)/leaves/leave-definition-form-fields"
 import { Button } from "@/components/ui/button"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
+import { Dialog } from "@/components/ui/dialog"
 import { useFormErrors } from "@/hooks/use-form-errors"
 import type { LeaveDefinitionFormValues, LeaveDefinitionRow } from "@/types/leaves"
 
@@ -40,9 +41,14 @@ const mapToFormValues = (row: LeaveDefinitionRow): LeaveDefinitionFormValues => 
 })
 
 export default function LeaveDefinitionDetailPage() {
+  const canEdit = useCurrentResourceAction("edit")
+  const canArchive = useCurrentResourceAction("archive")
+
   const router = useRouter()
   const params = useParams<{ id: string }>()
   const id = params.id
+  const [editOpen, setEditOpen] = React.useState(false)
+  const [formError, setFormError] = React.useState("")
   const [loading, setLoading] = React.useState(true)
   const [saving, setSaving] = React.useState(false)
   const [deleting, setDeleting] = React.useState(false)
@@ -91,43 +97,55 @@ export default function LeaveDefinitionDetailPage() {
 
   const save = async () => {
     if (!values) return
-    setSaving(true)
-    clearErrors()
-    const response = await fetch(`/api/leaves/definitions/${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(values),
-    })
-    if (!response.ok) {
-      const data = (await response.json().catch(() => ({}))) as {
-        error?: string
-        details?: { fieldErrors?: Record<string, string[]> }
+    setFormError(""); setSaving(true)
+    try {
+      clearErrors()
+      const response = await fetch(`/api/leaves/definitions/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(values),
+      })
+      if (!response.ok) {
+        const data = (await response.json().catch(() => ({}))) as {
+          error?: string
+          details?: { fieldErrors?: Record<string, string[]> }
+        }
+        setErrorsFromResponse(data)
+        setFormError(data.error ?? "Unable to update leave definition."); toast.error(data.error ?? "Unable to update leave definition.")
+        setSaving(false)
+        return
       }
-      setErrorsFromResponse(data)
-      toast.error(data.error ?? "Unable to update leave definition.")
+      const data = (await response.json()) as { item: LeaveDefinitionRow }
+      setRow(data.item)
+      setValues(mapToFormValues(data.item))
+      toast.success("Leave definition updated."); setEditOpen(false)
       setSaving(false)
-      return
+    } catch {
+      setFormError("Unable to save. Please try again.")
+    } finally {
+      setSaving(false)
     }
-    const data = (await response.json()) as { item: LeaveDefinitionRow }
-    setRow(data.item)
-    setValues(mapToFormValues(data.item))
-    toast.success("Leave definition updated.")
-    setSaving(false)
   }
 
   const remove = async () => {
     setDeleting(true)
-    const response = await fetch(`/api/leaves/definitions/${id}`, {
-      method: "DELETE",
-    })
-    if (!response.ok) {
-      const data = (await response.json().catch(() => ({}))) as { error?: string }
-      toast.error(data.error ?? "Unable to delete leave definition.")
+    try {
+      const response = await fetch(`/api/leaves/definitions/${id}`, {
+        method: "DELETE",
+      })
+      if (!response.ok) {
+        const data = (await response.json().catch(() => ({}))) as { error?: string }
+        toast.error(data.error ?? "Unable to delete leave definition.")
+        setDeleting(false)
+        return
+      }
+      toast.success("Leave definition deleted.")
+      router.push("/leaves")
+    } catch {
+      toast.error("Unable to complete this action. Please try again.")
+    } finally {
       setDeleting(false)
-      return
     }
-    toast.success("Leave definition deleted.")
-    router.push("/leaves")
   }
 
   if (loading) {
@@ -138,42 +156,29 @@ export default function LeaveDefinitionDetailPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold">{row.name}</h1>
-          <p className="text-sm text-muted-foreground">Code: {row.code}</p>
-        </div>
-        <div className="flex items-center gap-2">
+    <div className={pageClass}>
+      <PageHeader title={row.name} description={<> Code: {row.code} </>} actions={<> <Button disabled={!canEdit} onClick={() => { setValues(mapToFormValues(row)); clearErrors(); setFormError(""); setEditOpen(true) }}>Edit details</Button> <div className="flex items-center gap-2">
           <Button variant="outline" asChild>
             <Link href="/leaves">Back to list</Link>
           </Button>
           <Button
             variant="destructive"
-            onClick={() => setDeleteOpen(true)}
+            disabled={!canArchive} onClick={() => setDeleteOpen(true)}
             loading={deleting}
             loadingText="Deleting..."
           >
             Delete
           </Button>
-        </div>
-      </div>
+        </div> </>} />
 
-      <div className="rounded-xl border bg-card p-4">
-        <LeaveDefinitionFormFields
+      <LeaveDefinitionSummary row={row} />
+      {canEdit && editOpen && <DraftPanel title="Edit leave definition" description="Update the configuration below." fingerprint={values} saving={saving} error={formError} onClose={() => { setValues(mapToFormValues(row)); setEditOpen(false) }} onSubmit={() => void save()}><LeaveDefinitionFormFields
           values={values}
           errors={errors}
           onChange={(updater) => setValues((prev) => (prev ? updater(prev) : prev))}
           leaveOptions={leaveOptions}
           disableCode={false}
-        />
-      </div>
-
-      <div className="flex justify-end">
-        <Button onClick={save} loading={saving} loadingText="Saving...">
-          Save changes
-        </Button>
-      </div>
+        /></DraftPanel>}
 
       <Dialog
         open={deleteOpen}
@@ -181,31 +186,21 @@ export default function LeaveDefinitionDetailPage() {
           if (!deleting) setDeleteOpen(open)
         }}
       >
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Delete leave definition</DialogTitle>
-            <DialogDescription>
-              Delete &quot;{row.name}&quot;? This cannot be undone.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button
+        <ActionDialogContent title={<>Delete leave definition</>} description={<>Delete &quot;{row.name}&quot;? This cannot be undone.
+            </>} className="sm:max-w-md" actions={<> <Button
               variant="outline"
               disabled={deleting}
               onClick={() => setDeleteOpen(false)}
             >
               Cancel
-            </Button>
-            <Button
+            </Button><Button
               variant="destructive"
               onClick={remove}
               loading={deleting}
               loadingText="Deleting..."
             >
               Delete
-            </Button>
-          </DialogFooter>
-        </DialogContent>
+            </Button> </>}></ActionDialogContent>
       </Dialog>
     </div>
   )

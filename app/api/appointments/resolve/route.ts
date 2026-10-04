@@ -1,3 +1,8 @@
+import { withAppointmentsApi } from "@/modules/appointments/api"
+import type { BusinessActor } from "@/platform/policy"
+import { readJson } from "@/platform/business-api"
+import { requirePermission } from "@/platform/access/policy"
+import { requireServicesAccess } from "@/modules/services/api"
 import { NextResponse } from "next/server"
 
 import { AppointmentStatus } from "@prisma/client"
@@ -27,7 +32,7 @@ const buildDateTime = (date: string, time: string) => {
   return new Date(`${date}T${time}:00.000Z`)
 }
 
-export async function POST(request: Request) {
+async function handlePOST(request: Request, actor: BusinessActor) {
   const logContext = createApiLogContext(request)
   logApiRequestStart(logContext, request)
 
@@ -36,7 +41,7 @@ export async function POST(request: Request) {
     logApiRequestSuccess(logContext, tenantSession.error.status, { reason: "unauthorized_or_invalid_tenant" })
     return withRequestId(tenantSession.error, logContext.requestId)
   }
-  const { tenantId, role, sessionUserId } = tenantSession.context
+  const { tenantId, role } = tenantSession.context
 
   if (!canManageUsers(role as Role)) {
     const response = NextResponse.json({ error: "Unauthorized" }, { status: 401 })
@@ -64,16 +69,22 @@ export async function POST(request: Request) {
       return withRequestId(response, logContext.requestId)
     }
 
+  const beforeAppointments = await prisma.appointment.findMany({
+    where: { tenantId, id: { in: appointmentIds } },
+    select: { id: true, status: true, staffProfileId: true, startAt: true, endAt: true },
+  })
   if (body.action === "cancel") {
     const result = await prisma.appointment.updateMany({
       where: { id: { in: appointmentIds }, tenantId },
       data: { status: AppointmentStatus.CANCELED },
     })
       await recordDomainAuditEventSafe(prisma, {
+        tenantId,
+        before: JSON.parse(JSON.stringify(beforeAppointments)),
         event: "appointment.bulk_canceled",
         entityType: "Appointment",
-        actorUserId: sessionUserId ?? null,
-        actorRole: role ?? null,
+        actorUserId: actor.userId,
+        actorRole: actor.role,
         requestId: logContext.requestId,
         metadata: {
           appointmentIds,
@@ -108,10 +119,12 @@ export async function POST(request: Request) {
       data: { staffProfileId: staffProfile.id },
     })
       await recordDomainAuditEventSafe(prisma, {
+        tenantId,
+        before: JSON.parse(JSON.stringify(beforeAppointments)),
         event: "appointment.bulk_reassigned",
         entityType: "Appointment",
-        actorUserId: sessionUserId ?? null,
-        actorRole: role ?? null,
+        actorUserId: actor.userId,
+        actorRole: actor.role,
         requestId: logContext.requestId,
         metadata: {
           appointmentIds,
@@ -226,10 +239,12 @@ export async function POST(request: Request) {
     )
     const updatedCount = updates.reduce((total, result) => total + result.count, 0)
       await recordDomainAuditEventSafe(prisma, {
+        tenantId,
+        before: JSON.parse(JSON.stringify(beforeAppointments)),
         event: "appointment.bulk_rescheduled",
         entityType: "Appointment",
-        actorUserId: sessionUserId ?? null,
-        actorRole: role ?? null,
+        actorUserId: actor.userId,
+        actorRole: actor.role,
         requestId: logContext.requestId,
         metadata: {
           appointmentIds,
@@ -251,4 +266,13 @@ export async function POST(request: Request) {
     const response = NextResponse.json({ error: "Unable to resolve appointments." }, { status: 500 })
     return withRequestId(response, logContext.requestId)
   }
+}
+
+export function POST(request: Request) {
+  return withAppointmentsApi(request, "appointments", "read", async actor => {
+    const input = await readJson(request.clone()) as { action?: string }
+    requirePermission(actor, input?.action === "cancel" ? "appointments.archive" : "appointments.edit")
+    if (input?.action !== "cancel") await requireServicesAccess(actor)
+    return handlePOST(request, actor)
+  })
 }

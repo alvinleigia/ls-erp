@@ -1,3 +1,5 @@
+import { withServicesApi } from "@/modules/services/api"
+import type { BusinessActor } from "@/platform/policy"
 import { NextResponse } from "next/server"
 import { z } from "zod"
 
@@ -14,8 +16,6 @@ import {
   createServiceCategorySchema,
   serviceCategoryStatusSchema,
 } from "@/lib/validation"
-import { canManageUsers, type Role } from "@/lib/permissions"
-import { requireTenantSession } from "@/lib/tenant-auth"
 
 const listSchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
@@ -26,22 +26,11 @@ const listSchema = z.object({
   status: serviceCategoryStatusSchema.optional(),
 })
 
-export async function GET(request: Request) {
+async function handleGET(request: Request, actor: BusinessActor) {
   const logContext = createApiLogContext(request)
   logApiRequestStart(logContext, request)
 
-  const tenantSession = await requireTenantSession(request)
-  if (tenantSession.error) {
-    logApiRequestSuccess(logContext, tenantSession.error.status, { reason: "tenant_or_auth_failed" })
-    return withRequestId(tenantSession.error, logContext.requestId)
-  }
-  const { tenantId, role } = tenantSession.context
-
-  if (!canManageUsers(role as Role)) {
-    const response = NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    logApiRequestSuccess(logContext, 401, { reason: "unauthorized" })
-    return withRequestId(response, logContext.requestId)
-  }
+  const { tenantId } = actor
 
   const url = new URL(request.url)
   const parsed = listSchema.safeParse(Object.fromEntries(url.searchParams.entries()))
@@ -105,22 +94,11 @@ export async function GET(request: Request) {
   }
 }
 
-export async function POST(request: Request) {
+async function handlePOST(request: Request, actor: BusinessActor) {
   const logContext = createApiLogContext(request)
   logApiRequestStart(logContext, request)
 
-  const tenantSession = await requireTenantSession(request)
-  if (tenantSession.error) {
-    logApiRequestSuccess(logContext, tenantSession.error.status, { reason: "tenant_or_auth_failed" })
-    return withRequestId(tenantSession.error, logContext.requestId)
-  }
-  const { tenantId, role } = tenantSession.context
-
-  if (!canManageUsers(role as Role)) {
-    const response = NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    logApiRequestSuccess(logContext, 401, { reason: "unauthorized" })
-    return withRequestId(response, logContext.requestId)
-  }
+  const { tenantId } = actor
 
   const body = await request.json().catch(() => null)
   if (!body) {
@@ -181,3 +159,7 @@ export async function POST(request: Request) {
     return withRequestId(response, logContext.requestId)
   }
 }
+
+export function GET(request: Request) { return withServicesApi(request, "serviceCategories", "read", actor => handleGET(request, actor)) }
+
+export function POST(request: Request) { return withServicesApi(request, "serviceCategories", "create", actor => handlePOST(request, actor)) }

@@ -1,4 +1,8 @@
+import { requireServicesAccess } from "@/modules/services/api"
 import { prisma } from "@/lib/prisma"
+import { requireBusinessModule } from "@/platform/module-server"
+import { requirePermission } from "@/platform/access/policy"
+import { BusinessError, type BusinessActor } from "@/platform/policy"
 import {
   calculateDiscountCents,
   calculateLineAmounts,
@@ -54,6 +58,7 @@ type ResolvedOrderTax = {
 }
 
 type ResolveOrderOptions = {
+  actor?: BusinessActor
   enforceFutureStartAt?: boolean
   existingOrderId?: string
   tenantId?: string
@@ -160,6 +165,21 @@ export const resolveOrderData = async (
   const tenantId = options.tenantId
   if (!tenantId) {
     throw new Error("Tenant context is required for order resolution.")
+  }
+  if (input.productLines?.length) {
+    await requireBusinessModule(prisma, tenantId, "inventory")
+    if (!options.actor || options.actor.tenantId !== tenantId) throw new BusinessError(403, "Inventory access is required for product lines.")
+    requirePermission(options.actor, "inventoryProducts.read")
+  }
+
+  if (input.lines?.length) {
+    if (!options.actor || options.actor.tenantId !== tenantId) throw new BusinessError(403, "Services access is required for service lines.")
+    await requireServicesAccess(options.actor)
+  }
+
+  if (input.coupons?.length) {
+    if (!options.actor || options.actor.tenantId !== tenantId) throw new BusinessError(403, "Coupon access is required.")
+    requirePermission(options.actor, "appointmentCoupons.read")
   }
 
   const appointmentStartAt = new Date(input.appointmentStartAt)

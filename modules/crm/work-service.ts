@@ -1,3 +1,4 @@
+import { salesRecordAccess, canReadSalesRecord } from "@/platform/access/record-scope"
 import { requirePermission, requireWriteFields, permits } from "@/platform/access/policy"
 import type { PermissionRun } from "@/platform/access/server"
 import { resolveActivityType } from "./activity-type-service"
@@ -15,23 +16,23 @@ type Tx = Prisma.TransactionClient
 type Context = {
   run: PermissionRun
   audit: (tx: Tx, actor: CrmActor, event: string, id: string, before?: Prisma.InputJsonValue, after?: Prisma.InputJsonValue) => Promise<void>
-  checkAssignee: (tx: Tx, actor: CrmActor, id: string) => Promise<void>
+  checkAssignee: (tx: Tx, actor: CrmActor, id: string, existingAssigneeId?: string) => Promise<void>
 }
 const openStatuses = ["OPEN", "IN_PROGRESS"] as const
 const page = <T>(items: T[], total: number, page: number, pageSize: number) => ({ items, total, page, pageSize, totalPages: Math.max(1, Math.ceil(total / pageSize)) })
 const snapshot = (value: unknown): Prisma.InputJsonValue => JSON.parse(JSON.stringify(value))
-const include = { contact: { select: { id: true, name: true, email: true, phone: true } }, assignee: { select: { id: true, name: true } }, enquiry: { select: { id: true, title: true, assignedUserId: true } }, opportunity: { select: { id: true, title: true, assignedUserId: true } }, planLaunch: { select: { planName: true, planVersion: true } } } as const
+const include = { contact: { select: { id: true, name: true, email: true, phone: true } }, assignee: { select: { id: true, name: true } }, enquiry: { select: { id: true, title: true, assignedUserId: true, salesTeamId: true } }, opportunity: { select: { id: true, title: true, assignedUserId: true, salesTeamId: true } }, planLaunch: { select: { planName: true, planVersion: true } } } as const
 type Loaded = Prisma.CrmTaskGetPayload<{ include: typeof include }>
 export function workScope(actor: CrmActor): Prisma.CrmTaskWhereInput {
-  return { tenantId: actor.tenantId, ...(!canManageCrm(actor.role) ? { OR: [
-    { assignedUserId: actor.userId }, { enquiry: { assignedUserId: actor.userId } }, { opportunity: { assignedUserId: actor.userId } },
+  return { tenantId: actor.tenantId, ...(salesRecordAccess(actor) !== "ALL" ? { OR: [
+    { assignedUserId: actor.userId }, { enquiry: enquiryScope(actor) }, { opportunity: enquiryScope(actor) },
     { enquiryId: null, opportunityId: null, contact: { ownerUserId: actor.userId } },
   ] } : {}) }
 }
 function dto(record: Loaded, actor: CrmActor) {
   const { enquiry, opportunity, ...data } = record
   const source = enquiry || opportunity
-  const canViewParent = permits(actor, enquiry ? "enquiries.read" : "opportunities.read") && !!source && (canManageCrm(actor.role) || source.assignedUserId === actor.userId)
+  const canViewParent = permits(actor, enquiry ? "enquiries.read" : "opportunities.read") && !!source && canReadSalesRecord(actor, source)
   return { ...data, enquiryId: canViewParent ? record.enquiryId : null, opportunityId: canViewParent ? record.opportunityId : null,
     parent: canViewParent ? { id: source.id, title: source.title, kind: enquiry ? "enquiry" : "opportunity" } : null,
     canEdit: permits(actor, "activities.edit") && (canManageCrm(actor.role) || record.assignedUserId === actor.userId) }
@@ -55,7 +56,7 @@ export function createWorkService({ run, audit, checkAssignee }: Context, extens
   }
   async function schedule(tx: Tx, actor: CrmActor, data: WorkScheduleInput, before?: CrmTask) {
     requireWriteFields(actor, "activities", before, data)
-    await checkAssignee(tx, actor, data.assignedUserId)
+    await checkAssignee(tx, actor, data.assignedUserId, before?.assignedUserId)
     const timeZone = await zone(tx, actor)
     if (data.startsAt && businessDate(new Date(data.startsAt), timeZone) !== data.dueOn) throw new CrmError(400, "The due date must match the start date in the business time zone.")
     return { ...data, ...await resolveActivityType(tx, actor, data, before), dueOn: new Date(`${data.dueOn}T00:00:00Z`), startsAt: data.startsAt ? new Date(data.startsAt) : null, endsAt: data.endsAt ? new Date(data.endsAt) : null, reminderAt: data.reminderAt ? new Date(data.reminderAt) : null }

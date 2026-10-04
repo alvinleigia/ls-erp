@@ -1,4 +1,12 @@
 "use client"
+import { useCurrentResourceAction } from "@/platform/access/view-guard"
+
+import { ActionDialogContent } from "@/components/erp/action-dialog"
+
+import { PageHeader, pageClass, Surface, TableToolbar } from "@/components/erp/page"
+import { TablePagination } from "@/components/erp/pagination"
+
+import { Select } from "@/components/erp/controls"
 
 import * as React from "react"
 import Link from "next/link"
@@ -12,16 +20,9 @@ import {
 import { ArrowDownIcon, ArrowUpDownIcon, ArrowUpIcon, MoreHorizontalIcon } from "lucide-react"
 import { toast } from "sonner"
 
-import { DataTable, DataTablePagination, DataTableToolbar } from "@/components/data-table"
+import { DataTable } from "@/components/data-table"
 import { Button } from "@/components/ui/button"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
+import { Dialog } from "@/components/ui/dialog"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -52,6 +53,9 @@ const SortIndicator = ({ value }: { value: false | "asc" | "desc" }) => {
 }
 
 export default function LeaveGroupsPage() {
+  const canCreate = useCurrentResourceAction("create")
+  const canArchive = useCurrentResourceAction("archive")
+
   const [loading, setLoading] = React.useState(true)
   const [rows, setRows] = React.useState<LeaveGroupRow[]>([])
   const [totalRows, setTotalRows] = React.useState(0)
@@ -131,20 +135,26 @@ export default function LeaveGroupsPage() {
   const confirmDelete = React.useCallback(async () => {
     if (!deleteTarget) return
     setDeleting(true)
-    const response = await fetch(`/api/leaves/groups/${deleteTarget.id}`, {
-      method: "DELETE",
-    })
-    if (!response.ok) {
-      const data = (await response.json().catch(() => ({}))) as { error?: string }
-      toast.error(data.error ?? "Unable to delete leave group.")
+    try {
+      const response = await fetch(`/api/leaves/groups/${deleteTarget.id}`, {
+        method: "DELETE",
+      })
+      if (!response.ok) {
+        const data = (await response.json().catch(() => ({}))) as { error?: string }
+        toast.error(data.error ?? "Unable to delete leave group.")
+        setDeleting(false)
+        return
+      }
+      toast.success("Leave group deleted.")
       setDeleting(false)
-      return
+      setDeleteOpen(false)
+      setDeleteTarget(null)
+      await loadRows()
+    } catch {
+      toast.error("Unable to complete this action. Please try again.")
+    } finally {
+      setDeleting(false)
     }
-    toast.success("Leave group deleted.")
-    setDeleting(false)
-    setDeleteOpen(false)
-    setDeleteTarget(null)
-    await loadRows()
   }, [deleteTarget, loadRows])
 
   const columns = React.useMemo<ColumnDef<LeaveGroupRow>[]>(
@@ -176,7 +186,7 @@ export default function LeaveGroupsPage() {
             <SortIndicator value={column.getIsSorted()} />
           </button>
         ),
-        cell: ({ row }) => <span className="font-medium">{row.original.name}</span>,
+        cell: ({ row }) => <Link className="font-medium underline underline-offset-4" href={`/leaves/groups/${row.original.id}`}>{row.original.name}</Link>,
       },
       { accessorKey: "assignmentMode", meta: { label: "Assignment" }, header: "Assignment" },
       { accessorKey: "status", meta: { label: "Status" }, header: "Status" },
@@ -208,17 +218,17 @@ export default function LeaveGroupsPage() {
         cell: ({ row }) => (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button size="icon" variant="ghost">
+              <Button size="icon" variant="ghost" aria-label="Record actions">
                 <MoreHorizontalIcon className="h-4 w-4" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
               <DropdownMenuItem asChild>
-                <Link href={`/leaves/groups/${row.original.id}`}>Edit</Link>
+                <Link href={`/leaves/groups/${row.original.id}`}>View details</Link>
               </DropdownMenuItem>
               <DropdownMenuItem
                 className="text-destructive"
-                onSelect={() => requestDelete(row.original)}
+                disabled={!canArchive} onSelect={() => requestDelete(row.original)}
               >
                 Delete
               </DropdownMenuItem>
@@ -227,11 +237,10 @@ export default function LeaveGroupsPage() {
         ),
       },
     ],
-    [requestDelete]
+    [requestDelete, canArchive]
   )
 
   const totalPages = Math.max(1, Math.ceil(totalRows / pagination.pageSize))
-  // eslint-disable-next-line react-hooks/incompatible-library
   const table = useReactTable({
     data: rows,
     columns,
@@ -248,30 +257,23 @@ export default function LeaveGroupsPage() {
   })
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold">Leave Groups</h1>
-          <p className="text-sm text-muted-foreground">
-            Bundle leave definitions and assign them to all or selected employees.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
+    <div className={pageClass}>
+      <PageHeader title={<> Leave Groups </>} description={<> Bundle leave definitions and assign them to all or selected employees. </>} actions={<> <div className="flex items-center gap-2">
           <Button variant="outline" asChild>
             <Link href="/leaves">Leave definitions</Link>
           </Button>
-          <Button asChild>
+          {canCreate && <Button asChild>
             <Link href="/leaves/groups/new">New leave group</Link>
-          </Button>
-        </div>
-      </div>
+          </Button>}
+        </div> </>} />
 
-      <DataTableToolbar table={table} searchPlaceholder="Search by code or name">
-        <select
+      <Surface>
+      <TableToolbar table={table} searchPlaceholder="Search by code or name">
+        <Select
           className="h-9 rounded-md border border-input bg-background px-3 text-sm"
           value={assignmentModeFilter}
-          onChange={(event) =>
-            setAssignmentModeFilter(event.target.value as LeaveGroupAssignmentMode | "all")
+          onValueChange={(value) =>
+            setAssignmentModeFilter(value as LeaveGroupAssignmentMode | "all")
           }
         >
           <option value="all">All assignment modes</option>
@@ -280,11 +282,11 @@ export default function LeaveGroupsPage() {
               {item}
             </option>
           ))}
-        </select>
-        <select
+        </Select>
+        <Select
           className="h-9 rounded-md border border-input bg-background px-3 text-sm"
           value={statusFilter}
-          onChange={(event) => setStatusFilter(event.target.value as LeaveGroupStatus | "all")}
+          onValueChange={(value) => setStatusFilter(value as LeaveGroupStatus | "all")}
         >
           <option value="all">All status</option>
           {statusOptions.map((item) => (
@@ -292,11 +294,12 @@ export default function LeaveGroupsPage() {
               {item}
             </option>
           ))}
-        </select>
-      </DataTableToolbar>
+        </Select>
+      </TableToolbar>
 
       <DataTable table={table} loading={loading} emptyMessage="No leave groups found." />
-      <DataTablePagination table={table} totalRows={totalRows} />
+      <TablePagination table={table} totalRows={totalRows} />
+      </Surface>
 
       <Dialog
         open={deleteOpen}
@@ -308,24 +311,13 @@ export default function LeaveGroupsPage() {
           }
         }}
       >
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Delete leave group</DialogTitle>
-            <DialogDescription>
-              {deleteTarget
+        <ActionDialogContent title={<>Delete leave group</>} description={<>{deleteTarget
                 ? `Delete "${deleteTarget.name}"? This cannot be undone.`
-                : "Delete this leave group? This cannot be undone."}
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleteOpen(false)} disabled={deleting}>
+                : "Delete this leave group? This cannot be undone."}</>} className="sm:max-w-md" actions={<> <Button variant="outline" onClick={() => setDeleteOpen(false)} disabled={deleting}>
               Cancel
-            </Button>
-            <Button variant="destructive" onClick={confirmDelete} disabled={deleting}>
+            </Button><Button variant="destructive" onClick={confirmDelete} disabled={deleting}>
               {deleting ? "Deleting..." : "Delete"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
+            </Button> </>}></ActionDialogContent>
       </Dialog>
     </div>
   )

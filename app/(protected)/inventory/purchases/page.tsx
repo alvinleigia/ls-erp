@@ -1,5 +1,12 @@
 "use client"
 
+import { PurchaseView } from "@/modules/inventory/record-view"
+
+import { Select, Textarea } from "@/components/erp/controls"
+
+import { useCurrentResourceAction } from "@/platform/access/view-guard"
+import { useBusinessModules } from "@/platform/module-provider"
+
 import * as React from "react"
 import {
   ColumnDef,
@@ -17,11 +24,15 @@ import {
 } from "lucide-react"
 import { toast } from "sonner"
 
-import { DataTable, DataTablePagination, DataTableToolbar } from "@/components/data-table"
+import { DataTable } from "@/components/data-table"
+import { PageHeader, Surface, TableToolbar, pageClass } from "@/components/erp/page"
+import { TablePagination } from "@/components/erp/pagination"
+import { DraftPanel } from "@/components/erp/record-detail"
+import { Section } from "@/components/erp/section"
+import { ConfirmAction } from "@/components/erp/confirm-action"
 import { FormField } from "@/components/form-field"
-import { SearchableSelect } from "@/components/searchable-select"
+import { RecordSelect } from "@/components/erp/record-select"
 import { Button } from "@/components/ui/button"
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -29,13 +40,12 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
+import { formatDateForDisplay, DEFAULT_DATE_FORMAT } from "@/lib/date"
 import { formatCurrencyFromCents } from "@/lib/formatting"
 import type { ListResponse } from "@/types/api"
 import type {
-  InventoryProductRow,
   PurchaseOrderFormValues,
   PurchaseOrderRow,
-  SupplierRow,
 } from "@/types/inventory"
 import type { AppSettingsPayload } from "@/types/scheduling"
 
@@ -57,17 +67,28 @@ const SortIndicator = ({ value }: { value: false | "asc" | "desc" }) => {
 }
 
 export default function InventoryPurchasesPage() {
+  const canCreate = useCurrentResourceAction("create")
+  const canEdit = useCurrentResourceAction("edit")
+  const { can } = useBusinessModules()
+  const canReceiveStock = can("inventoryProducts.edit")
+  const canReceive = canEdit && canReceiveStock
+
   const [items, setItems] = React.useState<PurchaseOrderRow[]>([])
-  const [suppliers, setSuppliers] = React.useState<SupplierRow[]>([])
-  const [products, setProducts] = React.useState<InventoryProductRow[]>([])
   const [totalRows, setTotalRows] = React.useState(0)
   const [loading, setLoading] = React.useState(true)
+  const [statusFilter, setStatusFilter] = React.useState("all")
+  const listRequest = React.useRef<AbortController | null>(null)
   const [search, setSearch] = React.useState("")
   const [sorting, setSorting] = React.useState<SortingState>([])
   const [pagination, setPagination] = React.useState<PaginationState>({ pageIndex: 0, pageSize: 10 })
+  const [receiveTarget, setReceiveTarget] = React.useState<PurchaseOrderRow | null>(null)
+  const [receiving, setReceiving] = React.useState(false)
+  const [viewing, setViewing] = React.useState<PurchaseOrderRow | null>(null)
   const [formOpen, setFormOpen] = React.useState(false)
+  const [formError, setFormError] = React.useState("")
   const [saving, setSaving] = React.useState(false)
   const [formValues, setFormValues] = React.useState<PurchaseOrderFormValues>(defaultValues)
+  const [dateFormat, setDateFormat] = React.useState(DEFAULT_DATE_FORMAT)
   const [settings, setSettings] = React.useState<
     Required<
       Pick<
@@ -93,64 +114,50 @@ export default function InventoryPurchasesPage() {
     (cents: number) => formatCurrencyFromCents(cents, settings),
     [settings]
   )
-  const productOptions = React.useMemo(
-    () =>
-      products.map((product) => ({
-        value: product.id,
-        label: `${product.sku} - ${product.name}`,
-      })),
-    [products]
-  )
-  const supplierOptions = React.useMemo(
-    () => suppliers.map((supplier) => ({ value: supplier.id, label: supplier.name })),
-    [suppliers]
-  )
-
+  const formatDate = React.useCallback((value: string) => formatDateForDisplay(value, dateFormat), [dateFormat])
   const loadItems = React.useCallback(async () => {
+    listRequest.current?.abort()
+    const controller = new AbortController()
+    listRequest.current = controller
+    const signal = controller.signal
     setLoading(true)
-    const params = new URLSearchParams()
-    params.set("page", String(pagination.pageIndex + 1))
-    params.set("pageSize", String(pagination.pageSize))
-    if (search.trim()) params.set("q", search.trim())
-    if (sorting[0]) {
-      params.set("sort", sorting[0].id)
-      params.set("order", sorting[0].desc ? "desc" : "asc")
-    }
-    const response = await fetch(`/api/inventory/purchases?${params.toString()}`)
-    if (!response.ok) {
-      toast.error("Unable to load purchase orders.")
-      setItems([])
-      setTotalRows(0)
+    try {
+      const params = new URLSearchParams()
+      params.set("page", String(pagination.pageIndex + 1))
+      params.set("pageSize", String(pagination.pageSize))
+      if (statusFilter !== "all") params.set("status", statusFilter)
+      if (search.trim()) params.set("q", search.trim())
+      if (sorting[0]) {
+        params.set("sort", sorting[0].id)
+        params.set("order", sorting[0].desc ? "desc" : "asc")
+      }
+      const response = await fetch(`/api/inventory/purchases?${params.toString()}`, { signal })
+      if (!response.ok) {
+        toast.error("Unable to load purchase orders.")
+        setItems([])
+        setTotalRows(0)
+        setLoading(false)
+        return
+      }
+      const data = (await response.json()) as ListResponse<PurchaseOrderRow>
+      if (signal.aborted) return
+      setItems(data.items)
+      setTotalRows(data.total)
       setLoading(false)
-      return
-    }
-    const data = (await response.json()) as ListResponse<PurchaseOrderRow>
-    setItems(data.items)
-    setTotalRows(data.total)
-    setLoading(false)
-  }, [pagination.pageIndex, pagination.pageSize, search, sorting])
+    } catch { if (!signal.aborted) toast.error("Unable to load records. Please refresh.") } finally { if (!signal.aborted) setLoading(false) }
+  }, [pagination.pageIndex, pagination.pageSize, search, sorting, statusFilter])
 
   React.useEffect(() => {
     void loadItems()
+    return () => listRequest.current?.abort()
   }, [loadItems])
 
   React.useEffect(() => {
     const loadDependencies = async () => {
-      const [supplierResponse, productResponse, settingsResponse] = await Promise.all([
-        fetch("/api/inventory/suppliers?page=1&pageSize=100&status=ACTIVE"),
-        fetch("/api/inventory/products?page=1&pageSize=100&status=ACTIVE"),
-        fetch("/api/settings", { cache: "no-store" }),
-      ])
-      if (supplierResponse.ok) {
-        const data = (await supplierResponse.json()) as ListResponse<SupplierRow>
-        setSuppliers(data.items)
-      }
-      if (productResponse.ok) {
-        const data = (await productResponse.json()) as ListResponse<InventoryProductRow>
-        setProducts(data.items)
-      }
+      const settingsResponse = await fetch("/api/settings/display", { cache: "no-store" })
       if (settingsResponse.ok) {
         const data = (await settingsResponse.json()) as { settings?: AppSettingsPayload }
+        if (data.settings?.dateFormat) setDateFormat(data.settings.dateFormat)
         if (data.settings?.locale && data.settings.currency) {
           setSettings({
             locale: data.settings.locale,
@@ -166,54 +173,64 @@ export default function InventoryPurchasesPage() {
 
   const save = async () => {
     setSaving(true)
-    const payload = {
-      ...formValues,
-      items: formValues.items
-        .filter((item) => item.productId)
-        .map((item) => ({
-          productId: item.productId,
-          quantity: item.quantity,
-          unitCostCents: parseMoney(item.unitCost),
-        })),
-    }
-    const response = await fetch("/api/inventory/purchases", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    })
-    if (!response.ok) {
-      const data = (await response.json().catch(() => ({}))) as { error?: string }
-      toast.error(data.error ?? "Unable to create purchase order.")
+    setFormError("")
+    try {
+      const payload = {
+        ...formValues,
+        items: formValues.items
+          .filter((item) => item.productId)
+          .map((item) => ({
+            productId: item.productId,
+            quantity: item.quantity,
+            unitCostCents: parseMoney(item.unitCost),
+          })),
+      }
+      const response = await fetch("/api/inventory/purchases", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      })
+      if (!response.ok) {
+        const data = (await response.json().catch(() => ({}))) as { error?: string }
+        setFormError(data.error ?? "Unable to save. Check the form and try again.")
+        toast.error(data.error ?? "Unable to create purchase order.")
+        setSaving(false)
+        return
+      }
+      toast.success("Purchase order created.")
       setSaving(false)
-      return
-    }
-    toast.success("Purchase order created.")
-    setSaving(false)
-    setFormOpen(false)
-    setFormValues(defaultValues)
-    await loadItems()
+      setFormOpen(false)
+      setFormValues(defaultValues)
+      await loadItems()
+    } catch { setFormError("Unable to save. Please try again."); toast.error("Unable to save. Please try again.") } finally { setSaving(false) }
   }
 
   const markReceived = React.useCallback(async (order: PurchaseOrderRow) => {
     if (order.status === "RECEIVED") return
-    const response = await fetch(`/api/inventory/purchases/${order.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status: "RECEIVED" }),
-    })
-    if (!response.ok) {
-      const data = (await response.json().catch(() => ({}))) as { error?: string }
-      toast.error(data.error ?? "Unable to mark as received.")
-      return
-    }
-    toast.success("Purchase order received. Stock updated.")
-    await loadItems()
+    setReceiving(true)
+    try {
+      const response = await fetch(`/api/inventory/purchases/${order.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "RECEIVED" }),
+      })
+      if (!response.ok) {
+        const data = (await response.json().catch(() => ({}))) as { error?: string }
+        toast.error(data.error ?? "Unable to mark as received.")
+        return
+      }
+      toast.success("Purchase order received. Stock updated.")
+      setReceiveTarget(null)
+      setViewing(null)
+      await loadItems()
+    } catch { toast.error("Unable to receive stock. Please try again.") } finally { setReceiving(false) }
   }, [loadItems])
 
   const columns = React.useMemo<ColumnDef<PurchaseOrderRow>[]>(
     () => [
       {
         accessorKey: "orderNumber",
+        cell: ({ row }) => <button type="button" className="font-medium underline underline-offset-4" onClick={() => setViewing(row.original)}>{row.original.orderNumber}</button>,
         meta: { label: "PO number" },
         header: ({ column }) => (
           <button
@@ -232,7 +249,7 @@ export default function InventoryPurchasesPage() {
         meta: { label: "Supplier" },
         header: "Supplier",
       },
-      { accessorKey: "orderDate", meta: { label: "Order date" }, header: "Order date" },
+      { accessorKey: "orderDate", meta: { label: "Order date" }, header: "Order date", cell: ({ row }) => formatDate(row.original.orderDate) },
       { accessorKey: "status", meta: { label: "Status" }, header: "Status" },
       {
         accessorKey: "totalCents",
@@ -247,14 +264,14 @@ export default function InventoryPurchasesPage() {
         cell: ({ row }) => (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button size="icon" variant="ghost">
+              <Button size="icon" variant="ghost" aria-label="Record actions">
                 <MoreHorizontalIcon className="h-4 w-4" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
               <DropdownMenuItem
-                disabled={row.original.status === "RECEIVED"}
-                onSelect={() => void markReceived(row.original)}
+                disabled={!canReceive || row.original.status === "RECEIVED"}
+                onSelect={() => setReceiveTarget(row.original)}
               >
                 Mark as received
               </DropdownMenuItem>
@@ -263,16 +280,15 @@ export default function InventoryPurchasesPage() {
         ),
       },
     ],
-    [formatMoney, markReceived]
+    [formatMoney, canReceive, formatDate]
   )
 
-  // eslint-disable-next-line react-hooks/incompatible-library
   const table = useReactTable({
     data: items,
     columns,
     state: { sorting, pagination, globalFilter: search },
-    onSortingChange: setSorting,
-    onGlobalFilterChange: setSearch,
+    onSortingChange: value => { setSorting(value); setPagination(prev => ({ ...prev, pageIndex: 0 })) },
+    onGlobalFilterChange: value => { setSearch(value); setPagination(prev => ({ ...prev, pageIndex: 0 })) },
     onPaginationChange: (updater) => {
       setPagination((prev) =>
         typeof updater === "function" ? (updater(prev as never) as PaginationState) : updater
@@ -286,49 +302,37 @@ export default function InventoryPurchasesPage() {
   })
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold">Purchase orders</h1>
-          <p className="text-sm text-muted-foreground">
-            Create supplier purchases and receive stock into inventory.
-          </p>
-        </div>
-        <Button
+    <div className={pageClass}>
+      <PageHeader title="Purchase orders" description="Create supplier purchases and receive stock into inventory." actions={<Button
+          disabled={!canCreate}
           onClick={() => {
             setFormValues(defaultValues)
-            setFormOpen(true)
+            setFormError(""); setFormOpen(true)
           }}
         >
           <PlusIcon className="mr-2 h-4 w-4" />
           New PO
-        </Button>
-      </div>
+        </Button>} />
 
-      <DataTableToolbar table={table} searchPlaceholder="Search by PO number or supplier" />
+      <Surface>
+      <TableToolbar table={table} searchPlaceholder="Search by PO number or supplier"><Select aria-label="Status filter" value={statusFilter} onValueChange={value => { setStatusFilter(value); setPagination(prev => ({ ...prev, pageIndex: 0 })) }}><option value="all">All statuses</option><option value="DRAFT">Draft</option><option value="ORDERED">Ordered</option><option value="RECEIVED">Received</option><option value="CANCELED">Canceled</option></Select><Button type="button" variant="outline" disabled={loading} onClick={() => void loadItems()}>Refresh</Button></TableToolbar>
       <DataTable table={table} loading={loading} emptyMessage="No purchase orders found." />
-      <DataTablePagination table={table} totalRows={totalRows} />
+      <TablePagination table={table} totalRows={totalRows} loading={loading} />
+      </Surface>
 
-      <Dialog
-        open={formOpen}
-        onOpenChange={(open) => {
-          setFormOpen(open)
-          if (!open) setFormValues(defaultValues)
-        }}
-      >
-        <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col">
-          <DialogHeader>
-            <DialogTitle>New purchase order</DialogTitle>
-          </DialogHeader>
-          <div className="flex-1 overflow-y-auto space-y-4 px-1">
-            <div className="grid gap-3 md:grid-cols-4">
+      {receiveTarget && <ConfirmAction title="Receive purchase order" description={`Receive ${receiveTarget.orderNumber}? This adds the ordered quantities to stock.`} label="Receive stock" busy={receiving} onCancel={() => setReceiveTarget(null)} onConfirm={() => void markReceived(receiveTarget)} />}
+
+      {viewing && <PurchaseView item={viewing} onClose={() => setViewing(null)} formatMoney={formatMoney} formatDate={formatDate} actions={canReceive && viewing.status !== "RECEIVED" ? <Button onClick={() => { setReceiveTarget(viewing); setViewing(null) }}>Mark as received</Button> : undefined} />}
+
+      {formOpen && <DraftPanel error={formError} fingerprint={formValues} title="New purchase order" description="Enter purchase order details in the sections below." onClose={() => setFormOpen(false)} onSubmit={() => void save()} saving={saving} disabled={!canCreate} saveLabel="Create purchase order">
+          <div className="space-y-5"><Section title="Order details">
+            <div className="grid gap-3 sm:grid-cols-2">
               <FormField id="po-supplier" label="Supplier">
-                <SearchableSelect
+                <RecordSelect
                   id="po-supplier"
                   value={formValues.supplierId}
                   placeholder="Select supplier"
-                  searchPlaceholder="Search supplier..."
-                  options={supplierOptions}
+                  endpoint="/api/inventory/suppliers?status=ACTIVE"
                   onChange={(nextValue) =>
                     setFormValues((prev) => ({ ...prev, supplierId: nextValue }))
                   }
@@ -355,26 +359,26 @@ export default function InventoryPurchasesPage() {
                 />
               </FormField>
               <FormField id="po-status" label="Status">
-                <select
+                <Select
                   id="po-status"
-                  className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+                  className="w-full"
                   value={formValues.status}
-                  onChange={(event) =>
+                  onValueChange={(value) =>
                     setFormValues((prev) => ({
                       ...prev,
-                      status: event.target.value as PurchaseOrderFormValues["status"],
+                      status: value as PurchaseOrderFormValues["status"],
                     }))
                   }
                 >
                   <option value="ORDERED">Ordered</option>
                   <option value="DRAFT">Draft</option>
-                  <option value="RECEIVED">Received</option>
-                </select>
+                  <option disabled={!canReceiveStock} value="RECEIVED">Received</option>
+                </Select>
               </FormField>
             </div>
 
             <FormField id="po-notes" label="Notes">
-              <Input
+              <Textarea
                 id="po-notes"
                 value={formValues.notes}
                 onChange={(event) =>
@@ -383,6 +387,7 @@ export default function InventoryPurchasesPage() {
               />
             </FormField>
 
+            </Section><Section title="Order items">
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <p className="text-sm font-medium">Items</p>
@@ -403,13 +408,11 @@ export default function InventoryPurchasesPage() {
               {formValues.items.map((item, index) => (
                 <div key={index} className="grid gap-3 md:grid-cols-[2fr_1fr_1fr_auto]">
                   <FormField id={`po-item-product-${index}`} label="Product">
-                    <SearchableSelect
+                    <RecordSelect
                       id={`po-item-product-${index}`}
                       value={item.productId}
                       placeholder="Select product"
-                      searchPlaceholder="Search by SKU or product name..."
-                      emptyLabel="No products found."
-                      options={productOptions}
+                      endpoint="/api/inventory/products?status=ACTIVE"
                       onChange={(event) =>
                         setFormValues((prev) => ({
                           ...prev,
@@ -472,17 +475,8 @@ export default function InventoryPurchasesPage() {
                 </div>
               ))}
             </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setFormOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={save} loading={saving} loadingText="Saving...">
-              Create PO
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </Section></div>
+      </DraftPanel>}
     </div>
   )
 }

@@ -11,7 +11,8 @@ import {
 } from "@/lib/api-logging"
 import { canManageUsers, type Role } from "@/lib/permissions"
 import { prisma } from "@/lib/prisma"
-import { requireTenantSession } from "@/lib/tenant-auth"
+import { withWorkforceApi, workforceSession } from "@/modules/workforce/api"
+import type { BusinessActor } from "@/platform/policy"
 import {
   createLeaveGroupSchema,
   leaveGroupAssignmentModeSchema,
@@ -38,11 +39,11 @@ const leaveGroupListSchema = z.object({
   order: z.enum(["asc", "desc"]).default("asc"),
 })
 
-export async function GET(request: Request) {
+async function handleGET(request: Request, actor: BusinessActor) {
   const logContext = createApiLogContext(request)
   logApiRequestStart(logContext, request)
 
-  const tenantSession = await requireTenantSession(request)
+  const tenantSession = workforceSession(actor)
   if (tenantSession.error) {
     logApiRequestSuccess(logContext, tenantSession.error.status, { reason: "tenant_or_auth_failed" })
     return withRequestId(tenantSession.error, logContext.requestId)
@@ -111,11 +112,11 @@ export async function GET(request: Request) {
   }
 }
 
-export async function POST(request: Request) {
+async function handlePOST(request: Request, actor: BusinessActor) {
   const logContext = createApiLogContext(request)
   logApiRequestStart(logContext, request)
 
-  const tenantSession = await requireTenantSession(request)
+  const tenantSession = workforceSession(actor)
   if (tenantSession.error) {
     logApiRequestSuccess(logContext, tenantSession.error.status, { reason: "tenant_or_auth_failed" })
     return withRequestId(tenantSession.error, logContext.requestId)
@@ -194,4 +195,12 @@ export async function POST(request: Request) {
     const response = NextResponse.json({ error: "Unable to create leave group." }, { status: 500 })
     return withRequestId(response, logContext.requestId)
   }
+}
+
+export async function POST(request: Request) {
+  return withWorkforceApi(request, "leaves", "leaveGroups", "create", actor => handlePOST(request, actor), "groups")
+}
+
+export async function GET(request: Request) {
+  return withWorkforceApi(request, "leaves", "leaveGroups", "read", actor => handleGET(request, actor), "groups")
 }

@@ -12,6 +12,7 @@ if (!["127.0.0.1", "localhost"].includes(url.hostname) || url.pathname !== "/ls_
 const root = new Client({ connectionString: rawUrl })
 url.username = "crm_test_runtime"; url.password = ""
 process.env.DATABASE_URL = url.toString()
+process.env.PLATFORM_ADMIN_TENANT_SLUG = "provision-platform"
 const sessions = new AsyncLocalStorage()
 // Authentication is the sole stub; actual authorization, routing, Prisma and RLS run.
 const authPath = path.resolve(__dirname, "../auth.ts")
@@ -25,7 +26,7 @@ const { POST, GET } = require("../app/api/tenants/route.ts")
 const { GET: moduleGet, PATCH: modulePatch } = require("../app/api/tenants/[id]/modules/route.ts")
 const platformSession = { user: { id: "provision_platform_admin", tenantId: "provision_platform", role: "ADMIN" } }
 const input = (slug, extra = {}) => ({ name: "Provision test", slug, adminName: "Business admin", adminEmail: `${slug}@example.test`, adminPassword: "SyntheticTest!2026", ...extra })
-const request = (method, data, hostname = "platform.localhost") => new Request(`http://${hostname}/api/tenants`, { method, headers: { "Content-Type": "application/json", host: hostname }, ...(data ? { body: JSON.stringify(data) } : {}) })
+const request = (method, data, hostname = "provision-platform.localhost") => new Request(`http://${hostname}/api/tenants`, { method, headers: { "Content-Type": "application/json", host: hostname }, ...(data ? { body: JSON.stringify(data) } : {}) })
 
 async function cleanupFixtures() {
   for (const table of ["RealEstateProjectStatus", "RealEstatePropertyCategory", "RealEstateBuyingTimeframe"]) {
@@ -38,7 +39,7 @@ async function cleanupFixtures() {
 before(async () => {
   await root.connect()
   await cleanupFixtures()
-  await root.query('INSERT INTO "Tenant" (id, name, slug, "updatedAt") VALUES ($1,$2,$3,NOW()) ON CONFLICT (id) DO NOTHING', ["provision_platform", "Platform", "platform"])
+  await root.query('INSERT INTO "Tenant" (id, name, slug, "updatedAt") VALUES ($1,$2,$3,NOW()) ON CONFLICT (id) DO NOTHING', ["provision_platform", "Platform", "provision-platform"])
   await root.query('INSERT INTO "User" (id, name, email, role, "tenantId", "updatedAt") VALUES ($1,$2,$3,$4,$5,NOW()) ON CONFLICT (id) DO NOTHING', ["provision_platform_admin", "Platform admin", "provision-platform@example.test", "ADMIN", "provision_platform"])
 })
 after(async () => {
@@ -56,8 +57,9 @@ test("platform admin provisions a tenant with admin, settings and audit under en
   assert.equal(response.status, 201, JSON.stringify({ body: await response.clone().json(), errors }))
   const { tenant, admin } = await response.json()
   const flags = (await root.query('SELECT key, allowed, enabled FROM "TenantModule" WHERE "tenantId"=$1', [tenant.id])).rows
-  assert.equal(flags.length, 4)
+  assert.deepEqual(flags.map(row => row.key).sort(), ["appointments", "crm", "inventory", "leaves", "paymentPlans", "realEstate", "salesDocuments", "services", "shifts"])
   assert.deepEqual(flags.filter(row => row.allowed), [{ key: "crm", allowed: true, enabled: true }])
+  assert.ok(flags.filter(row => row.key !== "crm").every(row => !row.allowed && !row.enabled))
   assert.equal((await root.query('SELECT id FROM "User" WHERE id=$1 AND "tenantId"=$2 AND role=$3', [admin.id, tenant.id, "ADMIN"])).rowCount, 1)
   assert.equal((await root.query('SELECT id FROM "AppSetting" WHERE "tenantId"=$1', [tenant.id])).rowCount, 1)
   assert.equal((await root.query('SELECT id FROM "AuditLog" WHERE event=$1 AND "entityId"=$2 AND "tenantId"=$3', ["tenant.created", tenant.id, "provision_platform"])).rowCount, 1)
@@ -66,7 +68,7 @@ test("platform admin provisions a tenant with admin, settings and audit under en
   const result = await listed.json()
   assert.ok(result.items.some(item => item.id === tenant.id))
   assert.equal(result.items.find(item => item.id === tenant.id).userCount, 1)
-  assert.ok(result.items.every(item => item.slug !== "platform"))
+  assert.ok(result.items.every(item => item.slug !== "provision-platform"))
 })
 
 test("duplicate admin detection works across tenants without partial provisioning", async () => {
@@ -122,8 +124,8 @@ test("provisioning bypass does not escape into subsequent unscoped database read
 test("platform module API grants only to authenticated current platform administrators", async () => {
   const target = (await root.query('SELECT id FROM "Tenant" WHERE slug=$1', ["provision-business"])).rows[0].id
   const context = { params: Promise.resolve({ id: target }) }
-  const url = `http://platform.localhost/api/tenants/${target}/modules`
-  const req = (method, data) => new Request(url, { method, headers: { host: "platform.localhost", "Content-Type": "application/json" }, ...(data ? { body: JSON.stringify(data) } : {}) })
+  const url = `http://provision-platform.localhost/api/tenants/${target}/modules`
+  const req = (method, data) => new Request(url, { method, headers: { host: "provision-platform.localhost", "Content-Type": "application/json" }, ...(data ? { body: JSON.stringify(data) } : {}) })
   assert.equal((await sessions.run(null, () => moduleGet(req("GET"), context))).status, 401)
   const orgSession = { user: { id: "provision_org_admin", tenantId: "provision_platform", role: "STAFF" } }
   assert.equal((await sessions.run(orgSession, () => modulePatch(req("PATCH", { key: "realEstate", allowed: true }), context))).status, 403)

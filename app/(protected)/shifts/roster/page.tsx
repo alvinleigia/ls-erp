@@ -1,4 +1,11 @@
 "use client"
+import { useBusinessModules } from "@/platform/module-provider"
+
+import { ActionDialogContent } from "@/components/erp/action-dialog"
+
+import { PageHeader, pageClass } from "@/components/erp/page"
+
+import { Select, Checkbox } from "@/components/erp/controls"
 
 import * as React from "react"
 import { useSearchParams } from "next/navigation"
@@ -15,14 +22,7 @@ import {
 } from "@/lib/formatting"
 import { Button } from "@/components/ui/button"
 import { SearchableSelect } from "@/components/searchable-select"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
+import { Dialog } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { TimePicker } from "@/components/ui/time-picker"
@@ -147,6 +147,12 @@ const hasAnyConfiguredFlexibleDay = (days: FlexibleDraftDay[]) =>
   days.some((day) => !day.isOff || day.slots.length > 0)
 
 export default function RosterPage() {
+  const { can, enabled } = useBusinessModules()
+  const canEditRoster = can("shiftRoster.edit"), canArchiveRoster = can("shiftRoster.archive")
+  const canCreatePlan = can("shiftPlans.create"), canEditPlan = can("shiftPlans.edit"), canArchivePlan = can("shiftPlans.archive")
+  const readTemplates = can("shiftTemplates.read"), readSchedules = can("shiftSchedules.read"), readPlans = can("shiftPlans.read")
+  const readLeaves = enabled("leaves") && can("leaveApprovals.read")
+
   const searchParams = useSearchParams()
   const debugEnabled = searchParams.get("debug") === "1"
   const scheduleRef = React.useRef<ScheduleComponent | null>(null)
@@ -210,7 +216,7 @@ export default function RosterPage() {
 
   const loadStaff = React.useCallback(async () => {
     try {
-      const response = await fetch("/api/users?role=STAFF&pageSize=100")
+      const response = await fetch("/api/directory?role=STAFF&pageSize=100")
       if (!response.ok) {
         throw new Error("Failed to load staff.")
       }
@@ -225,7 +231,7 @@ export default function RosterPage() {
 
   const loadSettings = React.useCallback(async () => {
     try {
-      const response = await fetch("/api/settings")
+      const response = await fetch("/api/settings/operations")
       if (!response.ok) {
         return
       }
@@ -247,6 +253,7 @@ export default function RosterPage() {
   }, [])
 
   const loadTemplates = React.useCallback(async () => {
+    if (!readTemplates) { setTemplates([]); return }
     try {
       const response = await fetch("/api/shifts/templates?includeInactive=true", {
         cache: "no-store",
@@ -261,9 +268,10 @@ export default function RosterPage() {
       console.error(error)
       toast.error("Unable to load shift templates.")
     }
-  }, [])
+  }, [readTemplates])
 
   const loadDefaultSchedule = React.useCallback(async () => {
+    if (!readSchedules) { setDefaultSchedule(null); return }
     try {
       const response = await fetch(
         "/api/shifts/schedules?isDefault=true&page=1&pageSize=1",
@@ -279,10 +287,11 @@ export default function RosterPage() {
       console.error(error)
       setDefaultSchedule(null)
     }
-  }, [])
+  }, [readSchedules])
 
   const loadStaffAssignments = React.useCallback(
     async (staffIds: string[], rangeStart: string, rangeEnd: string) => {
+      if (!readSchedules) { setStaffAssignments({}); return }
       try {
         const response = await fetch(
           `/api/shifts/assignments?startDate=${rangeStart}&endDate=${rangeEnd}&staffIds=${staffIds.join(
@@ -308,7 +317,7 @@ export default function RosterPage() {
         toast.error("Unable to load staff schedules.")
       }
     },
-    []
+    [readSchedules]
   )
 
   React.useEffect(() => {
@@ -472,6 +481,7 @@ export default function RosterPage() {
   }, [loadFlexibleWeekPlans])
 
   const loadFlexiblePatterns = React.useCallback(async () => {
+    if (!readPlans) { setFlexiblePatterns([]); return }
     if (!availabilityDates.length || !staff.length) return
     const staffIds =
       staffFilter === "all"
@@ -497,13 +507,14 @@ export default function RosterPage() {
       setFlexiblePatterns([])
       toast.error("Unable to load flexible recurring patterns.")
     }
-  }, [availabilityDates, staff, staffFilter])
+  }, [availabilityDates, staff, staffFilter, readPlans])
 
   React.useEffect(() => {
     void loadFlexiblePatterns()
   }, [loadFlexiblePatterns])
 
   const loadApprovedLeaves = React.useCallback(async () => {
+    if (!readLeaves) { setApprovedLeaves([]); return }
     if (!availabilityDates.length || !staff.length) return
     const start = toISODate(availabilityDates[0])
     const end = toISODate(availabilityDates[availabilityDates.length - 1])
@@ -533,7 +544,7 @@ export default function RosterPage() {
       toast.error("Unable to load approved leaves.")
       setApprovedLeaves([])
     }
-  }, [availabilityDates, staff, staffFilter])
+  }, [availabilityDates, staff, staffFilter, readLeaves])
 
   React.useEffect(() => {
     void loadApprovedLeaves()
@@ -613,7 +624,7 @@ export default function RosterPage() {
       maps[member.id] = baseMap
     }
     return maps
-  }, [availabilityDates, buildScheduleMap, defaultSchedule, filteredStaff, staffAssignments])
+  }, [availabilityDates, defaultSchedule, filteredStaff, staffAssignments])
 
   const overrideMap = React.useMemo(() => {
     const map: Record<string, Record<string, string | null>> = {}
@@ -771,7 +782,7 @@ export default function RosterPage() {
       }
       return null
     },
-    [formatDateKey, getHistoryDay, overrideMap, scheduleMaps, staffSchedulingModeMap, templateMap]
+    [getHistoryDay, overrideMap, scheduleMaps, staffSchedulingModeMap, templateMap]
   )
 
   const getStaffPeriodsForDate = React.useCallback(
@@ -906,11 +917,9 @@ export default function RosterPage() {
       return []
     },
     [
-      buildShiftSegments,
       getActiveRecurringPatternForDate,
       flexibleWeekPlanMap,
       flexibleSlotMap,
-      formatDateKey,
       getHistoryDay,
       overrideMap,
       scheduleMaps,
@@ -1074,9 +1083,9 @@ export default function RosterPage() {
     approvedLeaves,
     availabilityDates,
     filteredStaff,
-    formatDateKey,
     getStaffPeriodsForDate,
     getStaffTemplateForDate,
+    overrideMap,
     settings,
     templateColorMap,
   ])
@@ -1244,6 +1253,7 @@ export default function RosterPage() {
 
   const openOverrideEditor = React.useCallback(
     (staffId: string, dateValue: Date) => {
+      if (!canEditRoster && !canCreatePlan && !canEditPlan) return
       if (isPastDate(dateValue)) {
         toast.error("Past dates cannot be edited.")
         return
@@ -1276,6 +1286,7 @@ export default function RosterPage() {
       setOverrideOpen(true)
     },
     [
+      canEditRoster, canCreatePlan, canEditPlan,
       getFlexibleDraftForEffectiveWeek,
       getRecurringDraftFromPattern,
       isPastDate,
@@ -1311,7 +1322,7 @@ export default function RosterPage() {
             {data.leaveReason ? <div>Reason: {data.leaveReason}</div> : null}
           </div>
         ) : null}
-        {data.staffId && !data.isLeave ? (
+        {data.staffId && !data.isLeave && (canEditRoster || canCreatePlan || canEditPlan) ? (
           <Button
             type="button"
             variant="secondary"
@@ -1323,7 +1334,7 @@ export default function RosterPage() {
         ) : null}
       </div>
     )
-  }, [openOverrideEditor, settings])
+  }, [openOverrideEditor, settings, canEditRoster, canCreatePlan, canEditPlan])
 
   const staffResources = React.useMemo(
     () =>
@@ -1368,7 +1379,6 @@ export default function RosterPage() {
     debugEnabled,
     filteredStaff,
     getStaffPeriodsForDate,
-    settings.dateFormat,
     settings,
   ])
 
@@ -2082,16 +2092,9 @@ export default function RosterPage() {
 
 
   return (
-    <div className="flex flex-col gap-6 px-6 py-6">
-      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold">Roster</h1>
-          <p className="text-sm text-muted-foreground">
-            View staff schedules in a monthly roster.
-          </p>
-        </div>
-        <div />
-      </div>
+    <div className={pageClass}>
+      {(!readTemplates || !readSchedules || !readPlans || !readLeaves) && <p role="status" className="text-sm text-muted-foreground">This roster shows only the schedules, plans and leaves your role can access. Hidden records still apply to booking availability.</p>}
+      <PageHeader title={<> Roster </>} description={<> View staff schedules in a monthly roster. </>} />
 
       <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
         <div className="flex flex-col gap-2">
@@ -2112,7 +2115,7 @@ export default function RosterPage() {
           />
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {rosterMode === "grid" ? (
             <>
               <Button
@@ -2387,16 +2390,40 @@ export default function RosterPage() {
           }
         }}
       >
-        <DialogContent className="max-w-3xl">
-          <DialogHeader>
-            <DialogTitle>{useFlexibleSlot ? "Edit flexible availability" : "Change shift"}</DialogTitle>
-            <DialogDescription>
-              {useFlexibleSlot
+        <ActionDialogContent title={<>{useFlexibleSlot ? "Edit flexible availability" : "Change shift"}</>} description={<>{useFlexibleSlot
                 ? "Configure weekly overrides or recurring custom patterns for flexible staff."
-                : "Apply a shift template to a date range for this staff member."}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
+                : "Apply a shift template to a date range for this staff member."}</>} className="sm:max-w-3xl" actions={<> <Button variant="outline" onClick={() => setOverrideOpen(false)}>
+              Cancel
+            </Button><Button
+              variant="outline"
+              onClick={clearOverride}
+              disabled={
+                !(useFlexibleSlot && flexibleEditorMode === "RECURRING_PATTERN" ? canArchivePlan : canArchiveRoster) ||
+                useFlexibleSlot &&
+                flexibleEditorMode === "WEEK_OVERRIDE" &&
+                !hasWeeklyOverrideInContext
+              }
+            >
+              {useFlexibleSlot
+                ? flexibleEditorMode === "WEEK_OVERRIDE"
+                  ? "Clear weekly override"
+                  : "Deactivate recurring pattern"
+                : "Clear override"}
+            </Button>{useFlexibleSlot &&
+            flexibleEditorMode === "RECURRING_PATTERN" &&
+            Boolean(recurringPatternId) ? (
+              <Button disabled={!canCreatePlan} variant="outline" onClick={() => setSaveAsNewConfirmOpen(true)}>
+                Save as new pattern
+              </Button>
+            ) : null}<Button disabled={useFlexibleSlot && flexibleEditorMode === "RECURRING_PATTERN" ? !(recurringPatternId ? canEditPlan : canCreatePlan) : !canEditRoster} onClick={() => submitOverride(false)}>
+              {useFlexibleSlot
+                ? flexibleEditorMode === "WEEK_OVERRIDE"
+                  ? "Save weekly override"
+                  : recurringPatternId
+                    ? "Update recurring pattern"
+                    : "Save recurring pattern"
+                : "Save override"}
+            </Button> </>}><div className="space-y-4">
             <div className="space-y-1">
               <Label className="text-xs text-muted-foreground">Staff</Label>
               <SearchableSelect
@@ -2439,11 +2466,11 @@ export default function RosterPage() {
             </div>
             <div className="space-y-1">
               <Label className="text-xs text-muted-foreground">Mode</Label>
-              <select
+              <Select aria-label="Mode"
                 className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
                 value={useFlexibleSlot ? "FLEXIBLE" : "TEMPLATE"}
-                onChange={(event) => {
-                  const nextFlexible = event.target.value === "FLEXIBLE"
+                onValueChange={(value) => {
+                  const nextFlexible = value === "FLEXIBLE"
                   if (nextFlexible && !isOverrideStaffFlexible) {
                     setUseFlexibleSlot(false)
                     return
@@ -2484,7 +2511,7 @@ export default function RosterPage() {
                 {isOverrideStaffFlexible ? (
                   <option value="FLEXIBLE">Flexible weekly plan</option>
                 ) : null}
-              </select>
+              </Select>
             </div>
             {!useFlexibleSlot ? (
             <div className="space-y-1">
@@ -2509,24 +2536,24 @@ export default function RosterPage() {
               <div className="space-y-3 rounded-md border p-3">
                 <div className="space-y-1">
                   <Label className="text-xs text-muted-foreground">Flexible plan type</Label>
-                  <select
+                  <Select aria-label="Flexible plan type"
                     className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
                     value={flexibleEditorMode}
-                    onChange={(event) =>
+                    onValueChange={(value) =>
                       setFlexibleEditorMode(
-                        event.target.value as "WEEK_OVERRIDE" | "RECURRING_PATTERN"
+                        value as "WEEK_OVERRIDE" | "RECURRING_PATTERN"
                       )
                     }
                   >
                     <option value="WEEK_OVERRIDE">Weekly override (current week)</option>
                     <option value="RECURRING_PATTERN">Recurring base pattern</option>
-                  </select>
+                  </Select>
                 </div>
                 {flexibleEditorMode === "RECURRING_PATTERN" ? (
                   <div className="grid gap-2 rounded-md border p-2 sm:grid-cols-2">
                     <div className="space-y-1 sm:col-span-2">
                       <Label className="text-[10px] text-muted-foreground">Pattern name</Label>
-                      <Input
+                      <Input aria-label="Pattern name"
                         value={recurringPatternName}
                         onChange={(event) => setRecurringPatternName(event.target.value)}
                         placeholder="Optional pattern name"
@@ -2534,7 +2561,7 @@ export default function RosterPage() {
                     </div>
                     <div className="space-y-1">
                       <Label className="text-[10px] text-muted-foreground">Valid from</Label>
-                      <Input
+                      <Input aria-label="Valid from"
                         type="date"
                         value={recurringValidFrom}
                         onChange={(event) => setRecurringValidFrom(event.target.value)}
@@ -2542,7 +2569,7 @@ export default function RosterPage() {
                     </div>
                     <div className="space-y-1">
                       <Label className="text-[10px] text-muted-foreground">Valid to</Label>
-                      <Input
+                      <Input aria-label="Valid to"
                         type="date"
                         value={recurringValidTo}
                         onChange={(event) => setRecurringValidTo(event.target.value)}
@@ -2550,7 +2577,7 @@ export default function RosterPage() {
                     </div>
                     <div className="space-y-1">
                       <Label className="text-[10px] text-muted-foreground">Cycle weeks</Label>
-                      <Input
+                      <Input aria-label="Cycle weeks"
                         type="number"
                         min={1}
                         max={12}
@@ -2579,11 +2606,11 @@ export default function RosterPage() {
                     </div>
                     <div className="space-y-1">
                       <Label className="text-[10px] text-muted-foreground">Editing week</Label>
-                      <select
+                      <Select aria-label="Editing week"
                         className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
                         value={recurringSelectedWeekIndex}
-                        onChange={(event) =>
-                          setRecurringSelectedWeekIndex(Number(event.target.value) || 1)
+                        onValueChange={(value) =>
+                          setRecurringSelectedWeekIndex(Number(value) || 1)
                         }
                       >
                         {Array.from({ length: recurringCycleLength }, (_, index) => (
@@ -2591,7 +2618,7 @@ export default function RosterPage() {
                             Week {index + 1}
                           </option>
                         ))}
-                      </select>
+                      </Select>
                     </div>
                   </div>
                 ) : null}
@@ -2606,8 +2633,7 @@ export default function RosterPage() {
                       <div className="mb-2 flex items-center justify-between">
                         <div className="text-sm font-medium">{day.day}</div>
                         <label className="flex items-center gap-2 text-xs">
-                          <input
-                            type="checkbox"
+                          <Checkbox
                             checked={day.isOff}
                             onChange={(event) => setFlexibleDayOff(day.day, event.target.checked)}
                           />
@@ -2778,17 +2804,17 @@ export default function RosterPage() {
                 <div className="grid gap-2 sm:grid-cols-[1fr_auto] sm:items-end">
                   <div className="space-y-1">
                     <Label className="text-xs text-muted-foreground">Preview mode</Label>
-                    <select
+                    <Select aria-label="Preview mode"
                       className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
                       value={recurringImpactMode}
-                      onChange={(event) => {
-                        setRecurringImpactMode(event.target.value as "UPDATE" | "CLONE")
+                      onValueChange={(value) => {
+                        setRecurringImpactMode(value as "UPDATE" | "CLONE")
                         setRecurringImpactPreview(null)
                       }}
                     >
                       <option value="UPDATE">Update current pattern</option>
                       <option value="CLONE">Save as new pattern</option>
-                    </select>
+                    </Select>
                   </div>
                   <Button
                     type="button"
@@ -2827,8 +2853,7 @@ export default function RosterPage() {
             ) : null}
             {!useFlexibleSlot ? (
             <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
+              <Checkbox
                 checked={overrideUnavailable}
                 onChange={(event) => {
                   const next = event.target.checked
@@ -2844,8 +2869,7 @@ export default function RosterPage() {
             ) : null}
             {!useFlexibleSlot ? (
             <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
+              <Checkbox
                 checked={overrideSkipWeekOff}
                 onChange={(event) => setOverrideSkipWeekOff(event.target.checked)}
                 disabled={useFlexibleSlot}
@@ -2853,77 +2877,26 @@ export default function RosterPage() {
               Skip holidays / week off
             </label>
             ) : null}
-          </div>
-          <DialogFooter className="pt-2 sm:flex-wrap">
-            <Button variant="outline" onClick={() => setOverrideOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              variant="outline"
-              onClick={clearOverride}
-              disabled={
-                useFlexibleSlot &&
-                flexibleEditorMode === "WEEK_OVERRIDE" &&
-                !hasWeeklyOverrideInContext
-              }
-            >
-              {useFlexibleSlot
-                ? flexibleEditorMode === "WEEK_OVERRIDE"
-                  ? "Clear weekly override"
-                  : "Deactivate recurring pattern"
-                : "Clear override"}
-            </Button>
-            {useFlexibleSlot &&
-            flexibleEditorMode === "RECURRING_PATTERN" &&
-            Boolean(recurringPatternId) ? (
-              <Button variant="outline" onClick={() => setSaveAsNewConfirmOpen(true)}>
-                Save as new pattern
-              </Button>
-            ) : null}
-            <Button onClick={() => submitOverride(false)}>
-              {useFlexibleSlot
-                ? flexibleEditorMode === "WEEK_OVERRIDE"
-                  ? "Save weekly override"
-                  : recurringPatternId
-                    ? "Update recurring pattern"
-                    : "Save recurring pattern"
-                : "Save override"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
+          </div></ActionDialogContent>
       </Dialog>
       <Dialog open={saveAsNewConfirmOpen} onOpenChange={setSaveAsNewConfirmOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Save as new recurring pattern?</DialogTitle>
-            <DialogDescription>
-              This keeps the current pattern and creates a new active pattern version for this staff member.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter className="pt-2">
-            <Button variant="outline" onClick={() => setSaveAsNewConfirmOpen(false)}>
+        <ActionDialogContent title={<>Save as new recurring pattern?</>} description={<>This keeps the current pattern and creates a new active pattern version for this staff member.
+            </>} className="sm:max-w-md" actions={<> <Button variant="outline" onClick={() => setSaveAsNewConfirmOpen(false)}>
               Cancel
-            </Button>
-            <Button
-              onClick={() => {
+            </Button><Button
+              disabled={!canCreatePlan} onClick={() => {
                 setSaveAsNewConfirmOpen(false)
                 void submitOverride(true)
               }}
             >
               Confirm and save new
-            </Button>
-          </DialogFooter>
-        </DialogContent>
+            </Button> </>}></ActionDialogContent>
       </Dialog>
       <Dialog open={conflictsOpen} onOpenChange={setConflictsOpen}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Resolve appointment conflicts</DialogTitle>
-            <DialogDescription>
-              The shift change overlaps existing appointments. Choose how to handle them.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
+        <ActionDialogContent title={<>Resolve appointment conflicts</>} description={<>The shift change overlaps existing appointments. Choose how to handle them.
+            </>} className="sm:max-w-lg" actions={<> <Button variant="outline" onClick={() => setConflictsOpen(false)}>
+              Close
+            </Button><Button disabled={!enabled("appointments") || !(conflictAction === "cancel" ? can("appointments.archive") : enabled("services") && can("services.read") && can("appointments.edit"))} onClick={resolveConflicts}>Apply resolution</Button> </>}><div className="space-y-4">
             <div className="rounded-md border p-3 text-sm text-muted-foreground">
               {conflicts.length} appointment{conflicts.length === 1 ? "" : "s"} in conflict.
             </div>
@@ -2943,17 +2916,17 @@ export default function RosterPage() {
             </div>
             <div className="space-y-2">
               <Label className="text-xs text-muted-foreground">Action</Label>
-              <select
+              <Select aria-label="Action"
                 className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
                 value={conflictAction}
-                onChange={(event) =>
-                  setConflictAction(event.target.value as "cancel" | "reassign" | "reschedule")
+                onValueChange={(value) =>
+                  setConflictAction(value as "cancel" | "reassign" | "reschedule")
                 }
               >
                 <option value="cancel">Cancel appointments</option>
                 <option value="reassign">Reassign to another staff</option>
                 <option value="reschedule">Reschedule to another time</option>
-              </select>
+              </Select>
             </div>
             {conflictAction === "reassign" ? (
               <div className="space-y-1">
@@ -2974,7 +2947,7 @@ export default function RosterPage() {
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="space-y-1">
                   <Label className="text-xs text-muted-foreground">New date</Label>
-                  <Input
+                  <Input aria-label="New date"
                     type="date"
                     value={conflictRescheduleDate}
                     onChange={(event) => setConflictRescheduleDate(event.target.value)}
@@ -2990,14 +2963,7 @@ export default function RosterPage() {
                 </div>
               </div>
             ) : null}
-          </div>
-          <DialogFooter className="pt-2">
-            <Button variant="outline" onClick={() => setConflictsOpen(false)}>
-              Close
-            </Button>
-            <Button onClick={resolveConflicts}>Apply resolution</Button>
-          </DialogFooter>
-        </DialogContent>
+          </div></ActionDialogContent>
       </Dialog>
       {debugEnabled && debugSummary ? (
         <div className="rounded-lg border border-dashed bg-muted/40 p-4 text-xs text-muted-foreground">

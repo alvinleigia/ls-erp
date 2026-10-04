@@ -1,4 +1,5 @@
 "use client"
+import { useCurrentResourceAction } from "@/platform/access/view-guard"
 
 import * as React from "react"
 import { toast } from "sonner"
@@ -38,6 +39,7 @@ import {
 } from "./settings-form-model"
 
 export default function SettingsPage() {
+  const canEdit = useCurrentResourceAction("edit")
   const InlineField = ({
     label,
     children,
@@ -271,6 +273,8 @@ export default function SettingsPage() {
         </p>
       </div>
 
+      {!canEdit && <p role="status" className="text-sm text-muted-foreground">You have read-only access to business settings.</p>}
+      <fieldset disabled={!canEdit} className="space-y-6">
       <div className="rounded-xl border bg-card p-6">
         <div className="grid gap-4 sm:grid-cols-2">
           <FormField id="settings-locale" label="Locale" error={errors.locale}>
@@ -750,10 +754,11 @@ export default function SettingsPage() {
       </div>
 
       <div className="flex justify-end">
-        <Button onClick={save} loading={saving} loadingText="Saving...">
+        <Button disabled={!canEdit} onClick={save} loading={saving} loadingText="Saving...">
           Save settings
         </Button>
       </div>
+      </fieldset>
     </div>
   )
 }

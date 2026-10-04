@@ -1,3 +1,6 @@
+import { withBusinessApi, readJson } from "@/platform/business-api"
+import { BusinessError } from "@/platform/policy"
+import { requireBusinessModule } from "@/platform/module-server"
 import { randomUUID } from "crypto"
 import { NextResponse } from "next/server"
 import {
@@ -2542,7 +2545,7 @@ const clearModulesData = async (tenantId: string, modules: Set<ClearModule>) => 
   return { deleted, preservedAdmins }
 }
 
-export async function POST(request: Request) {
+async function handlePOST(request: Request) {
   const logContext = createApiLogContext(request)
   logApiRequestStart(logContext, request)
 
@@ -2735,4 +2738,35 @@ export async function POST(request: Request) {
     const response = NextResponse.json({ error: "Unable to process seed request." }, { status: 500 })
     return withRequestId(response, logContext.requestId)
   }
+}
+
+// Maintenance must not bypass module switches or a restricted access role.
+export async function POST(request: Request) {
+  return withBusinessApi(request, async actor => {
+    if (!canManageUsers(actor.role as Role) || actor.permissions !== undefined) throw new BusinessError(403, "Seed maintenance requires unrestricted administrator or manager access.")
+    const parsed = requestSchema.safeParse(await readJson(request.clone()))
+    if (parsed.success) {
+      const input = parsed.data
+      const clearModules = expandClearModules(new Set(input.modules ?? []), "include_dependents").expanded
+      const touchesInventory = input.action === "clear" || input.action === "previewClear" ||
+        ((input.action === "clearModules" || input.action === "previewModulesClear") && clearModules.some(key => key === "inventory" || key === "purchases")) ||
+        (input.action === "seed" && (!input.groups?.length || input.groups.some(key => key === "inventoryCatalog" || key === "purchases")))
+      const touchesServices = input.action === "clear" || input.action === "previewClear" ||
+        ((input.action === "clearModules" || input.action === "previewModulesClear") && clearModules.includes("services")) ||
+        (input.action === "seed" && (!input.groups?.length || input.groups.some(key => key === "serviceCatalog" || key === "appointments")))
+      const touchesAppointments = input.action === "clear" || input.action === "previewClear" ||
+        ((input.action === "clearModules" || input.action === "previewModulesClear") && clearModules.some(key => key === "appointments" || key === "coupons")) ||
+        (input.action === "seed" && (!input.groups?.length || input.groups.some(key => key === "appointments" || key === "coupons")))
+      for (const key of ["leaves", "shifts"] as const) {
+        const touched = input.action === "clear" || input.action === "previewClear" ||
+          ((input.action === "clearModules" || input.action === "previewModulesClear") && ((clearModules as readonly string[]).includes(key) || clearModules.includes("users"))) ||
+          (input.action === "seed" && (!input.groups?.length || (input.groups as readonly string[]).includes(key) || (key === "shifts" && input.groups.includes("appointments"))))
+        if (touched) await requireBusinessModule(prisma, actor.tenantId, key)
+      }
+      if (touchesAppointments) await requireBusinessModule(prisma, actor.tenantId, "appointments")
+      if (touchesServices) await requireBusinessModule(prisma, actor.tenantId, "services")
+      if (touchesInventory) await requireBusinessModule(prisma, actor.tenantId, "inventory")
+    }
+    return handlePOST(request)
+  })
 }

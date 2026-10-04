@@ -1,4 +1,16 @@
 "use client"
+import { useBusinessModules } from "@/platform/module-provider"
+import { useCurrentResourceAction } from "@/platform/access/view-guard"
+
+import { DraftPanel } from "@/components/erp/record-detail"
+import { Section } from "@/components/erp/section"
+
+import { ActionDialogContent } from "@/components/erp/action-dialog"
+
+import { PageHeader, pageClass, Surface, TableToolbar } from "@/components/erp/page"
+import { TablePagination } from "@/components/erp/pagination"
+
+import { Select } from "@/components/erp/controls"
 
 import * as React from "react"
 import {
@@ -15,18 +27,11 @@ import Link from "next/link"
 import { toast } from "sonner"
 
 import { LeaveRequestDetailsDialog } from "../request-details-dialog"
-import { DataTable, DataTablePagination, DataTableToolbar } from "@/components/data-table"
+import { DataTable } from "@/components/data-table"
 import { FormField } from "@/components/form-field"
 import { SearchableSelect } from "@/components/searchable-select"
 import { Button } from "@/components/ui/button"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
+import { Dialog } from "@/components/ui/dialog"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -80,6 +85,10 @@ const SortIndicator = ({ value }: { value: false | "asc" | "desc" }) => {
 }
 
 export default function LeaveRequestsPage() {
+  const { can, enabled } = useBusinessModules()
+  const canCreate = useCurrentResourceAction("create")
+  const canArchive = useCurrentResourceAction("archive")
+
   const { data: session } = useSession()
   const router = useRouter()
   const role = (session?.user as { role?: string })?.role
@@ -91,6 +100,7 @@ export default function LeaveRequestsPage() {
     }
   }, [role, router])
 
+  const [formError, setFormError] = React.useState("")
   const [loading, setLoading] = React.useState(true)
   const [rows, setRows] = React.useState<LeaveRequestRow[]>([])
   const [totalRows, setTotalRows] = React.useState(0)
@@ -204,28 +214,34 @@ export default function LeaveRequestsPage() {
   }, [cancelReason, cancelTarget, loadRows])
 
   const createRequest = async () => {
-    setCreating(true)
-    clearErrors()
-    const response = await fetch("/api/leaves/requests", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(formValues),
-    })
-    if (!response.ok) {
-      const data = (await response.json().catch(() => ({}))) as {
-        error?: string
-        details?: { fieldErrors?: Record<string, string[]> }
+    setFormError(""); setCreating(true)
+    try {
+      clearErrors()
+      const response = await fetch("/api/leaves/requests", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(formValues),
+      })
+      if (!response.ok) {
+        const data = (await response.json().catch(() => ({}))) as {
+          error?: string
+          details?: { fieldErrors?: Record<string, string[]> }
+        }
+        setErrorsFromResponse(data)
+        setFormError(data.error ?? "Unable to create leave request."); toast.error(data.error ?? "Unable to create leave request.")
+        setCreating(false)
+        return
       }
-      setErrorsFromResponse(data)
-      toast.error(data.error ?? "Unable to create leave request.")
+      toast.success("Leave request submitted.")
+      setFormValues(defaultFormValues)
       setCreating(false)
-      return
+      setCreateOpen(false)
+      await loadRows()
+    } catch {
+      setFormError("Unable to save. Please try again.")
+    } finally {
+      setCreating(false)
     }
-    toast.success("Leave request submitted.")
-    setFormValues(defaultFormValues)
-    setCreating(false)
-    setCreateOpen(false)
-    await loadRows()
   }
 
   const columns = React.useMemo<ColumnDef<LeaveRequestRow>[]>(
@@ -304,11 +320,11 @@ export default function LeaveRequestsPage() {
         header: "",
         enableHiding: false,
         cell: ({ row }) => {
-          const canCancel = row.original.status === "PENDING" || row.original.status === "APPROVED"
+          const canCancel = canArchive && (row.original.status === "PENDING" || row.original.status === "APPROVED")
           return (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button size="icon" variant="ghost">
+                <Button size="icon" variant="ghost" aria-label="Record actions">
                   <MoreHorizontalIcon className="h-4 w-4" />
                 </Button>
               </DropdownMenuTrigger>
@@ -331,11 +347,10 @@ export default function LeaveRequestsPage() {
         },
       },
     ],
-    [openDetails, requestCancel]
+    [openDetails, requestCancel, canArchive]
   )
 
   const totalPages = Math.max(1, Math.ceil(totalRows / pagination.pageSize))
-  // eslint-disable-next-line react-hooks/incompatible-library
   const table = useReactTable({
     data: rows,
     columns,
@@ -352,57 +367,36 @@ export default function LeaveRequestsPage() {
   })
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold">Leave Requests</h1>
-          <p className="text-sm text-muted-foreground">
-            Submit leave requests and track approval status.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          {canManage ? (
+    <div className={pageClass}>
+      <PageHeader title={<> Leave Requests </>} description={<> Submit leave requests and track approval status. </>} actions={<> <div className="flex items-center gap-2">
+          {canManage && enabled("leaves") && can("leaveApprovals.read") ? (
             <Button variant="outline" asChild>
               <Link href="/leaves/approvals">Approval queue</Link>
             </Button>
           ) : null}
-          <Button onClick={() => setCreateOpen(true)}>Apply leave</Button>
-        </div>
-      </div>
+          <Button disabled={!canCreate} onClick={() => { setFormError(""); setCreateOpen(true) }}>Apply leave</Button>
+        </div> </>} />
 
-      <DataTableToolbar table={table} searchPlaceholder="Search by reason or leave type">
-        <select
+      <Surface>
+      <TableToolbar table={table} searchPlaceholder="Search by reason or leave type">
+        <Select
           className="h-9 rounded-md border border-input bg-background px-3 text-sm"
           value={statusFilter}
-          onChange={(event) => setStatusFilter(event.target.value as LeaveRequestStatus | "all")}
+          onValueChange={(value) => setStatusFilter(value as LeaveRequestStatus | "all")}
         >
           {statusOptions.map((item) => (
             <option key={item} value={item}>
               {item === "all" ? "All statuses" : item}
             </option>
           ))}
-        </select>
-      </DataTableToolbar>
+        </Select>
+      </TableToolbar>
 
       <DataTable table={table} loading={loading} emptyMessage="No leave requests found." />
-      <DataTablePagination table={table} totalRows={totalRows} />
+      <TablePagination table={table} totalRows={totalRows} />
+      </Surface>
 
-      <Dialog
-        open={createOpen}
-        onOpenChange={(open) => {
-          setCreateOpen(open)
-          if (!open) {
-            setFormValues(defaultFormValues)
-            clearErrors()
-          }
-        }}
-      >
-        <DialogContent className="max-w-xl">
-          <DialogHeader>
-            <DialogTitle>Apply leave</DialogTitle>
-            <DialogDescription>Submit a new leave request.</DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-3">
+      {canCreate && createOpen && <DraftPanel title="Apply leave" description="Submit a leave request for review." fingerprint={formValues} saving={creating} error={formError} saveLabel="Submit request" onClose={() => { setCreateOpen(false); setFormValues(defaultFormValues); clearErrors() }} onSubmit={() => void createRequest()}><Section title="Request details"><div className="grid gap-3">
             <FormField id="leave-definition-id" label="Leave type" error={errors.leaveDefinitionId}>
               <SearchableSelect
                 id="leave-definition-id"
@@ -445,17 +439,7 @@ export default function LeaveRequestsPage() {
                 placeholder="Optional"
               />
             </FormField>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setCreateOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={() => void createRequest()} loading={creating} loadingText="Submitting...">
-              Submit request
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </div></Section></DraftPanel>}
 
       <Dialog
         open={cancelOpen}
@@ -467,33 +451,21 @@ export default function LeaveRequestsPage() {
           }
         }}
       >
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Cancel leave request</DialogTitle>
-            <DialogDescription>
-              {cancelTarget
+        <ActionDialogContent title={<>Cancel leave request</>} description={<>{cancelTarget
                 ? `Cancel ${cancelTarget.leaveDefinition.code} request from ${new Date(
                     cancelTarget.startDate
                   ).toLocaleDateString()} to ${new Date(cancelTarget.endDate).toLocaleDateString()}?`
-                : "Cancel this leave request?"}
-            </DialogDescription>
-          </DialogHeader>
-          <FormField id="cancel-reason" label="Cancel reason (optional)">
+                : "Cancel this leave request?"}</>} className="sm:max-w-md" actions={<> <Button variant="outline" onClick={() => setCancelOpen(false)} disabled={canceling}>
+              Back
+            </Button><Button variant="destructive" onClick={() => void confirmCancel()} disabled={canceling}>
+              {canceling ? "Canceling..." : "Cancel request"}
+            </Button> </>}><FormField id="cancel-reason" label="Cancel reason (optional)">
             <Input
               id="cancel-reason"
               value={cancelReason}
               onChange={(event) => setCancelReason(event.target.value)}
             />
-          </FormField>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setCancelOpen(false)} disabled={canceling}>
-              Back
-            </Button>
-            <Button variant="destructive" onClick={() => void confirmCancel()} disabled={canceling}>
-              {canceling ? "Canceling..." : "Cancel request"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
+          </FormField></ActionDialogContent>
       </Dialog>
 
       <LeaveRequestDetailsDialog

@@ -12,17 +12,17 @@ import { prisma } from "@/lib/prisma"
 import { captureRosterHistoryUpToYesterday } from "@/lib/roster-history"
 import { shiftScheduleSchema } from "@/lib/validation"
 import { canManageUsers, type Role } from "@/lib/permissions"
-import { requireTenantSession } from "@/lib/tenant-auth"
+import { withWorkforceApi, workforceSession } from "@/modules/workforce/api"
+import type { BusinessActor } from "@/platform/policy"
 
-export async function PATCH(
+async function handlePATCH(
   request: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
+  { params }: { params: Promise<{ id: string }> }, actor: BusinessActor) {
   const logContext = createApiLogContext(request)
   logApiRequestStart(logContext, request)
 
   const { id } = await params
-  const tenantSession = await requireTenantSession(request)
+  const tenantSession = workforceSession(actor)
   if (tenantSession.error) {
     logApiRequestSuccess(logContext, tenantSession.error.status, { reason: "tenant_or_auth_failed", scheduleId: id })
     return withRequestId(tenantSession.error, logContext.requestId)
@@ -312,15 +312,14 @@ export async function PATCH(
   return withRequestId(response, logContext.requestId)
 }
 
-export async function DELETE(
+async function handleDELETE(
   request: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
+  { params }: { params: Promise<{ id: string }> }, actor: BusinessActor) {
   const logContext = createApiLogContext(request)
   logApiRequestStart(logContext, request)
 
   const { id } = await params
-  const tenantSession = await requireTenantSession(request)
+  const tenantSession = workforceSession(actor)
   if (tenantSession.error) {
     logApiRequestSuccess(logContext, tenantSession.error.status, { reason: "tenant_or_auth_failed", scheduleId: id })
     return withRequestId(tenantSession.error, logContext.requestId)
@@ -390,4 +389,12 @@ export async function DELETE(
     const response = NextResponse.json({ error: "Unable to delete schedule." }, { status: 500 })
     return withRequestId(response, logContext.requestId)
   }
+}
+
+export async function DELETE(request: Request, context: { params: Promise<{ id: string }> }) {
+  return withWorkforceApi(request, "shifts", "shiftSchedules", "archive", actor => handleDELETE(request, context, actor), "schedules/[id]", (await context.params).id)
+}
+
+export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
+  return withWorkforceApi(request, "shifts", "shiftSchedules", "edit", actor => handlePATCH(request, context, actor), "schedules/[id]", (await context.params).id)
 }

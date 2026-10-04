@@ -1,4 +1,7 @@
 "use client"
+import { Section } from "@/components/erp/section"
+
+import { Select, Checkbox } from "@/components/erp/controls"
 
 import * as React from "react"
 import { Trash2Icon } from "lucide-react"
@@ -67,18 +70,16 @@ export function ScheduleFormFields({
   const fieldId = (name: string) => (mode === "create" ? name : `edit-${name}`)
 
   return (
-    <div className="grid gap-4">
-      <FormField id={fieldId("schedule-name")} label="Schedule name" error={errors.name}>
+    <div className="space-y-5"><Section title="Schedule and assignment"><FormField id={fieldId("schedule-name")} label="Schedule name" error={errors.name}>
         <Input
           id={fieldId("schedule-name")}
           value={form.name}
           onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))}
         />
       </FormField>
-      <div className="flex items-center gap-2">
-        <input
+<div className="flex items-center gap-2">
+        <Checkbox
           id={fieldId("schedule-default")}
-          type="checkbox"
           checked={form.isDefault}
           onChange={(event) =>
             setForm((prev) => ({
@@ -90,7 +91,7 @@ export function ScheduleFormFields({
         />
         <Label htmlFor={fieldId("schedule-default")}>Make this the default schedule</Label>
       </div>
-      <FormField id={fieldId("schedule-staff")} label="Staff" error={errors.staffIds}>
+<FormField id={fieldId("schedule-staff")} label="Staff" error={errors.staffIds}>
         {form.isDefault ? (
           <div className="rounded-md border border-dashed border-input bg-background p-3 text-xs text-muted-foreground">
             Default schedules apply to all staff without an explicit schedule.
@@ -106,8 +107,7 @@ export function ScheduleFormFields({
                 const checked = form.staffIds.includes(staff.id)
                 return (
                   <label key={staff.id} className="flex items-center gap-2 text-sm">
-                    <input
-                      type="checkbox"
+                    <Checkbox
                       checked={checked}
                       onChange={(event) =>
                         setForm((prev) => ({
@@ -148,7 +148,7 @@ export function ScheduleFormFields({
           </p>
         ) : null}
       </FormField>
-      {!form.isDefault ? (
+{!form.isDefault ? (
         <div className="grid gap-4 sm:grid-cols-2">
           <FormField
             id={fieldId("schedule-assign-start")}
@@ -182,7 +182,7 @@ export function ScheduleFormFields({
           </FormField>
         </div>
       ) : null}
-      <FormField id={fieldId("schedule-start")} label="Start date" error={errors.startDate}>
+<FormField id={fieldId("schedule-start")} label="Start date" error={errors.startDate}>
         <Input
           id={fieldId("schedule-start")}
           type="date"
@@ -202,18 +202,17 @@ export function ScheduleFormFields({
             })
           }
         />
-      </FormField>
-
-      <div className="grid gap-4 sm:grid-cols-2">
+      </FormField></Section>
+<Section title="Week off rules"><div className="grid gap-4 sm:grid-cols-2">
         <FormField id={fieldId("schedule-weekoff-1")} label="Week off day 1" error={errors.weekOffDay1}>
-          <select
+          <Select
             id={fieldId("schedule-weekoff-1")}
             className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
             value={form.weekOffDay1}
-            onChange={(event) =>
+            onValueChange={(value) =>
               setForm((prev) => ({
                 ...prev,
-                weekOffDay1: event.target.value as Weekday,
+                weekOffDay1: value as Weekday,
               }))
             }
           >
@@ -222,15 +221,15 @@ export function ScheduleFormFields({
                 {day.label}
               </option>
             ))}
-          </select>
+          </Select>
         </FormField>
         <FormField id={fieldId("schedule-weekoff-2")} label="Week off day 2" error={errors.weekOffDay2}>
-          <select
+          <Select
             id={fieldId("schedule-weekoff-2")}
             className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
             value={form.weekOffDay2}
-            onChange={(event) => {
-              const value = event.target.value as Weekday | ""
+            onValueChange={(nextValue) => {
+              const value = nextValue as Weekday | ""
               setForm((prev) => ({
                 ...prev,
                 weekOffDay2: value,
@@ -248,11 +247,10 @@ export function ScheduleFormFields({
                 {day.label}
               </option>
             ))}
-          </select>
+          </Select>
         </FormField>
       </div>
-
-      <div className="space-y-2 rounded-md border border-input bg-background p-3">
+<div className="space-y-2 rounded-md border border-input bg-background p-3">
         <div className="flex items-center justify-between">
           <Label>Week off day 2 weeks</Label>
           <span className="text-xs text-muted-foreground">Weeks of the month.</span>
@@ -260,8 +258,7 @@ export function ScheduleFormFields({
         <div className="flex flex-wrap gap-3">
           {[1, 2, 3, 4, 5].map((week) => (
             <label key={week} className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
+              <Checkbox
                 checked={form.weekOff2Weeks.includes(week)}
                 disabled={!weekOff2Enabled}
                 onChange={(event) =>
@@ -280,9 +277,8 @@ export function ScheduleFormFields({
         {errors.weekOff2Weeks ? (
           <p className="text-xs text-destructive">{errors.weekOff2Weeks}</p>
         ) : null}
-      </div>
-
-      <div className="space-y-2">
+      </div></Section>
+<Section title="Repeating blocks"><div className="space-y-2">
         <div className="flex items-center justify-between gap-2">
           <Label>Shift blocks</Label>
           <span className="text-xs text-muted-foreground">
@@ -300,6 +296,7 @@ export function ScheduleFormFields({
                 label={`Shift template ${index + 1}`}
               >
                 <SearchableSelect
+                  id={fieldId(`block-template-${index}`)}
                   value={block.templateId}
                   placeholder="Select template"
                   searchPlaceholder="Search template..."
@@ -328,7 +325,7 @@ export function ScheduleFormFields({
                   }
                 />
               </FormField>
-              <Button
+              <Button type="button"
                 variant="outline"
                 size="icon-sm"
                 aria-label="Remove shift block"
@@ -341,11 +338,10 @@ export function ScheduleFormFields({
         </div>
         {errors.blocks ? <p className="text-xs text-destructive">{errors.blocks}</p> : null}
         <div className="flex flex-wrap gap-2">
-          <Button variant="outline" onClick={addBlock}>
+          <Button type="button" variant="outline" onClick={addBlock}>
             Add shift block
           </Button>
         </div>
-      </div>
-    </div>
+      </div></Section></div>
   )
 }

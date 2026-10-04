@@ -1,3 +1,4 @@
+import { canReadAppointmentDetails } from "@/modules/appointments/conflict-access"
 import { NextResponse } from "next/server"
 
 import {
@@ -9,7 +10,8 @@ import {
 } from "@/lib/api-logging"
 import { canManageUsers, type Role } from "@/lib/permissions"
 import { prisma } from "@/lib/prisma"
-import { requireTenantSession } from "@/lib/tenant-auth"
+import { withWorkforceApi, workforceSession } from "@/modules/workforce/api"
+import type { BusinessActor } from "@/platform/policy"
 import {
   normalizeHistoryRangeToPast,
   syncRosterHistoryRange,
@@ -23,11 +25,11 @@ import {
   serializeLeaveRequest,
 } from "../../_requests"
 
-export async function POST(request: Request) {
+async function handlePOST(request: Request, actor: BusinessActor) {
   const logContext = createApiLogContext(request)
   logApiRequestStart(logContext, request)
 
-  const tenantSession = await requireTenantSession(request)
+  const tenantSession = workforceSession(actor)
   if (tenantSession.error) {
     logApiRequestSuccess(logContext, tenantSession.error.status, { reason: "tenant_or_auth_failed" })
     return withRequestId(tenantSession.error, logContext.requestId)
@@ -129,7 +131,7 @@ export async function POST(request: Request) {
         const response = NextResponse.json(
           {
             error: "Cannot approve selected leave requests because active appointments overlap.",
-            conflicts,
+            conflicts: await canReadAppointmentDetails(tenantId, sessionUserId) ? conflicts : conflicts.map(item => ({ ...item, conflictingAppointments: [] })),
             blockedRequestIds: conflicts.map((item) => item.requestId),
           },
           { status: 409 }
@@ -182,6 +184,7 @@ export async function POST(request: Request) {
     })
   }
   await recordDomainAuditEventSafe(prisma, {
+      tenantId,
     event: "leave.request.bulk_reviewed",
     entityType: "LeaveRequest",
     actorUserId: reviewer.id,
@@ -212,4 +215,8 @@ export async function POST(request: Request) {
     const response = NextResponse.json({ error: "Unable to bulk review leave requests." }, { status: 500 })
     return withRequestId(response, logContext.requestId)
   }
+}
+
+export async function POST(request: Request) {
+  return withWorkforceApi(request, "leaves", "leaveApprovals", "approve", actor => handlePOST(request, actor), "requests/review-bulk")
 }

@@ -10,7 +10,8 @@ import {
 } from "@/lib/api-logging"
 import { canManageUsers, type Role } from "@/lib/permissions"
 import { prisma } from "@/lib/prisma"
-import { requireTenantSession } from "@/lib/tenant-auth"
+import { withWorkforceApi, workforceSession } from "@/modules/workforce/api"
+import type { BusinessActor } from "@/platform/policy"
 import type { StaffFlexiblePattern } from "@/types/shifts"
 
 const weekdayOrder: Weekday[] = [
@@ -107,14 +108,13 @@ const mapPattern = (
     })),
 })
 
-export async function GET(
+async function handleGET(
   request: Request,
-  context: { params: Promise<{ id: string }> }
-) {
+  context: { params: Promise<{ id: string }> }, actor: BusinessActor) {
   const logContext = createApiLogContext(request)
   logApiRequestStart(logContext, request)
 
-  const tenantSession = await requireTenantSession(request)
+  const tenantSession = workforceSession(actor)
   if (tenantSession.error) {
     logApiRequestSuccess(logContext, tenantSession.error.status, { reason: "tenant_or_auth_failed" })
     return withRequestId(tenantSession.error, logContext.requestId)
@@ -178,3 +178,7 @@ export async function GET(
   }
 }
 
+
+export async function GET(request: Request, context: { params: Promise<{ id: string }> }) {
+  return withWorkforceApi(request, "shifts", "shiftPlans", "read", actor => handleGET(request, context, actor), "flexible-patterns/[id]", (await context.params).id)
+}

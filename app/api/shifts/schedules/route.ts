@@ -13,14 +13,15 @@ import { toISODate } from "@/lib/date"
 import { captureRosterHistoryUpToYesterday } from "@/lib/roster-history"
 import { shiftScheduleSchema } from "@/lib/validation"
 import { canManageUsers, type Role } from "@/lib/permissions"
-import { requireTenantSession } from "@/lib/tenant-auth"
+import { withWorkforceApi, workforceSession } from "@/modules/workforce/api"
+import type { BusinessActor } from "@/platform/policy"
 import type { ListResponse } from "@/types/api"
 
-export async function GET(request: Request) {
+async function handleGET(request: Request, actor: BusinessActor) {
   const logContext = createApiLogContext(request)
   logApiRequestStart(logContext, request)
 
-  const tenantSession = await requireTenantSession(request)
+  const tenantSession = workforceSession(actor)
   if (tenantSession.error) {
     logApiRequestSuccess(logContext, tenantSession.error.status, { reason: "tenant_or_auth_failed" })
     return withRequestId(tenantSession.error, logContext.requestId)
@@ -120,11 +121,11 @@ export async function GET(request: Request) {
   }
 }
 
-export async function POST(request: Request) {
+async function handlePOST(request: Request, actor: BusinessActor) {
   const logContext = createApiLogContext(request)
   logApiRequestStart(logContext, request)
 
-  const tenantSession = await requireTenantSession(request)
+  const tenantSession = workforceSession(actor)
   if (tenantSession.error) {
     logApiRequestSuccess(logContext, tenantSession.error.status, { reason: "tenant_or_auth_failed" })
     return withRequestId(tenantSession.error, logContext.requestId)
@@ -368,4 +369,12 @@ export async function POST(request: Request) {
   const response = NextResponse.json({ schedule })
   logApiRequestSuccess(logContext, 200, { scheduleId: schedule.id, isDefault: false })
   return withRequestId(response, logContext.requestId)
+}
+
+export async function POST(request: Request) {
+  return withWorkforceApi(request, "shifts", "shiftSchedules", "create", actor => handlePOST(request, actor), "schedules")
+}
+
+export async function GET(request: Request) {
+  return withWorkforceApi(request, "shifts", "shiftSchedules", "read", actor => handleGET(request, actor), "schedules")
 }

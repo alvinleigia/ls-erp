@@ -10,7 +10,8 @@ import {
 } from "@/lib/api-logging"
 import { canManageUsers, type Role } from "@/lib/permissions"
 import { prisma } from "@/lib/prisma"
-import { requireTenantSession } from "@/lib/tenant-auth"
+import { withWorkforceApi, workforceSession } from "@/modules/workforce/api"
+import type { BusinessActor } from "@/platform/policy"
 
 const updateAssignmentSchema = z.object({
   endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
@@ -18,15 +19,14 @@ const updateAssignmentSchema = z.object({
 
 const toDateOnly = (value: Date) => value.toISOString().slice(0, 10)
 
-export async function PATCH(
+async function handlePATCH(
   request: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
+  { params }: { params: Promise<{ id: string }> }, actor: BusinessActor) {
   const logContext = createApiLogContext(request)
   logApiRequestStart(logContext, request)
 
   const { id } = await params
-  const tenantSession = await requireTenantSession(request)
+  const tenantSession = workforceSession(actor)
   if (tenantSession.error) {
     logApiRequestSuccess(logContext, tenantSession.error.status, {
       reason: "tenant_or_auth_failed",
@@ -101,3 +101,7 @@ export async function PATCH(
   }
 }
 
+
+export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
+  return withWorkforceApi(request, "shifts", "shiftSchedules", "archive", actor => handlePATCH(request, context, actor), "assignments/[id]", (await context.params).id)
+}

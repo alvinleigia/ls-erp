@@ -1,3 +1,4 @@
+import { canReadAppointmentDetails } from "@/modules/appointments/conflict-access"
 import { AppointmentStatus } from "@prisma/client"
 import { NextResponse } from "next/server"
 import { z } from "zod"
@@ -11,7 +12,8 @@ import {
 } from "@/lib/api-logging"
 import { canManageUsers, type Role } from "@/lib/permissions"
 import { prisma } from "@/lib/prisma"
-import { requireTenantSession } from "@/lib/tenant-auth"
+import { withWorkforceApi, workforceSession } from "@/modules/workforce/api"
+import type { BusinessActor } from "@/platform/policy"
 import { flexibleSlotSchema } from "@/lib/validation"
 import type { StaffFlexibleSlot } from "@/types/shifts"
 
@@ -55,11 +57,11 @@ const slotContainsRange = (
   endMinutes: number
 ) => slots.some((slot) => startMinutes >= toMinutes(slot.startTime) && endMinutes <= toMinutes(slot.endTime))
 
-export async function GET(request: Request) {
+async function handleGET(request: Request, actor: BusinessActor) {
   const logContext = createApiLogContext(request)
   logApiRequestStart(logContext, request)
 
-  const tenantSession = await requireTenantSession(request)
+  const tenantSession = workforceSession(actor)
   if (tenantSession.error) {
     logApiRequestSuccess(logContext, tenantSession.error.status, { reason: "tenant_or_auth_failed" })
     return withRequestId(tenantSession.error, logContext.requestId)
@@ -139,11 +141,11 @@ export async function GET(request: Request) {
   }
 }
 
-export async function POST(request: Request) {
+async function handlePOST(request: Request, actor: BusinessActor) {
   const logContext = createApiLogContext(request)
   logApiRequestStart(logContext, request)
 
-  const tenantSession = await requireTenantSession(request)
+  const tenantSession = workforceSession(actor)
   if (tenantSession.error) {
     logApiRequestSuccess(logContext, tenantSession.error.status, { reason: "tenant_or_auth_failed" })
     return withRequestId(tenantSession.error, logContext.requestId)
@@ -231,7 +233,8 @@ export async function POST(request: Request) {
     const response = NextResponse.json(
       {
         error: "Flexible slot update conflicts with existing appointments.",
-        conflicts,
+        conflicts: await canReadAppointmentDetails(tenantId, tenantSession.context.sessionUserId) ? conflicts : [],
+        conflictCount: conflicts.length,
       },
       { status: 409 }
     )
@@ -282,11 +285,11 @@ export async function POST(request: Request) {
   }
 }
 
-export async function DELETE(request: Request) {
+async function handleDELETE(request: Request, actor: BusinessActor) {
   const logContext = createApiLogContext(request)
   logApiRequestStart(logContext, request)
 
-  const tenantSession = await requireTenantSession(request)
+  const tenantSession = workforceSession(actor)
   if (tenantSession.error) {
     logApiRequestSuccess(logContext, tenantSession.error.status, { reason: "tenant_or_auth_failed" })
     return withRequestId(tenantSession.error, logContext.requestId)
@@ -334,4 +337,16 @@ export async function DELETE(request: Request) {
     const response = NextResponse.json({ error: "Unable to delete flexible slots." }, { status: 500 })
     return withRequestId(response, logContext.requestId)
   }
+}
+
+export async function DELETE(request: Request) {
+  return withWorkforceApi(request, "shifts", "shiftRoster", "archive", actor => handleDELETE(request, actor), "flexible-slots")
+}
+
+export async function POST(request: Request) {
+  return withWorkforceApi(request, "shifts", "shiftRoster", "edit", actor => handlePOST(request, actor), "flexible-slots")
+}
+
+export async function GET(request: Request) {
+  return withWorkforceApi(request, "shifts", "shiftRoster", "read", actor => handleGET(request, actor), "flexible-slots")
 }

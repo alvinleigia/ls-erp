@@ -9,16 +9,16 @@ import {
 } from "@/lib/api-logging"
 import { canManageUsers, type Role } from "@/lib/permissions"
 import { prisma } from "@/lib/prisma"
-import { requireTenantSession } from "@/lib/tenant-auth"
+import { withWorkforceApi, workforceSession } from "@/modules/workforce/api"
+import type { BusinessActor } from "@/platform/policy"
 
-export async function POST(
+async function handlePOST(
   request: Request,
-  context: { params: Promise<{ id: string }> }
-) {
+  context: { params: Promise<{ id: string }> }, actor: BusinessActor) {
   const logContext = createApiLogContext(request)
   logApiRequestStart(logContext, request)
 
-  const tenantSession = await requireTenantSession(request)
+  const tenantSession = workforceSession(actor)
   if (tenantSession.error) {
     logApiRequestSuccess(logContext, tenantSession.error.status, { reason: "tenant_or_auth_failed" })
     return withRequestId(tenantSession.error, logContext.requestId)
@@ -63,3 +63,7 @@ export async function POST(
   }
 }
 
+
+export async function POST(request: Request, context: { params: Promise<{ id: string }> }) {
+  return withWorkforceApi(request, "shifts", "shiftPlans", "archive", actor => handlePOST(request, context, actor), "flexible-patterns/[id]/deactivate", (await context.params).id)
+}

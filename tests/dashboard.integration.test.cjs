@@ -23,14 +23,19 @@ const session = id => ({ user: { id: `${id}_admin`, tenantId: id, role: "ADMIN" 
 const request = slug => new Request(`http://${slug}.localhost/api/dashboard/summary?range=today&debug=1`, { headers: { host: `${slug}.localhost` } })
 before(async () => {
   await root.connect()
+  await cleanup()
   for (const id of ["dashboard_a", "dashboard_b"]) {
     await root.query('INSERT INTO "Tenant" (id,name,slug,"updatedAt") VALUES ($1,$1,$1,NOW())', [id])
     await root.query('INSERT INTO "User" (id,name,email,role,"tenantId","updatedAt") VALUES ($1,$1,$2,$3,$4,NOW())', [`${id}_admin`, `${id}@example.test`, "ADMIN", id])
     await root.query('INSERT INTO "AppSetting" (id,"tenantId","timeZone","updatedAt") VALUES ($1,$1,$2,NOW())', [id, id === "dashboard_a" ? "Asia/Kolkata" : "Europe/London"])
   }
 })
-after(async () => {
+async function cleanup() {
+  for (const table of ["RealEstateProjectStatus", "RealEstatePropertyCategory", "RealEstateBuyingTimeframe"]) await root.query(`DELETE FROM "${table}" WHERE "tenantId" IN ($1,$2)`, ["dashboard_a", "dashboard_b"])
   await root.query('DELETE FROM "Tenant" WHERE id IN ($1,$2)', ["dashboard_a", "dashboard_b"])
+}
+after(async () => {
+  await cleanup()
   await root.end()
   const clients = [global.prisma, global.prismaBypassClient, ...[...(global.prismaScopedClientCache?.values() || [])].map(entry => entry.client)].filter(Boolean)
   await Promise.all(clients.map(client => client.$disconnect()))

@@ -11,7 +11,8 @@ import {
 } from "@/lib/api-logging"
 import { canManageUsers, type Role } from "@/lib/permissions"
 import { prisma } from "@/lib/prisma"
-import { requireTenantSession } from "@/lib/tenant-auth"
+import { withWorkforceApi, workforceSession } from "@/modules/workforce/api"
+import type { BusinessActor } from "@/platform/policy"
 import { flexibleWeekPlanSchema } from "@/lib/validation"
 import type { StaffFlexibleWeekPlan } from "@/types/shifts"
 
@@ -113,11 +114,11 @@ const mapPlanResponse = (
     })),
 })
 
-export async function GET(request: Request) {
+async function handleGET(request: Request, actor: BusinessActor) {
   const logContext = createApiLogContext(request)
   logApiRequestStart(logContext, request)
 
-  const tenantSession = await requireTenantSession(request)
+  const tenantSession = workforceSession(actor)
   if (tenantSession.error) {
     logApiRequestSuccess(logContext, tenantSession.error.status, { reason: "tenant_or_auth_failed" })
     return withRequestId(tenantSession.error, logContext.requestId)
@@ -189,11 +190,11 @@ export async function GET(request: Request) {
   }
 }
 
-export async function PUT(request: Request) {
+async function handlePUT(request: Request, actor: BusinessActor) {
   const logContext = createApiLogContext(request)
   logApiRequestStart(logContext, request)
 
-  const tenantSession = await requireTenantSession(request)
+  const tenantSession = workforceSession(actor)
   if (tenantSession.error) {
     logApiRequestSuccess(logContext, tenantSession.error.status, { reason: "tenant_or_auth_failed" })
     return withRequestId(tenantSession.error, logContext.requestId)
@@ -328,11 +329,11 @@ export async function PUT(request: Request) {
   }
 }
 
-export async function DELETE(request: Request) {
+async function handleDELETE(request: Request, actor: BusinessActor) {
   const logContext = createApiLogContext(request)
   logApiRequestStart(logContext, request)
 
-  const tenantSession = await requireTenantSession(request)
+  const tenantSession = workforceSession(actor)
   if (tenantSession.error) {
     logApiRequestSuccess(logContext, tenantSession.error.status, { reason: "tenant_or_auth_failed" })
     return withRequestId(tenantSession.error, logContext.requestId)
@@ -398,4 +399,16 @@ export async function DELETE(request: Request) {
     const response = NextResponse.json({ error: "Unable to clear flexible week plan." }, { status: 500 })
     return withRequestId(response, logContext.requestId)
   }
+}
+
+export async function DELETE(request: Request) {
+  return withWorkforceApi(request, "shifts", "shiftRoster", "archive", actor => handleDELETE(request, actor), "flexible-week-plans")
+}
+
+export async function PUT(request: Request) {
+  return withWorkforceApi(request, "shifts", "shiftRoster", "edit", actor => handlePUT(request, actor), "flexible-week-plans")
+}
+
+export async function GET(request: Request) {
+  return withWorkforceApi(request, "shifts", "shiftRoster", "read", actor => handleGET(request, actor), "flexible-week-plans")
 }

@@ -1,5 +1,7 @@
 "use client"
 
+import { Select } from "@/components/erp/controls"
+
 import { FormField } from "@/components/form-field"
 import { Input } from "@/components/ui/input"
 import { SearchableSelect } from "@/components/searchable-select"
@@ -20,6 +22,7 @@ type AppointmentFormFieldsProps = {
   services: AppointmentServiceOption[]
   staff: AppointmentStaffOption[]
   timeFormat?: TimeFormat
+  canCancel?: boolean
   showStatus?: boolean
   disableParticipantFields?: boolean
   onChange: (next: AppointmentFormValues) => void
@@ -32,6 +35,7 @@ export function AppointmentFormFields({
   services,
   staff,
   timeFormat = "H24",
+  canCancel = true,
   showStatus = false,
   disableParticipantFields = false,
   onChange,
@@ -112,19 +116,19 @@ export function AppointmentFormFields({
 
       {showStatus ? (
         <FormField id="appointment-status" label="Status" error={errors.status}>
-          <select
+          <Select
             id="appointment-status"
-            className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+            className="w-full"
             value={values.status}
-            onChange={(event) => update("status", event.target.value as AppointmentStatus)}
+            onValueChange={(value) => update("status", value as AppointmentStatus)}
           >
             <option value="SCHEDULED">SCHEDULED</option>
             <option value="CONFIRMED">CONFIRMED</option>
             <option value="IN_PROGRESS">IN_PROGRESS</option>
             <option value="COMPLETED">COMPLETED</option>
-            <option value="CANCELED">CANCELED</option>
+            <option value="CANCELED" disabled={!canCancel}>CANCELED</option>
             <option value="NO_SHOW">NO_SHOW</option>
-          </select>
+          </Select>
         </FormField>
       ) : null}
     </div>

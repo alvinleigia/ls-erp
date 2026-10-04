@@ -12,7 +12,8 @@ import {
 import { recordDomainAuditEventSafe } from "@/lib/domain-audit"
 import type { Role } from "@/lib/permissions"
 import { prisma } from "@/lib/prisma"
-import { requireTenantSession } from "@/lib/tenant-auth"
+import { withWorkforceApi, workforceSession } from "@/modules/workforce/api"
+import type { BusinessActor } from "@/platform/policy"
 import { createLeaveRequestSchema } from "@/lib/validation"
 import type { ListResponse } from "@/types/api"
 import type { LeaveRequestRow } from "@/types/leaves"
@@ -42,11 +43,11 @@ const leaveRequestListSchema = z.object({
   order: z.enum(["asc", "desc"]).default("desc"),
 })
 
-export async function GET(request: Request) {
+async function handleGET(request: Request, actor: BusinessActor) {
   const logContext = createApiLogContext(request)
   logApiRequestStart(logContext, request)
 
-  const tenantSession = await requireTenantSession(request)
+  const tenantSession = workforceSession(actor)
   if (tenantSession.error) {
     logApiRequestSuccess(logContext, tenantSession.error.status, { reason: "tenant_or_auth_failed" })
     return withRequestId(tenantSession.error, logContext.requestId)
@@ -177,11 +178,11 @@ export async function GET(request: Request) {
   }
 }
 
-export async function POST(request: Request) {
+async function handlePOST(request: Request, actor: BusinessActor) {
   const logContext = createApiLogContext(request)
   logApiRequestStart(logContext, request)
 
-  const tenantSession = await requireTenantSession(request)
+  const tenantSession = workforceSession(actor)
   if (tenantSession.error) {
     logApiRequestSuccess(logContext, tenantSession.error.status, { reason: "tenant_or_auth_failed" })
     return withRequestId(tenantSession.error, logContext.requestId)
@@ -269,6 +270,7 @@ export async function POST(request: Request) {
       daysCount: serialized.daysCount,
     })
     await recordDomainAuditEventSafe(prisma, {
+      tenantId,
       event: "leave.request.submitted",
       entityType: "LeaveRequest",
       entityId: serialized.id,
@@ -301,4 +303,12 @@ export async function POST(request: Request) {
     const response = NextResponse.json({ error: "Unable to create leave request." }, { status: 500 })
     return withRequestId(response, logContext.requestId)
   }
+}
+
+export async function POST(request: Request) {
+  return withWorkforceApi(request, "leaves", "leaveRequests", "create", actor => handlePOST(request, actor), "requests")
+}
+
+export async function GET(request: Request) {
+  return withWorkforceApi(request, "leaves", "leaveRequests", "read", actor => handleGET(request, actor), "requests")
 }

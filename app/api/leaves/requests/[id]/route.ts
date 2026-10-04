@@ -9,7 +9,8 @@ import {
 } from "@/lib/api-logging"
 import type { Role } from "@/lib/permissions"
 import { prisma } from "@/lib/prisma"
-import { requireTenantSession } from "@/lib/tenant-auth"
+import { withWorkforceApi, workforceSession } from "@/modules/workforce/api"
+import type { BusinessActor } from "@/platform/policy"
 import {
   buildLeaveRequestRuleChecks,
   buildLeaveRequestTimeline,
@@ -17,14 +18,13 @@ import {
   serializeLeaveRequest,
 } from "../../_requests"
 
-export async function GET(
+async function handleGET(
   request: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
+  { params }: { params: Promise<{ id: string }> }, actor: BusinessActor) {
   const logContext = createApiLogContext(request)
   logApiRequestStart(logContext, request)
 
-  const tenantSession = await requireTenantSession(request)
+  const tenantSession = workforceSession(actor)
   if (tenantSession.error) {
     logApiRequestSuccess(logContext, tenantSession.error.status, { reason: "tenant_or_auth_failed" })
     return withRequestId(tenantSession.error, logContext.requestId)
@@ -143,4 +143,8 @@ export async function GET(
     const response = NextResponse.json({ error: "Unable to load leave request." }, { status: 500 })
     return withRequestId(response, logContext.requestId)
   }
+}
+
+export async function GET(request: Request, context: { params: Promise<{ id: string }> }) {
+  return withWorkforceApi(request, "leaves", "leaveRequests", "read", actor => handleGET(request, context, actor), "requests/[id]", (await context.params).id)
 }

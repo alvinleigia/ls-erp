@@ -1,3 +1,7 @@
+import { requirePermission } from "@/platform/access/policy"
+import { withAppointmentsApi } from "@/modules/appointments/api"
+import { BusinessError, type BusinessActor } from "@/platform/policy"
+import { requireServicesAccess } from "@/modules/services/api"
 import { NextResponse } from "next/server"
 import { AppointmentStatus } from "@prisma/client"
 
@@ -9,10 +13,8 @@ import {
   withRequestId,
 } from "@/lib/api-logging"
 import { recordDomainAuditEventSafe } from "@/lib/domain-audit"
-import { canManageUsers, type Role } from "@/lib/permissions"
 import { prisma } from "@/lib/prisma"
 import { appointmentUpdateSchema } from "@/lib/validation"
-import { requireTenantSession } from "@/lib/tenant-auth"
 import type { AppointmentRow } from "@/types/appointments"
 import { checkStaffAppointmentAvailability } from "../_availability"
 
@@ -56,25 +58,15 @@ const appointmentInclude = {
   },
 } as const
 
-export async function GET(
+async function handleGET(
   request: Request,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
+  actor: BusinessActor
 ) {
   const logContext = createApiLogContext(request)
   logApiRequestStart(logContext, request)
 
-  const tenantSession = await requireTenantSession(request)
-  if (tenantSession.error) {
-    logApiRequestSuccess(logContext, tenantSession.error.status, { reason: "tenant_or_auth_failed" })
-    return withRequestId(tenantSession.error, logContext.requestId)
-  }
-  const { tenantId, role } = tenantSession.context
-
-  if (!canManageUsers(role as Role)) {
-    const response = NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    logApiRequestSuccess(logContext, 401, { reason: "unauthorized" })
-    return withRequestId(response, logContext.requestId)
-  }
+  const { tenantId } = actor
 
   try {
     const { id } = await params
@@ -93,31 +85,22 @@ export async function GET(
     logApiRequestSuccess(logContext, 200, { appointmentId: id })
     return withRequestId(response, logContext.requestId)
   } catch (error) {
+    if (error instanceof BusinessError) throw error
     logApiRequestError(logContext, error, 500)
     const response = NextResponse.json({ error: "Unable to load appointment." }, { status: 500 })
     return withRequestId(response, logContext.requestId)
   }
 }
 
-export async function PATCH(
+async function handlePATCH(
   request: Request,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
+  actor: BusinessActor
 ) {
   const logContext = createApiLogContext(request)
   logApiRequestStart(logContext, request)
 
-  const tenantSession = await requireTenantSession(request)
-  if (tenantSession.error) {
-    logApiRequestSuccess(logContext, tenantSession.error.status, { reason: "tenant_or_auth_failed" })
-    return withRequestId(tenantSession.error, logContext.requestId)
-  }
-  const { tenantId, role, sessionUserId } = tenantSession.context
-
-  if (!canManageUsers(role as Role)) {
-    const response = NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    logApiRequestSuccess(logContext, 401, { reason: "unauthorized" })
-    return withRequestId(response, logContext.requestId)
-  }
+  const { tenantId, role, userId: sessionUserId } = actor
 
   try {
     const { id } = await params
@@ -144,6 +127,8 @@ export async function PATCH(
       return withRequestId(response, logContext.requestId)
     }
 
+    if (data.status && data.status !== current.status && (data.status === "CANCELED" || current.status === "CANCELED")) requirePermission(actor, "appointments.archive")
+    if (data.serviceId || data.staffId || data.startAt || (data.status && ACTIVE_APPOINTMENT_STATUSES.includes(data.status) && data.status !== current.status)) await requireServicesAccess(actor)
     const [customer, service, staffProfile] = await Promise.all([
       data.customerId
         ? prisma.user.findFirst({
@@ -307,6 +292,7 @@ export async function PATCH(
       return withRequestId(response, logContext.requestId)
     }
     await recordDomainAuditEventSafe(prisma, {
+      tenantId,
       event: "appointment.updated",
       entityType: "Appointment",
       entityId: updatedAppointment.id,
@@ -335,31 +321,22 @@ export async function PATCH(
     logApiRequestSuccess(logContext, 200, { appointmentId: id })
     return withRequestId(response, logContext.requestId)
   } catch (error) {
+    if (error instanceof BusinessError) throw error
     logApiRequestError(logContext, error, 500)
     const response = NextResponse.json({ error: "Unable to update appointment." }, { status: 500 })
     return withRequestId(response, logContext.requestId)
   }
 }
 
-export async function DELETE(
+async function handleDELETE(
   request: Request,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
+  actor: BusinessActor
 ) {
   const logContext = createApiLogContext(request)
   logApiRequestStart(logContext, request)
 
-  const tenantSession = await requireTenantSession(request)
-  if (tenantSession.error) {
-    logApiRequestSuccess(logContext, tenantSession.error.status, { reason: "tenant_or_auth_failed" })
-    return withRequestId(tenantSession.error, logContext.requestId)
-  }
-  const { tenantId, role, sessionUserId } = tenantSession.context
-
-  if (!canManageUsers(role as Role)) {
-    const response = NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    logApiRequestSuccess(logContext, 401, { reason: "unauthorized" })
-    return withRequestId(response, logContext.requestId)
-  }
+  const { tenantId, role, userId: sessionUserId } = actor
 
   try {
     const { id } = await params
@@ -385,6 +362,7 @@ export async function DELETE(
       data: { status: AppointmentStatus.CANCELED },
     })
     await recordDomainAuditEventSafe(prisma, {
+      tenantId,
       event: "appointment.canceled",
       entityType: "Appointment",
       entityId: id,
@@ -403,8 +381,30 @@ export async function DELETE(
     logApiRequestSuccess(logContext, 200, { appointmentId: id, canceled: true })
     return withRequestId(response, logContext.requestId)
   } catch (error) {
+    if (error instanceof BusinessError) throw error
     logApiRequestError(logContext, error, 500)
     const response = NextResponse.json({ error: "Unable to cancel appointment." }, { status: 500 })
     return withRequestId(response, logContext.requestId)
   }
+}
+
+export function GET(request: Request, context: { params: Promise<{ id: string }> }) {
+  return withAppointmentsApi(request, "appointments", "read", async actor => {
+
+    return handleGET(request, context, actor)
+  })
+}
+
+export function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
+  return withAppointmentsApi(request, "appointments", "edit", async actor => {
+
+    return handlePATCH(request, context, actor)
+  })
+}
+
+export function DELETE(request: Request, context: { params: Promise<{ id: string }> }) {
+  return withAppointmentsApi(request, "appointments", "archive", async actor => {
+
+    return handleDELETE(request, context, actor)
+  })
 }

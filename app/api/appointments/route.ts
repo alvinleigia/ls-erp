@@ -1,3 +1,6 @@
+import { withAppointmentsApi } from "@/modules/appointments/api"
+import { BusinessError, type BusinessActor } from "@/platform/policy"
+import { requireServicesAccess } from "@/modules/services/api"
 import { NextResponse } from "next/server"
 import { AppointmentStatus, Prisma } from "@prisma/client"
 import { z } from "zod"
@@ -12,8 +15,6 @@ import {
 import { recordDomainAuditEventSafe } from "@/lib/domain-audit"
 import { prisma } from "@/lib/prisma"
 import { appointmentCreateSchema } from "@/lib/validation"
-import { canManageUsers, type Role } from "@/lib/permissions"
-import { requireTenantSession } from "@/lib/tenant-auth"
 import type { ListResponse } from "@/types/api"
 import type { AppointmentRow } from "@/types/appointments"
 import { checkStaffAppointmentAvailability } from "./_availability"
@@ -56,22 +57,11 @@ const serializeAppointment = <
     updatedAt: appointment.updatedAt.toISOString(),
   })
 
-export async function GET(request: Request) {
+async function handleGET(request: Request, actor: BusinessActor) {
   const logContext = createApiLogContext(request)
   logApiRequestStart(logContext, request)
 
-  const tenantSession = await requireTenantSession(request)
-  if (tenantSession.error) {
-    logApiRequestSuccess(logContext, tenantSession.error.status, { reason: "tenant_or_auth_failed" })
-    return withRequestId(tenantSession.error, logContext.requestId)
-  }
-  const { tenantId, role } = tenantSession.context
-
-  if (!canManageUsers(role as Role)) {
-    const response = NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    logApiRequestSuccess(logContext, 401, { reason: "unauthorized" })
-    return withRequestId(response, logContext.requestId)
-  }
+  const { tenantId } = actor
 
   try {
     const url = new URL(request.url)
@@ -176,28 +166,18 @@ export async function GET(request: Request) {
     logApiRequestSuccess(logContext, 200, { page, pageSize, total })
     return withRequestId(jsonResponse, logContext.requestId)
   } catch (error) {
+    if (error instanceof BusinessError) throw error
     logApiRequestError(logContext, error, 500)
     const response = NextResponse.json({ error: "Unable to load appointments." }, { status: 500 })
     return withRequestId(response, logContext.requestId)
   }
 }
 
-export async function POST(request: Request) {
+async function handlePOST(request: Request, actor: BusinessActor) {
   const logContext = createApiLogContext(request)
   logApiRequestStart(logContext, request)
 
-  const tenantSession = await requireTenantSession(request)
-  if (tenantSession.error) {
-    logApiRequestSuccess(logContext, tenantSession.error.status, { reason: "tenant_or_auth_failed" })
-    return withRequestId(tenantSession.error, logContext.requestId)
-  }
-  const { tenantId, role, sessionUserId } = tenantSession.context
-
-  if (!canManageUsers(role as Role)) {
-    const response = NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    logApiRequestSuccess(logContext, 401, { reason: "unauthorized" })
-    return withRequestId(response, logContext.requestId)
-  }
+  const { tenantId, role, userId: sessionUserId } = actor
 
   try {
     const payload = await request.json()
@@ -360,6 +340,7 @@ export async function POST(request: Request) {
     },
   })
     await recordDomainAuditEventSafe(prisma, {
+      tenantId,
       event: "appointment.created",
       entityType: "Appointment",
       entityId: appointment.id,
@@ -382,8 +363,23 @@ export async function POST(request: Request) {
     logApiRequestSuccess(logContext, 201, { appointmentId: appointment.id })
     return withRequestId(response, logContext.requestId)
   } catch (error) {
+    if (error instanceof BusinessError) throw error
     logApiRequestError(logContext, error, 500)
     const response = NextResponse.json({ error: "Unable to create appointment." }, { status: 500 })
     return withRequestId(response, logContext.requestId)
   }
+}
+
+export function GET(request: Request) {
+  return withAppointmentsApi(request, "appointments", "read", async actor => {
+
+    return handleGET(request, actor)
+  })
+}
+
+export function POST(request: Request) {
+  return withAppointmentsApi(request, "appointments", "create", async actor => {
+    await requireServicesAccess(actor)
+    return handlePOST(request, actor)
+  })
 }

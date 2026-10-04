@@ -1,3 +1,4 @@
+import { canReadAppointmentDetails } from "@/modules/appointments/conflict-access"
 import { NextResponse } from "next/server"
 
 import { AppointmentStatus } from "@prisma/client"
@@ -15,7 +16,8 @@ import {
 } from "@/lib/roster-history"
 import { shiftOverrideSchema } from "@/lib/validation"
 import { canManageUsers, type Role } from "@/lib/permissions"
-import { requireTenantSession } from "@/lib/tenant-auth"
+import { withWorkforceApi, workforceSession } from "@/modules/workforce/api"
+import type { BusinessActor } from "@/platform/policy"
 
 const toISODate = (value: Date) => value.toISOString().slice(0, 10)
 const parseTimeToMinutes = (value: string) => {
@@ -63,11 +65,11 @@ const getMinutesInTimeZone = (value: Date, timeZone: string) => {
   return (Number.isNaN(hour) ? 0 : hour) * 60 + (Number.isNaN(minute) ? 0 : minute)
 }
 
-export async function GET(request: Request) {
+async function handleGET(request: Request, actor: BusinessActor) {
   const logContext = createApiLogContext(request)
   logApiRequestStart(logContext, request)
 
-  const tenantSession = await requireTenantSession(request)
+  const tenantSession = workforceSession(actor)
   if (tenantSession.error) {
     logApiRequestSuccess(logContext, tenantSession.error.status, { reason: "tenant_or_auth_failed" })
     return withRequestId(tenantSession.error, logContext.requestId)
@@ -138,11 +140,11 @@ export async function GET(request: Request) {
   }
 }
 
-export async function POST(request: Request) {
+async function handlePOST(request: Request, actor: BusinessActor) {
   const logContext = createApiLogContext(request)
   logApiRequestStart(logContext, request)
 
-  const tenantSession = await requireTenantSession(request)
+  const tenantSession = workforceSession(actor)
   if (tenantSession.error) {
     logApiRequestSuccess(logContext, tenantSession.error.status, { reason: "tenant_or_auth_failed" })
     return withRequestId(tenantSession.error, logContext.requestId)
@@ -383,7 +385,8 @@ export async function POST(request: Request) {
     const response = NextResponse.json(
       {
         error: "Shift change conflicts with existing appointments.",
-        conflicts,
+        conflicts: await canReadAppointmentDetails(tenantId, tenantSession.context.sessionUserId) ? conflicts : [],
+        conflictCount: conflicts.length,
       },
       { status: 409 }
     )
@@ -428,11 +431,11 @@ export async function POST(request: Request) {
   return withRequestId(response, logContext.requestId)
 }
 
-export async function DELETE(request: Request) {
+async function handleDELETE(request: Request, actor: BusinessActor) {
   const logContext = createApiLogContext(request)
   logApiRequestStart(logContext, request)
 
-  const tenantSession = await requireTenantSession(request)
+  const tenantSession = workforceSession(actor)
   if (tenantSession.error) {
     logApiRequestSuccess(logContext, tenantSession.error.status, { reason: "tenant_or_auth_failed" })
     return withRequestId(tenantSession.error, logContext.requestId)
@@ -506,4 +509,16 @@ export async function DELETE(request: Request) {
   const response = NextResponse.json({ deletedCount: result.count })
   logApiRequestSuccess(logContext, 200, { deletedCount: result.count })
   return withRequestId(response, logContext.requestId)
+}
+
+export async function DELETE(request: Request) {
+  return withWorkforceApi(request, "shifts", "shiftRoster", "archive", actor => handleDELETE(request, actor), "overrides")
+}
+
+export async function POST(request: Request) {
+  return withWorkforceApi(request, "shifts", "shiftRoster", "edit", actor => handlePOST(request, actor), "overrides")
+}
+
+export async function GET(request: Request) {
+  return withWorkforceApi(request, "shifts", "shiftRoster", "read", actor => handleGET(request, actor), "overrides")
 }

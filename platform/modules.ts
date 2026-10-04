@@ -2,6 +2,20 @@
 // remain available until their server boundaries have been extracted and tested.
 type ModuleDefinition = { name: string; description: string; defaultEnabled: boolean; href: string; requires: readonly string[]; parent?: string }
 export const businessModules = {
+  leaves: { name: "Leaves", description: "Leave rules, groups, personal requests and approvals.", defaultEnabled: false, href: "/leaves/requests", requires: [] },
+  shifts: { name: "Shifts", description: "Shift templates, schedules, recurring plans and staff roster.", defaultEnabled: false, href: "/shifts/roster", requires: [] },
+  appointments: {
+    name: "Appointments", description: "Bookings, calendar, invoices and coupons. Service bookings require Services; product lines require Inventory.",
+    defaultEnabled: false, href: "/appointments", requires: [],
+  },
+  services: {
+    name: "Services", description: "Service catalog, packages and service categories.",
+    defaultEnabled: false, href: "/services", requires: [],
+  },
+  inventory: {
+    name: "Inventory", description: "Products, categories, suppliers and purchase orders.",
+    defaultEnabled: false, href: "/inventory", requires: [],
+  },
   crm: {
     name: "CRM",
     description: "Contacts, enquiries and follow-up tasks",

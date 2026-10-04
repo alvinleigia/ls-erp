@@ -1,4 +1,7 @@
 "use client"
+import { useBusinessModules } from "@/platform/module-provider"
+
+import { Select } from "@/components/erp/controls"
 
 import * as React from "react"
 import { useRouter } from "next/navigation"
@@ -15,7 +18,12 @@ import { calendarViewsEnabled } from "@/lib/calendar-features"
 import { ArrowDownIcon, ArrowUpDownIcon, ArrowUpIcon, MoreHorizontalIcon } from "lucide-react"
 import { toast } from "sonner"
 
-import { DataTable, DataTablePagination, DataTableToolbar } from "@/components/data-table"
+import { DataTable } from "@/components/data-table"
+import { PageHeader, Surface, TableToolbar, Filters, pageClass } from "@/components/erp/page"
+import { TablePagination } from "@/components/erp/pagination"
+import { DraftPanel } from "@/components/erp/record-detail"
+import { Section } from "@/components/erp/section"
+import { ConfirmAction } from "@/components/erp/confirm-action"
 import { DateRangePicker } from "@/components/date-range-picker"
 import { SearchableSelect } from "@/components/searchable-select"
 import { Button } from "@/components/ui/button"
@@ -169,6 +177,11 @@ const minutesToTime = (value: number) => {
 }
 
 export default function AppointmentsPage() {
+  const { can, enabled } = useBusinessModules()
+  const canBook = enabled("services") && can("services.read")
+  const canCreate = canBook && can("appointments.create")
+  const canUpdate = canBook && can("appointments.edit")
+  const canArchive = can("appointments.archive")
   const router = useRouter()
   const { formatDate } = useDateFormatter()
   const scheduleRef = React.useRef<ScheduleComponent | null>(null)
@@ -294,12 +307,12 @@ export default function AppointmentsPage() {
 
   const loadLookups = React.useCallback(async () => {
     const [customerRes, staffRes, serviceRes, settingsRes] = await Promise.all([
-      fetch("/api/users?role=CUSTOMER&status=ACTIVE&page=1&pageSize=100", { cache: "no-store" }),
-      fetch("/api/users?role=STAFF&status=ACTIVE&page=1&pageSize=100", { cache: "no-store" }),
-      fetch("/api/services?status=ACTIVE&page=1&pageSize=100&sort=name&order=asc", {
+      fetch("/api/directory?role=CUSTOMER&status=ACTIVE&page=1&pageSize=100", { cache: "no-store" }),
+      fetch("/api/directory?role=STAFF&status=ACTIVE&page=1&pageSize=100", { cache: "no-store" }),
+      canBook ? fetch("/api/services?status=ACTIVE&page=1&pageSize=100&sort=name&order=asc", {
         cache: "no-store",
-      }),
-      fetch("/api/settings", { cache: "no-store" }),
+      }) : Promise.resolve(new Response(JSON.stringify({ items: [] }), { status: 200 })),
+      fetch("/api/settings/operations", { cache: "no-store" }),
     ])
 
     if (customerRes.ok) {
@@ -346,7 +359,7 @@ export default function AppointmentsPage() {
         }
       }
     }
-  }, [])
+  }, [canBook])
 
   const loadAppointments = React.useCallback(async () => {
     setLoading(true)
@@ -456,6 +469,7 @@ export default function AppointmentsPage() {
 
   const openCreateDialog = React.useCallback(
     (seedDate?: Date) => {
+      if (!canCreate) return
       const base = defaultAppointmentFormValues()
       if (seedDate) {
         base.date = toDateInput(seedDate)
@@ -469,10 +483,11 @@ export default function AppointmentsPage() {
       clearErrors()
       setFormOpen(true)
     },
-    [clearErrors]
+    [clearErrors, canCreate]
   )
 
   const submitForm = React.useCallback(async () => {
+    if (!(editingId ? canUpdate : canCreate)) return
     if (!formValues.customerId || !formValues.serviceId || !formValues.staffId) {
       toast.error("Customer, service and staff are required.")
       return
@@ -491,40 +506,44 @@ export default function AppointmentsPage() {
     }
 
     setSaving(true)
-    clearErrors()
-    const payload = {
-      customerId: formValues.customerId,
-      serviceId: formValues.serviceId,
-      staffId: formValues.staffId,
-      startAt: combineLocalDateTimeToISO(formValues.date, formValues.startTime),
-      status: formValues.status,
-    }
-
-    const response = await fetch(
-      editingId ? `/api/appointments/${editingId}` : "/api/appointments",
-      {
-        method: editingId ? "PATCH" : "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+    try {
+      clearErrors()
+      const payload = {
+        customerId: formValues.customerId,
+        serviceId: formValues.serviceId,
+        staffId: formValues.staffId,
+        startAt: combineLocalDateTimeToISO(formValues.date, formValues.startTime),
+        status: formValues.status,
       }
-    )
 
-    if (!response.ok) {
-      const data = (await response.json()) as {
-        error?: string
-        details?: { fieldErrors?: Record<string, string[]> }
+      const response = await fetch(
+        editingId ? `/api/appointments/${editingId}` : "/api/appointments",
+        {
+          method: editingId ? "PATCH" : "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        }
+      )
+
+      if (!response.ok) {
+        const data = (await response.json()) as {
+          error?: string
+          details?: { fieldErrors?: Record<string, string[]> }
+        }
+        setErrorsFromResponse(data)
+        toast.error(data.error ?? "Unable to save appointment.")
+        setSaving(false)
+        return
       }
-      setErrorsFromResponse(data)
-      toast.error(data.error ?? "Unable to save appointment.")
+
+      toast.success(editingId ? "Appointment updated." : "Appointment created.")
       setSaving(false)
-      return
-    }
+      setFormOpen(false)
+      await Promise.all([loadAppointments(), loadCalendarAppointments()])
+    } catch { toast.error("Unable to save appointment.") } finally { setSaving(false) }
 
-    toast.success(editingId ? "Appointment updated." : "Appointment created.")
-    setSaving(false)
-    setFormOpen(false)
-    await Promise.all([loadAppointments(), loadCalendarAppointments()])
   }, [
+    canUpdate, canCreate,
     availability,
     availabilityChecking,
     clearErrors,
@@ -576,23 +595,27 @@ export default function AppointmentsPage() {
   }, [editingId, formOpen, formValues])
 
   const confirmCancelAppointment = React.useCallback(async (appointmentId: string) => {
+    if (!canArchive) return
     setDeleting(true)
-    const response = await fetch(`/api/appointments/${appointmentId}`, {
-      method: "DELETE",
-    })
-    if (!response.ok) {
-      const data = (await response.json()) as { error?: string }
-      toast.error(data.error ?? "Unable to cancel appointment.")
+    try {
+      const response = await fetch(`/api/appointments/${appointmentId}`, {
+        method: "DELETE",
+      })
+      if (!response.ok) {
+        const data = (await response.json()) as { error?: string }
+        toast.error(data.error ?? "Unable to cancel appointment.")
+        setDeleting(false)
+        return
+      }
+      toast.success("Appointment canceled.")
       setDeleting(false)
-      return
-    }
-    toast.success("Appointment canceled.")
-    setDeleting(false)
-    setCancelConfirmOpen(false)
-    setCancelTarget(null)
-    setFormOpen(false)
-    await Promise.all([loadAppointments(), loadCalendarAppointments()])
-  }, [loadAppointments, loadCalendarAppointments])
+      setCancelConfirmOpen(false)
+      setCancelTarget(null)
+      setFormOpen(false)
+      await Promise.all([loadAppointments(), loadCalendarAppointments()])
+    } catch { toast.error("Unable to cancel appointment.") } finally { setDeleting(false) }
+
+  }, [loadAppointments, loadCalendarAppointments, canArchive])
 
   const requestCancelAppointment = React.useCallback((appointment: AppointmentRow | null, id?: string) => {
     if (appointment) {
@@ -803,6 +826,7 @@ export default function AppointmentsPage() {
         meta: { label: "Customer" },
         header: "Customer",
         accessorFn: (row) => row.customer?.name || row.customer?.email || "-",
+        cell: ({ row }) => <button type="button" className="text-left font-medium underline underline-offset-4" onClick={() => openQuickInfoDialog(row.original)}>{row.original.customer?.name || row.original.customer?.email || "Customer"}</button>,
       },
       {
         id: "service",
@@ -873,13 +897,13 @@ export default function AppointmentsPage() {
         enableHiding: false,
         cell: ({ row }) => {
           const appointment = row.original
-          const canEdit = canEditAppointment(appointment.status)
-          const canReschedule = canRescheduleAppointment(appointment.status)
-          const canCancel = canCancelAppointment(appointment.status)
+          const canEdit = canUpdate && canEditAppointment(appointment.status)
+          const canReschedule = canUpdate && canRescheduleAppointment(appointment.status)
+          const canCancel = canArchive && canCancelAppointment(appointment.status)
           return (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button size="icon" variant="ghost">
+                <Button size="icon" variant="ghost" aria-label="Record actions">
                   <MoreHorizontalIcon className="h-4 w-4" />
                 </Button>
               </DropdownMenuTrigger>
@@ -912,10 +936,9 @@ export default function AppointmentsPage() {
         },
       },
     ],
-    [formatDate, openAppointmentEditor, openQuickInfoDialog, requestCancelAppointment]
+    [formatDate, openAppointmentEditor, openQuickInfoDialog, requestCancelAppointment, canUpdate, canArchive]
   )
 
-  // eslint-disable-next-line react-hooks/incompatible-library
   const table = useReactTable({
     data: appointments,
     columns,
@@ -932,25 +955,17 @@ export default function AppointmentsPage() {
   })
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold">Appointments</h1>
-          <p className="text-sm text-muted-foreground">
-            Manage bookings below or use New appointment to create one.
-          </p>
-        </div>
-        <Button onClick={() => router.push("/appointments/new")}>New appointment</Button>
-      </div>
+    <div className={pageClass}>
+      <PageHeader title="Appointments" description="View bookings and manage their schedules." actions={<Button disabled={!canCreate} onClick={() => router.push("/appointments/new")}>New appointment</Button>} />
 
       {calendarViewsEnabled ? <div className="rounded-xl border bg-card p-3 shadow-sm">
         <div className="mb-3 flex flex-wrap items-center justify-end gap-2">
-          <select
-            className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+          <Select
+            aria-label="Calendar status"
             value={calendarStatusFilter}
-            onChange={(event) =>
+            onValueChange={(value) =>
               setCalendarStatusFilter(
-                event.target.value as "non_canceled" | "all" | AppointmentStatus
+                value as "non_canceled" | "all" | AppointmentStatus
               )
             }
           >
@@ -958,10 +973,10 @@ export default function AppointmentsPage() {
             <option value="all">Calendar: All statuses</option>
             {APPOINTMENT_STATUS_OPTIONS.filter((status) => status !== "all").map((status) => (
               <option key={`calendar-${status}`} value={status}>
-                Calendar: {status}
+                Calendar: {APPOINTMENT_STATUS_META[status].label}
               </option>
             ))}
-          </select>
+          </Select>
           <Button
             type="button"
             size="sm"
@@ -1009,21 +1024,22 @@ export default function AppointmentsPage() {
         />
       </div> : <CalendarUnavailable />}
 
-      <DataTableToolbar table={table} searchPlaceholder="Search appointments">
-        <select
-          className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+      <Surface><TableToolbar table={table} searchPlaceholder="Search appointments">
+        <Select
+          aria-label="Status filter"
           value={statusFilter}
-          onChange={(event) =>
-            setStatusFilter(event.target.value as AppointmentStatus | "all")
+          onValueChange={(value) =>
+            setStatusFilter(value as AppointmentStatus | "all")
           }
         >
           {APPOINTMENT_STATUS_OPTIONS.map((status) => (
             <option key={status} value={status}>
-              {status === "all" ? "All statuses" : status}
+              {status === "all" ? "All statuses" : APPOINTMENT_STATUS_META[status].label}
             </option>
           ))}
-        </select>
-        <div className="w-56">
+        </Select>
+        <Filters activeCount={Number(staffFilter !== "all") + Number(Boolean(dateRangeFilter))} onReset={() => { setStaffFilter("all"); setDateRangeFilter(undefined) }}>
+        <div className="min-w-0">
           <SearchableSelect
             value={staffFilter}
             placeholder="All staff"
@@ -1038,7 +1054,7 @@ export default function AppointmentsPage() {
             onChange={(nextValue) => setStaffFilter(nextValue)}
           />
         </div>
-        <div className="flex items-center gap-2">
+        <div className="col-span-full flex flex-wrap items-center gap-2">
           <DateRangePicker
             value={dateRangeFilter}
             onChange={(nextValue) => setDateRangeFilter(nextValue)}
@@ -1054,10 +1070,10 @@ export default function AppointmentsPage() {
             Clear dates
           </Button>
         </div>
-      </DataTableToolbar>
+      </Filters><Button variant="outline" disabled={loading} onClick={() => void loadAppointments()}>Refresh</Button></TableToolbar>
 
       <DataTable table={table} loading={loading} emptyMessage="No appointments found." />
-      <DataTablePagination table={table} totalRows={totalRows} />
+      <TablePagination table={table} totalRows={totalRows} loading={loading} /></Surface>
 
       <Dialog
         open={quickInfoOpen}
@@ -1070,7 +1086,7 @@ export default function AppointmentsPage() {
           }
         }}
       >
-        <DialogContent className="max-w-md">
+        <DialogContent className="flex max-h-[90vh] flex-col sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>Appointment info</DialogTitle>
             <DialogDescription>
@@ -1078,7 +1094,7 @@ export default function AppointmentsPage() {
             </DialogDescription>
           </DialogHeader>
           {quickInfoTarget ? (
-            <div className="space-y-3 text-sm">
+            <div className="min-h-0 flex-1 space-y-3 overflow-y-auto text-sm">
               <div className="rounded-md border p-3">
                 <p className="font-medium text-base">
                   {quickInfoTarget.customer?.name || quickInfoTarget.customer?.email || "Customer"}
@@ -1163,7 +1179,7 @@ export default function AppointmentsPage() {
             <Button variant="outline" onClick={() => setQuickInfoOpen(false)}>
               Close
             </Button>
-            {quickInfoTarget && canCancelAppointment(quickInfoTarget.status) ? (
+            {quickInfoTarget && canArchive && canCancelAppointment(quickInfoTarget.status) ? (
               <Button
                 variant="outline"
                 className="text-destructive"
@@ -1183,84 +1199,20 @@ export default function AppointmentsPage() {
                 }}
                 disabled={!quickInfoTarget.orderLine?.order?.id}
               >
-                {canEditAppointment(quickInfoTarget.status) ? "Edit booking" : "View booking"}
+                {canUpdate && canEditAppointment(quickInfoTarget.status) ? "Edit booking" : "View booking"}
               </Button>
             ) : null}
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      <Dialog
-        open={cancelConfirmOpen}
-        onOpenChange={(open) => {
-          setCancelConfirmOpen(open)
-          if (!open) {
-            setCancelTarget(null)
-          }
-        }}
-      >
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Cancel appointment</DialogTitle>
-            <DialogDescription>
-              {cancelTarget
-                ? `Cancel this appointment for ${cancelTarget.customer?.name || cancelTarget.customer?.email || "the customer"}?`
-                : "Cancel this appointment?"}
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setCancelConfirmOpen(false)
-                setCancelTarget(null)
-              }}
-              disabled={deleting}
-            >
-              Keep appointment
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={() => (cancelTarget ? void confirmCancelAppointment(cancelTarget.id) : undefined)}
-              disabled={deleting || !cancelTarget}
-            >
-              {deleting ? "Canceling..." : "Confirm cancel"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {cancelConfirmOpen && cancelTarget && <ConfirmAction title="Cancel appointment" description={`Cancel this appointment for ${cancelTarget.customer?.name || cancelTarget.customer?.email || "the customer"}?`} label="Confirm cancel" destructive busy={deleting} onCancel={() => { setCancelConfirmOpen(false); setCancelTarget(null) }} onConfirm={() => void confirmCancelAppointment(cancelTarget.id)} />}
 
-      <Dialog
-        open={formOpen}
-        onOpenChange={(open) => {
-          setFormOpen(open)
-          if (!open) {
-            setEditingId(null)
-            setFormMode("create")
-            clearErrors()
-          }
-        }}
-      >
-        <DialogContent className="max-h-[90vh] flex flex-col">
-          <DialogHeader>
-            <DialogTitle>
-              {editingId
-                ? formMode === "reschedule"
-                  ? "Reschedule appointment"
-                  : "Edit appointment"
-                : "New appointment"}
-            </DialogTitle>
-            <DialogDescription>
-              {editingId
-                ? formMode === "reschedule"
-                  ? "Update date and time for this booking."
-                  : "Update appointment details, staff, service, and status."
-                : "Use the same booking form whether you open from calendar or button."}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex-1 overflow-y-auto">
+      {formOpen && <DraftPanel title={editingId ? formMode === "reschedule" ? "Reschedule appointment" : "Edit appointment" : "New appointment"} description="Update the booking details and check slot availability." fingerprint={formValues} saving={saving} disabled={!(editingId ? canUpdate : canCreate) || availabilityChecking || availability?.available === false} saveLabel={editingId ? "Save changes" : "Create appointment"} onClose={() => { setFormOpen(false); setEditingId(null); clearErrors() }} onSubmit={() => void submitForm()}>
+        <Section title="Booking details">
             <AppointmentFormFields
               values={formValues}
+              canCancel={canArchive}
               errors={errors}
               customers={customers}
               services={services}
@@ -1290,31 +1242,8 @@ export default function AppointmentsPage() {
                 </p>
               )}
             </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setFormOpen(false)}>
-              Cancel
-            </Button>
-            {editingId && canCancelAppointment(formValues.status) ? (
-              <Button
-                variant="outline"
-                onClick={() => requestCancelAppointment(null, editingId)}
-                disabled={deleting}
-              >
-                {deleting ? "Canceling..." : "Cancel appointment"}
-              </Button>
-            ) : null}
-            <Button
-              onClick={submitForm}
-              loading={saving}
-              loadingText="Saving..."
-              disabled={availabilityChecking || availability?.available === false}
-            >
-              {editingId ? "Save changes" : "Create appointment"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        </Section>
+      </DraftPanel>}
     </div>
   )
 }

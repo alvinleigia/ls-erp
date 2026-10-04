@@ -1,3 +1,5 @@
+import { withAppointmentsApi } from "@/modules/appointments/api"
+import { requirePermission } from "@/platform/access/policy"
 import { NextResponse } from "next/server"
 import { Prisma } from "@prisma/client"
 import { z } from "zod"
@@ -109,7 +111,7 @@ const makeUsageMap = (
   return map
 }
 
-export async function GET(request: Request) {
+async function handleGET(request: Request) {
   const logContext = createApiLogContext(request)
   logApiRequestStart(logContext, request)
 
@@ -272,4 +274,11 @@ export async function GET(request: Request) {
     const response = NextResponse.json({ error: "Unable to load coupon usage report." }, { status: 500 })
     return withRequestId(response, logContext.requestId)
   }
+}
+
+export async function GET(request: Request) {
+  return withAppointmentsApi(request, "appointmentCoupons", "read", async actor => {
+    requirePermission(actor, "appointments.read")
+    return handleGET(request)
+  })
 }

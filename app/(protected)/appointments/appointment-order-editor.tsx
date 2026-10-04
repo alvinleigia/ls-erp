@@ -1,9 +1,15 @@
 "use client"
+import { useBusinessModules } from "@/platform/module-provider"
 
 import * as React from "react"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 
+import { PageHeader, pageClass } from "@/components/erp/page"
+import { Section } from "@/components/erp/section"
+import { DraftPanel } from "@/components/erp/record-detail"
+import { ConfirmAction } from "@/components/erp/confirm-action"
+import { AppointmentOrderSummary } from "./appointment-order-summary"
 import { Button } from "@/components/ui/button"
 import { useFormErrors } from "@/hooks/use-form-errors"
 import type {
@@ -134,14 +140,27 @@ const ORDER_STATUS_META: Record<
 }
 
 export function AppointmentOrderEditor({ mode, appointmentId }: AppointmentOrderEditorProps) {
+  const { can, enabled } = useBusinessModules()
+  const servicesAllowed = enabled("services") && can("services.read")
+  const productsAllowed = enabled("inventory") && can("inventoryProducts.read")
+  const couponsAllowed = can("appointmentCoupons.read")
+  const canExport = can("appointments.export")
+  const canEmail = canExport && can("appointments.edit")
   const router = useRouter()
-  const [loading, setLoading] = React.useState(mode === "edit")
+  const [loading, setLoading] = React.useState(true)
+  const [savedOrder, setSavedOrder] = React.useState<AppointmentOrderRow | null>(null)
+  const canWrite = servicesAllowed && can(mode === "create" ? "appointments.create" : "appointments.edit") && (!savedOrder?.productLines?.length || productsAllowed) && (!savedOrder?.coupons.length || couponsAllowed)
+  const [editOpen, setEditOpen] = React.useState(false)
+  const [formError, setFormError] = React.useState("")
+  const [loadError, setLoadError] = React.useState("")
+  const [discardCreate, setDiscardCreate] = React.useState(false)
   const [saving, setSaving] = React.useState(false)
   const [emailing, setEmailing] = React.useState(false)
   const [editingId, setEditingId] = React.useState<string | null>(appointmentId ?? null)
   const [values, setValues] = React.useState<AppointmentOrderFormValues>(
-    defaultAppointmentOrderFormValues()
+    defaultAppointmentOrderFormValues
   )
+  const [initialDraft] = React.useState(() => JSON.stringify(values))
   const [customers, setCustomers] = React.useState<AppointmentCustomerOption[]>([])
   const [staff, setStaff] = React.useState<AppointmentStaffOption[]>([])
   const [services, setServices] = React.useState<AppointmentServiceOption[]>([])
@@ -569,6 +588,7 @@ export function AppointmentOrderEditor({ mode, appointmentId }: AppointmentOrder
 
   const applyOrderToForm = React.useCallback(
     (order: AppointmentOrderRow) => {
+      setSavedOrder(order)
       const start = new Date(order.appointmentStartAt)
       const nextValues: AppointmentOrderFormValues = {
         customerId: order.customerId,
@@ -623,23 +643,23 @@ export function AppointmentOrderEditor({ mode, appointmentId }: AppointmentOrder
   React.useEffect(() => {
     const loadLookups = async () => {
       const [customerRes, staffRes, serviceRes, productRes, couponRes, taxesRes, settingsRes] = await Promise.all([
-        fetch("/api/users?role=CUSTOMER&status=ACTIVE&page=1&pageSize=100", {
+        fetch("/api/directory?role=CUSTOMER&status=ACTIVE&page=1&pageSize=100", {
           cache: "no-store",
         }),
-        fetch("/api/users?role=STAFF&status=ACTIVE&page=1&pageSize=100", {
+        fetch("/api/directory?role=STAFF&status=ACTIVE&page=1&pageSize=100", {
           cache: "no-store",
         }),
-        fetch("/api/services?status=ACTIVE&page=1&pageSize=100&sort=name&order=asc", {
+        servicesAllowed ? fetch("/api/services?status=ACTIVE&page=1&pageSize=100&sort=name&order=asc", {
           cache: "no-store",
-        }),
-        fetch("/api/inventory/products?status=ACTIVE&page=1&pageSize=100&sort=name&order=asc", {
+        }) : Promise.resolve(new Response(JSON.stringify({ items: [] }), { status: 200 })),
+        productsAllowed ? fetch("/api/inventory/products?status=ACTIVE&page=1&pageSize=100&sort=name&order=asc", {
           cache: "no-store",
-        }),
-        fetch("/api/appointments/coupons?page=1&pageSize=100&active=true", {
+        }) : Promise.resolve(new Response(JSON.stringify({ items: [] }), { status: 200 })),
+        couponsAllowed ? fetch("/api/appointments/coupons?page=1&pageSize=100&active=true", {
           cache: "no-store",
-        }),
-        fetch("/api/settings/taxes?page=1&pageSize=100&active=true", { cache: "no-store" }),
-        fetch("/api/settings", { cache: "no-store" }),
+        }) : Promise.resolve(new Response(JSON.stringify({ items: [] }), { status: 200 })),
+        fetch("/api/lookups/taxes?page=1&pageSize=100&active=true", { cache: "no-store" }),
+        fetch("/api/settings/operations", { cache: "no-store" }),
       ])
 
       if (customerRes.ok) {
@@ -718,14 +738,16 @@ export function AppointmentOrderEditor({ mode, appointmentId }: AppointmentOrder
       }
     }
 
-    void loadLookups()
-  }, [])
+    void loadLookups().catch(() => toast.error("Unable to load booking choices. Please refresh."))
+  }, [servicesAllowed, productsAllowed, couponsAllowed])
 
   React.useEffect(() => {
-    if (mode !== "edit" || !appointmentId) return
+    if (mode !== "edit") { setLoading(false); return }
+    if (!appointmentId) { setLoadError("Booking order not found."); setLoading(false); return }
 
     const load = async () => {
       setLoading(true)
+      setLoadError("")
       setEditingId(appointmentId)
 
       const orderResponse = await fetch(`/api/appointments/orders/${appointmentId}`, {
@@ -741,10 +763,11 @@ export function AppointmentOrderEditor({ mode, appointmentId }: AppointmentOrder
         }
       }
 
+      setLoadError("Booking order not found.")
       toast.error("Booking order not found.")
       setLoading(false)
     }
-    void load()
+    void load().catch(() => { setLoadError("Unable to load booking. Please refresh."); setLoading(false) })
   }, [appointmentId, applyOrderToForm, mode])
 
   const bookingStartAt = React.useMemo(() => {
@@ -770,127 +793,136 @@ export function AppointmentOrderEditor({ mode, appointmentId }: AppointmentOrder
   const primaryActionLabel = currentStatus === "DRAFT" ? "Confirm booking" : "Save changes"
 
   const handleSave = async (target: "draft" | "confirm") => {
+    if (!canWrite) return
     if (isReadOnlyBooking) {
       toast.error("This booking is historical and cannot be modified.")
       return
     }
     if (!values.lines.length) {
+      setFormError("Add at least one service item.")
       toast.error("Add at least one service item.")
       return
     }
     if (!values.customerId || !values.appointmentDate || !values.appointmentStartTime) {
+      setFormError("Customer, date and start time are required.")
       toast.error("Customer, date and start time are required.")
       return
     }
 
     setSaving(true)
-    setStartSuggestion(null)
+    setFormError("")
+    try {
+      setStartSuggestion(null)
 
-    const response = await fetch(
-      editingId ? `/api/appointments/orders/${editingId}` : "/api/appointments/orders",
-      {
-        method: editingId ? "PATCH" : "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          customerId: values.customerId,
-          appointmentDate: values.appointmentDate,
-          appointmentStartTime: values.appointmentStartTime,
-          appointmentStartAt: combineLocalDateTimeToISO(
-            values.appointmentDate,
-            values.appointmentStartTime
-          ),
-          status: target === "confirm" ? "CONFIRMED" : "DRAFT",
-          customerNote: values.customerNote,
-          internalNote: values.internalNote,
-          coupons: values.coupons.map((coupon) => coupon.code),
-          lines: values.lines.map((line) => ({
-            serviceId: line.serviceId,
-            staffId: line.staffId,
-            quantity: line.quantity,
-            durationMinutes: line.durationMinutes,
-            unitPriceCents:
-              line.unitPriceCents > 0
-                ? line.unitPriceCents
-                : services.find((service) => service.id === line.serviceId)?.priceCents ?? 0,
-            discountType: line.discountType,
-            discountValue: line.discountValue,
-            taxMode: line.taxMode,
-            taxIds: line.taxIds,
-            note: line.note,
-          })),
-          productLines: (values.productLines ?? []).map((line) => ({
-            productId: line.productId,
-            quantity: line.quantity,
-            unitPriceCents: line.unitPriceCents,
-            discountType: line.discountType,
-            discountValue: line.discountValue,
-            taxMode: line.taxMode,
-            taxIds: line.taxIds,
-            note: line.note,
-          })),
-        }),
+      const response = await fetch(
+        editingId ? `/api/appointments/orders/${editingId}` : "/api/appointments/orders",
+        {
+          method: editingId ? "PATCH" : "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            customerId: values.customerId,
+            appointmentDate: values.appointmentDate,
+            appointmentStartTime: values.appointmentStartTime,
+            appointmentStartAt: combineLocalDateTimeToISO(
+              values.appointmentDate,
+              values.appointmentStartTime
+            ),
+            status: target === "confirm" ? "CONFIRMED" : "DRAFT",
+            customerNote: values.customerNote,
+            internalNote: values.internalNote,
+            coupons: values.coupons.map((coupon) => coupon.code),
+            lines: values.lines.map((line) => ({
+              serviceId: line.serviceId,
+              staffId: line.staffId,
+              quantity: line.quantity,
+              durationMinutes: line.durationMinutes,
+              unitPriceCents:
+                line.unitPriceCents > 0
+                  ? line.unitPriceCents
+                  : services.find((service) => service.id === line.serviceId)?.priceCents ?? 0,
+              discountType: line.discountType,
+              discountValue: line.discountValue,
+              taxMode: line.taxMode,
+              taxIds: line.taxIds,
+              note: line.note,
+            })),
+            productLines: (values.productLines ?? []).map((line) => ({
+              productId: line.productId,
+              quantity: line.quantity,
+              unitPriceCents: line.unitPriceCents,
+              discountType: line.discountType,
+              discountValue: line.discountValue,
+              taxMode: line.taxMode,
+              taxIds: line.taxIds,
+              note: line.note,
+            })),
+          }),
+        }
+      )
+
+      if (!response.ok) {
+        const data = (await response.json().catch(() => ({}))) as {
+          error?: string
+          suggestedStartAt?: string
+          canApplySuggestion?: boolean
+        }
+        if (
+          target === "confirm" &&
+          data.suggestedStartAt &&
+          data.canApplySuggestion !== false
+        ) {
+          setStartSuggestion({
+            suggestedStartAt: data.suggestedStartAt,
+            reason: data.error ?? "Selected time is unavailable.",
+            requestKey,
+          })
+        }
+        setFormError(data.error ?? "Unable to save booking.")
+        toast.error(data.error ?? "Unable to save booking.")
+        return
       }
-    )
 
-    setSaving(false)
-
-    if (!response.ok) {
-      const data = (await response.json().catch(() => ({}))) as {
-        error?: string
-        suggestedStartAt?: string
-        canApplySuggestion?: boolean
+      const data = (await response.json()) as { order?: AppointmentOrderRow }
+      const nextId = data.order?.id ?? editingId
+      if (data.order) {
+        applyOrderToForm(data.order)
       }
-      if (
-        target === "confirm" &&
-        data.suggestedStartAt &&
-        data.canApplySuggestion !== false
-      ) {
-        setStartSuggestion({
-          suggestedStartAt: data.suggestedStartAt,
-          reason: data.error ?? "Selected time is unavailable.",
-          requestKey,
-        })
+      toast.success(target === "draft" ? "Draft saved." : "Booking confirmed.")
+      setEditOpen(false)
+      if (nextId) {
+        router.replace(`/appointments/${nextId}/edit`)
       }
-      toast.error(data.error ?? "Unable to save booking.")
-      return
-    }
-
-    const data = (await response.json()) as { order?: AppointmentOrderRow }
-    const nextId = data.order?.id ?? editingId
-    if (data.order) {
-      applyOrderToForm(data.order)
-    }
-    toast.success(target === "draft" ? "Draft saved." : "Booking confirmed.")
-    if (nextId) {
-      router.replace(`/appointments/${nextId}/edit`)
-    }
+    } catch { setFormError("Unable to save booking. Please try again.") } finally { setSaving(false) }
   }
 
   const handlePrintInvoice = React.useCallback(() => {
+    if (!canExport) return
     if (!editingId) {
       toast.error("Save the booking before printing the invoice.")
       return
     }
     window.open(`/api/appointments/orders/${editingId}/invoice`, "_blank", "noopener")
-  }, [editingId])
+  }, [editingId, canExport])
 
   const handleEmailInvoice = React.useCallback(async () => {
+    if (!canEmail) return
     if (!editingId) {
       toast.error("Save the booking before emailing the invoice.")
       return
     }
     setEmailing(true)
-    const response = await fetch(`/api/appointments/orders/${editingId}/invoice-email`, {
-      method: "POST",
-    })
-    setEmailing(false)
-    if (!response.ok) {
-      const data = (await response.json().catch(() => ({}))) as { error?: string }
-      toast.error(data.error ?? "Unable to email invoice.")
-      return
-    }
-    toast.success("Invoice emailed.")
-  }, [editingId])
+    try {
+      const response = await fetch(`/api/appointments/orders/${editingId}/invoice-email`, {
+        method: "POST",
+      })
+      if (!response.ok) {
+        const data = (await response.json().catch(() => ({}))) as { error?: string }
+        toast.error(data.error ?? "Unable to email invoice.")
+        return
+      }
+      toast.success("Invoice emailed.")
+    } catch { toast.error("Unable to email invoice.") } finally { setEmailing(false) }
+  }, [editingId, canEmail])
 
   React.useEffect(() => {
     if (savedLineScheduleKey && savedLineScheduleKey !== requestKey) {
@@ -918,69 +950,8 @@ export function AppointmentOrderEditor({ mode, appointmentId }: AppointmentOrder
     toast.success("Applied next available start time.")
   }
 
-  return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold">
-            {mode === "create" ? "New booking" : "Edit booking"}
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            Invoice-style booking with multiple services, attendants, notes, and coupons.
-          </p>
-          <div className="mt-2 flex items-center gap-2 text-xs">
-            <span className={`rounded-full border px-2 py-0.5 font-medium ${currentStatusMeta.badgeClass}`}>
-              {currentStatusMeta.label}
-            </span>
-            <span className="text-muted-foreground">{currentStatusMeta.helperText}</span>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" onClick={() => router.push("/appointments")}>
-            Back
-          </Button>
-          <Button variant="outline" onClick={handlePrintInvoice} disabled={!editingId}>
-            Print invoice
-          </Button>
-          <Button
-            variant="outline"
-            onClick={() => void handleEmailInvoice()}
-            loading={emailing}
-            loadingText="Emailing..."
-            disabled={!editingId}
-          >
-            Email invoice
-          </Button>
-          {!isReadOnlyBooking ? (
-            <>
-              {canSaveDraft ? (
-                <Button
-                  variant="outline"
-                  onClick={() => void handleSave("draft")}
-                  loading={saving}
-                  loadingText="Saving..."
-                >
-                  Save draft
-                </Button>
-              ) : null}
-              <Button onClick={() => void handleSave("confirm")} loading={saving} loadingText="Saving...">
-                {primaryActionLabel}
-              </Button>
-            </>
-          ) : (
-            <Button variant="outline" disabled>
-              Historical record
-            </Button>
-          )}
-        </div>
-      </div>
-
-      {isReadOnlyBooking ? (
-        <div className="rounded-md border border-muted px-3 py-2 text-xs text-muted-foreground">
-          This booking is in the past or in a closed status and is read-only.
-        </div>
-      ) : null}
-
+  const closeCreate = () => { if (JSON.stringify(values) !== initialDraft) setDiscardCreate(true); else router.push("/appointments") }
+  const formContent = <>
       {activeSuggestion && !isReadOnlyBooking ? (
         <div className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-900 dark:text-amber-200">
           <p>{activeSuggestion.reason}</p>
@@ -1012,6 +983,8 @@ export function AppointmentOrderEditor({ mode, appointmentId }: AppointmentOrder
           staff={staff}
           services={services}
           products={products}
+          productsEnabled={productsAllowed}
+          couponsEnabled={couponsAllowed}
           timeFormat={settings.timeFormat}
           couponOptions={coupons.map((coupon) => ({
             value: coupon.code,
@@ -1025,8 +998,7 @@ export function AppointmentOrderEditor({ mode, appointmentId }: AppointmentOrder
         />
       </div>
 
-      <div className="rounded-xl border bg-card p-4">
-        <h2 className="mb-1 text-sm font-semibold">Schedule preview</h2>
+      <Section title="Schedule preview">
         <p className="mb-3 text-xs text-muted-foreground">
           Services are scheduled sequentially from the selected start time; wait gaps appear when a later slot is needed.
         </p>
@@ -1054,10 +1026,9 @@ export function AppointmentOrderEditor({ mode, appointmentId }: AppointmentOrder
             Select date and start time to preview slots.
           </p>
         )}
-      </div>
+      </Section>
 
-      <div className="rounded-xl border bg-card p-4">
-        <h2 className="mb-3 text-sm font-semibold">Totals</h2>
+      <Section title="Totals">
         <div className="grid gap-2 text-sm sm:grid-cols-2">
           <div className="text-muted-foreground">Subtotal</div>
           <div className="text-right">{formatCurrencyFromCents(totals.subtotalCents, settings)}</div>
@@ -1070,7 +1041,25 @@ export function AppointmentOrderEditor({ mode, appointmentId }: AppointmentOrder
           <div className="font-semibold">Grand total</div>
           <div className="text-right font-semibold">{formatCurrencyFromCents(totals.totalCents, settings)}</div>
         </div>
-      </div>
-    </div>
-  )
+      </Section>
+  </>
+  if (loadError) return <div className={pageClass}><PageHeader title="Booking" backHref="/appointments" /><p role="alert" className="text-destructive">{loadError}</p></div>
+  return <div className={pageClass}>
+    <PageHeader title={mode === "create" ? "New booking" : "Booking"} description={canWrite ? currentStatusMeta.helperText : "View saved booking details and pricing."} badge={<span className={`rounded-full border px-2 py-0.5 text-xs ${currentStatusMeta.badgeClass}`}>{currentStatusMeta.label}</span>} actions={mode === "create" ? <>
+      <Button variant="outline" disabled={saving} onClick={closeCreate}>Cancel</Button>
+      <Button variant="outline" disabled={!canWrite} loading={saving} onClick={() => void handleSave("draft")}>Save draft</Button>
+      <Button disabled={!canWrite} loading={saving} onClick={() => void handleSave("confirm")}>Confirm booking</Button>
+    </> : <>
+      <Button variant="outline" onClick={() => router.push("/appointments")}>Back</Button>
+      <Button variant="outline" onClick={handlePrintInvoice} disabled={!savedOrder || !canExport}>Print invoice</Button>
+      <Button variant="outline" onClick={() => void handleEmailInvoice()} loading={emailing} disabled={!savedOrder || !canEmail}>Email invoice</Button>
+      {canWrite && !isReadOnlyBooking && savedOrder && <Button onClick={() => { applyOrderToForm(savedOrder); setFormError(""); setEditOpen(true) }}>Edit booking</Button>}
+    </>} />
+    {isReadOnlyBooking && <p className="text-sm text-muted-foreground">This booking is in the past or in a closed status and is read-only.</p>}
+    {mode === "create" ? <>{formError && <p role="alert" className="text-destructive">{formError}</p>}<fieldset disabled={saving || !canWrite} className="min-w-0 space-y-6">{formContent}</fieldset></> : savedOrder && <AppointmentOrderSummary order={savedOrder} settings={settings} />}
+    {editOpen && savedOrder && <DraftPanel disabled={!canWrite} title="Edit booking" description="Update booking details, items and schedule." fingerprint={values} saving={saving} error={formError} footerActions={canSaveDraft ? <Button type="button" disabled={saving} onClick={() => void handleSave("draft")}>Save draft</Button> : undefined} saveLabel={primaryActionLabel} onClose={() => { applyOrderToForm(savedOrder); setStartSuggestion(null); setEditOpen(false) }} onSubmit={() => void handleSave("confirm")}>
+      {formContent}
+    </DraftPanel>}
+    {discardCreate && <ConfirmAction title="Discard unsaved booking?" description="Your booking has not been saved." label="Discard changes" busy={false} onCancel={() => setDiscardCreate(false)} onConfirm={() => router.push("/appointments")} />}
+  </div>
 }

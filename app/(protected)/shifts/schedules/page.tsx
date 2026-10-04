@@ -1,4 +1,15 @@
 "use client"
+import { useCurrentResourceAction } from "@/platform/access/view-guard"
+
+import { DraftPanel, RecordPanel, ReadOnlyFields } from "@/components/erp/record-detail"
+import { Section } from "@/components/erp/section"
+
+import { ActionDialogContent } from "@/components/erp/action-dialog"
+
+import { PageHeader, pageClass, Surface, TableToolbar } from "@/components/erp/page"
+import { TablePagination } from "@/components/erp/pagination"
+
+import { Select } from "@/components/erp/controls"
 
 import * as React from "react"
 import {
@@ -12,14 +23,7 @@ import { ArrowDownIcon, ArrowUpDownIcon, ArrowUpIcon, MoreHorizontalIcon } from 
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
+import { Dialog } from "@/components/ui/dialog"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -27,11 +31,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
-import {
-  DataTable,
-  DataTablePagination,
-  DataTableToolbar,
-} from "@/components/data-table"
+import { DataTable } from "@/components/data-table"
 import { SearchableSelect } from "@/components/searchable-select"
 import { useDateFormatter } from "@/hooks/use-date-formatter"
 import { useFormErrors } from "@/hooks/use-form-errors"
@@ -109,10 +109,15 @@ const summarizeAssignmentRange = (
 }
 
 export default function ShiftSchedulesPage() {
+  const canCreate = useCurrentResourceAction("create")
+  const canEdit = useCurrentResourceAction("edit")
+  const canArchive = useCurrentResourceAction("archive")
+
   const { formatDate } = useDateFormatter()
   type PaginationState = { pageIndex: number; pageSize: number }
 
   const [schedules, setSchedules] = React.useState<ShiftSchedule[]>([])
+  const [formError, setFormError] = React.useState("")
   const [loading, setLoading] = React.useState(true)
   const [totalRows, setTotalRows] = React.useState(0)
 
@@ -135,6 +140,7 @@ export default function ShiftSchedulesPage() {
     pageSize: 10,
   })
 
+  const [viewing, setViewing] = React.useState<ShiftSchedule | null>(null)
   const [createOpen, setCreateOpen] = React.useState(false)
   const [editOpen, setEditOpen] = React.useState(false)
   const [deleteOpen, setDeleteOpen] = React.useState(false)
@@ -222,7 +228,7 @@ export default function ShiftSchedulesPage() {
   }, [])
 
   const loadStaff = React.useCallback(async () => {
-    const response = await fetch("/api/users?role=STAFF&pageSize=100", {
+    const response = await fetch("/api/directory?role=STAFF&pageSize=100", {
       cache: "no-store",
     })
     if (!response.ok) {
@@ -271,38 +277,45 @@ export default function ShiftSchedulesPage() {
       toast.error("Select at least one staff member.")
       return
     }
-    setSaving(true)
-    clearCreateErrors()
-    const response = await fetch("/api/shifts/schedules", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        ...newSchedule,
-        staffIds: normalizedStaffIds,
-      }),
-    })
+    setFormError(""); setSaving(true)
+    try {
+      clearCreateErrors()
+      const response = await fetch("/api/shifts/schedules", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...newSchedule,
+          staffIds: normalizedStaffIds,
+        }),
+      })
 
-    if (!response.ok) {
-      const data = (await response.json()) as {
-        error?: string
-        details?: { fieldErrors?: Record<string, string[]> }
+      if (!response.ok) {
+        const data = (await response.json()) as {
+          error?: string
+          details?: { fieldErrors?: Record<string, string[]> }
+        }
+        setCreateErrorsFromResponse(data)
+        setFormError(data.error ?? "Unable to create shift schedule."); toast.error(data.error ?? "Unable to create shift schedule.")
+        setSaving(false)
+        return
       }
-      setCreateErrorsFromResponse(data)
-      toast.error(data.error ?? "Unable to create shift schedule.")
-      setSaving(false)
-      return
-    }
 
-    toast.success("Shift schedule created.")
-    setNewSchedule(defaultForm)
-    setSaving(false)
-    setCreateOpen(false)
-    await loadSchedules()
+      toast.success("Shift schedule created.")
+      setNewSchedule(defaultForm)
+      setSaving(false)
+      setCreateOpen(false)
+      await loadSchedules()
+    } catch {
+      setFormError("Unable to save. Please try again.")
+    } finally {
+      setSaving(false)
+    }
   }
 
   const startEdit = React.useCallback(
     (schedule: ShiftSchedule) => {
       clearEditErrors()
+      setFormError("")
       const assignments = schedule.assignments ?? []
       const assignmentStart = assignments[0]?.startDate
         ? toDateInputValue(assignments[0].startDate)
@@ -349,32 +362,38 @@ export default function ShiftSchedulesPage() {
       toast.error("Select a staff member.")
       return
     }
-    setSaving(true)
-    const response = await fetch(`/api/shifts/schedules/${editingSchedule.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        ...editSchedule,
-        staffIds: normalizedStaffIds,
-      }),
-    })
+    setFormError(""); setSaving(true)
+    try {
+      const response = await fetch(`/api/shifts/schedules/${editingSchedule.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...editSchedule,
+          staffIds: normalizedStaffIds,
+        }),
+      })
 
-    if (!response.ok) {
-      const data = (await response.json()) as {
-        error?: string
-        details?: { fieldErrors?: Record<string, string[]> }
+      if (!response.ok) {
+        const data = (await response.json()) as {
+          error?: string
+          details?: { fieldErrors?: Record<string, string[]> }
+        }
+        setEditErrorsFromResponse(data)
+        setFormError(data.error ?? "Unable to update shift schedule."); toast.error(data.error ?? "Unable to update shift schedule.")
+        setSaving(false)
+        return
       }
-      setEditErrorsFromResponse(data)
-      toast.error(data.error ?? "Unable to update shift schedule.")
-      setSaving(false)
-      return
-    }
 
-    toast.success("Shift schedule updated.")
-    setSaving(false)
-    setEditOpen(false)
-    setEditingSchedule(null)
-    await loadSchedules()
+      toast.success("Shift schedule updated.")
+      setSaving(false)
+      setEditOpen(false)
+      setEditingSchedule(null)
+      await loadSchedules()
+    } catch {
+      setFormError("Unable to save. Please try again.")
+    } finally {
+      setSaving(false)
+    }
   }
 
   const requestDelete = React.useCallback((schedule: ShiftSchedule) => {
@@ -400,20 +419,26 @@ export default function ShiftSchedulesPage() {
   const confirmDelete = React.useCallback(async () => {
     if (!deleteTarget) return
     setDeleting(true)
-    const response = await fetch(`/api/shifts/schedules/${deleteTarget.id}`, {
-      method: "DELETE",
-    })
-    if (!response.ok) {
-      const data = (await response.json()) as { error?: string }
-      toast.error(data.error ?? "Unable to delete shift schedule.")
+    try {
+      const response = await fetch(`/api/shifts/schedules/${deleteTarget.id}`, {
+        method: "DELETE",
+      })
+      if (!response.ok) {
+        const data = (await response.json()) as { error?: string }
+        toast.error(data.error ?? "Unable to delete shift schedule.")
+        setDeleting(false)
+        return
+      }
+      toast.success("Shift schedule deleted.")
       setDeleting(false)
-      return
+      setDeleteOpen(false)
+      setDeleteTarget(null)
+      await loadSchedules()
+    } catch {
+      toast.error("Unable to complete this action. Please try again.")
+    } finally {
+      setDeleting(false)
     }
-    toast.success("Shift schedule deleted.")
-    setDeleting(false)
-    setDeleteOpen(false)
-    setDeleteTarget(null)
-    await loadSchedules()
   }, [deleteTarget, loadSchedules])
 
   const confirmUnassign = React.useCallback(async () => {
@@ -595,21 +620,21 @@ export default function ShiftSchedulesPage() {
         cell: ({ row }) => (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button size="icon" variant="ghost">
+              <Button size="icon" variant="ghost" aria-label="Record actions">
                 <MoreHorizontalIcon className="h-4 w-4" />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onSelect={() => startEdit(row.original)}>
+            <DropdownMenuContent align="end"><DropdownMenuItem onSelect={() => setViewing(row.original)}>View details</DropdownMenuItem>
+              <DropdownMenuItem disabled={!canEdit} onSelect={() => startEdit(row.original)}>
                 Edit
               </DropdownMenuItem>
               {!row.original.isDefault && (row.original.assignments?.length ?? 0) > 0 ? (
-                <DropdownMenuItem onSelect={() => requestUnassign(row.original)}>
+                <DropdownMenuItem disabled={!canArchive} onSelect={() => requestUnassign(row.original)}>
                   End staff assignment
                 </DropdownMenuItem>
               ) : null}
               <DropdownMenuItem
-                onSelect={() => requestDelete(row.original)}
+                disabled={!canArchive} onSelect={() => requestDelete(row.original)}
                 className="text-destructive"
               >
                 Delete
@@ -619,7 +644,7 @@ export default function ShiftSchedulesPage() {
         ),
       },
     ],
-    [formatDate, requestDelete, requestUnassign, startEdit]
+    [formatDate, requestDelete, requestUnassign, startEdit, canEdit, canArchive]
   )
 
   const table = useReactTable({
@@ -640,21 +665,15 @@ export default function ShiftSchedulesPage() {
   })
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold">Shift schedules</h1>
-          <p className="text-sm text-muted-foreground">
-            Assign shift templates in repeating blocks with week off rules.
-          </p>
-        </div>
-        <Button onClick={() => setCreateOpen(true)}>New schedule</Button>
-      </div>
+    <div className={pageClass}>
+      <PageHeader title={<> Shift schedules </>} description={<> Assign shift templates in repeating blocks with week off rules. </>} actions={<> <Button disabled={!canCreate} onClick={() => { setFormError(""); setCreateOpen(true) }}>New schedule</Button> </>} />
 
-      <DataTableToolbar table={table} showSearch={false}>
+      {viewing && <RecordPanel title={viewing.name || "Shift schedule"} description="Saved scheduling details." onClose={() => setViewing(null)} actions={<Button disabled={!canEdit} onClick={() => { startEdit(viewing); setViewing(null) }}>Edit details</Button>}><Section title="Schedule details"><ReadOnlyFields fields={[{label:"Start date",value:formatDate(viewing.startDate)},{label:"Default schedule",value:viewing.isDefault?"Yes":"No"},{label:"Week off day 1",value:viewing.weekOffDay1},{label:"Week off day 2",value:viewing.weekOffDay2},{label:"Second day weeks",value:viewing.weekOff2Weeks.join(", ")}]} /></Section><Section title="Repeating blocks">{viewing.blocks.map((block,index)=><p key={block.id||index}>{block.template?.name || templates.find(item=>item.id===block.templateId)?.name || "Shift template"}: {block.repeatDays} working days</p>)}</Section><Section title="Staff assignments">{viewing.assignments?.length?viewing.assignments.map(item=><p key={item.id}>{item.staffProfile?.user?.name || item.staffProfile?.user?.email}: {formatDate(item.startDate)} - {item.endDate?formatDate(item.endDate):"Open ended"}</p>):<p>No explicit assignments.</p>}</Section></RecordPanel>}
+      <Surface>
+      <TableToolbar table={table} showSearch={false}>
         <div className="flex flex-wrap items-center gap-3">
           <label className="text-sm text-muted-foreground">Start date</label>
-          <Input
+          <Input aria-label="Start date"
             type="date"
             className="h-9 w-44"
             value={startDateFilter}
@@ -676,11 +695,12 @@ export default function ShiftSchedulesPage() {
             />
           </div>
         </div>
-      </DataTableToolbar>
+      </TableToolbar>
 
       <DataTable table={table} loading={loading} emptyMessage="No shift schedules found." />
 
-      <DataTablePagination table={table} totalRows={totalRows} />
+      <TablePagination table={table} totalRows={totalRows} />
+      </Surface>
 
       <Dialog
         open={deleteOpen}
@@ -692,28 +712,17 @@ export default function ShiftSchedulesPage() {
           }
         }}
       >
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Delete shift schedule</DialogTitle>
-            <DialogDescription>
-              {deleteTarget
+        <ActionDialogContent title={<>Delete shift schedule</>} description={<>{deleteTarget
                 ? `Delete "${deleteTarget.name ?? "Shift schedule"}"? This cannot be undone.`
-                : "Delete this shift schedule? This cannot be undone."}
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button
+                : "Delete this shift schedule? This cannot be undone."}</>} className="sm:max-w-md" actions={<> <Button
               variant="outline"
               onClick={() => setDeleteOpen(false)}
               disabled={deleting}
             >
               Cancel
-            </Button>
-            <Button variant="destructive" onClick={confirmDelete} disabled={deleting}>
+            </Button><Button variant="destructive" onClick={confirmDelete} disabled={deleting}>
               {deleting ? "Deleting..." : "Delete"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
+            </Button> </>}></ActionDialogContent>
       </Dialog>
 
       <Dialog
@@ -728,21 +737,23 @@ export default function ShiftSchedulesPage() {
           }
         }}
       >
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>End assignment</DialogTitle>
-            <DialogDescription>
-              Set an end date for the selected staff assignment. Historical schedule data remains preserved.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-3">
+        <ActionDialogContent title={<>End assignment</>} description={<>Set an end date for the selected staff assignment. Historical schedule data remains preserved.
+            </>} className="sm:max-w-md" actions={<> <Button
+              variant="outline"
+              onClick={() => setUnassignOpen(false)}
+              disabled={unassigning}
+            >
+              Cancel
+            </Button><Button onClick={confirmUnassign} loading={unassigning} loadingText="Saving...">
+              End assignment
+            </Button> </>}><div className="space-y-3">
             <div className="space-y-1">
               <label className="text-xs text-muted-foreground">Assigned staff</label>
-              <select
+              <Select aria-label="Assigned staff"
                 className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
                 value={unassignAssignmentId}
-                onChange={(event) => {
-                  const nextId = event.target.value
+                onValueChange={(value) => {
+                  const nextId = value
                   setUnassignAssignmentId(nextId)
                   const selected = (unassignTarget?.assignments ?? []).find((item) => item.id === nextId)
                   const todayDate = toISODate(new Date())
@@ -760,11 +771,11 @@ export default function ShiftSchedulesPage() {
                       })`}
                   </option>
                 ))}
-              </select>
+              </Select>
             </div>
             <div className="space-y-1">
               <label className="text-xs text-muted-foreground">End date</label>
-              <Input
+              <Input aria-label="End date"
                 type="date"
                 value={unassignEndDate}
                 min={toDateInputValue(
@@ -773,30 +784,10 @@ export default function ShiftSchedulesPage() {
                 onChange={(event) => setUnassignEndDate(event.target.value)}
               />
             </div>
-          </div>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setUnassignOpen(false)}
-              disabled={unassigning}
-            >
-              Cancel
-            </Button>
-            <Button onClick={confirmUnassign} loading={unassigning} loadingText="Saving...">
-              End assignment
-            </Button>
-          </DialogFooter>
-        </DialogContent>
+          </div></ActionDialogContent>
       </Dialog>
 
-      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent className="max-h-[90vh] flex flex-col">
-          <DialogHeader>
-            <DialogTitle>New shift schedule</DialogTitle>
-            <DialogDescription>Define repeating blocks and week off rules.</DialogDescription>
-          </DialogHeader>
-          <div className="flex-1 overflow-y-auto">
-            <ScheduleFormFields
+      {canCreate && createOpen && <DraftPanel title="New shift schedule" description="Update the details and scheduling rules below." fingerprint={newSchedule} saving={saving} error={formError} saveLabel="Create schedule" onClose={() => { setCreateOpen(false); setNewSchedule(defaultForm); clearCreateErrors(); setFormError("") }} onSubmit={() => void createSchedule()}><ScheduleFormFields
               mode="create"
               form={newSchedule}
               setForm={setNewSchedule}
@@ -805,36 +796,9 @@ export default function ShiftSchedulesPage() {
               today={today}
               staffOptions={standardStaffOptions}
               templates={templates}
-            />
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setCreateOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={createSchedule} loading={saving} loadingText="Saving...">
-              Create schedule
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+            /></DraftPanel>}
 
-      <Dialog
-        open={editOpen}
-        onOpenChange={(open) => {
-          setEditOpen(open)
-          if (!open) {
-            setEditingSchedule(null)
-            clearEditErrors()
-          }
-        }}
-      >
-        <DialogContent className="max-h-[90vh] flex flex-col">
-          <DialogHeader>
-            <DialogTitle>Edit shift schedule</DialogTitle>
-            <DialogDescription>Update schedule details and blocks.</DialogDescription>
-          </DialogHeader>
-          <div className="flex-1 overflow-y-auto">
-            <ScheduleFormFields
+      {canEdit && editOpen && <DraftPanel title="Edit shift schedule" description="Update the details and scheduling rules below." fingerprint={editSchedule} saving={saving} error={formError} saveLabel="Save changes" onClose={() => { setEditOpen(false) }} onSubmit={() => void saveEdit()}><ScheduleFormFields
               mode="edit"
               form={editSchedule}
               setForm={setEditSchedule}
@@ -843,18 +807,7 @@ export default function ShiftSchedulesPage() {
               today={today}
               staffOptions={standardStaffOptions}
               templates={templates}
-            />
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setEditOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={saveEdit} loading={saving} loadingText="Saving...">
-              Save changes
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+            /></DraftPanel>}
     </div>
   )
 }

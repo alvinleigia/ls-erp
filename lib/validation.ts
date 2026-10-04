@@ -1510,3 +1510,13 @@ export type UpdateOrganizationMemberInput = z.infer<typeof updateOrganizationMem
 export type UpdateTenantStatusInput = z.infer<typeof updateTenantStatusSchema>
 export type ResetAllTenantsInput = z.infer<typeof resetAllTenantsSchema>
 export type UpdateTenantAdminInput = z.infer<typeof updateTenantAdminSchema>
+
+
+export const directoryQuerySchema = z.object({
+  role: z.enum(["STAFF", "MANAGER", "CUSTOMER"]),
+  q: z.string().trim().max(120).optional(),
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(100).default(20),
+})
+
+export const taxLookupQuerySchema = z.object({ page: z.coerce.number().int().min(1).default(1), pageSize: z.coerce.number().int().min(1).max(100).default(20), q: z.string().trim().max(120).optional() })

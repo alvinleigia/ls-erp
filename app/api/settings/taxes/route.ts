@@ -11,7 +11,8 @@ import {
 } from "@/lib/api-logging"
 import { prisma } from "@/lib/prisma"
 import { canManageUsers, type Role } from "@/lib/permissions"
-import { requireTenantSession } from "@/lib/tenant-auth"
+import { withCoreApi, actorSession } from "@/platform/core/api"
+import type { BusinessActor } from "@/platform/policy"
 import { taxCreateSchema } from "@/lib/validation"
 import type { ListResponse } from "@/types/api"
 import type { TaxRow } from "@/types/scheduling"
@@ -26,8 +27,8 @@ const listSchema = z.object({
     .transform((value) => (value === undefined ? undefined : value === "true")),
 })
 
-const ensureAuthorized = async (request: Request) => {
-  const tenantSession = await requireTenantSession(request)
+const ensureAuthorized = async (actor: BusinessActor) => {
+  const tenantSession = actorSession(actor)
   if (tenantSession.error) {
     return { error: tenantSession.error }
   }
@@ -55,11 +56,11 @@ const serializeTax = (tax: {
   updatedAt: tax.updatedAt.toISOString(),
 })
 
-export async function GET(request: Request) {
+async function handleGET(request: Request, actor: BusinessActor) {
   const logContext = createApiLogContext(request)
   logApiRequestStart(logContext, request)
 
-  const authorized = await ensureAuthorized(request)
+  const authorized = await ensureAuthorized(actor)
   if (authorized.error) {
     logApiRequestSuccess(logContext, authorized.error.status, { reason: "unauthorized_or_tenant_failed" })
     return withRequestId(authorized.error, logContext.requestId)
@@ -116,11 +117,11 @@ export async function GET(request: Request) {
   }
 }
 
-export async function POST(request: Request) {
+async function handlePOST(request: Request, actor: BusinessActor) {
   const logContext = createApiLogContext(request)
   logApiRequestStart(logContext, request)
 
-  const authorized = await ensureAuthorized(request)
+  const authorized = await ensureAuthorized(actor)
   if (authorized.error) {
     logApiRequestSuccess(logContext, authorized.error.status, { reason: "unauthorized_or_tenant_failed" })
     return withRequestId(authorized.error, logContext.requestId)
@@ -168,4 +169,12 @@ export async function POST(request: Request) {
     const response = NextResponse.json({ error: "Unable to create tax." }, { status: 500 })
     return withRequestId(response, logContext.requestId)
   }
+}
+
+export async function GET(request: Request) {
+  return withCoreApi(request, "taxRates", "read", actor => handleGET(request, actor))
+}
+
+export async function POST(request: Request) {
+  return withCoreApi(request, "taxRates", "create", actor => handlePOST(request, actor))
 }

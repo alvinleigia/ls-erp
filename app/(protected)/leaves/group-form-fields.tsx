@@ -1,4 +1,9 @@
 "use client"
+import { useCurrentResourceAction } from "@/platform/access/view-guard"
+
+import { Section } from "@/components/erp/section"
+
+import { Select, Checkbox } from "@/components/erp/controls"
 
 import * as React from "react"
 
@@ -26,9 +31,9 @@ export function LeaveGroupFormFields({
   staffOptions,
   disableCode = false,
 }: LeaveGroupFormFieldsProps) {
+  const canArchive = useCurrentResourceAction("archive")
   return (
-    <div className="grid gap-4">
-      <div className="grid gap-4 md:grid-cols-2">
+    <div className="space-y-5"><Section title="Group details"><div className="grid gap-4 md:grid-cols-2">
         <FormField id="code" label="Group code" error={errors.code}>
           <Input
             id="code"
@@ -49,8 +54,7 @@ export function LeaveGroupFormFields({
           />
         </FormField>
       </div>
-
-      <FormField id="description" label="Description" error={errors.description}>
+<FormField id="description" label="Description" error={errors.description}>
         <Input
           id="description"
           value={values.description}
@@ -60,17 +64,15 @@ export function LeaveGroupFormFields({
           placeholder="Optional"
         />
       </FormField>
-
-      <div className="grid gap-4 md:grid-cols-2">
+<div className="grid gap-4 md:grid-cols-2">
         <FormField id="status" label="Status" error={errors.status}>
-          <select
-            id="status"
+          <Select disabled={!canArchive} id="status"
             className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
             value={values.status}
-            onChange={(event) =>
+            onValueChange={(value) =>
               onChange((prev) => ({
                 ...prev,
-                status: event.target.value as LeaveGroupFormValues["status"],
+                status: value as LeaveGroupFormValues["status"],
               }))
             }
           >
@@ -79,7 +81,7 @@ export function LeaveGroupFormFields({
                 {item}
               </option>
             ))}
-          </select>
+          </Select>
         </FormField>
         <FormField id="sortOrder" label="Sort order" error={errors.sortOrder}>
           <Input
@@ -96,9 +98,8 @@ export function LeaveGroupFormFields({
             }
           />
         </FormField>
-      </div>
-
-      <FormField
+      </div></Section>
+<Section title="Leaves and staff"><FormField
         id="leaveDefinitionIds"
         label="Leaves in this group"
         error={errors.leaveDefinitionIds}
@@ -112,17 +113,15 @@ export function LeaveGroupFormFields({
           searchPlaceholder="Search leave definitions..."
         />
       </FormField>
-
-      <FormField
+<FormField
         id="assignmentMode"
         label="Staff assignment"
         error={errors.assignmentMode || errors.staffIds}
       >
         <div className="space-y-3 rounded-md border border-input bg-background p-3">
           <div className="flex items-center gap-2">
-            <input
+            <Checkbox
               id="assignmentMode"
-              type="checkbox"
               checked={values.assignmentMode === "ALL_STAFF"}
               onChange={(event) =>
                 onChange((prev) => ({
@@ -144,9 +143,7 @@ export function LeaveGroupFormFields({
                 {staffOptions.map((staff) => {
                   const checked = values.staffIds.includes(staff.value)
                   return (
-                    <label key={staff.value} className="flex items-center gap-2 text-sm">
-                      <input
-                        type="checkbox"
+                    <label key={staff.value} className="flex items-center gap-2 text-sm"><Checkbox
                         checked={checked}
                         onChange={(event) =>
                           onChange((prev) => ({
@@ -157,8 +154,7 @@ export function LeaveGroupFormFields({
                           }))
                         }
                       />
-                      <span>{staff.label}</span>
-                    </label>
+<span>{staff.label}</span></label>
                   )
                 })}
               </div>
@@ -169,7 +165,6 @@ export function LeaveGroupFormFields({
             </div>
           )}
         </div>
-      </FormField>
-    </div>
+      </FormField></Section></div>
   )
 }

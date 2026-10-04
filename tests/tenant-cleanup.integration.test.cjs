@@ -10,22 +10,40 @@ const url = new URL(connectionString)
 if (!["localhost", "127.0.0.1"].includes(url.hostname) || url.pathname !== "/ls_salon_crm_test") throw new Error("Refusing to modify a non-local or non-test database.")
 const db = new Client({ connectionString })
 const migration = readFileSync("prisma/migrations/20260927090000_retire_legacy_default_tenant/migration.sql", "utf8")
+const fixtureIds = []
+let preservedTenantIds
+async function removeDefaultChoices(ids) {
+  for (const table of ["RealEstateProjectStatus", "RealEstatePropertyCategory", "RealEstateBuyingTimeframe"]) {
+    await db.query(`DELETE FROM "${table}" WHERE "tenantId" = ANY($1)`, [ids])
+  }
+}
 async function createTenant(id, slug) {
   await db.query('INSERT INTO "Tenant" (id, name, slug, "updatedAt") VALUES ($1,$2,$3,NOW())', [id, `Cleanup test ${slug}`, slug])
+  fixtureIds.push(id)
+  // Simulate the pre-Real-Estate legacy tenant, before catalog seed triggers existed.
+  if (id === "tenant_default") await removeDefaultChoices([id])
 }
 before(async () => {
   await db.connect()
-  await createTenant("cleanup_platform", "platform")
+  preservedTenantIds = (await db.query('SELECT id FROM "Tenant" ORDER BY id')).rows.map(row => row.id)
+  await createTenant("cleanup_platform", "cleanup-platform")
   await createTenant("cleanup_business", "cleanup-business")
   await db.query('INSERT INTO "User" (id, name, email, "tenantId", "updatedAt") VALUES ($1,$2,$3,$4,NOW())', ["cleanup_admin", "Preserved admin", "cleanup-admin@example.test", "cleanup_platform"])
 })
-after(async () => { await db.end() })
+after(async () => {
+  try {
+    await db.query("ROLLBACK")
+    await db.query("RESET ROLE")
+    await removeDefaultChoices(fixtureIds)
+    await db.query('DELETE FROM "Tenant" WHERE id = ANY($1)', [fixtureIds])
+  } finally { await db.end() }
+})
 
 test("retirement removes only the empty legacy tenant and preserves platform/business records", async () => {
   await createTenant("tenant_default", "default")
   await db.query(migration)
   assert.equal((await db.query('SELECT id FROM "Tenant" WHERE id=$1', ["tenant_default"])).rowCount, 0)
-  assert.deepEqual((await db.query('SELECT id FROM "Tenant" ORDER BY id')).rows.map(row => row.id), ["cleanup_business", "cleanup_platform"])
+  assert.deepEqual((await db.query('SELECT id FROM "Tenant" ORDER BY id')).rows.map(row => row.id), [...preservedTenantIds, "cleanup_business", "cleanup_platform"].sort())
   assert.equal((await db.query('SELECT id FROM "User" WHERE id=$1 AND "tenantId"=$2', ["cleanup_admin", "cleanup_platform"])).rowCount, 1)
 })
 

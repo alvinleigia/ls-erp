@@ -1,4 +1,8 @@
 "use client"
+import { useBusinessModules } from "@/platform/module-provider"
+import { useCurrentResourceAction } from "@/platform/access/view-guard"
+
+import { Select } from "@/components/erp/controls"
 
 import * as React from "react"
 import {
@@ -10,11 +14,17 @@ import {
 import { ArrowDownIcon, ArrowUpDownIcon, ArrowUpIcon, MoreHorizontalIcon, PlusIcon } from "lucide-react"
 import { toast } from "sonner"
 
-import { DataTable, DataTablePagination, DataTableToolbar } from "@/components/data-table"
+import { DataTable } from "@/components/data-table"
+import { PageHeader, Surface, TableToolbar, pageClass } from "@/components/erp/page"
+import { TablePagination } from "@/components/erp/pagination"
+import { DraftPanel, RecordPanel, ReadOnlyFields } from "@/components/erp/record-detail"
+import { Section } from "@/components/erp/section"
+import { ConfirmAction } from "@/components/erp/confirm-action"
+import { Checkbox } from "@/components/erp/controls"
+import { useDateFormatter } from "@/hooks/use-date-formatter"
 import { FormField } from "@/components/form-field"
 import { SearchableMultiSelect } from "@/components/searchable-multi-select"
 import { Button } from "@/components/ui/button"
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -91,6 +101,18 @@ const formatStackingMode = (value: CouponStackingMode) =>
   value === "EXCLUSIVE" ? "Exclusive" : "Stackable"
 
 export default function AppointmentCouponsPage() {
+  const { can, enabled } = useBusinessModules()
+  const serviceAccess = enabled("services") && can("services.read")
+  const categoryAccess = enabled("services") && can("serviceCategories.read")
+  const productAccess = enabled("inventory") && can("inventoryProducts.read")
+  const canCreate = useCurrentResourceAction("create")
+  const canEdit = useCurrentResourceAction("edit")
+  const canArchive = useCurrentResourceAction("archive")
+  const { formatDate } = useDateFormatter()
+  const [viewing, setViewing] = React.useState<CouponRow | null>(null)
+  const [deleteTarget, setDeleteTarget] = React.useState<CouponRow | null>(null)
+  const [deleting, setDeleting] = React.useState(false)
+  const [formError, setFormError] = React.useState("")
   const [items, setItems] = React.useState<CouponRow[]>([])
   const [totalRows, setTotalRows] = React.useState(0)
   const [loading, setLoading] = React.useState(true)
@@ -155,15 +177,15 @@ export default function AppointmentCouponsPage() {
     setScopeOptionsLoading(true)
     try {
       const [servicesResponse, categoriesResponse, productsResponse] = await Promise.all([
-        fetch("/api/services?page=1&pageSize=100&status=ACTIVE&sort=name&order=asc", {
+        serviceAccess ? fetch("/api/services?page=1&pageSize=100&status=ACTIVE&sort=name&order=asc", {
           cache: "no-store",
-        }),
-        fetch("/api/service-categories?page=1&pageSize=100&status=ACTIVE&sort=name&order=asc", {
+        }) : Promise.resolve(new Response(JSON.stringify({ items: [] }), { status: 200 })),
+        categoryAccess ? fetch("/api/service-categories?page=1&pageSize=100&status=ACTIVE&sort=name&order=asc", {
           cache: "no-store",
-        }),
-        fetch("/api/inventory/products?page=1&pageSize=100&status=ACTIVE&sort=name&order=asc", {
+        }) : Promise.resolve(new Response(JSON.stringify({ items: [] }), { status: 200 })),
+        productAccess ? fetch("/api/inventory/products?page=1&pageSize=100&status=ACTIVE&sort=name&order=asc", {
           cache: "no-store",
-        }),
+        }) : Promise.resolve(new Response(JSON.stringify({ items: [] }), { status: 200 })),
       ])
 
       if (!servicesResponse.ok || !categoriesResponse.ok || !productsResponse.ok) {
@@ -196,7 +218,7 @@ export default function AppointmentCouponsPage() {
     } finally {
       setScopeOptionsLoading(false)
     }
-  }, [])
+  }, [serviceAccess, categoryAccess, productAccess])
 
   React.useEffect(() => {
     void loadScopeOptions()
@@ -204,7 +226,7 @@ export default function AppointmentCouponsPage() {
 
   React.useEffect(() => {
     const loadSettings = async () => {
-      const response = await fetch("/api/settings", { cache: "no-store" })
+      const response = await fetch("/api/settings/display", { cache: "no-store" })
       if (!response.ok) return
       const data = (await response.json()) as { settings?: AppSettingsPayload }
       if (data.settings?.locale && data.settings.currency) {
@@ -223,6 +245,8 @@ export default function AppointmentCouponsPage() {
     setEditing(null)
     setFormValues(defaultCouponFormValues)
     clearErrors()
+    setViewing(null)
+    setFormError("")
     setFormOpen(true)
   }
 
@@ -246,11 +270,15 @@ export default function AppointmentCouponsPage() {
       maxUsesPerCustomer: coupon.maxUsesPerCustomer ? String(coupon.maxUsesPerCustomer) : "",
     })
     clearErrors()
+    setViewing(null)
+    setFormError("")
     setFormOpen(true)
   }, [clearErrors])
 
   const save = async () => {
     setSaving(true)
+    setFormError("")
+    try {
     clearErrors()
     const payload = {
       ...formValues,
@@ -275,6 +303,7 @@ export default function AppointmentCouponsPage() {
         details?: { fieldErrors?: Record<string, string[]> }
       }
       setErrorsFromResponse(data)
+      setFormError(data.error ?? "Unable to save coupon.")
       toast.error(data.error ?? "Unable to save coupon.")
       setSaving(false)
       return
@@ -283,16 +312,21 @@ export default function AppointmentCouponsPage() {
     setSaving(false)
     setFormOpen(false)
     await loadCoupons()
+    } catch { setFormError("Unable to save coupon. Please try again.") } finally { setSaving(false) }
   }
 
   const removeCoupon = React.useCallback(async (coupon: CouponRow) => {
+    setDeleting(true)
+    try {
     const response = await fetch(`/api/appointments/coupons/${coupon.id}`, { method: "DELETE" })
     if (!response.ok) {
       toast.error("Unable to delete coupon.")
       return
     }
     toast.success("Coupon deleted.")
+    setDeleteTarget(null)
     await loadCoupons()
+    } catch { toast.error("Unable to delete coupon.") } finally { setDeleting(false) }
   }, [loadCoupons])
 
   const columns = React.useMemo<ColumnDef<CouponRow>[]>(
@@ -311,6 +345,7 @@ export default function AppointmentCouponsPage() {
           </button>
         ),
         accessorFn: (row) => row.code,
+        cell: ({ row }) => <button type="button" className="text-left font-medium underline underline-offset-4" onClick={() => setViewing(row.original)}>{row.original.code}</button>,
       },
       {
         id: "discountType",
@@ -373,15 +408,15 @@ export default function AppointmentCouponsPage() {
         cell: ({ row }) => (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button size="icon" variant="ghost">
+              <Button size="icon" variant="ghost" aria-label="Record actions">
                 <MoreHorizontalIcon className="h-4 w-4" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem onSelect={() => openEdit(row.original)}>Edit</DropdownMenuItem>
+              <DropdownMenuItem disabled={!canEdit} onSelect={() => openEdit(row.original)}>Edit</DropdownMenuItem>
               <DropdownMenuItem
-                className="text-destructive"
-                onSelect={() => void removeCoupon(row.original)}
+                className="text-destructive" disabled={!canArchive}
+                onSelect={() => setDeleteTarget(row.original)}
               >
                 Delete
               </DropdownMenuItem>
@@ -390,15 +425,15 @@ export default function AppointmentCouponsPage() {
         ),
       },
     ],
-    [formatMoney, openEdit, removeCoupon]
+    [formatMoney, openEdit, canEdit, canArchive]
   )
 
   const table = useReactTable({
     data: items,
     columns,
     state: { sorting, pagination, globalFilter: search },
-    onSortingChange: setSorting,
-    onGlobalFilterChange: setSearch,
+    onSortingChange: value => { setSorting(value); setPagination(prev => ({ ...prev, pageIndex: 0 })) },
+    onGlobalFilterChange: value => { setSearch(value); setPagination(prev => ({ ...prev, pageIndex: 0 })) },
     onPaginationChange: (updater) => {
       setPagination((prev) =>
         typeof updater === "function" ? updater(prev as never) as PaginationState : updater
@@ -411,37 +446,17 @@ export default function AppointmentCouponsPage() {
     getCoreRowModel: getCoreRowModel(),
   })
 
-  return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold">Appointment coupons</h1>
-          <p className="text-sm text-muted-foreground">Create and manage reusable billing coupon codes.</p>
-        </div>
-        <Button onClick={openCreate}>
-          <PlusIcon className="mr-2 h-4 w-4" />
-          New coupon
-        </Button>
-      </div>
-
-      <DataTableToolbar table={table} searchPlaceholder="Search coupons" />
-      <DataTable table={table} loading={loading} emptyMessage="No coupons found." />
-      <DataTablePagination table={table} totalRows={totalRows} />
-
-      <Dialog
-        open={formOpen}
-        onOpenChange={(open) => {
-          setFormOpen(open)
-          if (!open) {
-            setEditing(null)
-          }
-        }}
-      >
-        <DialogContent className="max-h-[80vh] overflow-hidden sm:max-w-3xl">
-          <DialogHeader>
-            <DialogTitle>{editing ? "Edit coupon" : "New coupon"}</DialogTitle>
-          </DialogHeader>
-          <div className="grid max-h-[60vh] gap-3 overflow-y-auto pr-1">
+  return <div className={pageClass}>
+    <PageHeader title="Appointment coupons" description="Manage reusable booking discounts and eligibility." actions={<Button disabled={!canCreate} onClick={openCreate}><PlusIcon className="size-4" />New coupon</Button>} />
+    <Surface><TableToolbar table={table} searchPlaceholder="Search coupons"><Button variant="outline" disabled={loading} onClick={() => void loadCoupons()}>Refresh</Button></TableToolbar><DataTable table={table} loading={loading} emptyMessage="No coupons found." /><TablePagination table={table} totalRows={totalRows} loading={loading} /></Surface>
+    {viewing && <RecordPanel title={viewing.code} description={viewing.name || "Appointment coupon"} onClose={() => setViewing(null)} actions={<Button disabled={!canEdit} onClick={() => openEdit(viewing)}>Edit details</Button>}>
+      <Section title="Discount"><ReadOnlyFields fields={[{ label: "Type", value: viewing.discountType }, { label: "Value", value: viewing.discountType === "PERCENT" ? `${viewing.discountValue}%` : formatMoney(Math.round(viewing.discountValue * 100)) }, { label: "Applies to", value: formatAppliesTo(viewing.appliesTo) }, { label: "Stacking", value: viewing.stackingMode }, { label: "Minimum subtotal", value: formatMoney(viewing.minSubtotalCents) }, { label: "Status", value: viewing.isActive ? "Active" : "Inactive" }]} /></Section>
+      <Section title="Eligibility"><ReadOnlyFields fields={[{ label: "Services", value: viewing.allowedServiceIds.map(id => serviceOptions.find(item => item.value === id)?.label || "Selected service").join(", ") || "All services" }, { label: "Categories", value: viewing.allowedCategoryIds.map(id => serviceCategoryOptions.find(item => item.value === id)?.label || "Selected category").join(", ") || "All categories" }, { label: "Products", value: viewing.allowedProductIds.map(id => productOptions.find(item => item.value === id)?.label || "Selected product").join(", ") || "All products" }]} /></Section>
+      <Section title="Validity and limits"><ReadOnlyFields fields={[{ label: "Valid from", value: viewing.validFrom ? formatDate(viewing.validFrom) : "No start date" }, { label: "Valid to", value: viewing.validTo ? formatDate(viewing.validTo) : "No end date" }, { label: "Maximum uses", value: viewing.maxUses ?? "Unlimited" }, { label: "Per customer", value: viewing.maxUsesPerCustomer ?? "Unlimited" }, { label: "Used", value: viewing.usedCount }]} /></Section>
+    </RecordPanel>}
+    {deleteTarget && <ConfirmAction title="Delete coupon" description={`Delete ${deleteTarget.code}? Used coupons will be deactivated to preserve their history.`} label="Delete" destructive busy={deleting} onCancel={() => setDeleteTarget(null)} onConfirm={() => void removeCoupon(deleteTarget)} />}
+    {formOpen && <DraftPanel disabled={!(editing ? canEdit : canCreate)} title={editing ? "Edit coupon" : "New coupon"} description="Set the discount, eligibility and validity below." fingerprint={formValues} error={formError} saving={saving} saveLabel={editing ? "Save changes" : "Create coupon"} onClose={() => setFormOpen(false)} onSubmit={() => void save()}>
+      <Section title="Discount"><div className="grid gap-3">
             <FormField id="coupon-code" label="Code" error={errors.code}>
               <Input
                 id="coupon-code"
@@ -462,20 +477,20 @@ export default function AppointmentCouponsPage() {
             </FormField>
             <div className="grid gap-3 sm:grid-cols-2">
               <FormField id="coupon-type" label="Discount type" error={errors.discountType}>
-                <select
+                <Select
                   id="coupon-type"
-                  className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                  className="w-full"
                   value={formValues.discountType}
-                  onChange={(event) =>
+                  onValueChange={(value) =>
                     setFormValues((prev) => ({
                       ...prev,
-                      discountType: event.target.value as DiscountType,
+                      discountType: value as DiscountType,
                     }))
                   }
                 >
                   <option value="PERCENT">Percent</option>
                   <option value="AMOUNT">Amount</option>
-                </select>
+                </Select>
               </FormField>
               <FormField id="coupon-value" label="Discount value" error={errors.discountValue}>
                 <Input
@@ -493,39 +508,40 @@ export default function AppointmentCouponsPage() {
                 />
               </FormField>
             </div>
-            <div className="grid gap-3 sm:grid-cols-3">
+</div></Section><Section title="Eligibility"><div className="grid gap-3">
+            <div className="grid gap-3 sm:grid-cols-2">
               <FormField id="coupon-applies-to" label="Applies to" error={errors.appliesTo}>
-                <select
+                <Select
                   id="coupon-applies-to"
-                  className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                  className="w-full"
                   value={formValues.appliesTo}
-                  onChange={(event) =>
+                  onValueChange={(value) =>
                     setFormValues((prev) => ({
                       ...prev,
-                      appliesTo: event.target.value as CouponAppliesTo,
+                      appliesTo: value as CouponAppliesTo,
                     }))
                   }
                 >
                   <option value="ORDER">Order total</option>
                   <option value="SERVICE_LINES">Service lines</option>
                   <option value="PRODUCT_LINES">Product lines</option>
-                </select>
+                </Select>
               </FormField>
               <FormField id="coupon-stacking-mode" label="Stacking" error={errors.stackingMode}>
-                <select
+                <Select
                   id="coupon-stacking-mode"
-                  className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                  className="w-full"
                   value={formValues.stackingMode}
-                  onChange={(event) =>
+                  onValueChange={(value) =>
                     setFormValues((prev) => ({
                       ...prev,
-                      stackingMode: event.target.value as CouponStackingMode,
+                      stackingMode: value as CouponStackingMode,
                     }))
                   }
                 >
                   <option value="STACKABLE">Stackable</option>
                   <option value="EXCLUSIVE">Exclusive</option>
-                </select>
+                </Select>
               </FormField>
               <FormField
                 id="coupon-min-subtotal"
@@ -554,7 +570,7 @@ export default function AppointmentCouponsPage() {
               >
                 <SearchableMultiSelect
                   id="coupon-allowed-services"
-                  values={formValues.allowedServiceIds}
+                  disabled={scopeOptionsLoading || !serviceAccess} values={formValues.allowedServiceIds}
                   onChange={(values) =>
                     setFormValues((prev) => ({
                       ...prev,
@@ -562,8 +578,7 @@ export default function AppointmentCouponsPage() {
                     }))
                   }
                   options={serviceOptions}
-                  disabled={scopeOptionsLoading}
-                  placeholder={scopeOptionsLoading ? "Loading services..." : "All services"}
+                                    placeholder={scopeOptionsLoading ? "Loading services..." : "All services"}
                   searchPlaceholder="Search services..."
                   emptyLabel="No services found."
                 />
@@ -576,7 +591,7 @@ export default function AppointmentCouponsPage() {
             >
               <SearchableMultiSelect
                 id="coupon-allowed-categories"
-                values={formValues.allowedCategoryIds}
+                disabled={scopeOptionsLoading || !categoryAccess} values={formValues.allowedCategoryIds}
                 onChange={(values) =>
                   setFormValues((prev) => ({
                     ...prev,
@@ -584,8 +599,7 @@ export default function AppointmentCouponsPage() {
                   }))
                 }
                 options={serviceCategoryOptions}
-                disabled={scopeOptionsLoading}
-                placeholder={scopeOptionsLoading ? "Loading categories..." : "All categories"}
+                                placeholder={scopeOptionsLoading ? "Loading categories..." : "All categories"}
                 searchPlaceholder="Search categories..."
                 emptyLabel="No categories found."
               />
@@ -598,7 +612,7 @@ export default function AppointmentCouponsPage() {
               >
                 <SearchableMultiSelect
                   id="coupon-allowed-products"
-                  values={formValues.allowedProductIds}
+                  disabled={scopeOptionsLoading || !productAccess} values={formValues.allowedProductIds}
                   onChange={(values) =>
                     setFormValues((prev) => ({
                       ...prev,
@@ -606,14 +620,14 @@ export default function AppointmentCouponsPage() {
                     }))
                   }
                   options={productOptions}
-                  disabled={scopeOptionsLoading}
-                  placeholder={scopeOptionsLoading ? "Loading products..." : "All products"}
+                                    placeholder={scopeOptionsLoading ? "Loading products..." : "All products"}
                   searchPlaceholder="Search products..."
                   emptyLabel="No products found."
                 />
               </FormField>
             ) : null}
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+</div></Section><Section title="Validity and limits"><div className="grid gap-3">
+            <div className="grid gap-3 sm:grid-cols-2">
               <FormField id="coupon-valid-from" label="Valid from" error={errors.validFrom}>
                 <Input
                   id="coupon-valid-from"
@@ -665,26 +679,15 @@ export default function AppointmentCouponsPage() {
               </FormField>
             </div>
             <label className="inline-flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={formValues.isActive}
+              <Checkbox
+                disabled={!canArchive} checked={formValues.isActive}
                 onChange={(event) =>
                   setFormValues((prev) => ({ ...prev, isActive: event.target.checked }))
                 }
               />
               Active
             </label>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setFormOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={save} loading={saving} loadingText="Saving...">
-              {editing ? "Save changes" : "Create coupon"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </div>
-  )
+      </div></Section>
+    </DraftPanel>}
+  </div>
 }

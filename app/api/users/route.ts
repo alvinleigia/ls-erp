@@ -1,3 +1,5 @@
+import { requireBusinessModule } from "@/platform/module-server"
+import { recordDomainAuditEvent } from "@/lib/domain-audit"
 import { guardUserWrite, auditUserSecurity, assignInitialRole } from "@/platform/access/user-security"
 import { BusinessError } from "@/platform/policy"
 import { NextResponse } from "next/server"
@@ -15,7 +17,8 @@ import { Prisma } from "@prisma/client"
 import { prisma, runWithTenantDbContext } from "@/lib/prisma"
 import { createUserSchema } from "@/lib/validation"
 import { canInvite, canManageUsers, type Role } from "@/lib/permissions"
-import { requireTenantSession } from "@/lib/tenant-auth"
+import { withCoreApi, actorSession } from "@/platform/core/api"
+import type { BusinessActor } from "@/platform/policy"
 
 const paginationSchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
@@ -34,11 +37,11 @@ const paginationSchema = z.object({
   order: z.enum(["asc", "desc"]).optional(),
 })
 
-export async function GET(request: Request) {
+async function handleGET(request: Request, actor: BusinessActor) {
   const logContext = createApiLogContext(request)
   logApiRequestStart(logContext, request)
 
-  const tenantSession = await requireTenantSession(request)
+  const tenantSession = actorSession(actor)
   if (tenantSession.error) {
     logApiRequestSuccess(logContext, tenantSession.error.status, { reason: "tenant_or_auth_failed" })
     return withRequestId(tenantSession.error, logContext.requestId)
@@ -156,11 +159,11 @@ export async function GET(request: Request) {
   })
 }
 
-export async function POST(request: Request) {
+async function handlePOST(request: Request, actor: BusinessActor) {
   const logContext = createApiLogContext(request)
   logApiRequestStart(logContext, request)
 
-  const tenantSession = await requireTenantSession(request)
+  const tenantSession = actorSession(actor)
   if (tenantSession.error) {
     logApiRequestSuccess(logContext, tenantSession.error.status, { reason: "tenant_or_auth_failed" })
     return withRequestId(tenantSession.error, logContext.requestId)
@@ -231,6 +234,11 @@ export async function POST(request: Request) {
       const identity = { tenantId, userId: sessionUserId!, requestId: logContext.requestId }
       const user = await prisma.$transaction(async tx => {
         await guardUserWrite(tx, identity)
+        if (normalizedEligibleServiceIds.length) {
+          await requireBusinessModule(tx, tenantId, "services")
+          const count = await tx.service.count({ where: { tenantId, id: { in: normalizedEligibleServiceIds } } })
+          if (count !== normalizedEligibleServiceIds.length) throw new BusinessError(400, "One or more services were not found in this tenant.")
+        }
         const created = await tx.user.create({
         data: {
           name: name || undefined,
@@ -286,6 +294,7 @@ export async function POST(request: Request) {
       })
 
       await assignInitialRole(tx, identity, created, parsed.data.accessRoleId)
+        if (normalizedEligibleServiceIds.length) await recordDomainAuditEvent(tx, { tenantId, actorUserId: sessionUserId, actorRole: "ADMIN", requestId: logContext.requestId, event: "services.eligibility.updated", entityType: "User", entityId: created.id, after: { serviceIds: normalizedEligibleServiceIds } })
         await auditUserSecurity(tx, identity, created.id, null, created)
         return created
       })
@@ -300,4 +309,12 @@ export async function POST(request: Request) {
       return withRequestId(response, logContext.requestId)
     }
   })
+}
+
+export async function GET(request: Request) {
+  return withCoreApi(request, "users", "read", actor => handleGET(request, actor))
+}
+
+export async function POST(request: Request) {
+  return withCoreApi(request, "users", "create", actor => handlePOST(request, actor))
 }

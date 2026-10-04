@@ -1,3 +1,4 @@
+import { canReadAppointmentDetails } from "@/modules/appointments/conflict-access"
 import { NextResponse } from "next/server"
 
 import {
@@ -9,7 +10,8 @@ import {
 } from "@/lib/api-logging"
 import { canManageUsers, type Role } from "@/lib/permissions"
 import { prisma } from "@/lib/prisma"
-import { requireTenantSession } from "@/lib/tenant-auth"
+import { withWorkforceApi, workforceSession } from "@/modules/workforce/api"
+import type { BusinessActor } from "@/platform/policy"
 import {
   normalizeHistoryRangeToPast,
   syncRosterHistoryRange,
@@ -24,14 +26,13 @@ import {
   serializeLeaveRequest,
 } from "../../../_requests"
 
-export async function PATCH(
+async function handlePATCH(
   request: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
+  { params }: { params: Promise<{ id: string }> }, actor: BusinessActor) {
   const logContext = createApiLogContext(request)
   logApiRequestStart(logContext, request)
 
-  const tenantSession = await requireTenantSession(request)
+  const tenantSession = workforceSession(actor)
   if (tenantSession.error) {
     logApiRequestSuccess(logContext, tenantSession.error.status, { reason: "tenant_or_auth_failed" })
     return withRequestId(tenantSession.error, logContext.requestId)
@@ -130,7 +131,7 @@ export async function PATCH(
         const response = NextResponse.json(
           {
             error: "Cannot approve leave request because active appointments overlap this date range.",
-            conflicts,
+            conflicts: await canReadAppointmentDetails(tenantId, sessionUserId) ? conflicts : conflicts.map(item => ({ ...item, conflictingAppointments: [] })),
           },
           { status: 409 }
         )
@@ -176,6 +177,7 @@ export async function PATCH(
       daysCount: serialized.daysCount,
     })
     await recordDomainAuditEventSafe(prisma, {
+      tenantId,
       event: "leave.request.reviewed",
       entityType: "LeaveRequest",
       entityId: serialized.id,
@@ -207,4 +209,8 @@ export async function PATCH(
     const response = NextResponse.json({ error: "Unable to review leave request." }, { status: 500 })
     return withRequestId(response, logContext.requestId)
   }
+}
+
+export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
+  return withWorkforceApi(request, "leaves", "leaveApprovals", "approve", actor => handlePATCH(request, context, actor), "requests/[id]/review", (await context.params).id)
 }

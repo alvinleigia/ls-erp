@@ -2,6 +2,7 @@
 
 import * as React from "react"
 
+import { DropdownSelect } from "@/components/ui/dropdown-select"
 import { cn } from "@/lib/utils"
 import type { TimeFormat } from "@/types/scheduling"
 
@@ -92,67 +93,15 @@ export function TimePicker({
         className
       )}
     >
-      {timeFormat === "H24" ? (
-        <select
-          id={id}
-          className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
-          value={hour24}
-          disabled={disabled}
-          onChange={(event) => onChange(clamp(`${event.target.value}:${parsed.minute}`))}
-        >
-          {HOUR_24_OPTIONS.map((hour) => (
-            <option key={hour} value={hour}>
-              {hour}
-            </option>
-          ))}
-        </select>
-      ) : (
-      <select
-        id={id}
-        className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
-        value={parsed.hour12}
-        disabled={disabled}
-        onChange={(event) =>
-          onChange(clamp(to24h(event.target.value, parsed.minute, parsed.meridiem)))
-        }
-      >
-        {HOUR_OPTIONS.map((hour) => (
-          <option key={hour} value={hour}>
-            {hour}
-          </option>
-        ))}
-      </select>
-      )}
-      <select
-        className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
-        value={parsed.minute}
-        disabled={disabled}
-        onChange={(event) =>
-          onChange(clamp(to24h(parsed.hour12, event.target.value, parsed.meridiem)))
-        }
-      >
-        {minuteOptions.map((minute) => (
-          <option key={minute} value={minute}>
-            {minute}
-          </option>
-        ))}
-      </select>
-      {timeFormat === "H12" ? (
-        <select
-          className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
-          value={parsed.meridiem}
-          disabled={disabled}
-          onChange={(event) =>
-            onChange(
-              clamp(to24h(parsed.hour12, parsed.minute, event.target.value as "AM" | "PM"))
-            )
-          }
-        >
-          <option value="AM">AM</option>
-          <option value="PM">PM</option>
-        </select>
-      ) : null}
+      <DropdownSelect id={id} label="Hour" className="w-full" value={timeFormat === "H24" ? hour24 : parsed.hour12} disabled={disabled}
+        options={(timeFormat === "H24" ? HOUR_24_OPTIONS : HOUR_OPTIONS).map(hour => ({ value: hour, label: hour }))}
+        onValueChange={hour => onChange(clamp(timeFormat === "H24" ? `${hour}:${parsed.minute}` : to24h(hour, parsed.minute, parsed.meridiem)))} />
+      <DropdownSelect label="Minute" className="w-full" value={parsed.minute} disabled={disabled}
+        options={minuteOptions.map(minute => ({ value: minute, label: minute }))}
+        onValueChange={minute => onChange(clamp(to24h(parsed.hour12, minute, parsed.meridiem)))} />
+      {timeFormat === "H12" && <DropdownSelect label="AM or PM" className="w-full" value={parsed.meridiem} disabled={disabled}
+        options={[{ value: "AM", label: "AM" }, { value: "PM", label: "PM" }]}
+        onValueChange={meridiem => onChange(clamp(to24h(parsed.hour12, parsed.minute, meridiem as "AM" | "PM")))} />}
     </div>
   )
 }
-

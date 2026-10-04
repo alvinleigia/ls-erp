@@ -1,3 +1,4 @@
+import { salesRecordAccess } from "@/platform/access/record-scope"
 import { requireWriteFields } from "@/platform/access/policy"
 import type { PermissionRun } from "@/platform/access/server"
 import type { Prisma } from "@prisma/client"
@@ -15,7 +16,7 @@ export const salesTeamSchema = z.object({
   workflow: z.enum(["ENQUIRY_FIRST", "DIRECT"]).default("ENQUIRY_FIRST"),
   archived: z.boolean().default(false), version: z.number().int().positive().optional(),
 }).strict()
-const memberSchema = z.object({ userId: z.string().min(1).max(100), version: z.number().int().positive(), remove: z.boolean().default(false) }).strict()
+const memberSchema = z.object({ userId: z.string().min(1).max(100), version: z.number().int().positive(), remove: z.boolean().default(false), isManager: z.boolean().optional() }).strict()
 export const teamSelect = { id: true, name: true, workflow: true, archived: true } as const
 const snapshot = (value: unknown): Prisma.InputJsonValue => JSON.parse(JSON.stringify(value))
 export function teamScope(actor: CrmActor) {
@@ -23,12 +24,13 @@ export function teamScope(actor: CrmActor) {
 }
 
 // Team membership restricts new assignment; it never grants access to another
-// salesperson's records. Existing owner/manager scopes remain authoritative.
+// salesperson's records. Explicit manager designation and role scopes control access.
 export async function resolveSalesTeam(tx: Tx, actor: CrmActor, requested: string | null | undefined, owner: string, before?: { salesTeamId: string | null; assignedUserId: string }) {
   const id = requested === undefined ? before?.salesTeamId ?? null : requested || null
   const unchanged = !!before && before.salesTeamId === id && before.assignedUserId === owner
   if (before && before.salesTeamId !== id && !canManageCrm(actor.role)) throw new CrmError(403, "Only a manager can change a record's sales team.")
   if (!id) return null
+  if (!unchanged && salesRecordAccess(actor) === "MANAGED_TEAMS" && !actor.managedTeamIds?.includes(id)) throw new CrmError(403, "Choose a sales team you manage.")
   const team = await tx.crmSalesTeam.findFirst({ where: { tenantId: actor.tenantId, id } })
   if (!team) throw new CrmError(404, "Sales team not found.")
   if (!unchanged) {
@@ -56,7 +58,7 @@ export function createTeamService({ run, audit }: Context) {
       return run("salesTeams.read", async (tx, actor) => {
         const team = await tx.crmSalesTeam.findFirst({ where: { ...teamScope(actor), id } })
         if (!team) throw new CrmError(404, "Sales team not found.")
-        return { ...team, canManage: canManageCrm(actor.role) }
+        return { ...team, canManage: canManageCrm(actor.role), canManageTeamAccess: actor.role === "ADMIN" }
       })
     },
     saveSalesTeam(input: unknown, id?: string) {
@@ -71,7 +73,7 @@ export function createTeamService({ run, audit }: Context) {
           ? await tx.crmSalesTeam.update({ where: { tenantId_id: { tenantId: actor.tenantId, id: before.id }, version }, data: { ...data, nameKey: data.name.toLowerCase(), version: { increment: 1 } } })
           : await tx.crmSalesTeam.create({ data: { ...data, tenantId: actor.tenantId, nameKey: data.name.toLowerCase() } })
         await audit(tx, actor, `crm.team.${before ? "updated" : "created"}`, record.id, before ? snapshot(before) : undefined, snapshot(record))
-        return record
+        return { ...record, canManageTeamAccess: actor.role === "ADMIN" }
       })
     },
     listSalesTeamMembers(id: string, input: unknown) {
@@ -81,7 +83,7 @@ export function createTeamService({ run, audit }: Context) {
         if (!await tx.crmSalesTeam.findUnique({ where: { tenantId_id: { tenantId: actor.tenantId, id } } })) throw new CrmError(404, "Sales team not found.")
         const where = { tenantId: actor.tenantId, teamId: id, user: { name: { contains: q.q, mode: "insensitive" as const } } }
         const [rows, total] = await Promise.all([tx.crmSalesTeamMember.findMany({ where, include: { user: { select: { id: true, name: true, status: true, role: true } } }, orderBy: [{ user: { name: "asc" } }, { userId: "asc" }], skip: (q.page - 1) * q.pageSize, take: q.pageSize }), tx.crmSalesTeamMember.count({ where })])
-        return { items: rows.map(row => row.user), total, page: q.page, pageSize: q.pageSize, totalPages: Math.max(1, Math.ceil(total / q.pageSize)) }
+        return { items: rows.map(row => ({ ...row.user, isManager: row.isManager })), total, page: q.page, pageSize: q.pageSize, totalPages: Math.max(1, Math.ceil(total / q.pageSize)) }
       })
     },
     changeSalesTeamMember(id: string, input: unknown) {
@@ -92,6 +94,9 @@ export function createTeamService({ run, audit }: Context) {
         if (!team) throw new CrmError(404, "Sales team not found.")
         if (team.version !== data.version) throw new CrmError(409, "This team changed. Refresh before saving.")
         if (team.archived) throw new CrmError(409, "Restore this team before changing membership.")
+        const previous = await tx.crmSalesTeamMember.findUnique({ where: { tenantId_teamId_userId: { tenantId: actor.tenantId, teamId: id, userId: data.userId } } })
+        if ((data.isManager !== undefined || (data.remove && previous?.isManager)) && actor.role !== "ADMIN") throw new CrmError(403, "Only a tenant administrator can change team-manager authority.")
+        if (data.isManager === true && !await tx.user.findFirst({ where: { tenantId: actor.tenantId, id: data.userId, role: "MANAGER", status: "ACTIVE" } })) throw new CrmError(400, "Team managers must be active Manager accounts.")
         if (data.remove) {
           const where = { tenantId: actor.tenantId, salesTeamId: id, assignedUserId: data.userId }
           const [leads, deals] = await Promise.all([
@@ -102,11 +107,11 @@ export function createTeamService({ run, audit }: Context) {
           await tx.crmSalesTeamMember.deleteMany({ where: { tenantId: actor.tenantId, teamId: id, userId: data.userId } })
         } else {
           if (!await tx.user.findFirst({ where: { tenantId: actor.tenantId, id: data.userId, status: "ACTIVE", role: { in: ["ADMIN", "MANAGER", "STAFF"] } } })) throw new CrmError(400, "Choose an active salesperson in this business.")
-          await tx.crmSalesTeamMember.createMany({ data: [{ tenantId: actor.tenantId, teamId: id, userId: data.userId }], skipDuplicates: true })
+          await tx.crmSalesTeamMember.upsert({ where: { tenantId_teamId_userId: { tenantId: actor.tenantId, teamId: id, userId: data.userId } }, create: { tenantId: actor.tenantId, teamId: id, userId: data.userId, isManager: data.isManager ?? false }, update: data.isManager === undefined ? {} : { isManager: data.isManager } })
         }
         const result = await tx.crmSalesTeam.update({ where: { tenantId_id: { tenantId: actor.tenantId, id }, version: data.version }, data: { version: { increment: 1 } } })
-        await audit(tx, actor, data.remove ? "crm.team.member.removed" : "crm.team.member.added", id, undefined, { userId: data.userId })
-        return result
+        await audit(tx, actor, data.remove ? "crm.team.member.removed" : data.isManager !== undefined ? "crm.team.manager.updated" : "crm.team.member.added", id, previous ? snapshot(previous) : undefined, { userId: data.userId, isManager: data.remove ? false : data.isManager ?? previous?.isManager ?? false })
+        return { ...result, canManageTeamAccess: actor.role === "ADMIN" }
       })
     },
   }

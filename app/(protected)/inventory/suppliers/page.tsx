@@ -1,5 +1,11 @@
 "use client"
 
+import { SupplierView } from "@/modules/inventory/record-view"
+
+import { Select, Textarea } from "@/components/erp/controls"
+
+import { useCurrentResourceAction } from "@/platform/access/view-guard"
+
 import * as React from "react"
 import {
   ColumnDef,
@@ -10,10 +16,14 @@ import {
 import { ArrowDownIcon, ArrowUpDownIcon, ArrowUpIcon, MoreHorizontalIcon, PlusIcon } from "lucide-react"
 import { toast } from "sonner"
 
-import { DataTable, DataTablePagination, DataTableToolbar } from "@/components/data-table"
+import { DataTable } from "@/components/data-table"
+import { PageHeader, Surface, TableToolbar, pageClass } from "@/components/erp/page"
+import { TablePagination } from "@/components/erp/pagination"
+import { DraftPanel } from "@/components/erp/record-detail"
+import { Section } from "@/components/erp/section"
+import { ConfirmAction } from "@/components/erp/confirm-action"
 import { FormField } from "@/components/form-field"
 import { Button } from "@/components/ui/button"
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -67,88 +77,116 @@ const SortIndicator = ({ value }: { value: false | "asc" | "desc" }) => {
 }
 
 export default function InventorySuppliersPage() {
+  const canCreate = useCurrentResourceAction("create")
+  const canEdit = useCurrentResourceAction("edit")
+  const canArchive = useCurrentResourceAction("archive")
+
   const [items, setItems] = React.useState<SupplierRow[]>([])
   const [totalRows, setTotalRows] = React.useState(0)
   const [loading, setLoading] = React.useState(true)
+  const [statusFilter, setStatusFilter] = React.useState("all")
+  const listRequest = React.useRef<AbortController | null>(null)
   const [search, setSearch] = React.useState("")
   const [sorting, setSorting] = React.useState<SortingState>([])
   const [pagination, setPagination] = React.useState<PaginationState>({ pageIndex: 0, pageSize: 10 })
+  const [deleteTarget, setDeleteTarget] = React.useState<SupplierRow | null>(null)
+  const [deleting, setDeleting] = React.useState(false)
+  const [viewing, setViewing] = React.useState<SupplierRow | null>(null)
   const [formOpen, setFormOpen] = React.useState(false)
   const [editing, setEditing] = React.useState<SupplierRow | null>(null)
   const [formValues, setFormValues] = React.useState<SupplierFormValues>(defaultValues)
+  const [formError, setFormError] = React.useState("")
   const [saving, setSaving] = React.useState(false)
   const { errors, setErrorsFromResponse, clearErrors } = useFormErrors()
   const stateOptions = getStateOptionsByCountry(formValues.country)
 
   const loadItems = React.useCallback(async () => {
+    listRequest.current?.abort()
+    const controller = new AbortController()
+    listRequest.current = controller
+    const signal = controller.signal
     setLoading(true)
-    const params = new URLSearchParams()
-    params.set("page", String(pagination.pageIndex + 1))
-    params.set("pageSize", String(pagination.pageSize))
-    if (search.trim()) params.set("q", search.trim())
-    if (sorting[0]) {
-      params.set("sort", sorting[0].id)
-      params.set("order", sorting[0].desc ? "desc" : "asc")
-    }
-    const response = await fetch(`/api/inventory/suppliers?${params.toString()}`)
-    if (!response.ok) {
-      toast.error("Unable to load suppliers.")
-      setItems([])
-      setTotalRows(0)
+    try {
+      const params = new URLSearchParams()
+      params.set("page", String(pagination.pageIndex + 1))
+      params.set("pageSize", String(pagination.pageSize))
+      if (statusFilter !== "all") params.set("status", statusFilter)
+      if (search.trim()) params.set("q", search.trim())
+      if (sorting[0]) {
+        params.set("sort", sorting[0].id)
+        params.set("order", sorting[0].desc ? "desc" : "asc")
+      }
+      const response = await fetch(`/api/inventory/suppliers?${params.toString()}`, { signal })
+      if (!response.ok) {
+        toast.error("Unable to load suppliers.")
+        setItems([])
+        setTotalRows(0)
+        setLoading(false)
+        return
+      }
+      const data = (await response.json()) as ListResponse<SupplierRow>
+      if (signal.aborted) return
+      setItems(data.items)
+      setTotalRows(data.total)
       setLoading(false)
-      return
-    }
-    const data = (await response.json()) as ListResponse<SupplierRow>
-    setItems(data.items)
-    setTotalRows(data.total)
-    setLoading(false)
-  }, [pagination.pageIndex, pagination.pageSize, search, sorting])
+    } catch { if (!signal.aborted) toast.error("Unable to load records. Please refresh.") } finally { if (!signal.aborted) setLoading(false) }
+  }, [pagination.pageIndex, pagination.pageSize, search, sorting, statusFilter])
 
   React.useEffect(() => {
     void loadItems()
+    return () => listRequest.current?.abort()
   }, [loadItems])
 
   const save = async () => {
     setSaving(true)
-    clearErrors()
-    const response = await fetch(
-      editing ? `/api/inventory/suppliers/${editing.id}` : "/api/inventory/suppliers",
-      {
-        method: editing ? "PATCH" : "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formValues),
+    setFormError("")
+    try {
+      clearErrors()
+      const response = await fetch(
+        editing ? `/api/inventory/suppliers/${editing.id}` : "/api/inventory/suppliers",
+        {
+          method: editing ? "PATCH" : "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(formValues),
+        }
+      )
+      if (!response.ok) {
+        const data = (await response.json()) as {
+          error?: string
+          details?: { fieldErrors?: Record<string, string[]> }
+        }
+        setErrorsFromResponse(data)
+        setFormError(data.error ?? "Unable to save. Check the form and try again.")
+        toast.error(data.error ?? "Unable to save supplier.")
+        setSaving(false)
+        return
       }
-    )
-    if (!response.ok) {
-      const data = (await response.json()) as {
-        error?: string
-        details?: { fieldErrors?: Record<string, string[]> }
-      }
-      setErrorsFromResponse(data)
-      toast.error(data.error ?? "Unable to save supplier.")
+      toast.success(editing ? "Supplier updated." : "Supplier created.")
       setSaving(false)
-      return
-    }
-    toast.success(editing ? "Supplier updated." : "Supplier created.")
-    setSaving(false)
-    setFormOpen(false)
-    setEditing(null)
-    setFormValues(defaultValues)
-    await loadItems()
+      setFormOpen(false)
+      setEditing(null)
+      setFormValues(defaultValues)
+      await loadItems()
+    } catch { setFormError("Unable to save. Please try again."); toast.error("Unable to save. Please try again.") } finally { setSaving(false) }
   }
 
   const removeItem = React.useCallback(async (item: SupplierRow) => {
-    const response = await fetch(`/api/inventory/suppliers/${item.id}`, { method: "DELETE" })
-    if (!response.ok) {
-      const data = (await response.json().catch(() => ({}))) as { error?: string }
-      toast.error(data.error ?? "Unable to delete supplier.")
-      return
-    }
-    toast.success("Supplier deleted.")
-    await loadItems()
+    setDeleting(true)
+    try {
+      const response = await fetch(`/api/inventory/suppliers/${item.id}`, { method: "DELETE" })
+      if (!response.ok) {
+        const data = (await response.json().catch(() => ({}))) as { error?: string }
+        toast.error(data.error ?? "Unable to delete supplier.")
+        return
+      }
+      toast.success("Supplier deleted.")
+      await loadItems()
+      setDeleteTarget(null)
+    } catch { toast.error("Unable to delete. Please try again.") } finally { setDeleting(false) }
   }, [loadItems])
 
   const openEdit = React.useCallback((item: SupplierRow) => {
+    setViewing(null)
     setEditing(item)
     setFormValues({
       name: item.name,
@@ -162,11 +200,11 @@ export default function InventorySuppliersPage() {
       city: item.city ?? "",
       state: item.state ?? "",
       country: item.country ?? "",
-      notes: "",
+      notes: item.notes ?? "",
       status: item.status,
     })
     clearErrors()
-    setFormOpen(true)
+    setFormError(""); setFormOpen(true)
   }, [clearErrors])
 
   const columns = React.useMemo<ColumnDef<SupplierRow>[]>(
@@ -186,7 +224,7 @@ export default function InventorySuppliersPage() {
         ),
         cell: ({ row }) => (
           <div className="flex flex-col">
-            <span className="font-medium">{row.original.name}</span>
+            <button type="button" className="text-left font-medium underline underline-offset-4 hover:text-primary" onClick={() => setViewing(row.original)}>{row.original.name}</button>
             <span className="text-xs text-muted-foreground">
               {row.original.contactPerson || row.original.email || "No contact"}
             </span>
@@ -209,15 +247,16 @@ export default function InventorySuppliersPage() {
         cell: ({ row }) => (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button size="icon" variant="ghost">
+              <Button size="icon" variant="ghost" aria-label="Record actions">
                 <MoreHorizontalIcon className="h-4 w-4" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem onSelect={() => openEdit(row.original)}>Edit</DropdownMenuItem>
+              <DropdownMenuItem disabled={!canEdit} onSelect={() => openEdit(row.original)}>Edit</DropdownMenuItem>
               <DropdownMenuItem
+                disabled={!canArchive}
                 className="text-destructive"
-                onSelect={() => void removeItem(row.original)}
+                onSelect={() => setDeleteTarget(row.original)}
               >
                 Delete
               </DropdownMenuItem>
@@ -226,16 +265,15 @@ export default function InventorySuppliersPage() {
         ),
       },
     ],
-    [openEdit, removeItem]
+    [openEdit, canEdit, canArchive]
   )
 
-  // eslint-disable-next-line react-hooks/incompatible-library
   const table = useReactTable({
     data: items,
     columns,
     state: { sorting, pagination, globalFilter: search },
-    onSortingChange: setSorting,
-    onGlobalFilterChange: setSearch,
+    onSortingChange: value => { setSorting(value); setPagination(prev => ({ ...prev, pageIndex: 0 })) },
+    onGlobalFilterChange: value => { setSearch(value); setPagination(prev => ({ ...prev, pageIndex: 0 })) },
     onPaginationChange: (updater) => {
       setPagination((prev) =>
         typeof updater === "function" ? (updater(prev as never) as PaginationState) : updater
@@ -249,49 +287,36 @@ export default function InventorySuppliersPage() {
   })
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold">Suppliers</h1>
-          <p className="text-sm text-muted-foreground">
-            Manage supplier master records for purchasing.
-          </p>
-        </div>
-        <Button
+    <div className={pageClass}>
+      <PageHeader title="Suppliers" description="Manage supplier master records for purchasing." actions={<Button
+          disabled={!canCreate}
           onClick={() => {
             setEditing(null)
             setFormValues(defaultValues)
             clearErrors()
-            setFormOpen(true)
+            setFormError(""); setFormOpen(true)
           }}
         >
           <PlusIcon className="mr-2 h-4 w-4" />
           New supplier
-        </Button>
-      </div>
+        </Button>} />
 
-      <DataTableToolbar table={table} searchPlaceholder="Search suppliers" />
+      <Surface>
+      <TableToolbar table={table} searchPlaceholder="Search suppliers"><Select aria-label="Status filter" value={statusFilter} onValueChange={value => { setStatusFilter(value); setPagination(prev => ({ ...prev, pageIndex: 0 })) }}><option value="all">All statuses</option><option value="ACTIVE">Active</option><option value="INACTIVE">Inactive</option></Select><Button type="button" variant="outline" disabled={loading} onClick={() => void loadItems()}>Refresh</Button></TableToolbar>
       <DataTable table={table} loading={loading} emptyMessage="No suppliers found." />
-      <DataTablePagination table={table} totalRows={totalRows} />
+      <TablePagination table={table} totalRows={totalRows} loading={loading} />
+      </Surface>
 
-      <Dialog
-        open={formOpen}
-        onOpenChange={(open) => {
-          setFormOpen(open)
-          if (!open) {
-            setEditing(null)
-            setFormValues(defaultValues)
-          }
-        }}
-      >
-        <DialogContent className="max-h-[90vh] overflow-y-auto max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>{editing ? "Edit supplier" : "New supplier"}</DialogTitle>
-          </DialogHeader>
-          <div className="grid gap-3">
+      {deleteTarget && <ConfirmAction title="Delete supplier" description={`Delete "${deleteTarget.name}"? If this record is in use, it will be made inactive instead.`} label="Delete" destructive busy={deleting} onCancel={() => setDeleteTarget(null)} onConfirm={() => void removeItem(deleteTarget)} />}
+
+      {viewing && <SupplierView item={viewing} onClose={() => setViewing(null)} onEdit={canEdit ? () => openEdit(viewing) : undefined} />}
+
+      {formOpen && <DraftPanel error={formError} fingerprint={formValues} title={editing ? "Edit supplier" : "New supplier"} description="Update supplier details in the sections below." onClose={() => setFormOpen(false)} onSubmit={() => void save()} saving={saving} disabled={!(editing ? canEdit : canCreate)} saveLabel={editing ? "Save changes" : "Create supplier"}>
+          <div className="space-y-5"><Section title="Contact and ordering"><div className="grid gap-4">
             <FormField id="sup-name" label="Name" error={errors.name}>
               <Input
                 id="sup-name"
+                required minLength={2}
                 value={formValues.name}
                 onChange={(event) => setFormValues((prev) => ({ ...prev, name: event.target.value }))}
               />
@@ -314,7 +339,7 @@ export default function InventorySuppliersPage() {
                 />
               </FormField>
             </div>
-            <div className="grid gap-3 md:grid-cols-3">
+            <div className="grid gap-3 sm:grid-cols-2">
               <FormField id="sup-phone" label="Phone" error={errors.phone}>
                 <Input
                   id="sup-phone"
@@ -337,55 +362,57 @@ export default function InventorySuppliersPage() {
                 />
               </FormField>
               <FormField id="sup-status" label="Status" error={errors.status}>
-                <select
+                <Select
                   id="sup-status"
+                  disabled={!canArchive}
                   className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
                   value={formValues.status}
-                  onChange={(event) =>
+                  onValueChange={(value) =>
                     setFormValues((prev) => ({
                       ...prev,
-                      status: event.target.value as SupplierFormValues["status"],
+                      status: value as SupplierFormValues["status"],
                     }))
                   }
                 >
                   <option value="ACTIVE">Active</option>
                   <option value="INACTIVE">Inactive</option>
-                </select>
+                </Select>
               </FormField>
             </div>
-            <div className="grid gap-3 md:grid-cols-3">
+            </div></Section><Section title="Tax registration"><div className="grid gap-4">
+            <div className="grid gap-3 sm:grid-cols-2">
               <FormField id="sup-tax-registered" label="Tax registered" error={errors.isTaxRegistered}>
-                <select
+                <Select
                   id="sup-tax-registered"
                   className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
                   value={formValues.isTaxRegistered ? "YES" : "NO"}
-                  onChange={(event) =>
+                  onValueChange={(value) =>
                     setFormValues((prev) => ({
                       ...prev,
-                      isTaxRegistered: event.target.value === "YES",
-                      taxRegistrationType: event.target.value === "YES" ? prev.taxRegistrationType : "",
-                      taxRegistrationNumber: event.target.value === "YES" ? prev.taxRegistrationNumber : "",
+                      isTaxRegistered: value === "YES",
+                      taxRegistrationType: value === "YES" ? prev.taxRegistrationType : "",
+                      taxRegistrationNumber: value === "YES" ? prev.taxRegistrationNumber : "",
                     }))
                   }
                 >
                   <option value="NO">No</option>
                   <option value="YES">Yes</option>
-                </select>
+                </Select>
               </FormField>
               <FormField
                 id="sup-tax-type"
                 label="Tax registration type"
                 error={errors.taxRegistrationType}
               >
-                <select
+                <Select
                   id="sup-tax-type"
                   className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
                   value={formValues.taxRegistrationType}
                   disabled={!formValues.isTaxRegistered}
-                  onChange={(event) =>
+                  onValueChange={(value) =>
                     setFormValues((prev) => ({
                       ...prev,
-                      taxRegistrationType: event.target.value as SupplierFormValues["taxRegistrationType"],
+                      taxRegistrationType: value as SupplierFormValues["taxRegistrationType"],
                     }))
                   }
                 >
@@ -395,7 +422,7 @@ export default function InventorySuppliersPage() {
                   <option value="SALES_TAX_ID">Sales Tax ID</option>
                   <option value="EIN">EIN</option>
                   <option value="OTHER">Other</option>
-                </select>
+                </Select>
               </FormField>
               <FormField
                 id="sup-tax-number"
@@ -415,6 +442,7 @@ export default function InventorySuppliersPage() {
                 />
               </FormField>
             </div>
+            </div></Section><Section title="Address"><div className="grid gap-4">
             <div className="grid gap-3 md:grid-cols-2">
               <FormField id="sup-city" label="City" error={errors.city}>
                 <Input
@@ -425,11 +453,11 @@ export default function InventorySuppliersPage() {
               </FormField>
               <FormField id="sup-state" label="State / province" error={errors.state}>
                 {stateOptions ? (
-                  <select
+                  <Select
                     id="sup-state"
                     className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
                     value={formValues.state}
-                    onChange={(event) => setFormValues((prev) => ({ ...prev, state: event.target.value }))}
+                    onValueChange={(value) => setFormValues((prev) => ({ ...prev, state: value }))}
                   >
                     <option value="">Select state/province</option>
                     {stateOptions.map((state) => (
@@ -437,7 +465,7 @@ export default function InventorySuppliersPage() {
                         {state}
                       </option>
                     ))}
-                  </select>
+                  </Select>
                 ) : (
                   <Input
                     id="sup-state"
@@ -450,13 +478,13 @@ export default function InventorySuppliersPage() {
             </div>
             <div className="grid gap-3 md:grid-cols-2">
               <FormField id="sup-country" label="Country" error={errors.country}>
-                <select
+                <Select
                   id="sup-country"
                   className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
                   value={formValues.country}
-                  onChange={(event) =>
+                  onValueChange={(value) =>
                     setFormValues((prev) => {
-                      const country = event.target.value
+                      const country = value
                       const nextStateOptions = getStateOptionsByCountry(country)
                       const shouldResetState = Boolean(
                         nextStateOptions && prev.state && !nextStateOptions.includes(prev.state)
@@ -475,27 +503,19 @@ export default function InventorySuppliersPage() {
                       {country}
                     </option>
                   ))}
-                </select>
+                </Select>
               </FormField>
             </div>
+            </div></Section><Section title="Notes">
             <FormField id="sup-notes" label="Notes" error={errors.notes}>
-              <Input
+              <Textarea
                 id="sup-notes"
                 value={formValues.notes}
                 onChange={(event) => setFormValues((prev) => ({ ...prev, notes: event.target.value }))}
               />
             </FormField>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setFormOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={save} loading={saving} loadingText="Saving...">
-              {editing ? "Save changes" : "Create supplier"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </Section></div>
+      </DraftPanel>}
     </div>
   )
 }

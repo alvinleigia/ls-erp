@@ -1,3 +1,6 @@
+import { withAppointmentsApi } from "@/modules/appointments/api"
+import { BusinessError, type BusinessActor } from "@/platform/policy"
+import { requireServicesAccess } from "@/modules/services/api"
 import { NextResponse } from "next/server"
 import { AppointmentStatus } from "@prisma/client"
 import { z } from "zod"
@@ -10,8 +13,6 @@ import {
   withRequestId,
 } from "@/lib/api-logging"
 import { prisma } from "@/lib/prisma"
-import { canManageUsers, type Role } from "@/lib/permissions"
-import { requireTenantSession } from "@/lib/tenant-auth"
 import type { AppointmentAvailabilityResult } from "@/types/appointments"
 import { checkStaffAppointmentAvailability } from "../_availability"
 
@@ -29,22 +30,11 @@ const ACTIVE_APPOINTMENT_STATUSES: AppointmentStatus[] = [
   AppointmentStatus.IN_PROGRESS,
 ]
 
-export async function POST(request: Request) {
+async function handlePOST(request: Request, actor: BusinessActor) {
   const logContext = createApiLogContext(request)
   logApiRequestStart(logContext, request)
 
-  const tenantSession = await requireTenantSession(request)
-  if (tenantSession.error) {
-    logApiRequestSuccess(logContext, tenantSession.error.status, { reason: "unauthorized_or_invalid_tenant" })
-    return withRequestId(tenantSession.error, logContext.requestId)
-  }
-  const { tenantId, role } = tenantSession.context
-
-  if (!canManageUsers(role as Role)) {
-    const response = NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    logApiRequestSuccess(logContext, 401, { reason: "unauthorized" })
-    return withRequestId(response, logContext.requestId)
-  }
+  const { tenantId } = actor
 
   try {
     const payload = await request.json()
@@ -172,8 +162,16 @@ export async function POST(request: Request) {
     logApiRequestSuccess(logContext, 200, { available: true })
     return withRequestId(response, logContext.requestId)
   } catch (error) {
+    if (error instanceof BusinessError) throw error
     logApiRequestError(logContext, error, 500)
     const response = NextResponse.json({ error: "Unable to check availability." }, { status: 500 })
     return withRequestId(response, logContext.requestId)
   }
+}
+
+export function POST(request: Request) {
+  return withAppointmentsApi(request, "appointments", "read", async actor => {
+    await requireServicesAccess(actor)
+    return handlePOST(request, actor)
+  })
 }

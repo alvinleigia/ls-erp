@@ -111,8 +111,8 @@ test("follow-up dates and bounded pagination are validated", () => {
 })
 test("staff scopes include tenant and ownership, and customers cannot use CRM", () => {
   const actor = { tenantId: "a", userId: "staff", role: "STAFF" }
-  assert.deepEqual(enquiryScope(actor), { tenantId: "a", assignedUserId: "staff" })
-  assert.equal(contactScope(actor).OR[1].enquiries.some.tenantId, "a")
+  assert.deepEqual(enquiryScope(actor), { tenantId: "a", AND: [{ OR: [{ assignedUserId: "staff" }] }] })
+  assert.equal(contactScope(actor).AND[0].OR[1].enquiries.some.tenantId, "a")
   assert.deepEqual(enquiryScope({ ...actor, role: "MANAGER" }), { tenantId: "a" })
   assert.equal(canUseCrm("CUSTOMER"), false)
   assert.throws(() => enquiryScope({ ...actor, role: "CUSTOMER" }), { status: 403 })

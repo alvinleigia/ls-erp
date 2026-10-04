@@ -1,4 +1,7 @@
 import type { AppointmentOrderStatus, Prisma } from "@prisma/client"
+import { requireBusinessModule } from "@/platform/module-server"
+import { requirePermission } from "@/platform/access/policy"
+import { BusinessError, type BusinessActor } from "@/platform/policy"
 
 type ProductQtyLine = {
   productId: string
@@ -74,9 +77,13 @@ export const applyStockDelta = async (params: {
   deltaByProduct: Map<string, number>
   orderId: string
   tenantId: string
+  actor: BusinessActor
 }) => {
   const { tx, deltaByProduct, orderId, tenantId } = params
   if (!deltaByProduct.size) return
+  if (params.actor.tenantId !== tenantId) throw new BusinessError(403, "Inventory access is required for stock changes.")
+  await requireBusinessModule(tx, tenantId, "inventory")
+  requirePermission(params.actor, "inventoryProducts.edit")
 
   const productIds = [...deltaByProduct.keys()]
   const products = await tx.inventoryProduct.findMany({

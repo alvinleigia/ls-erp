@@ -1,6 +1,8 @@
 "use client"
 
+import { useCurrentResourceAction } from "@/platform/access/view-guard"
 import { FormField } from "@/components/form-field"
+import { Select, Textarea } from "@/components/erp/controls"
 import { Input } from "@/components/ui/input"
 import type { CategoryFormValues } from "@/types/services"
 import { categoryStatusOptions } from "./category-form-model"
@@ -18,6 +20,7 @@ export function CategoryFormFields({
   errors,
   onChange,
 }: CategoryFormFieldsProps) {
+  const canArchive = useCurrentResourceAction("archive")
   const fieldId = (name: string) => (mode === "create" ? `category-${name}` : `edit-${name}`)
 
   return (
@@ -25,6 +28,7 @@ export function CategoryFormFields({
       <FormField id={fieldId("name")} label="Name" error={errors.name}>
         <Input
           id={fieldId("name")}
+          required minLength={2} maxLength={100}
           value={values.name}
           onChange={(event) => onChange({ ...values, name: event.target.value })}
         />
@@ -34,19 +38,20 @@ export function CategoryFormFields({
         label="Description"
         error={errors.description}
       >
-        <Input
+        <Textarea
+          maxLength={500}
           id={fieldId("description")}
           value={values.description}
           onChange={(event) => onChange({ ...values, description: event.target.value })}
         />
       </FormField>
       <FormField id={fieldId("status")} label="Status" error={errors.status}>
-        <select
+        <Select disabled={!canArchive}
           id={fieldId("status")}
-          className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+          className="w-full"
           value={values.status}
-          onChange={(event) =>
-            onChange({ ...values, status: event.target.value as CategoryFormValues["status"] })
+          onValueChange={(value) =>
+            onChange({ ...values, status: value as CategoryFormValues["status"] })
           }
         >
           {categoryStatusOptions.map((status) => (
@@ -54,7 +59,7 @@ export function CategoryFormFields({
               {status === "ACTIVE" ? "Active" : "Inactive"}
             </option>
           ))}
-        </select>
+        </Select>
       </FormField>
       <FormField id={fieldId("order")} label="Sort order" error={errors.sortOrder}>
         <Input

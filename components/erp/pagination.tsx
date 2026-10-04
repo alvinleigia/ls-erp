@@ -27,5 +27,5 @@ export function Pagination({ page, pageSize, total, totalPages = Math.max(1, Mat
 
 export function TablePagination<T>({ table, totalRows, loading = false }: { table: Table<T>; totalRows: number; loading?: boolean }) {
   const { pageIndex, pageSize } = table.getState().pagination
-  return <Pagination page={pageIndex + 1} pageSize={pageSize} total={totalRows} loading={loading} onPageChange={page => table.setPageIndex(page - 1)} onPageSizeChange={size => table.setPageSize(size)} />
+  return <Pagination page={pageIndex + 1} pageSize={pageSize} total={totalRows} loading={loading} onPageChange={page => table.setPageIndex(page - 1)} onPageSizeChange={size => { table.setPageSize(size); table.setPageIndex(0) }} />
 }

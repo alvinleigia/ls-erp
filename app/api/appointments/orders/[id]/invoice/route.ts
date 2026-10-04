@@ -1,3 +1,4 @@
+import { withAppointmentsApi } from "@/modules/appointments/api"
 import { NextResponse } from "next/server"
 
 import {
@@ -15,7 +16,7 @@ import { appointmentOrderInclude, serializeAppointmentOrder } from "../../_helpe
 
 export const runtime = "nodejs"
 
-export async function GET(
+async function handleGET(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
@@ -81,4 +82,10 @@ export async function GET(
     const response = NextResponse.json({ error: "Unable to generate invoice." }, { status: 500 })
     return withRequestId(response, logContext.requestId)
   }
+}
+
+export function GET(request: Request, context: { params: Promise<{ id: string }> }) {
+  return withAppointmentsApi(request, "appointments", "export", () => {
+    return handleGET(request, context)
+  })
 }

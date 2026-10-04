@@ -1,3 +1,4 @@
+import { salesRecordAccess } from "@/platform/access/record-scope"
 import type { PermissionRun } from "@/platform/access/server"
 import { Prisma } from "@prisma/client"
 import { CrmError, canManageCrm, type CrmActor } from "./policy"
@@ -25,7 +26,12 @@ export function createSalesReportService({ run }: Context, extensions: Pick<CrmE
     const owner = q.scope === "mine" ? actor.userId : q.assignedUserId
     // All identifiers are fixed application SQL; every user value is a bound
     // parameter. The same scoped sets power counts, drill-downs and downloads.
-    const filter = Prisma.sql`r."tenantId" = ${actor.tenantId}
+    const salesScopeSql = (alias: "r" | "o") => {
+      const column = (name: string) => Prisma.raw(`${alias}."${name}"`)
+      return salesRecordAccess(actor) === "ALL" ? Prisma.empty : Prisma.sql`AND (${column("assignedUserId")} = ${actor.userId}
+        ${salesRecordAccess(actor) === "MANAGED_TEAMS" && actor.managedTeamIds?.length ? Prisma.sql`OR ${column("salesTeamId")} IN (${Prisma.join(actor.managedTeamIds)})` : Prisma.empty})`
+    }
+    const filter = Prisma.sql`r."tenantId" = ${actor.tenantId} ${salesScopeSql("r")}
       ${owner ? Prisma.sql`AND r."assignedUserId" = ${owner}` : Prisma.empty}
       ${q.lostReasonId ? Prisma.sql`AND r."lostReasonId" = ${q.lostReasonId}` : Prisma.empty}
       ${q.salesTeamId ? Prisma.sql`AND r."salesTeamId" = ${q.salesTeamId}` : Prisma.empty}
@@ -41,7 +47,7 @@ export function createSalesReportService({ run }: Context, extensions: Pick<CrmE
     const cte = Prisma.sql`WITH leads_all AS (
       SELECT ${sharedColumns}, r.status::text AS status,
         EXISTS (SELECT 1 FROM "CrmOpportunity" o WHERE o."tenantId" = r."tenantId" AND o."enquiryId" = r.id
-          ${!canManage ? Prisma.sql`AND o."assignedUserId" = ${actor.userId}` : Prisma.empty}) AS converted
+          ${salesScopeSql("o")}) AS converted
       FROM "CrmEnquiry" r
       ${extension.enquiryJoins}
       ${joins} WHERE ${filter}

@@ -1,5 +1,3 @@
-# http://platform.localhost:3000/ - Email: alvinaraujo@gmail.com Password: password123
-# http://storefront1.localhost:3000/ - Email: storefront1.admin@ls-salon.test Password: password123
 # Base Conventions
 
 This is the baseline for new modules (API + UI) in this codebase.

@@ -11,7 +11,8 @@ import {
 } from "@/lib/api-logging"
 import { canManageUsers, type Role } from "@/lib/permissions"
 import { prisma } from "@/lib/prisma"
-import { requireTenantSession } from "@/lib/tenant-auth"
+import { withWorkforceApi, workforceSession } from "@/modules/workforce/api"
+import type { BusinessActor } from "@/platform/policy"
 
 const previewBreakSchema = z.object({
   startTime: z.string().regex(/^\d{2}:\d{2}$/),
@@ -145,11 +146,11 @@ const getDayNetMinutes = (
   }, 0)
 }
 
-export async function POST(request: Request) {
+async function handlePOST(request: Request, actor: BusinessActor) {
   const logContext = createApiLogContext(request)
   logApiRequestStart(logContext, request)
 
-  const tenantSession = await requireTenantSession(request)
+  const tenantSession = workforceSession(actor)
   if (tenantSession.error) {
     logApiRequestSuccess(logContext, tenantSession.error.status, { reason: "tenant_or_auth_failed" })
     return withRequestId(tenantSession.error, logContext.requestId)
@@ -435,4 +436,8 @@ export async function POST(request: Request) {
     const response = NextResponse.json({ error: "Unable to preview recurring pattern impact." }, { status: 500 })
     return withRequestId(response, logContext.requestId)
   }
+}
+
+export async function POST(request: Request) {
+  return withWorkforceApi(request, "shifts", "shiftPlans", "read", actor => handlePOST(request, actor), "flexible-patterns/impact-preview")
 }

@@ -1,6 +1,10 @@
 "use client"
 
 import * as React from "react"
+import { PageHeader, pageClass, Surface } from "@/components/erp/page"
+import { Section } from "@/components/erp/section"
+import { Select } from "@/components/erp/controls"
+import { Button } from "@/components/ui/button"
 import {
   Area,
   AreaChart,
@@ -16,7 +20,6 @@ import {
   YAxis,
 } from "recharts"
 import {
-  AlertTriangleIcon,
   CalendarClockIcon,
   CreditCardIcon,
   ScissorsIcon,
@@ -93,20 +96,20 @@ type DashboardSummary = {
 
 const pieColors = ["#22c55e", "#38bdf8", "#f59e0b", "#f97316", "#ef4444", "#a855f7"]
 const chartTooltipContentStyle = {
-  backgroundColor: "hsl(var(--popover))",
+  backgroundColor: "var(--popover)",
   opacity: 1,
-  border: "1px solid hsl(var(--border))",
+  border: "1px solid var(--border)",
   borderRadius: "0.5rem",
   boxShadow: "0 10px 25px rgba(0, 0, 0, 0.28)",
-  color: "hsl(var(--popover-foreground))",
+  color: "var(--popover-foreground)",
   padding: "8px 10px",
 }
 const chartTooltipLabelStyle = {
-  color: "hsl(var(--muted-foreground))",
+  color: "var(--muted-foreground)",
   fontSize: "12px",
 }
 const chartTooltipItemStyle = {
-  color: "hsl(var(--popover-foreground))",
+  color: "var(--popover-foreground)",
   fontSize: "12px",
   fontWeight: 500,
 }
@@ -132,6 +135,8 @@ const toDateOnlyLocal = (value: Date) => {
 
 export default function DashboardPage() {
   const [range, setRange] = React.useState<"today" | "week" | "month" | "custom">("week")
+  const [refresh, setRefresh] = React.useState(0)
+  const [appliedCustom, setAppliedCustom] = React.useState<DateRange | undefined>()
   const [dateRange, setDateRange] = React.useState<DateRange | undefined>()
   const [settings, setSettings] = React.useState<
     Pick<
@@ -147,7 +152,7 @@ export default function DashboardPage() {
 
   React.useEffect(() => {
     let mounted = true
-    fetch("/api/settings", { cache: "no-store" })
+    fetch("/api/settings/display", { cache: "no-store" })
       .then(async (response) => {
         if (!response.ok) return null
         const data = (await response.json()) as { settings?: AppSettingsPayload }
@@ -172,17 +177,17 @@ export default function DashboardPage() {
   }, [])
 
   React.useEffect(() => {
-    let mounted = true
+    const controller = new AbortController()
     const query = new URLSearchParams({ range })
-    if (range === "custom" && dateRange?.from && dateRange?.to) {
-      query.set("startDate", toDateOnlyLocal(dateRange.from))
-      query.set("endDate", toDateOnlyLocal(dateRange.to))
+    if (range === "custom" && appliedCustom?.from && appliedCustom?.to) {
+      query.set("startDate", toDateOnlyLocal(appliedCustom.from))
+      query.set("endDate", toDateOnlyLocal(appliedCustom.to))
     }
 
     setLoading(true)
     setError(null)
 
-    fetch(`/api/dashboard/summary?${query.toString()}`, { cache: "no-store" })
+    fetch(`/api/dashboard/summary?${query.toString()}`, { cache: "no-store", signal: controller.signal })
       .then(async (response) => {
         if (!response.ok) {
           const body = (await response.json().catch(() => null)) as { error?: string } | null
@@ -191,22 +196,22 @@ export default function DashboardPage() {
         return (await response.json()) as DashboardSummary
       })
       .then((data) => {
-        if (!mounted) return
+        if (controller.signal.aborted) return
         setSummary(data)
       })
       .catch((fetchError) => {
-        if (!mounted) return
+        if (controller.signal.aborted) return
         setError(fetchError instanceof Error ? fetchError.message : "Unable to load dashboard")
       })
       .finally(() => {
-        if (!mounted) return
+        if (controller.signal.aborted) return
         setLoading(false)
       })
 
     return () => {
-      mounted = false
+      controller.abort()
     }
-  }, [range, dateRange])
+  }, [range, appliedCustom, refresh])
 
   const rangeText = React.useMemo(() => {
     if (!summary?.range) return ""
@@ -269,152 +274,37 @@ export default function DashboardPage() {
     [settings.timeZone]
   )
 
-  React.useEffect(() => {
-    if (!summary) return
-
-    const dailyBookingsTotal = summary.series.daily.reduce((sum, row) => sum + row.bookings, 0)
-    const statusTotal = summary.appointmentStatus.reduce((sum, row) => sum + row.count, 0)
-    const staffBookingsTotal = summary.staffUtilization.reduce((sum, row) => sum + row.bookings, 0)
-    const topServicesBookingsTotal = summary.topServices.reduce((sum, row) => sum + row.bookings, 0)
-    const topServicesRevenueTotal = summary.topServices.reduce((sum, row) => sum + row.revenueCents, 0)
-
-    console.groupCollapsed(
-      `[Dashboard Debug] range=${range} uiRange=${summary.range.startDate}..${summary.range.endDate}`
-    )
-
-    console.log("Filter Query", {
-      selectedRange: range,
-      customFrom: dateRange?.from ? toDateOnlyLocal(dateRange.from) : null,
-      customTo: dateRange?.to ? toDateOnlyLocal(dateRange.to) : null,
-    })
-
-    console.log("Widget: KPI Cards", summary.kpis)
-
-    console.log("Widget: Daily Bookings", {
-      points: summary.series.daily,
-      totalBookingsFromSeries: dailyBookingsTotal,
-    })
-
-    console.log("Widget: Appointment Status Mix", {
-      rows: summary.appointmentStatus,
-      totalFromStatusMix: statusTotal,
-    })
-
-    console.log("Widget: Staff Load", {
-      rows: summary.staffUtilization,
-      totalStaffBookings: staffBookingsTotal,
-      totalStaffBookedMinutes: summary.staffUtilization.reduce(
-        (sum, row) => sum + row.bookedMinutes,
-        0
-      ),
-    })
-
-    console.log("Widget: Upcoming Appointments", {
-      count: summary.upcomingAppointments.length,
-      rows: summary.upcomingAppointments,
-    })
-
-    console.log("Widget: Top Services", {
-      rows: summary.topServices,
-      totalBookingsFromTopServices: topServicesBookingsTotal,
-      totalRevenueFromTopServicesCents: topServicesRevenueTotal,
-    })
-
-    console.log("Widget: Low Stock", {
-      count: summary.lowStock.length,
-      rows: summary.lowStock,
-    })
-
-    console.log("Consistency Checks", {
-      kpiAppointmentsEqualsDailyBookings:
-        summary.kpis.appointments === dailyBookingsTotal,
-      kpiAppointmentsEqualsStatusMix:
-        summary.kpis.appointments === statusTotal,
-      staffBookingsCanExceedAppointments:
-        "Expected true when one appointment can involve one staff booking row; compare only after confirming filters",
-    })
-
-    console.log("Raw Summary Payload", summary)
-    console.groupEnd()
-  }, [dateRange?.from, dateRange?.to, range, summary])
 
   return (
-    <div className="space-y-6">
-      <section className="relative overflow-hidden rounded-2xl border bg-gradient-to-br from-white via-slate-50 to-slate-100 p-6 text-slate-900 dark:from-[#0b0b0b] dark:via-[#151515] dark:to-[#1f1f1f] dark:text-white">
-        <div className="absolute -right-12 -top-12 h-36 w-36 rounded-full bg-emerald-500/10 blur-3xl dark:bg-emerald-500/20" />
-        <div className="absolute -bottom-12 left-12 h-40 w-40 rounded-full bg-sky-500/10 blur-3xl dark:bg-sky-500/20" />
-        <div className="relative space-y-4">
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div>
-              <p className="text-xs uppercase tracking-[0.25em] text-slate-600 dark:text-white/60">Salon Overview</p>
-              <h1 className="mt-2 text-3xl font-semibold tracking-tight font-serif">
-                {summary?.range.label || "Dashboard"}
-              </h1>
-              <p className="mt-1 text-xs text-slate-600 dark:text-white/70">{rangeText || "Choose a range to view live metrics"}</p>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <div className="flex items-center gap-2 rounded-full border border-slate-300 bg-white/70 px-2 py-1 dark:border-white/15 dark:bg-white/5">
-                {[
-                  { id: "today", label: "Today" },
-                  { id: "week", label: "Week" },
-                  { id: "month", label: "Month" },
-                ].map((option) => (
-                  <button
-                    key={option.id}
-                    type="button"
-                    onClick={() => {
-                      setRange(option.id as "today" | "week" | "month")
-                      setDateRange(undefined)
-                    }}
-                    className={`rounded-full px-3 py-1 text-xs font-medium transition ${
-                      range === option.id
-                        ? "bg-slate-900 text-white dark:bg-white dark:text-black"
-                        : "text-slate-600 hover:text-slate-900 dark:text-white/70 dark:hover:text-white"
-                    }`}
-                  >
-                    {option.label}
-                  </button>
-                ))}
-              </div>
-              <DateRangePicker
-                value={dateRange}
-                onChange={(next) => {
-                  setDateRange(next)
-                  if (next?.from && next?.to) setRange("custom")
-                }}
-                buttonClassName="rounded-full border-slate-300 bg-white/70 text-slate-900 hover:bg-white dark:bg-white/5 dark:border-white/20 dark:text-white dark:hover:bg-white/10"
-              />
-            </div>
-          </div>
-
-          {loading ? (
-            <div className="text-sm text-slate-600 dark:text-white/70">Loading metrics...</div>
-          ) : error ? (
-            <div className="rounded-xl border border-red-400/30 bg-red-500/10 px-4 py-3 text-sm text-red-800 dark:text-red-100">{error}</div>
-          ) : (
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              {headerCards.map((card) => (
-                <div key={card.label} className="rounded-xl border border-slate-300 bg-white/75 p-4 dark:border-white/10 dark:bg-white/5">
-                  <div className="flex items-center justify-between text-xs text-slate-600 dark:text-white/70">
-                    <span>{card.label}</span>
-                    <card.icon className="h-4 w-4" />
-                  </div>
-                  <div className="mt-3 text-2xl font-semibold">{card.value}</div>
-                  <div className="mt-1 text-xs text-slate-600 dark:text-white/60">{card.hint}</div>
-                </div>
-              ))}
-            </div>
-          )}
+    <div className={`${pageClass} [contain:inline-size]`}>
+      <PageHeader title="Dashboard" description="Business activity, bookings and operational summaries." />
+      <Surface>
+        <div className="flex flex-wrap items-center gap-3">
+          <Select aria-label="Period" value={range} onValueChange={value => {
+            setRange(value as typeof range)
+            if (value !== "custom") { setDateRange(undefined); setAppliedCustom(undefined) }
+          }}>
+            <option value="today">Today</option><option value="week">This week</option><option value="month">This month</option>
+            {range === "custom" && <option value="custom">Custom range</option>}
+          </Select>
+          <DateRangePicker value={dateRange} numberOfMonths={1} placeholder="Custom date range" onChange={next => {
+            setDateRange(next)
+            if (next?.from && next?.to) { setAppliedCustom(next); setRange("custom") }
+          }} />
+          <Button variant="outline" onClick={() => setRefresh(value => value + 1)} disabled={loading}>Refresh</Button>
         </div>
-      </section>
+        <p className="text-sm text-muted-foreground">{rangeText || "Choose a period to view metrics."}</p>
+      </Surface>
+      {loading ? <p role="status" className="text-sm text-muted-foreground">Loading metrics...</p> : error ? <Surface><p role="alert" className="text-sm text-destructive">{error}</p></Surface> : summary && <>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {headerCards.map(card => <Surface key={card.label}>
+            <div className="flex items-center justify-between gap-2 text-sm text-muted-foreground"><span>{card.label}</span><card.icon className="size-4" aria-hidden="true" /></div>
+            <p className="text-2xl font-semibold">{card.value}</p><p className="text-xs text-muted-foreground">{card.hint}</p>
+          </Surface>)}
+        </div>
 
       <section className="grid gap-6 lg:grid-cols-[1.7fr_1fr]">
-        <div className="rounded-2xl border bg-card p-5">
-          <div className="mb-3">
-            <h2 className="text-lg font-semibold">Revenue trend</h2>
-            <p className="text-xs text-muted-foreground">Revenue and booking volume by day</p>
-          </div>
-          <div className="h-64 w-full">
+        <Section title="Revenue trend" description="Revenue and booking volume by day"><div className="h-64 w-full">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={revenueSeries}>
                 <defs>
@@ -440,15 +330,9 @@ export default function DashboardPage() {
                 <Area type="monotone" dataKey="revenue" stroke="#22c55e" strokeWidth={2} fill="url(#dashboardRevenueFill)" />
               </AreaChart>
             </ResponsiveContainer>
-          </div>
-        </div>
+          </div></Section>
 
-        <div className="rounded-2xl border bg-card p-5">
-          <div className="mb-3">
-            <h2 className="text-lg font-semibold">Appointment status mix</h2>
-            <p className="text-xs text-muted-foreground">Status distribution in selected range</p>
-          </div>
-          <div className="h-52">
+        <Section title="Appointment status mix" description="Status distribution in selected range"><div className="h-52">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie data={summary?.appointmentStatus ?? []} dataKey="count" nameKey="status" innerRadius={42} outerRadius={72} paddingAngle={3}>
@@ -473,24 +357,18 @@ export default function DashboardPage() {
               </PieChart>
             </ResponsiveContainer>
           </div>
-          <div className="space-y-1 text-xs text-muted-foreground">
+<div className="space-y-1 text-xs text-muted-foreground">
             {(summary?.appointmentStatus ?? []).slice(0, 5).map((row) => (
               <div key={row.status} className="flex items-center justify-between">
                 <span>{normalizeStatusLabel(row.status)}</span>
                 <span className="font-medium text-foreground">{row.count}</span>
               </div>
             ))}
-          </div>
-        </div>
+          </div></Section>
       </section>
 
       <section className="grid gap-6 lg:grid-cols-[1.2fr_1fr]">
-        <div className="rounded-2xl border bg-card p-5 h-full flex flex-col">
-          <div className="mb-3">
-            <h2 className="text-lg font-semibold">Daily bookings</h2>
-            <p className="text-xs text-muted-foreground">Booking count by day</p>
-          </div>
-          <div className="min-h-[260px] flex-1">
+        <Section title="Daily bookings" description="Booking count by day"><div className="h-64 min-w-0">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart
                 data={summary?.series.daily ?? []}
@@ -508,17 +386,9 @@ export default function DashboardPage() {
                 <Bar dataKey="bookings" fill="#38bdf8" radius={[6, 6, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
-          </div>
-        </div>
+          </div></Section>
 
-        <div className="rounded-2xl border bg-card p-5">
-          <div className="mb-3">
-            <h2 className="text-lg font-semibold">Staff load</h2>
-            <p className="text-xs text-muted-foreground">
-              Booked time in selected range (8h/day baseline)
-            </p>
-          </div>
-          <div className="space-y-3">
+        <Section title="Staff load" description="Booked time in selected range (8h/day baseline)"><div className="space-y-3">
             {(summary?.staffUtilization ?? []).length === 0 ? (
               <div className="text-sm text-muted-foreground">No staff bookings in selected range.</div>
             ) : (
@@ -537,20 +407,12 @@ export default function DashboardPage() {
                 </div>
               ))
             )}
-          </div>
-        </div>
+          </div></Section>
       </section>
 
       <section className="grid gap-6 xl:grid-cols-3">
-        <div className="rounded-2xl border bg-card p-5 xl:col-span-2">
-          <div className="mb-3 flex items-center justify-between">
-            <div>
-              <h2 className="text-lg font-semibold">Upcoming appointments</h2>
-              <p className="text-xs text-muted-foreground">Next confirmed/scheduled slots</p>
-            </div>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="min-w-full text-sm">
+        <Section title="Upcoming appointments" description="Next confirmed/scheduled slots" className="xl:col-span-2"><div className="overflow-x-auto">
+            <table className="min-w-[32rem] w-full text-sm">
               <thead className="text-xs uppercase text-muted-foreground">
                 <tr className="border-b">
                   <th className="py-3 text-left">Date</th>
@@ -580,18 +442,9 @@ export default function DashboardPage() {
                 )}
               </tbody>
             </table>
-          </div>
-        </div>
+          </div></Section>
 
-        <div className="rounded-2xl border bg-card p-5">
-          <div className="mb-3 flex items-center justify-between">
-            <div>
-              <h2 className="text-lg font-semibold">Low stock alerts</h2>
-              <p className="text-xs text-muted-foreground">Products at or below reorder point</p>
-            </div>
-            <AlertTriangleIcon className="h-4 w-4 text-amber-500" />
-          </div>
-          <div className="space-y-3">
+        <Section title="Low stock alerts" description="Products at or below reorder point"><div className="space-y-3">
             {(summary?.lowStock ?? []).length === 0 ? (
               <div className="text-sm text-muted-foreground">No low stock items.</div>
             ) : (
@@ -609,17 +462,11 @@ export default function DashboardPage() {
                 </div>
               ))
             )}
-          </div>
-        </div>
+          </div></Section>
       </section>
 
-      <section className="rounded-2xl border bg-card p-5">
-        <div className="mb-3">
-          <h2 className="text-lg font-semibold">Top services</h2>
-          <p className="text-xs text-muted-foreground">Revenue leaders in selected range</p>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="min-w-full text-sm">
+      <Section title="Top services" description="Revenue leaders in selected range"><div className="overflow-x-auto">
+          <table className="min-w-[32rem] w-full text-sm">
             <thead className="text-xs uppercase text-muted-foreground">
               <tr className="border-b">
                 <th className="py-3 text-left">Service</th>
@@ -643,8 +490,8 @@ export default function DashboardPage() {
               )}
             </tbody>
           </table>
-        </div>
-      </section>
+        </div></Section>
+      </>}
     </div>
   )
 }

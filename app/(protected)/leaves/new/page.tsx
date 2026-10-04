@@ -1,13 +1,13 @@
 "use client"
 
+import { PageHeader, pageClass, FormActions } from "@/components/erp/page"
+
 import * as React from "react"
-import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 
 import { LeaveDefinitionFormFields } from "@/app/(protected)/leaves/leave-definition-form-fields"
 import { defaultLeaveDefinitionFormValues } from "@/app/(protected)/leaves/leave-definition-form-model"
-import { Button } from "@/components/ui/button"
 import { useFormErrors } from "@/hooks/use-form-errors"
 import type { LeaveDefinitionFormValues, LeaveDefinitionRow } from "@/types/leaves"
 
@@ -16,6 +16,7 @@ export default function NewLeaveDefinitionPage() {
   const [values, setValues] = React.useState<LeaveDefinitionFormValues>(
     defaultLeaveDefinitionFormValues
   )
+  const [formError, setFormError] = React.useState("")
   const [saving, setSaving] = React.useState(false)
   const [leaveOptions, setLeaveOptions] = React.useState<Array<{ value: string; label: string }>>([])
   const { errors, setErrorsFromResponse, clearErrors } = useFormErrors()
@@ -36,61 +37,52 @@ export default function NewLeaveDefinitionPage() {
   }, [])
 
   const createDefinition = async () => {
+    setFormError("")
     setSaving(true)
-    clearErrors()
-    const response = await fetch("/api/leaves/definitions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(values),
-    })
+    try {
+      clearErrors()
+      const response = await fetch("/api/leaves/definitions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(values),
+      })
 
-    if (!response.ok) {
-      const data = (await response.json().catch(() => ({}))) as {
-        error?: string
-        details?: { fieldErrors?: Record<string, string[]> }
+      if (!response.ok) {
+        const data = (await response.json().catch(() => ({}))) as {
+          error?: string
+          details?: { fieldErrors?: Record<string, string[]> }
+        }
+        setErrorsFromResponse(data)
+        setFormError(data.error ?? "Unable to create leave definition.")
+        toast.error(data.error ?? "Unable to create leave definition.")
+        setSaving(false)
+        return
       }
-      setErrorsFromResponse(data)
-      toast.error(data.error ?? "Unable to create leave definition.")
-      setSaving(false)
-      return
-    }
 
-    const data = (await response.json()) as { item: LeaveDefinitionRow }
-    toast.success("Leave definition created.")
-    router.push(`/leaves/${data.item.id}`)
+      const data = (await response.json()) as { item: LeaveDefinitionRow }
+      toast.success("Leave definition created.")
+      router.push(`/leaves/${data.item.id}`)
+    } catch {
+      setFormError("Unable to save. Please try again.")
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold">New Leave Definition</h1>
-          <p className="text-sm text-muted-foreground">
-            Configure a leave definition without hardcoded leave categories.
-          </p>
-        </div>
-        <Button variant="outline" asChild>
-          <Link href="/leaves">Back to list</Link>
-        </Button>
-      </div>
+    <div className={pageClass}>
+      <PageHeader title={<> New Leave Definition </>} description={<> Configure a leave definition without hardcoded leave categories. </>} actions={<FormActions form="leave-create" cancelHref="/leaves" saving={saving} saveLabel="Create leave definition" />} />
 
-      <div className="rounded-xl border bg-card p-4">
+      {formError && <p role="alert" className="text-sm text-destructive">{formError}</p>}
+      <form id="leave-create" onSubmit={event => { event.preventDefault(); void createDefinition() }}><fieldset disabled={saving} className="min-w-0">
         <LeaveDefinitionFormFields
           values={values}
           errors={errors}
           onChange={(updater) => setValues((prev) => updater(prev))}
           leaveOptions={leaveOptions}
         />
-      </div>
+      </fieldset></form>
 
-      <div className="flex items-center justify-end gap-2">
-        <Button variant="outline" asChild>
-          <Link href="/leaves">Cancel</Link>
-        </Button>
-        <Button onClick={createDefinition} loading={saving} loadingText="Saving...">
-          Create leave definition
-        </Button>
-      </div>
     </div>
   )
 }

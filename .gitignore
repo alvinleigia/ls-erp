@@ -44,3 +44,6 @@ yarn-error.log*
 next-env.d.ts
 
 /lib/generated/prisma
+
+# Local development scratch files and verification logs
+/tmp/

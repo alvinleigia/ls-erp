@@ -1,3 +1,7 @@
+import { moduleEnabled } from "@/platform/modules"
+import { permits } from "@/platform/access/policy"
+import { findAccessUser, assignedPermissions } from "@/platform/access/server"
+import { canManageUsers, type Role as AccessRole } from "@/lib/permissions"
 import { NextResponse } from "next/server"
 import { AppointmentOrderStatus, AppointmentStatus, Role, UserStatus } from "@prisma/client"
 
@@ -9,7 +13,8 @@ import {
   withRequestId,
 } from "@/lib/api-logging"
 import { prisma, runWithTenantDbContext } from "@/lib/prisma"
-import { requireTenantSession } from "@/lib/tenant-auth"
+import { withCoreApi, actorSession } from "@/platform/core/api"
+import type { BusinessActor } from "@/platform/policy"
 
 const BOOKING_STATUSES: AppointmentStatus[] = [
   AppointmentStatus.SCHEDULED,
@@ -183,11 +188,11 @@ const getRangeBounds = (
   }
 }
 
-export async function GET(request: Request) {
+async function handleGET(request: Request, actor: BusinessActor) {
   const logContext = createApiLogContext(request)
   logApiRequestStart(logContext, request)
 
-  const authorized = await requireTenantSession(request)
+  const authorized = actorSession(actor)
   if (authorized.error) {
     logApiRequestSuccess(logContext, authorized.error.status, { reason: "unauthorized_or_invalid_tenant" })
     return withRequestId(authorized.error, logContext.requestId)
@@ -197,6 +202,15 @@ export async function GET(request: Request) {
 
   try {
     return await runWithTenantDbContext(tenantId, async () => {
+      const [accessUser, moduleFlags] = await Promise.all([
+        authorized.context.sessionUserId ? findAccessUser(prisma, tenantId, authorized.context.sessionUserId) : null,
+        prisma.tenantModule.findMany({ where: { tenantId }, select: { key: true, allowed: true, enabled: true } }),
+      ])
+      const canReadLeaves = !!accessUser && canManageUsers(accessUser.role as AccessRole) && moduleEnabled(moduleFlags, "leaves") && permits({ permissions: assignedPermissions(accessUser) }, "leaveApprovals.read")
+      const canReadBookings = !!accessUser && canManageUsers(accessUser.role as AccessRole) && moduleEnabled(moduleFlags, "appointments") && permits({ permissions: assignedPermissions(accessUser) }, "appointments.read")
+      const canReadServices = !!accessUser && canManageUsers(accessUser.role as AccessRole) && moduleEnabled(moduleFlags, "services") && permits({ permissions: assignedPermissions(accessUser) }, "services.read")
+      const canReadStock = !!accessUser && canManageUsers(accessUser.role as AccessRole) && moduleEnabled(moduleFlags, "inventory") && permits({ permissions: assignedPermissions(accessUser) }, "inventoryProducts.read")
+
       const url = new URL(request.url)
       const range = (url.searchParams.get("range") || "week").toLowerCase()
       const startDateRaw = url.searchParams.get("startDate")
@@ -245,7 +259,7 @@ export async function GET(request: Request) {
         topServiceLines,
         staffRangeAppointments,
       ] = await Promise.all([
-        prisma.appointmentOrder.findMany({
+        canReadBookings ? prisma.appointmentOrder.findMany({
           where: {
             tenantId,
             status: { in: REVENUE_STATUSES },
@@ -259,23 +273,23 @@ export async function GET(request: Request) {
             appointmentDate: true,
             totalCents: true,
           },
-        }),
-        prisma.appointmentOrder.findMany({
+        }) : Promise.resolve([]),
+        canReadBookings ? prisma.appointmentOrder.findMany({
           where: {
             tenantId,
             status: { in: REVENUE_STATUSES },
             appointmentDate: { gte: todayDateOnly, lte: todayDateOnly },
           },
           select: { totalCents: true },
-        }),
-        prisma.appointment.findMany({
+        }) : Promise.resolve([]),
+        canReadBookings ? prisma.appointment.findMany({
           where: {
             tenantId,
             startAt: { gte: rangeStart, lt: rangeEndExclusive },
           },
           select: { id: true, startAt: true, status: true, customerId: true },
-        }),
-        prisma.appointment.findMany({
+        }) : Promise.resolve([]),
+        canReadBookings ? prisma.appointment.findMany({
           where: {
             tenantId,
             startAt: { gte: todayStart, lt: tomorrowStart },
@@ -286,35 +300,32 @@ export async function GET(request: Request) {
             startAt: true,
             endAt: true,
           },
-        }),
-        prisma.appointment.findMany({
+        }) : Promise.resolve([]),
+        canReadBookings ? prisma.appointment.findMany({
           where: {
             tenantId,
             startAt: { gte: rangeStart, lt: rangeEndExclusive },
           },
           distinct: ["customerId"],
           select: { customerId: true },
-        }),
-        prisma.leaveRequest.count({
+        }) : Promise.resolve([]),
+        canReadLeaves ? prisma.leaveRequest.count({
           where: {
             tenantId,
             status: "PENDING",
+            ...(accessUser?.role === "MANAGER" ? { staffProfile: { managerUserId: authorized.context.sessionUserId, user: { role: "STAFF" as const } } } : {}),
           },
-        }),
-        prisma.service.count({
+        }) : Promise.resolve(0),
+        canReadServices ? prisma.service.count({
           where: {
             tenantId,
             status: "ACTIVE",
           },
-        }),
-        prisma.user.count({
-          where: {
-            tenantId,
-            role: Role.STAFF,
-            status: UserStatus.ACTIVE,
-          },
-        }),
-        prisma.appointment.findMany({
+        }) : Promise.resolve(0),
+        canManageUsers(actor.role as AccessRole) && permits(actor, "users.read") ? prisma.user.count({
+          where: { tenantId, role: Role.STAFF, status: UserStatus.ACTIVE },
+        }) : Promise.resolve(0),
+        canReadBookings ? prisma.appointment.findMany({
           where: {
             tenantId,
             startAt: { gte: new Date() },
@@ -336,8 +347,8 @@ export async function GET(request: Request) {
             service: { select: { name: true, priceCents: true } },
             staffProfile: { select: { user: { select: { name: true } } } },
           },
-        }),
-        prisma.inventoryProduct.findMany({
+        }) : Promise.resolve([]),
+        canReadStock ? prisma.inventoryProduct.findMany({
           where: {
             tenantId,
             status: "ACTIVE",
@@ -354,16 +365,16 @@ export async function GET(request: Request) {
             reorderQty: true,
             category: { select: { name: true } },
           },
-        }),
-        prisma.appointment.groupBy({
+        }) : Promise.resolve([]),
+        canReadBookings ? prisma.appointment.groupBy({
           by: ["status"],
           where: {
             tenantId,
             startAt: { gte: rangeStart, lt: rangeEndExclusive },
           },
           _count: { _all: true },
-        }),
-        prisma.appointmentOrderLine.findMany({
+        }) : Promise.resolve([]),
+        canReadBookings ? prisma.appointmentOrderLine.findMany({
           where: {
             order: {
               tenantId,
@@ -379,8 +390,8 @@ export async function GET(request: Request) {
             lineTotalCents: true,
             service: { select: { name: true } },
           },
-        }),
-        prisma.appointment.findMany({
+        }) : Promise.resolve([]),
+        canReadBookings ? prisma.appointment.findMany({
           where: {
             tenantId,
             startAt: { gte: rangeStart, lt: rangeEndExclusive },
@@ -392,7 +403,7 @@ export async function GET(request: Request) {
             endAt: true,
             staffProfile: { select: { user: { select: { name: true } } } },
           },
-        }),
+        }) : Promise.resolve([]),
       ])
 
       const rangeDays = Math.max(
@@ -578,4 +589,8 @@ export async function GET(request: Request) {
     const response = NextResponse.json({ error: "Unable to load dashboard summary." }, { status: 500 })
     return withRequestId(response, logContext.requestId)
   }
+}
+
+export async function GET(request: Request) {
+  return withCoreApi(request, "dashboard", "read", actor => handleGET(request, actor))
 }

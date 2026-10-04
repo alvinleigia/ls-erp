@@ -49,7 +49,7 @@ export function createAccessRoleService(db: PrismaClient, identity: Identity) {
         const before = id ? await find(tx, id) : null
         if (before && before.version !== data.version) throw new BusinessError(409, "This access role changed. Refresh before saving.")
         if (id && data.archived && !before?.archived && await tx.tenantRoleAssignment.count({ where: { tenantId: identity.tenantId, roleId: id } })) throw new BusinessError(409, "Reassign users before archiving this role.")
-        const fields = { name: data.name, nameKey: data.name.normalize("NFKC").toLocaleLowerCase("en-US"), permissions: data.permissions, archived: data.archived }
+        const fields = { name: data.name, nameKey: data.name.normalize("NFKC").toLocaleLowerCase("en-US"), permissions: data.permissions, crmRecordScope: data.crmRecordScope ?? before?.crmRecordScope ?? "ACCOUNT_ROLE", archived: data.archived }
         const role = id ? await tx.tenantAccessRole.update({ where: { tenantId_id: { tenantId: identity.tenantId, id } }, data: { ...fields, version: { increment: 1 } } }) : await tx.tenantAccessRole.create({ data: { tenantId: identity.tenantId, ...fields } })
         await audit(tx, id ? "access.role.updated" : "access.role.created", "TenantAccessRole", role.id, before, role)
         return role

@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { useCurrentResourceAction } from "@/platform/access/view-guard"
 import {
   ColumnDef,
   ColumnFiltersState,
@@ -19,33 +20,26 @@ import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
-import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import {
-  DataTable,
-  DataTablePagination,
-  DataTableToolbar,
-} from "@/components/data-table"
-import { SearchableSelect } from "@/components/searchable-select"
+import { DataTable } from "@/components/data-table"
+import { PageHeader, Surface, TableToolbar, Filters, pageClass } from "@/components/erp/page"
+import { TablePagination } from "@/components/erp/pagination"
+import { DraftPanel, RecordPanel, ReadOnlyFields } from "@/components/erp/record-detail"
+import { Section } from "@/components/erp/section"
+import { ConfirmAction } from "@/components/erp/confirm-action"
+import { Select } from "@/components/erp/controls"
+import { RecordSelect } from "@/components/erp/record-select"
+import { FormField } from "@/components/form-field"
 import { useFormErrors } from "@/hooks/use-form-errors"
 import type { AppSettingsPayload, TaxRow } from "@/types/scheduling"
 import { formatCurrencyFromCents } from "@/lib/formatting"
 import type { ListResponse } from "@/types/api"
 import type {
-  CategoryOption,
   ServiceFormValues,
-  ServiceOption,
   ServiceRow,
   ServiceStatus,
 } from "@/types/services"
@@ -62,11 +56,12 @@ const SortIndicator = ({ value }: { value: false | "asc" | "desc" }) => {
 }
 
 export default function ServicesPage() {
+  const canCreate = useCurrentResourceAction("create")
+  const canEdit = useCurrentResourceAction("edit")
+  const canArchive = useCurrentResourceAction("archive")
   type PaginationState = { pageIndex: number; pageSize: number }
 
   const [services, setServices] = React.useState<ServiceRow[]>([])
-  const [categories, setCategories] = React.useState<CategoryOption[]>([])
-  const [serviceOptions, setServiceOptions] = React.useState<ServiceOption[]>([])
   const [taxOptions, setTaxOptions] = React.useState<TaxRow[]>([])
   const [settings, setSettings] = React.useState<
     Required<
@@ -107,6 +102,9 @@ export default function ServicesPage() {
   const [createOpen, setCreateOpen] = React.useState(false)
   const [editOpen, setEditOpen] = React.useState(false)
   const [editingService, setEditingService] = React.useState<ServiceRow | null>(null)
+  const [viewing, setViewing] = React.useState<ServiceRow | null>(null)
+  const [formError, setFormError] = React.useState("")
+  const listRequest = React.useRef<AbortController | null>(null)
   const [saving, setSaving] = React.useState(false)
   const [deleteOpen, setDeleteOpen] = React.useState(false)
   const [deleteTarget, setDeleteTarget] = React.useState<ServiceRow | null>(null)
@@ -126,30 +124,16 @@ export default function ServicesPage() {
   const [newService, setNewService] = React.useState<ServiceFormValues>(
     defaultServiceFormValues
   )
-  const [newPackageQuery, setNewPackageQuery] = React.useState("")
 
   const [editValues, setEditValues] = React.useState<ServiceFormValues>(
     defaultServiceFormValues
   )
-  const [editPackageQuery, setEditPackageQuery] = React.useState("")
 
   const totalPages = Math.max(1, Math.ceil(totalRows / pagination.pageSize))
 
-  const loadCategories = React.useCallback(async () => {
-    const response = await fetch(
-      "/api/service-categories?page=1&pageSize=100&sort=sortOrder&order=asc",
-      { cache: "no-store" }
-    )
-    if (!response.ok) {
-      setCategories([])
-      return
-    }
-    const data = (await response.json()) as ListResponse<CategoryOption>
-    setCategories(data.items)
-  }, [])
 
   const loadSettings = React.useCallback(async () => {
-    const response = await fetch("/api/settings", { cache: "no-store" })
+    const response = await fetch("/api/settings/display", { cache: "no-store" })
     if (!response.ok) {
       return
     }
@@ -165,35 +149,40 @@ export default function ServicesPage() {
   }, [])
 
   const loadServices = React.useCallback(async () => {
+    listRequest.current?.abort()
+    const controller = new AbortController()
+    listRequest.current = controller
+    const signal = controller.signal
     setLoading(true)
-    const params = new URLSearchParams()
-    params.set("page", String(pagination.pageIndex + 1))
-    params.set("pageSize", String(pagination.pageSize))
-    if (search) {
-      params.set("q", search)
-    }
-    if (statusFilter !== "all") {
-      params.set("status", statusFilter)
-    }
-    if (categoryFilter !== "all") {
-      params.set("categoryId", categoryFilter)
-    }
-    if (sorting[0]) {
-      params.set("sort", sorting[0].id)
-      params.set("order", sorting[0].desc ? "desc" : "asc")
-    }
-    const response = await fetch(`/api/services?${params.toString()}`)
-    if (!response.ok) {
-      toast.error("Unable to load services.")
-      setServices([])
-      setTotalRows(0)
-      setLoading(false)
-      return
-    }
-    const data = (await response.json()) as ListResponse<ServiceRow>
-    setServices(data.items)
-    setTotalRows(data.total)
-    setLoading(false)
+    try {
+      const params = new URLSearchParams()
+      params.set("page", String(pagination.pageIndex + 1))
+      params.set("pageSize", String(pagination.pageSize))
+      if (search) {
+        params.set("q", search)
+      }
+      if (statusFilter !== "all") {
+        params.set("status", statusFilter)
+      }
+      if (categoryFilter !== "all") {
+        params.set("categoryId", categoryFilter)
+      }
+      if (sorting[0]) {
+        params.set("sort", sorting[0].id)
+        params.set("order", sorting[0].desc ? "desc" : "asc")
+      }
+      const response = await fetch(`/api/services?${params.toString()}`, { signal })
+      if (!response.ok) {
+        toast.error("Unable to load services.")
+        setServices([])
+        setTotalRows(0)
+        return
+      }
+      const data = (await response.json()) as ListResponse<ServiceRow>
+      if (signal.aborted) return
+      setServices(data.items)
+      setTotalRows(data.total)
+    } catch { if (!signal.aborted) toast.error("Unable to load records. Please refresh.") } finally { if (!signal.aborted) setLoading(false) }
   }, [
     pagination.pageIndex,
     pagination.pageSize,
@@ -203,29 +192,9 @@ export default function ServicesPage() {
     sorting,
   ])
 
-  const loadServiceOptions = React.useCallback(async () => {
-    const params = new URLSearchParams()
-    params.set("page", "1")
-    params.set("pageSize", "100")
-    params.set("sort", "name")
-    params.set("order", "asc")
-    params.set("status", "ACTIVE")
-    params.set("type", "STANDARD")
-    const response = await fetch(`/api/services?${params.toString()}`, {
-      cache: "no-store",
-    })
-    if (!response.ok) {
-      setServiceOptions([])
-      return
-    }
-    const data = (await response.json()) as ListResponse<ServiceRow>
-    setServiceOptions(
-      data.items.map((item) => ({ id: item.id, name: item.name }))
-    )
-  }, [])
 
   const loadTaxOptions = React.useCallback(async () => {
-    const response = await fetch("/api/settings/taxes?page=1&pageSize=100", {
+    const response = await fetch("/api/lookups/taxes?page=1&pageSize=100", {
       cache: "no-store",
     })
     if (!response.ok) {
@@ -236,31 +205,21 @@ export default function ServicesPage() {
     setTaxOptions(data.items)
   }, [])
 
-  React.useEffect(() => {
-    void loadCategories()
-  }, [loadCategories])
 
   React.useEffect(() => {
     void loadServices()
+    return () => listRequest.current?.abort()
   }, [loadServices])
 
   React.useEffect(() => {
     void loadSettings()
   }, [loadSettings])
 
-  React.useEffect(() => {
-    void loadServiceOptions()
-  }, [loadServiceOptions])
 
   React.useEffect(() => {
     void loadTaxOptions()
   }, [loadTaxOptions])
 
-  React.useEffect(() => {
-    setPagination((prev) =>
-      prev.pageIndex === 0 ? prev : { ...prev, pageIndex: 0 }
-    )
-  }, [search, statusFilter, categoryFilter, sorting])
 
   const handlePaginationChange = React.useCallback(
     (updater: PaginationState | ((prev: PaginationState) => PaginationState)) => {
@@ -341,45 +300,49 @@ export default function ServicesPage() {
 
   const createService = async () => {
     setSaving(true)
-    clearCreateErrors()
-    const response = await fetch("/api/services", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name: newService.name,
-        description: newService.description,
-        categoryId: newService.categoryId,
-        durationMinutes: Number(newService.durationMinutes),
-        priceCents: priceToCents(newService.price),
-        status: newService.status,
-        type: newService.type,
-        packageItemIds:
-          newService.type === "PACKAGE" ? newService.packageItemIds : [],
-        taxIds: newService.taxIds,
-        taxMode: newService.taxMode,
-      }),
-    })
+    setFormError("")
+    try {
+      clearCreateErrors()
+      const response = await fetch("/api/services", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: newService.name,
+          description: newService.description,
+          categoryId: newService.categoryId,
+          durationMinutes: Number(newService.durationMinutes),
+          priceCents: priceToCents(newService.price),
+          status: newService.status,
+          type: newService.type,
+          packageItemIds:
+            newService.type === "PACKAGE" ? newService.packageItemIds : [],
+          taxIds: newService.taxIds,
+          taxMode: newService.taxMode,
+        }),
+      })
 
-    if (!response.ok) {
-      const data = (await response.json()) as {
-        error?: string
-        details?: { fieldErrors?: Record<string, string[]> }
+      if (!response.ok) {
+        const data = (await response.json()) as {
+          error?: string
+          details?: { fieldErrors?: Record<string, string[]> }
+        }
+        setCreateErrorsFromResponse(data)
+        setFormError(data.error ?? "Unable to save. Check the form and try again.")
+        toast.error(data.error ?? "Unable to create service.")
+        return
       }
-      setCreateErrorsFromResponse(data)
-      toast.error(data.error ?? "Unable to create service.")
-      setSaving(false)
-      return
-    }
 
-    toast.success("Service created.")
-    setNewService(defaultServiceFormValues)
-    setNewPackageQuery("")
-    setSaving(false)
-    setCreateOpen(false)
-    await loadServices()
+      toast.success("Service created.")
+      setNewService(defaultServiceFormValues)
+      setCreateOpen(false)
+      await loadServices()
+    } catch { setFormError("Unable to save. Please try again.") } finally { setSaving(false) }
+
   }
 
   const startEdit = React.useCallback((service: ServiceRow) => {
+    setViewing(null)
+    setFormError("")
     setEditingService(service)
     clearEditErrors()
     setEditValues({
@@ -395,47 +358,49 @@ export default function ServicesPage() {
       taxIds: service.taxIds ?? [],
       taxMode: service.taxMode ?? "EXCLUSIVE",
     })
-    setEditPackageQuery("")
     setEditOpen(true)
   }, [clearEditErrors])
 
   const saveEdit = async () => {
     if (!editingService) return
     setSaving(true)
-    const response = await fetch(`/api/services/${editingService.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name: editValues.name,
-        description: editValues.description,
-        categoryId: editValues.categoryId,
-        durationMinutes: Number(editValues.durationMinutes),
-        priceCents: priceToCents(editValues.price),
-        status: editValues.status,
-        type: editValues.type,
-        packageItemIds:
-          editValues.type === "PACKAGE" ? editValues.packageItemIds : [],
-        taxIds: editValues.taxIds,
-        taxMode: editValues.taxMode,
-      }),
-    })
+    setFormError("")
+    try {
+      const response = await fetch(`/api/services/${editingService.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: editValues.name,
+          description: editValues.description,
+          categoryId: editValues.categoryId,
+          durationMinutes: Number(editValues.durationMinutes),
+          priceCents: priceToCents(editValues.price),
+          status: editValues.status,
+          type: editValues.type,
+          packageItemIds:
+            editValues.type === "PACKAGE" ? editValues.packageItemIds : [],
+          taxIds: editValues.taxIds,
+          taxMode: editValues.taxMode,
+        }),
+      })
 
-    if (!response.ok) {
-      const data = (await response.json()) as {
-        error?: string
-        details?: { fieldErrors?: Record<string, string[]> }
+      if (!response.ok) {
+        const data = (await response.json()) as {
+          error?: string
+          details?: { fieldErrors?: Record<string, string[]> }
+        }
+        setEditErrorsFromResponse(data)
+        setFormError(data.error ?? "Unable to save. Check the form and try again.")
+        toast.error(data.error ?? "Unable to update service.")
+        return
       }
-      setEditErrorsFromResponse(data)
-      toast.error(data.error ?? "Unable to update service.")
-      setSaving(false)
-      return
-    }
 
-    toast.success("Service updated.")
-    setSaving(false)
-    setEditOpen(false)
-    setEditingService(null)
-    await loadServices()
+      toast.success("Service updated.")
+      setEditOpen(false)
+      setEditingService(null)
+      await loadServices()
+    } catch { setFormError("Unable to save. Please try again.") } finally { setSaving(false) }
+
   }
 
   const requestDelete = React.useCallback((service: ServiceRow) => {
@@ -446,20 +411,21 @@ export default function ServicesPage() {
   const confirmDelete = React.useCallback(async () => {
     if (!deleteTarget) return
     setDeleting(true)
-    const response = await fetch(`/api/services/${deleteTarget.id}`, {
-      method: "DELETE",
-    })
-    if (!response.ok) {
-      const data = (await response.json()) as { error?: string }
-      toast.error(data.error ?? "Unable to delete service.")
-      setDeleting(false)
-      return
-    }
-    toast.success("Service deleted.")
-    setDeleting(false)
-    setDeleteOpen(false)
-    setDeleteTarget(null)
-    await loadServices()
+    try {
+      const response = await fetch(`/api/services/${deleteTarget.id}`, {
+        method: "DELETE",
+      })
+      if (!response.ok) {
+        const data = (await response.json()) as { error?: string }
+        toast.error(data.error ?? "Unable to delete service.")
+        return
+      }
+      toast.success("Service deleted.")
+      setDeleteOpen(false)
+      setDeleteTarget(null)
+      await loadServices()
+    } catch { toast.error("Unable to delete. Please try again.") } finally { setDeleting(false) }
+
   }, [deleteTarget, loadServices])
 
   const columns = React.useMemo<ColumnDef<ServiceRow>[]>(
@@ -479,7 +445,7 @@ export default function ServicesPage() {
         ),
         cell: ({ row }) => (
           <div className="flex flex-col">
-            <span className="font-medium">{row.original.name}</span>
+            <button type="button" className="text-left font-medium underline underline-offset-4 hover:text-primary" onClick={() => setViewing(row.original)}>{row.original.name}</button>
             {row.original.description ? (
               <span className="text-xs text-muted-foreground">
                 {row.original.description}
@@ -538,31 +504,15 @@ export default function ServicesPage() {
         id: "taxMode",
         accessorFn: (row) => row.taxMode ?? "EXCLUSIVE",
         meta: { label: "Tax mode" },
-        header: ({ column }) => (
-          <button
-            type="button"
-            className="inline-flex items-center gap-2 text-sm font-medium"
-            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-          >
-            Tax mode
-            <SortIndicator value={column.getIsSorted()} />
-          </button>
-        ),
+        enableSorting: false,
+        header: "Tax mode",
         cell: ({ row }) => (row.original.taxMode === "INCLUSIVE" ? "Inclusive" : "Exclusive"),
       },
       {
         id: "taxes",
         meta: { label: "Taxes" },
-        header: ({ column }) => (
-          <button
-            type="button"
-            className="inline-flex items-center gap-2 text-sm font-medium"
-            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-          >
-            Taxes
-            <SortIndicator value={column.getIsSorted()} />
-          </button>
-        ),
+        enableSorting: false,
+        header: "Taxes",
         cell: ({ row }) => (
           <div className="text-xs text-muted-foreground">
             {taxSummary(row.original).label}
@@ -572,31 +522,15 @@ export default function ServicesPage() {
       {
         id: "taxAmount",
         meta: { label: "Tax" },
-        header: ({ column }) => (
-          <button
-            type="button"
-            className="inline-flex items-center gap-2 text-sm font-medium"
-            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-          >
-            Tax
-            <SortIndicator value={column.getIsSorted()} />
-          </button>
-        ),
+        enableSorting: false,
+        header: "Tax",
         cell: ({ row }) => formatPrice(computeTaxCents(row.original)),
       },
       {
         id: "totalWithTax",
         meta: { label: "Total" },
-        header: ({ column }) => (
-          <button
-            type="button"
-            className="inline-flex items-center gap-2 text-sm font-medium"
-            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-          >
-            Total
-            <SortIndicator value={column.getIsSorted()} />
-          </button>
-        ),
+        enableSorting: false,
+        header: "Total",
         cell: ({ row }) => (
           <span className="font-medium">{formatPrice(computeTotalWithTax(row.original))}</span>
         ),
@@ -616,11 +550,10 @@ export default function ServicesPage() {
         ),
         cell: ({ row }) => (
           <span
-            className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
-              row.original.status === "ACTIVE"
-                ? "bg-emerald-500/10 text-emerald-500"
-                : "bg-muted text-muted-foreground"
-            }`}
+            className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${row.original.status === "ACTIVE"
+              ? "bg-emerald-500/10 text-emerald-500"
+              : "bg-muted text-muted-foreground"
+              }`}
           >
             {row.original.status === "ACTIVE" ? "Active" : "Inactive"}
           </span>
@@ -649,15 +582,15 @@ export default function ServicesPage() {
         cell: ({ row }) => (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button size="icon" variant="ghost">
+              <Button size="icon" variant="ghost" aria-label="Record actions">
                 <MoreHorizontalIcon className="h-4 w-4" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem onSelect={() => startEdit(row.original)}>
+              <DropdownMenuItem disabled={!canEdit} onSelect={() => startEdit(row.original)}>
                 Edit
               </DropdownMenuItem>
-              <DropdownMenuItem
+              <DropdownMenuItem disabled={!canArchive}
                 onSelect={() => requestDelete(row.original)}
                 className="text-destructive"
               >
@@ -669,6 +602,7 @@ export default function ServicesPage() {
       },
     ],
     [
+      canEdit, canArchive,
       computeNetPriceCents,
       computeTaxCents,
       computeTotalWithTax,
@@ -679,7 +613,6 @@ export default function ServicesPage() {
     ]
   )
 
-  // eslint-disable-next-line react-hooks/incompatible-library
   const table = useReactTable({
     data: services,
     columns,
@@ -690,10 +623,10 @@ export default function ServicesPage() {
       globalFilter: search,
       pagination,
     },
-    onSortingChange: setSorting,
+    onSortingChange: value => { setSorting(value); setPagination(prev => ({ ...prev, pageIndex: 0 })) },
     onColumnFiltersChange: setColumnFilters,
     onColumnVisibilityChange: setColumnVisibility,
-    onGlobalFilterChange: setSearch,
+    onGlobalFilterChange: value => { setSearch(value); setPagination(prev => ({ ...prev, pageIndex: 0 })) },
     onPaginationChange: handlePaginationChange,
     manualPagination: true,
     manualSorting: true,
@@ -703,155 +636,33 @@ export default function ServicesPage() {
   })
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold">Services</h1>
-          <p className="text-sm text-muted-foreground">
-            Manage services, pricing, and durations.
-          </p>
-        </div>
-        <Button onClick={() => setCreateOpen(true)}>New service</Button>
-      </div>
-
-      <DataTableToolbar table={table} searchPlaceholder="Search services">
-        <select
-          className="h-9 rounded-md border border-input bg-background px-3 text-sm"
-          value={statusFilter}
-          onChange={(event) =>
-            setStatusFilter(event.target.value as "all" | ServiceStatus)
-          }
-        >
-          <option value="all">All statuses</option>
-          {serviceStatusOptions.map((status) => (
-            <option key={status} value={status}>
-              {status === "ACTIVE" ? "Active" : "Inactive"}
-            </option>
-          ))}
-        </select>
-        <div className="w-56">
-          <SearchableSelect
-            value={categoryFilter}
-            placeholder="All categories"
-            searchPlaceholder="Search category..."
-            options={[
-              { value: "all", label: "All categories" },
-              ...categories.map((category) => ({
-                value: category.id,
-                label: category.name,
-              })),
-            ]}
-            onChange={(nextValue) => setCategoryFilter(nextValue)}
-          />
-        </div>
-      </DataTableToolbar>
-
-      <DataTable table={table} loading={loading} emptyMessage="No services found." />
-
-      <DataTablePagination table={table} totalRows={totalRows} />
-
-      <Dialog
-        open={deleteOpen}
-        onOpenChange={(open) => {
-          setDeleteOpen(open)
-          if (!open) {
-            setDeleteTarget(null)
-            setDeleting(false)
-          }
-        }}
-      >
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Delete service</DialogTitle>
-            <DialogDescription>
-              {deleteTarget
-                ? `Delete "${deleteTarget.name}"? This cannot be undone.`
-                : "Delete this service? This cannot be undone."}
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setDeleteOpen(false)}
-              disabled={deleting}
-            >
-              Cancel
-            </Button>
-            <Button variant="destructive" onClick={confirmDelete} disabled={deleting}>
-              {deleting ? "Deleting..." : "Delete"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent className="max-h-[90vh] flex flex-col">
-          <DialogHeader>
-            <DialogTitle>New service</DialogTitle>
-            <DialogDescription>Create a service offering.</DialogDescription>
-          </DialogHeader>
-          <div className="flex-1 overflow-y-auto">
-            <ServiceFormFields
-              mode="create"
-              values={newService}
-              errors={createErrors}
-              categories={categories}
-              serviceOptions={serviceOptions}
-              taxOptions={taxOptions}
-              packageQuery={newPackageQuery}
-              onPackageQueryChange={setNewPackageQuery}
-              onChange={setNewService}
-            />
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setCreateOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={createService} loading={saving} loadingText="Saving...">
-              Create service
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog
-        open={editOpen}
-        onOpenChange={(open) => {
-          setEditOpen(open)
-          if (!open) {
-            setEditingService(null)
-            clearEditErrors()
-          }
-        }}
-      >
-        <DialogContent className="max-h-[90vh] flex flex-col">
-          <DialogHeader>
-            <DialogTitle>Edit service</DialogTitle>
-            <DialogDescription>Update service details.</DialogDescription>
-          </DialogHeader>
-          <div className="flex-1 overflow-y-auto">
-            <ServiceFormFields
-              mode="edit"
-              values={editValues}
-              errors={editErrors}
-              categories={categories}
-              serviceOptions={serviceOptions}
-              taxOptions={taxOptions}
-              packageQuery={editPackageQuery}
-              onPackageQueryChange={setEditPackageQuery}
-              onChange={setEditValues}
-            />
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setEditOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={saveEdit} loading={saving} loadingText="Saving...">
-              Save changes
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+    <div className={pageClass}>
+      <PageHeader title="Services" description="Manage services, packages, pricing and durations." actions={<Button disabled={!canCreate} onClick={() => { setNewService(defaultServiceFormValues); clearCreateErrors(); setFormError(""); setCreateOpen(true) }}>New service</Button>} />
+      <Surface>
+        <TableToolbar table={table} searchPlaceholder="Search services">
+          <Select aria-label="Status filter" value={statusFilter} onValueChange={value => { setStatusFilter(value as "all" | ServiceStatus); setPagination(prev => ({ ...prev, pageIndex: 0 })) }}>
+            <option value="all">All statuses</option>{serviceStatusOptions.map(status => <option key={status} value={status}>{status === "ACTIVE" ? "Active" : "Inactive"}</option>)}
+          </Select>
+          <Filters activeCount={categoryFilter === "all" ? 0 : 1} onReset={() => { setCategoryFilter("all"); setPagination(prev => ({ ...prev, pageIndex: 0 })) }}>
+            <FormField id="category-filter" label="Category"><RecordSelect id="category-filter" endpoint="/api/service-categories" value={categoryFilter === "all" ? "" : categoryFilter} placeholder="All categories" onChange={value => { setCategoryFilter(value || "all"); setPagination(prev => ({ ...prev, pageIndex: 0 })) }} /></FormField>
+          </Filters>
+          <Button variant="outline" disabled={loading} onClick={() => void loadServices()}>Refresh</Button>
+        </TableToolbar>
+        <DataTable table={table} loading={loading} emptyMessage="No services found." />
+        <TablePagination table={table} totalRows={totalRows} loading={loading} />
+      </Surface>
+      {viewing && <RecordPanel title={viewing.name} description={viewing.type === "PACKAGE" ? "Service package" : "Service details"} onClose={() => setViewing(null)} actions={canEdit ? <Button onClick={() => startEdit(viewing)}>Edit details</Button> : undefined}>
+        <Section title="Service details"><ReadOnlyFields fields={[{ label: "Category", value: viewing.category.name }, { label: "Type", value: viewing.type === "PACKAGE" ? "Package" : "Standard" }, { label: "Status", value: viewing.status === "ACTIVE" ? "Active" : "Inactive" }, { label: "Duration", value: `${viewing.durationMinutes} minutes` }, { label: "Description", value: viewing.description }]} /></Section>
+        <Section title="Pricing and taxes"><ReadOnlyFields fields={[{ label: "Price before tax", value: formatPrice(computeNetPriceCents(viewing)) }, { label: "Tax mode", value: viewing.taxMode === "INCLUSIVE" ? "Inclusive" : "Exclusive" }, { label: "Default taxes", value: taxSummary(viewing).label }, { label: "Tax amount", value: formatPrice(computeTaxCents(viewing)) }, { label: "Total with tax", value: formatPrice(computeTotalWithTax(viewing)) }]} /></Section>
+        {viewing.type === "PACKAGE" && <Section title="Package items"><ul className="space-y-2 text-sm">{viewing.packageItems?.map(item => <li key={item.itemService.id} className="rounded-lg border p-3">{item.itemService.name}</li>)}</ul>{!viewing.packageItems?.length && <p className="text-sm text-muted-foreground">No services in this package.</p>}</Section>}
+      </RecordPanel>}
+      {deleteOpen && deleteTarget && <ConfirmAction title="Delete service" description={`Delete "${deleteTarget.name}"? Services linked to packages are made inactive instead.`} label="Delete" destructive busy={deleting} onCancel={() => { setDeleteOpen(false); setDeleteTarget(null) }} onConfirm={() => void confirmDelete()} />}
+      {createOpen && <DraftPanel disabled={!canCreate} title="New service" description="Create a service or package." fingerprint={newService} error={formError} saving={saving} saveLabel="Create service" onClose={() => setCreateOpen(false)} onSubmit={() => void createService()}>
+        <ServiceFormFields mode="create" values={newService} errors={createErrors} taxOptions={taxOptions} onChange={setNewService} />
+      </DraftPanel>}
+      {editOpen && editingService && <DraftPanel disabled={!canEdit} title="Edit service" description="Update the service in the sections below." fingerprint={editValues} error={formError} saving={saving} onClose={() => setEditOpen(false)} onSubmit={() => void saveEdit()}>
+        <ServiceFormFields mode="edit" values={editValues} errors={editErrors} selectedCategory={editingService.category} selectedServices={editingService.packageItems?.map(item => item.itemService)} taxOptions={taxOptions} onChange={setEditValues} />
+      </DraftPanel>}
     </div>
   )
 }

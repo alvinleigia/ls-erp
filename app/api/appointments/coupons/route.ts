@@ -1,3 +1,4 @@
+import { withAppointmentsApi } from "@/modules/appointments/api"
 import { NextResponse } from "next/server"
 import { Prisma } from "@prisma/client"
 import { z } from "zod"
@@ -79,7 +80,7 @@ const serializeCoupon = (coupon: {
   updatedAt: coupon.updatedAt.toISOString(),
 })
 
-export async function GET(request: Request) {
+async function handleGET(request: Request) {
   const logContext = createApiLogContext(request)
   logApiRequestStart(logContext, request)
   const authorized = await ensureAuthorized(request)
@@ -142,7 +143,7 @@ export async function GET(request: Request) {
   }
 }
 
-export async function POST(request: Request) {
+async function handlePOST(request: Request) {
   const logContext = createApiLogContext(request)
   logApiRequestStart(logContext, request)
   const authorized = await ensureAuthorized(request)
@@ -208,4 +209,16 @@ export async function POST(request: Request) {
     const response = NextResponse.json({ error: "Unable to create coupon." }, { status: 500 })
     return withRequestId(response, logContext.requestId)
   }
+}
+
+export async function GET(request: Request) {
+  return withAppointmentsApi(request, "appointmentCoupons", "read", async () => {
+    return handleGET(request)
+  })
+}
+
+export async function POST(request: Request) {
+  return withAppointmentsApi(request, "appointmentCoupons", "create", async () => {
+    return handlePOST(request)
+  }, { kind: "coupon" })
 }

@@ -806,3 +806,236 @@ Tenant access roles now restrict the existing Staff/Manager account authority ac
 Repository renamed to alvinleigia/ls-erp. Neutral presentation components now live in components/erp; CRM adapters preserve authorization and existing workflows. Product branding and tenant-specific invitation/invoice defaults were updated locally. Build, TypeScript, lint, 30 browser regressions and 20 unit checks passed. Legacy module migration remains incremental. See ERP_STANDARDIZATION.md for scope and the pending Vercel Git reconnection, which requires the account GitHub Login Connection. Application changes are not pushed or deployed.
 
 Vercel Git reconnection follow-up (2026-10-03): user reconnected the project; API verification confirms alvinleigia/ls-erp, repository ID 1279282190 and production branch main. The earlier connection blocker is resolved.
+
+
+## ERP Phase 3 - Inventory module boundary (2026-10-03)
+
+Inventory is independently platform-allowed and tenant-activated, with per-resource access-role checks across APIs, views, stock side effects and dashboard inventory data. A configuration-only migration preserves existing tenant access. Validation used disposable PostgreSQL with enforced RLS and intercepted browser fixtures. See ERP_STANDARDIZATION.md for migration order, configuration, validation, remaining name references and the next Services increment. Not pushed or deployed.
+
+
+## ERP Phase 2 resumed - Inventory UI adoption (2026-10-03)
+
+Phase sequencing is corrected: extracting shared ERP components did not complete Phase 2. Inventory products, categories, suppliers and purchase orders now adopt shared list layouts, pagination, read-only record panels and separate sectioned draft forms with fixed Save/Cancel actions. Delete and receiving confirmations reuse the same control. Server-backed record pickers replace capped preloads; supplier notes survive unrelated edits. Prior Phase 3 Inventory access work is retained. Services, Appointments, Leaves/Shifts and Dashboard/Reports UI adoption remain in Phase 2; Services is next. See ERP_STANDARDIZATION.md for scope and validation. Changes remain local; not pushed or deployed.
+
+
+## ERP Phase 2 - Services UI adoption (2026-10-03)
+
+Services, packages and service categories now reuse shared ERP list layouts, read-only record panels, sectioned draft forms, dropdowns, confirmations and pagination. Category and package-service choices search the server rather than preloading only 100 records. Existing tax/pricing, package payloads and access behavior remain in place. Build, TypeScript, targeted lint and four intercepted browser workflows passed; desktop/mobile screenshots were inspected. No hosted mutations, new migrations, push or deployment. Phase 2 continues with Appointments, then Leaves/Shifts and Dashboard/Reports. See ERP_STANDARDIZATION.md.
+
+
+## ERP Phase 2 - Appointments UI adoption (2026-10-03)
+
+Appointments and coupons now adopt shared ERP layouts, filters, dropdowns, centered pagination, read-only summaries and separate draft panels with fixed actions. Booking summaries use saved pricing/tax snapshots and scheduled times. Shared footers support multiple actions and narrow-screen wrapping; the shared time picker uses dropdowns. Existing booking APIs, stock/pricing rules, invoices and access checks are preserved. Production build, TypeScript, targeted lint and 14 distinct intercepted browser workflows passed across final runs; the new-booking focus-timing test passed three repeats after correction. Desktop/mobile screenshots were inspected. Enabled Syncfusion calendar behavior still needs hosted verification. Existing capped lookup preloads remain a follow-up. No new API/schema changes, hosted mutations, push or deployment. Phase 2 continues with Leaves/Shifts, then Dashboard/Reports. See ERP_STANDARDIZATION.md.
+
+
+## ERP Phase 2 - Leaves and Shifts UI adoption (2026-10-03)
+
+Leaves definitions/groups/requests/approvals and Shifts templates/schedules/recurring plans/roster now adopt shared ERP layouts, controls, pagination, read-only summaries and separate sectioned drafts. CRM and leave history share the neutral timeline; workflow dialogs keep reviewed actions visible on narrow screens. Existing approval/conflict and scheduling API payloads are preserved. Thirteen intercepted Leaves/Shifts browser workflows and 21 CRM record regressions passed across final runs; desktop/mobile screenshots were inspected. Targeted ESLint passed. See ERP_STANDARDIZATION.md for build verification and retained lookup/calendar limitations. No new API/schema changes, hosted mutations, push or deployment. Phase 2 continues with Dashboard/Reports before further Phase 3 access expansion.
+
+Leaves/Shifts final verification: production Next.js build and standalone TypeScript exited 0; targeted ESLint and whitespace checks passed. All 13 Leaves/Shifts browser checks passed together in the final run. Changes remain local.
+
+
+## ERP Phase 2 - Dashboard and Reports UI adoption (2026-10-03)
+
+Dashboard, Coupon usage and Audit logs now reuse shared ERP headers, sections, filters, dropdowns, pagination and read-only detail panels. Complete custom date ranges, refresh/loading/errors and cancelled obsolete requests preserve clear report state. Existing calculations, report role guards and server pagination remain intact. Production build, targeted lint and four intercepted browser workflows passed; chart animation settling was checked in a follow-up run and desktop/mobile screenshots were inspected. No new API/schema changes, migrations, hosted mutations, push or deployment. The named Phase 2 UI adoption increments are now complete locally; capped lookup and hosted Syncfusion/acceptance checks remain follow-ups. Next is Phase 3 Services/module activation and access expansion. See ERP_STANDARDIZATION.md for scope and limitations.
+
+
+## ERP Phase 3 - Services activation and access (2026-10-04)
+
+Services resumes Phase 3 after local Phase 2 UI adoption. Services/catalog categories now use platform allowances, tenant activation, resource/action permissions and current-user tenant-scoped API guards; legacy ADMIN/MANAGER ceilings remain. Booking catalog use, staff eligibility, maintenance and dashboard catalog counts respect the module boundary. Saved bookings/invoice PDFs remain readable. Migration 20261003100000_services_module preserves existing tenant access and explicit decisions; apply after the pending Inventory migration before rollout. Build, TypeScript, targeted lint, ten real-RLS integration/migration checks and twelve browser workflows passed; screenshots were inspected. Inventory/module/access/Users/Dashboard regression checks passed across runs. Catalog audits retain the existing best-effort policy; eligibility changes are transactionally audited. See ERP_STANDARDIZATION.md for dependencies, fixes and limitations. Changes and migrations remain local, not pushed or deployed. Next: Appointments activation/access.
+
+
+## ERP Phase 3 - Appointments activation and access (2026-10-04)
+
+Appointments now has independent platform/tenant activation, booking and coupon
+resource permissions, current-user API boundaries, guarded navigation/pages and
+permission-aware controls. Service booking changes require Services/read; product
+lines require Inventory/read; saved history remains available with Services off.
+Cancel/reactivate requires Archive, PDF export requires Export, and email also
+requires Edit. Dashboard, coupon reports, appointment/coupon audit snapshots,
+maintenance and leave/shift conflict detail responses respect the boundary.
+Migration 20261004090000_appointments_module preserves existing tenant access and
+explicit decisions; apply after pending Inventory/Services migrations at rollout.
+Nine real-RLS integration/migration checks, 25 related integration regressions,
+four access/navigation checks and 16 browser workflows passed. Desktop/mobile
+screenshots were inspected. See ERP_STANDARDIZATION.md for audit/dependency and
+calendar/lookup limitations. No push, deployment or hosted migrations performed.
+Next: Phase 3 Leaves/Shifts activation/access.
+
+Appointments final verification: production Next.js build exited 0; standalone TypeScript, targeted ESLint and whitespace checks passed. The disposable local test database container was stopped. Changes remain local.
+
+
+### Phase 3 - Leaves/Shifts boundaries (2026-10-04)
+
+Leaves/Shifts now use platform allowance and tenant activation, independent of CRM
+and each other. Current-user API guards enforce resource actions, personal-request
+ownership and direct-report approval limits; page/navigation/action controls match.
+Definition/group and template/schedule/plan/roster operations are separately
+permissioned. Replacement recurring plans require Archive; staff profile scheduling
+mode changes cannot bypass the Shifts switch. Existing saved availability remains
+in force for bookings when module screens are disabled. Workforce audits, dashboard
+counts and maintenance respect access. See ERP_STANDARDIZATION.md for exact audit,
+lookup and partial-roster behavior.
+Migration 20261004100000_workforce_modules preserves existing access; future tenants
+require allowance. Ten workforce database/RLS/migration tests, 34 related integration
+tests and 36 intercepted browser checks pass. Desktop/mobile screenshots inspected.
+All changes and pending migrations remain local. Next: remaining Dashboard/Reports,
+Users and Settings access boundaries, then separately planned record-scope work.
+
+Workforce final verification: production Next.js build exited 0; targeted ESLint and whitespace checks passed, alongside the four access-policy/navigation tests. Local database tests and browser harness used isolated/mocked data only. No push, deployment or hosted migrations.
+
+
+### Phase 3 - Core administration boundaries (2026-10-04)
+
+Dashboard, audit reports, user directory, business settings and tax configuration
+now have separate access-role permissions. These are shared core capabilities,
+not tenant-disableable modules; tenant administrators retain full access. Existing
+custom roles need the appropriate new read permissions explicitly granted.
+User creation, invitations, role/security changes and staff administration remain
+administrator-only. Active staff, managers and customers retain basic self-profile
+access without directory access. Current database account/tenant state overrides
+stale session role claims on these APIs and business layouts.
+
+Shared core guards, route requirements, navigation filtering and action controls
+are reused. Settings and user-detail GET requests no longer create configuration
+or staff rows. Business settings and tax writes record before/after audit snapshots;
+invitation audits exclude tokens. Tax activation/deletion requires Archive in
+addition to Read; Edit alone cannot change status.
+
+Booking/workforce forms use paginated, tenant-scoped directory projections;
+catalog/booking forms use a tax lookup; scheduling uses operational settings and
+other screens use display preferences. These avoid granting full Users/Settings
+access just to fill a dropdown. Existing 100-row client lookup caps remain a
+separate follow-up. The audit report applies source permissions/module activation
+before count and pagination. Managers see recognized authorized operational
+resource events only; security, CRM, unrecognized events and scoped leave-request
+snapshots remain excluded from that generic report. Relevant record timelines
+remain the place for scoped history. Dashboard staff counts require Users Read.
+
+Validation: 46 core/workforce/appointments/services/inventory database tests pass
+(44 initially, two legacy dashboard fixtures updated for the new Dashboard Read
+permission and rerun within 21 passing inventory/services tests). An additional
+18 Users/Settings tests, four Dashboard tests, six access-role integration tests
+and four policy/navigation tests pass. All 34 selected intercepted browser checks
+pass (33 initially; one form-navigation timeout passed on isolated rerun).
+Read-only Settings and restricted tax-editor screenshots inspected. Targeted
+ESLint passes. No live email, hosted data changes, commit, push or deployment.
+No new migration is required for this increment; earlier module migrations remain
+local. Next: separately planned record-scope expansion in TENANT_ACCESS_CONTROL.md.
+
+Core final verification: production Next.js build exited 0 after retrying a transient Google Fonts connection failure. Build TypeScript and prerendering passed; targeted ESLint and whitespace checks passed. The disposable local test database was stopped.
+
+
+## Phase 3 - CRM sales record scopes implemented locally (2026-10-04)
+
+Settings > Access roles now includes CRM sales record scope: Existing account
+access, Own / assigned records, Own and managed sales teams, or All tenant records.
+Existing roles retain account-based behavior. Tenant ADMIN remains tenant-wide;
+STAFF remains within assigned-record access even if a broader scope is selected.
+Manager accounts can be narrowed through the role. Action permissions still apply.
+
+In CRM > Configuration > Sales teams > Members, a tenant administrator can set
+Team access to Team manager for an active Manager account. Ordinary membership
+does not grant authority. A managed scope covers records explicitly assigned to
+that sales team, plus the manager's own records; it does not expose every record
+owned by a member. Role changes, manager revocation and team archival take effect
+on subsequent requests without another login. Changes are versioned and audited.
+
+Shared predicates cover enquiries, opportunities, related contacts/accounts,
+activities/internal history, quotations/PDF access, selectors, counts, reports and
+exports before pagination/aggregation. Parent/referral labels remain masked when
+outside the scope. Existing customer-facing completed interaction summaries stay
+shared for an accessible contact; private work details/history remain scoped.
+Edits retain the record owner and audit the actual manager. Former team members'
+visible activities remain attributed in reports; existing assignments may be
+preserved on edit, but new assignments still require an allowed active assignee.
+Project access, configuration permissions and other ERP module record scopes are
+unchanged by this sales-specific setting.
+
+Migration 20261004110000_crm_record_scopes adds TenantAccessRole.crmRecordScope
+(default ACCOUNT_ROLE, checked values) and CrmSalesTeamMember.isManager (false).
+It rewrites no ownership and promotes no existing members. Apply this and the
+pending earlier module migrations BEFORE deploying code that selects these
+columns. Only the disposable local database has received this migration.
+
+Validation: 126 database tests passed, including the new scope/migration suite,
+CRM, teams, sales reporting, quotations, roles and core boundaries. Two existing
+legacy migration checks remain skipped (activity upgrade and lead-source intake).
+One contention failure in the parallel run passed in isolation; the complete
+serial rerun passed. Thirty unit/policy checks and five intercepted browser checks
+passed. Role desktop/mobile and team-manager screenshots inspected. The managed
+scope returns five of 10,000 records in 13 SQL statements; authorization is loaded
+once per operation, with no per-row permission queries. Production build and
+TypeScript passed; targeted ESLint and whitespace checks passed.
+
+Run the new suite with npm.cmd run test:crm:scopes:integration, using only the
+local CRM_TEST_DATABASE_URL described in the test guard. No hosted writes,
+commit, push or deployment. Next: the separately planned audit-review and rollout
+increment; this milestone does not claim additional ERP record scopes are done.
+
+
+## Phase 3 - protected audit review implemented locally (2026-10-04)
+
+This completes the audit-review portion of access-control Stage 4; hosted rollout
+remains pending. Reports > Audit logs now provides All permitted / Business /
+Security event filters, exact actor and record IDs, request ID, entity type,
+validated UTC date bounds and search. Standard server pagination and shared
+read-only panels remain in use. View shows actor, target, timestamp, request ID
+and a field-by-field Before/After comparison. Recorded snapshots are expandable.
+Partial audit patches do not imply that omitted fields were deleted.
+
+The list selects summaries only. A separate detail GET repeats current access
+checks and returns recursively redacted credential fields, leaving stored audit
+rows unchanged. Reload/focus clears previous details while rechecking access;
+denied requests cannot fall back to the old snapshot. Neither endpoint mutates
+business data. Current actor permissions, module flags, count and rows use one
+repeatable-read database transaction for a consistent authorization snapshot.
+
+Tenant administrators can review security changes, including access roles,
+assignments, team-manager designations and module allowances/activation. Managers
+require Audit reports Read plus the underlying operational resource Read and
+module activation. They receive only the previously supported operational event
+families. Generic CRM/security/unknown audit snapshots remain excluded for
+managers regardless of CRM record scope; the existing scoped CRM record timelines
+remain available. Disabled modules hide domain audit payloads from administrators
+too, while security changes remain reviewable. Historical saved payment schedules
+retain the established Sales Documents contract.
+
+Migration 20261004120000_audit_review_indexes adds tenant/date, tenant/actor/date
+and tenant/entity/record/date indexes without rewriting rows or changing RLS.
+Only the disposable local database received it. Pending local deployment order:
+20261003090000_inventory_module, 20261003100000_services_module,
+20261004090000_appointments_module, 20261004100000_workforce_modules,
+20261004110000_crm_record_scopes, 20261004120000_audit_review_indexes.
+Verify hosted migration history before applying; earlier existing migrations may
+also be pending. Do not deploy the record-scope queries before their columns exist.
+
+Validation: 19 audit/core API, migration and formatting checks plus 33 appointment,
+workforce, role and CRM-scope regressions passed. Five intercepted browser tests
+passed, with the two audit cases rerun after fixing screenshot animation timing.
+Desktop/mobile audit screenshots inspected. A 10,000-event service list uses six
+SQL statements for five summaries and does not select snapshot columns; EXPLAIN
+confirms the record-history index. Production build/TypeScript, targeted ESLint
+and whitespace checks passed. The local database was stopped after verification.
+Run npm.cmd run test:audit:integration against the guarded disposable database.
+No commit, push, deployment or hosted data changes were made.
+
+Next: deployment-readiness review of the accumulated local changes and pending
+migrations, followed by hosted verification only when deployment is requested.
+
+
+## Local deployment-readiness review (2026-10-04)
+
+Phase 3 local release checks completed. See ERP_STANDARDIZATION.md, Phase 3
+deployment-readiness review, for migration order, validation evidence, existing
+warning/skip limits and the deployment procedure. All 96 migrations were rehearsed
+on a fresh local database, including the six pending migrations over populated
+fixtures; build and 112 local UI tests passed. Nothing was committed, pushed or
+deployed. Hosted migration state and end-to-end verification remain pending.
+
+
+## Phase 3 commit checkpoint (2026-10-04)
+
+The reviewed ERP interface/access changes and six migrations are consolidated for
+the user-authorized local commit. Validation evidence and deployment order are in
+ERP_STANDARDIZATION.md. Nothing is pushed or deployed at this checkpoint.

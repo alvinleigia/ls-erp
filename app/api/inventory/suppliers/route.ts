@@ -1,3 +1,5 @@
+import { withInventoryApi } from "@/modules/inventory/api"
+import type { BusinessActor } from "@/platform/policy"
 import { NextResponse } from "next/server"
 import { Prisma } from "@prisma/client"
 import { z } from "zod"
@@ -10,9 +12,7 @@ import {
   withRequestId,
 } from "@/lib/api-logging"
 import { prisma } from "@/lib/prisma"
-import { canManageUsers, type Role } from "@/lib/permissions"
 import { createSupplierSchema, supplierStatusSchema } from "@/lib/validation"
-import { requireTenantSession } from "@/lib/tenant-auth"
 
 const listSchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
@@ -23,25 +23,12 @@ const listSchema = z.object({
   status: supplierStatusSchema.optional(),
 })
 
-const ensureAuthorized = async (request: Request) => {
-  const tenantSession = await requireTenantSession(request)
-  if (tenantSession.error) return { error: tenantSession.error }
-  if (!canManageUsers(tenantSession.context.role as Role)) {
-    return { error: NextResponse.json({ error: "Unauthorized" }, { status: 401 }) }
-  }
-  return { context: tenantSession.context }
-}
 
-export async function GET(request: Request) {
+async function handleGET(request: Request, actor: BusinessActor) {
   const logContext = createApiLogContext(request)
   logApiRequestStart(logContext, request)
 
-  const authorized = await ensureAuthorized(request)
-  if (authorized.error) {
-    logApiRequestSuccess(logContext, authorized.error.status, { reason: "unauthorized_or_tenant_failed" })
-    return withRequestId(authorized.error, logContext.requestId)
-  }
-  const { tenantId } = authorized.context
+  const { tenantId } = actor
 
   const url = new URL(request.url)
   const parsed = listSchema.safeParse(Object.fromEntries(url.searchParams.entries()))
@@ -98,6 +85,7 @@ export async function GET(request: Request) {
           state: true,
           country: true,
           createdAt: true,
+          notes: true,
         },
       }),
     ])
@@ -121,16 +109,11 @@ export async function GET(request: Request) {
   }
 }
 
-export async function POST(request: Request) {
+async function handlePOST(request: Request, actor: BusinessActor) {
   const logContext = createApiLogContext(request)
   logApiRequestStart(logContext, request)
 
-  const authorized = await ensureAuthorized(request)
-  if (authorized.error) {
-    logApiRequestSuccess(logContext, authorized.error.status, { reason: "unauthorized_or_tenant_failed" })
-    return withRequestId(authorized.error, logContext.requestId)
-  }
-  const { tenantId } = authorized.context
+  const { tenantId } = actor
 
   const body = await request.json().catch(() => null)
   if (!body) {
@@ -187,6 +170,7 @@ export async function POST(request: Request) {
         state: true,
         country: true,
         createdAt: true,
+          notes: true,
       },
     })
 
@@ -206,4 +190,12 @@ export async function POST(request: Request) {
     const response = NextResponse.json({ error: "Unable to create supplier." }, { status: 500 })
     return withRequestId(response, logContext.requestId)
   }
+}
+
+export async function GET(request: Request) {
+  return withInventoryApi(request, "inventorySuppliers", "read", actor => handleGET(request, actor))
+}
+
+export async function POST(request: Request) {
+  return withInventoryApi(request, "inventorySuppliers", "create", actor => handlePOST(request, actor))
 }

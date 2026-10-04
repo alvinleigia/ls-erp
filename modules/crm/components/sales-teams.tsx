@@ -15,7 +15,7 @@ import { CrmSection } from "./crm-section"
 import { CrmTablePagination } from "./crm-pagination"
 import { RecordSelect } from "./record-select"
 
-type Team = { id: string; name: string; workflow: string; archived: boolean; version: number; canManage?: boolean; _count?: { members: number } }
+type Team = { id: string; name: string; workflow: string; archived: boolean; version: number; canManage?: boolean; canManageTeamAccess?: boolean; _count?: { members: number } }
 const base = "/crm/configuration/sales-teams"
 const workflowName = (value: string) => value === "DIRECT" ? "Direct opportunities" : "Qualify enquiries first"
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
@@ -84,18 +84,18 @@ function SalesTeamEditorBody({ id }: { id?: string }) {
   return <div className={crmPageClass}><CrmPageHeader title={id ? team.name || "Sales team" : "New sales team"} backHref={base} actions={<CrmFormActions form="team-form" cancelHref={base} canSave={canManage} saving={saving} disabled={failed} saveLabel="Save sales team" />} />
 
     <CrmRecordForm id="team-form" saving={saving} error={error} disabled={!canManage || failed} fingerprint={team} initialSection="Team details"
-      overview={original && <CrmSummarySection title="Team details" canEdit={canManage} fields={[{ label: "Name", value: original.name }, { label: "Workflow", value: workflowName(original.workflow) }, { label: "Status", value: original.archived ? "Archived" : "Active" }]}><p className="text-sm text-muted-foreground">Membership controls assignment. Staff retain access to their own sales records; managers can access records across the business.</p></CrmSummarySection>}
+      overview={original && <CrmSummarySection title="Team details" canEdit={canManage} fields={[{ label: "Name", value: original.name }, { label: "Workflow", value: workflowName(original.workflow) }, { label: "Status", value: original.archived ? "Archived" : "Active" }]}><p className="text-sm text-muted-foreground">Membership controls assignment. Record visibility follows the assigned access role; membership alone does not grant team-manager authority.</p></CrmSummarySection>}
       tabs={id && canManage && !failed ? [{ value: "members", label: "Members", content: <TeamMembers id={id} team={team} disabled={saving || dirty || team.archived} onChange={row => { setTeam(row); setOriginal(row) }} /> }] : []} onSubmit={event => { event.preventDefault(); if (original && !original.archived && team.archived) setConfirm(true); else void save() }} className="space-y-5"><CrmSection title="Team details"><fieldset disabled={!canManage || saving || failed} className="grid gap-4 sm:grid-cols-2">
       <FormField id="team-name" label="Team name"><Input id="team-name" required maxLength={100} value={team.name} onChange={event => setTeam({ ...team, name: event.target.value })} /></FormField>
       <FormField id="team-workflow" label="Sales workflow"><CrmSelect id="team-workflow" value={team.workflow} onValueChange={workflow => setTeam({ ...team, workflow })}><option value="ENQUIRY_FIRST">Qualify enquiries first</option><option value="DIRECT">Direct opportunities</option></CrmSelect><p className="text-sm text-muted-foreground">{team.workflow === "DIRECT" ? "Create opportunities directly. Existing enquiries remain available for conversion." : "Create an enquiry, mark it Qualified, then convert it to an opportunity."}</p></FormField>
       <label className="flex items-center gap-2"><CrmCheckbox checked={team.archived} onChange={event => setTeam({ ...team, archived: event.target.checked })} />Archived</label>
-    </fieldset></CrmSection><CrmSection title="Access and assignment"><p className="text-sm text-muted-foreground">Staff see their own sales records and assign work to themselves. Managers retain access across the business and can assign sales records to active team members. Membership does not share other members’ records. Existing records without a team keep their current workflow.</p></CrmSection></CrmRecordForm>
+    </fieldset></CrmSection><CrmSection title="Access and assignment"><p className="text-sm text-muted-foreground">Staff retain their assigned-record access. Managers follow the CRM sales record scope in their access role. Only a tenant administrator can designate a team manager; membership alone does not grant access to teammates&apos; records.</p></CrmSection></CrmRecordForm>
 
-    <Dialog open={confirm} onOpenChange={open => { if (!saving) setConfirm(open) }}><DialogContent><DialogHeader><DialogTitle>Archive this sales team?</DialogTitle><DialogDescription>Existing records remain accessible. New records cannot be assigned to this team until it is restored.</DialogDescription></DialogHeader><DialogFooter><Button variant="outline" disabled={saving} onClick={() => setConfirm(false)}>Cancel</Button><Button loading={saving} onClick={() => void save()}>Archive team</Button></DialogFooter></DialogContent></Dialog>
+    <Dialog open={confirm} onOpenChange={open => { if (!saving) setConfirm(open) }}><DialogContent><DialogHeader><DialogTitle>Archive this sales team?</DialogTitle><DialogDescription>Archiving removes managed-team access for scoped managers. Owners and tenant administrators retain access. New records cannot be assigned until the team is restored.</DialogDescription></DialogHeader><DialogFooter><Button variant="outline" disabled={saving} onClick={() => setConfirm(false)}>Cancel</Button><Button loading={saving} onClick={() => void save()}>Archive team</Button></DialogFooter></DialogContent></Dialog>
   </div>
 }
 
-type Member = { id: string; name: string | null; role: string; status: string }
+type Member = { isManager?: boolean; id: string; name: string | null; role: string; status: string }
 function TeamMembers({ id, team, disabled, onChange }: { id: string; team: Team; disabled: boolean; onChange: (row: Team) => void }) {
   const [data, setData] = React.useState<{ items: Member[]; total: number }>({ items: [], total: 0 }), [q, setQ] = React.useState({ page: 1, pageSize: 10 })
   const [userId, setUserId] = React.useState(""), [remove, setRemove] = React.useState<Member | null>(null), [error, setError] = React.useState(""), [saving, setSaving] = React.useState(false), [loading, setLoading] = React.useState(true)
@@ -104,16 +104,17 @@ function TeamMembers({ id, team, disabled, onChange }: { id: string; team: Team;
     request<typeof data>(`/api/crm/sales-teams/${id}/members?page=${q.page}&pageSize=${q.pageSize}`, { signal: controller.signal }).then(setData).catch(error => { if (!controller.signal.aborted) setError(error.message) }).finally(() => { if (!controller.signal.aborted) setLoading(false) })
     return () => controller.abort()
   }, [id, q, team.version])
-  async function change(memberId: string, removing: boolean) {
+  const change = React.useCallback(async (memberId: string, removing: boolean, isManager?: boolean) => {
     setSaving(true); setError("")
     try {
-      onChange(await request<Team>(`/api/crm/sales-teams/${id}/members`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId: memberId, version: team.version, remove: removing }) })); setUserId(""); setRemove(null); setQ(previous => ({ ...previous, page: 1 }))
+      onChange(await request<Team>(`/api/crm/sales-teams/${id}/members`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId: memberId, version: team.version, remove: removing, ...(isManager === undefined ? {} : { isManager }) }) })); setUserId(""); setRemove(null); setQ(previous => ({ ...previous, page: 1 }))
     } catch (error) { setError((error as Error).message) } finally { setSaving(false) }
-  }
+  }, [id, team.version, onChange])
   const columns = React.useMemo<ColumnDef<Member>[]>(() => [
     { accessorKey: "name", header: "Salesperson" }, { accessorKey: "role", header: "Role" }, { accessorKey: "status", header: "Status" },
-    { id: "action", header: "Action", cell: ({ row }) => <Button variant="outline" disabled={disabled || saving} onClick={() => setRemove(row.original)}>Remove</Button> },
-  ], [disabled, saving])
+    { id: "teamAccess", header: "Team access", cell: ({ row }) => team.canManageTeamAccess && row.original.role === "MANAGER" ? <CrmSelect aria-label={`${row.original.name || "Member"} team access`} value={row.original.isManager ? "manager" : "member"} disabled={disabled || saving} onValueChange={value => void change(row.original.id, false, value === "manager")}><option value="member">Member</option><option value="manager">Team manager</option></CrmSelect> : row.original.isManager ? "Team manager" : "Member" },
+    { id: "action", header: "Action", cell: ({ row }) => <Button variant="outline" disabled={disabled || saving || (!!row.original.isManager && !team.canManageTeamAccess)} onClick={() => setRemove(row.original)}>Remove</Button> },
+  ], [disabled, saving, team.canManageTeamAccess, change])
   const table = useReactTable({ data: data.items, columns, getCoreRowModel: getCoreRowModel(), manualPagination: true, rowCount: data.total, state: { pagination: { pageIndex: q.page - 1, pageSize: q.pageSize } }, onPaginationChange: updater => setQ(previous => { const next = typeof updater === "function" ? updater({ pageIndex: previous.page - 1, pageSize: previous.pageSize }) : updater; return { page: next.pageSize !== previous.pageSize ? 1 : next.pageIndex + 1, pageSize: next.pageSize } }) })
   return <CrmSection title="Team members" description="Save team changes before editing members. Reassign open sales records before removing a member.">
     {error && <p role="alert" className="text-destructive">{error}</p>}<div className="grid items-end gap-3 sm:grid-cols-[1fr_auto]"><FormField id="team-member" label="Add salesperson"><RecordSelect id="team-member" endpoint="/api/crm/assignees" value={userId} onChange={setUserId} disabled={disabled || saving} /></FormField><CrmActionBar><Button disabled={!userId || disabled} loading={saving} onClick={() => void change(userId, false)}>Add member</Button></CrmActionBar></div>

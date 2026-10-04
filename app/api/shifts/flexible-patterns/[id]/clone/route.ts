@@ -1,3 +1,6 @@
+import { requirePermission } from "@/platform/access/policy"
+import { BusinessError } from "@/platform/policy"
+import { recordDomainAuditEvent } from "@/lib/domain-audit"
 import { NextResponse } from "next/server"
 import { z } from "zod"
 
@@ -10,7 +13,8 @@ import {
 } from "@/lib/api-logging"
 import { canManageUsers, type Role } from "@/lib/permissions"
 import { prisma } from "@/lib/prisma"
-import { requireTenantSession } from "@/lib/tenant-auth"
+import { withWorkforceApi, workforceSession } from "@/modules/workforce/api"
+import type { BusinessActor } from "@/platform/policy"
 
 const cloneSchema = z.object({
   name: z.string().trim().max(120).optional().or(z.literal("")),
@@ -30,14 +34,13 @@ const rangesOverlap = (aStart: string, aEnd: string | null, bStart: string, bEnd
   return leftStart <= rightEnd && rightStart <= leftEnd
 }
 
-export async function POST(
+async function handlePOST(
   request: Request,
-  context: { params: Promise<{ id: string }> }
-) {
+  context: { params: Promise<{ id: string }> }, actor: BusinessActor) {
   const logContext = createApiLogContext(request)
   logApiRequestStart(logContext, request)
 
-  const tenantSession = await requireTenantSession(request)
+  const tenantSession = workforceSession(actor)
   if (tenantSession.error) {
     logApiRequestSuccess(logContext, tenantSession.error.status, { reason: "tenant_or_auth_failed" })
     return withRequestId(tenantSession.error, logContext.requestId)
@@ -161,6 +164,8 @@ export async function POST(
           )
           .map((existing) => existing.id)
         if (overlappingIds.length) {
+          requirePermission(actor, "shiftPlans.archive")
+          await recordDomainAuditEvent(tx, { tenantId: actor.tenantId, actorUserId: actor.userId, actorRole: actor.role, requestId: actor.requestId, event: "workforce.shiftPlans.archive", entityType: "shiftPlans", before: { activePatternIds: overlappingIds }, after: { inactivePatternIds: overlappingIds } })
           await tx.staffFlexiblePattern.updateMany({
             where: { id: { in: overlappingIds } },
             data: { isActive: false },
@@ -237,8 +242,13 @@ export async function POST(
     })
     return withRequestId(response, logContext.requestId)
   } catch (error) {
+    if (error instanceof BusinessError) throw error
     logApiRequestError(logContext, error, 500)
     const response = NextResponse.json({ error: "Unable to clone recurring pattern." }, { status: 500 })
     return withRequestId(response, logContext.requestId)
   }
+}
+
+export async function POST(request: Request, context: { params: Promise<{ id: string }> }) {
+  return withWorkforceApi(request, "shifts", "shiftPlans", "create", actor => handlePOST(request, context, actor), "flexible-patterns/[id]/clone", (await context.params).id)
 }

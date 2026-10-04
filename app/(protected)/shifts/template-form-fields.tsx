@@ -1,9 +1,13 @@
 "use client"
+import { useCurrentResourceAction } from "@/platform/access/view-guard"
+
+import { Section } from "@/components/erp/section"
+
+import { Select } from "@/components/erp/controls"
 
 import { FormField } from "@/components/form-field"
 import { Trash2Icon } from "lucide-react"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import { TimePicker } from "@/components/ui/time-picker"
 import type { TimeFormat } from "@/types/scheduling"
 import type { ShiftTemplateBreak, ShiftTemplateForm } from "@/types/shifts"
@@ -37,11 +41,11 @@ export function TemplateFormFields({
   onUpdateBreak,
   onRemoveBreak,
 }: TemplateFormFieldsProps) {
+  const canArchive = useCurrentResourceAction("archive")
   const fieldId = (name: string) => (mode === "create" ? name : `edit-${name}`)
 
   return (
-    <div className="space-y-6">
-      <div className="grid gap-4 sm:grid-cols-2">
+    <div className="space-y-5"><Section title="Template details"><div className="grid gap-4 sm:grid-cols-2">
         <FormField id={fieldId("template-name")} label="Name" error={errors.name}>
           <Input
             id={fieldId("template-name")}
@@ -71,12 +75,11 @@ export function TemplateFormFields({
           />
         </FormField>
         <FormField id={fieldId("template-status")} label="Status" error={errors.isActive}>
-          <select
-            id={fieldId("template-status")}
+          <Select disabled={!canArchive} id={fieldId("template-status")}
             className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
             value={template.isActive ? "ACTIVE" : "INACTIVE"}
-            onChange={(event) =>
-              onChange({ ...template, isActive: event.target.value === "ACTIVE" })
+            onValueChange={(value) =>
+              onChange({ ...template, isActive: value === "ACTIVE" })
             }
           >
             {templateStatusOptions.map((status) => (
@@ -84,11 +87,10 @@ export function TemplateFormFields({
                 {status === "ACTIVE" ? "Active" : "Inactive"}
               </option>
             ))}
-          </select>
+          </Select>
         </FormField>
-      </div>
-
-      <div className="rounded-lg border p-4">
+      </div></Section>
+<Section title="Shift timing"><div className="rounded-lg border p-4">
         <h3 className="text-sm font-medium">Shift timing</h3>
         <div className="mt-3 grid gap-4 sm:grid-cols-2">
           <FormField id={fieldId("shift-start")} label="Start" error={errors.startTime}>
@@ -112,16 +114,10 @@ export function TemplateFormFields({
             />
           </FormField>
         </div>
-      </div>
-
-      <div className="rounded-lg border p-4">
+      </div></Section>
+<Section title="Breaks" description="Optional breaks within the shift range."><div>
         <div className="flex items-center justify-between">
-          <div>
-            <h3 className="text-sm font-medium">Breaks</h3>
-            <p className="text-xs text-muted-foreground">
-              Optional breaks within the shift range.
-            </p>
-          </div>
+
           <button
             type="button"
             className="text-sm text-primary hover:underline"
@@ -185,9 +181,7 @@ export function TemplateFormFields({
           <p className="mt-2 text-xs text-destructive">{errors.breaks}</p>
         ) : null}
       </div>
-
-      {errors.form ? <p className="text-xs text-destructive">{errors.form}</p> : null}
-    </div>
+{errors.form ? <p className="text-xs text-destructive">{errors.form}</p> : null}</Section></div>
   )
 }
 

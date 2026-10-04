@@ -787,6 +787,9 @@ model AuditLog {
   @@index([requestId])
   @@index([createdAt])
   @@index([tenantId])
+  @@index([tenantId, createdAt, id])
+  @@index([tenantId, actorUserId, createdAt, id])
+  @@index([tenantId, entityType, entityId, createdAt, id])
 }
 
 model Organization {
@@ -2272,6 +2275,7 @@ model CrmSalesTeam {
   @@index([tenantId, archived, name, id])
 }
 model CrmSalesTeamMember {
+  isManager Boolean @default(false)
   tenantId String
   teamId String
   userId String
@@ -2331,6 +2335,7 @@ model TenantAccessRole {
   name String
   nameKey String
   permissions String[]
+  crmRecordScope String @default("ACCOUNT_ROLE")
   archived Boolean @default(false)
   version Int @default(1)
   createdAt DateTime @default(now())

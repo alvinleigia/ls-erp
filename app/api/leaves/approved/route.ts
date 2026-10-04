@@ -10,7 +10,8 @@ import {
 } from "@/lib/api-logging"
 import { canManageUsers, type Role } from "@/lib/permissions"
 import { prisma } from "@/lib/prisma"
-import { requireTenantSession } from "@/lib/tenant-auth"
+import { withWorkforceApi, workforceSession } from "@/modules/workforce/api"
+import type { BusinessActor } from "@/platform/policy"
 import type { LeaveRosterItem } from "@/types/leaves"
 
 const querySchema = z.object({
@@ -19,11 +20,11 @@ const querySchema = z.object({
   staffIds: z.string().optional(),
 })
 
-export async function GET(request: Request) {
+async function handleGET(request: Request, actor: BusinessActor) {
   const logContext = createApiLogContext(request)
   logApiRequestStart(logContext, request)
 
-  const tenantSession = await requireTenantSession(request)
+  const tenantSession = workforceSession(actor)
   if (tenantSession.error) {
     logApiRequestSuccess(logContext, tenantSession.error.status, { reason: "tenant_or_auth_failed" })
     return withRequestId(tenantSession.error, logContext.requestId)
@@ -76,7 +77,8 @@ export async function GET(request: Request) {
         status: "APPROVED",
         startDate: { lte: new Date(`${endDate}T00:00:00.000Z`) },
         endDate: { gte: new Date(`${startDate}T00:00:00.000Z`) },
-        ...(staffProfileIds.length ? { staffProfileId: { in: staffProfileIds } } : {}),
+        ...(staffUserIds.length ? { staffProfileId: { in: staffProfileIds } } : {}),
+        ...(actor.role === "MANAGER" ? { staffProfile: { managerUserId: actor.userId, user: { role: "STAFF" } } } : {}),
       },
       select: {
         id: true,
@@ -124,4 +126,8 @@ export async function GET(request: Request) {
     const response = NextResponse.json({ error: "Unable to load approved leaves." }, { status: 500 })
     return withRequestId(response, logContext.requestId)
   }
+}
+
+export async function GET(request: Request) {
+  return withWorkforceApi(request, "leaves", "leaveApprovals", "read", actor => handleGET(request, actor), "approved")
 }

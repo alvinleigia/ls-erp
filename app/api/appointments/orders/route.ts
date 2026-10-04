@@ -1,3 +1,5 @@
+import { withAppointmentsApi } from "@/modules/appointments/api"
+import { BusinessError, type BusinessActor } from "@/platform/policy"
 import { AppointmentStatus, Prisma } from "@prisma/client"
 import { NextResponse } from "next/server"
 import { z } from "zod"
@@ -50,7 +52,7 @@ const ensureAuthorized = async (request: Request) => {
   return { context: tenantSession.context }
 }
 
-export async function GET(request: Request) {
+async function handleGET(request: Request) {
   const logContext = createApiLogContext(request)
   logApiRequestStart(logContext, request)
 
@@ -102,13 +104,14 @@ export async function GET(request: Request) {
     logApiRequestSuccess(logContext, 200, { page, pageSize, total })
     return withRequestId(json, logContext.requestId)
   } catch (error) {
+    if (error instanceof BusinessError) return NextResponse.json({ error: error.message }, { status: error.status })
     logApiRequestError(logContext, error, 500)
     const response = NextResponse.json({ error: "Unable to load booking orders." }, { status: 500 })
     return withRequestId(response, logContext.requestId)
   }
 }
 
-export async function POST(request: Request) {
+async function handlePOST(request: Request, actor: BusinessActor) {
   const logContext = createApiLogContext(request)
   logApiRequestStart(logContext, request)
 
@@ -133,6 +136,7 @@ export async function POST(request: Request) {
   try {
     const resolved = await resolveOrderData(parsed.data, {
       enforceFutureStartAt: true,
+      actor,
       tenantId,
     })
     const scheduledLines =
@@ -246,6 +250,7 @@ export async function POST(request: Request) {
         })),
       })
       await applyStockDelta({
+        actor,
         tx,
         deltaByProduct: stockDelta,
         orderId: created.id,
@@ -259,6 +264,7 @@ export async function POST(request: Request) {
     logApiRequestSuccess(logContext, 201, { orderId: order.id, status: order.status })
     return withRequestId(response, logContext.requestId)
   } catch (error) {
+    if (error instanceof BusinessError) return NextResponse.json({ error: error.message }, { status: error.status })
     if (error instanceof AvailabilityConflictError) {
       const response = NextResponse.json(
         {
@@ -283,4 +289,16 @@ export async function POST(request: Request) {
     )
     return withRequestId(response, logContext.requestId)
   }
+}
+
+export async function POST(request: Request) {
+  return withAppointmentsApi(request, "appointments", "create", actor => {
+    return handlePOST(request, actor)
+  }, { kind: "order" })
+}
+
+export function GET(request: Request) {
+  return withAppointmentsApi(request, "appointments", "read", () => {
+    return handleGET(request)
+  })
 }

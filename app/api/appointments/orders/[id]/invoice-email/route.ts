@@ -1,3 +1,5 @@
+import { withAppointmentsApi } from "@/modules/appointments/api"
+import { requirePermission } from "@/platform/access/policy"
 import { businessDisplayName } from "@/lib/branding"
 import { NextResponse } from "next/server"
 
@@ -17,7 +19,7 @@ import { appointmentOrderInclude, serializeAppointmentOrder } from "../../_helpe
 
 export const runtime = "nodejs"
 
-export async function POST(
+async function handlePOST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
@@ -106,4 +108,11 @@ export async function POST(
     const response = NextResponse.json({ error: "Unable to send invoice email." }, { status: 500 })
     return withRequestId(response, logContext.requestId)
   }
+}
+
+export async function POST(request: Request, context: { params: Promise<{ id: string }> }) {
+  return withAppointmentsApi(request, "appointments", "export", async actor => {
+    requirePermission(actor, "appointments.edit")
+    return handlePOST(request, context)
+  }, { kind: "order", id: (await context.params).id }, "appointments.invoice.emailed")
 }

@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { businessNavigation } from "@/application/navigation"
+import { workforceNavigation, businessNavigation, inventoryNavigation, appointmentsNavigation, servicesNavigation } from "@/application/navigation"
 import { useBusinessModules } from "@/platform/module-provider"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
@@ -10,15 +10,12 @@ import { useTheme } from "next-themes"
 import {
   BarChart3Icon,
   Building2Icon,
-  CalendarClockIcon,
   ChevronRightIcon,
-  ClockIcon,
   LayoutDashboardIcon,
   LogOutIcon,
   MailIcon,
   MoonIcon,
   PackageIcon,
-  ScissorsIcon,
   SettingsIcon,
   SunIcon,
   TagIcon,
@@ -111,7 +108,7 @@ export function AppSidebar() {
     platformAccessMode === "SUPER_ADMIN"
   const [openSections, setOpenSections] = React.useState<Record<string, boolean>>({})
   const [logoLoadFailed, setLogoLoadFailed] = React.useState(false)
-  const { flags, permissions } = useBusinessModules()
+  const { flags, permissions, enabled, can } = useBusinessModules()
 
   const name = user?.name?.trim() || user?.email?.trim() || "Guest"
   const initials = name
@@ -125,48 +122,7 @@ export function AppSidebar() {
     const list: NavSection[] = []
     if (!isPlatformConsoleUser && canUseCrm(role)) list.push(...businessNavigation(flags, permissions))
 
-    if (!isPlatformSuperAdmin && (canManage || role === "STAFF")) {
-      const leavesItems: SubNavItem[] = []
-      if (role === "STAFF" || role === "MANAGER") {
-        leavesItems.push({
-          title: "Requests",
-          href: "/leaves/requests",
-          icon: CalendarClockIcon,
-          isActive: (current) => current.startsWith("/leaves/requests"),
-        })
-      }
-      if (canManage) {
-        leavesItems.push(
-          {
-            title: "Approvals",
-            href: "/leaves/approvals",
-            icon: UsersIcon,
-            isActive: (current) => current.startsWith("/leaves/approvals"),
-          },
-          {
-            title: "Definitions",
-            href: "/leaves",
-            icon: CalendarClockIcon,
-            isActive: (current) => current === "/leaves",
-          },
-          {
-            title: "Groups",
-            href: "/leaves/groups",
-            icon: UsersIcon,
-            isActive: (current) => current.startsWith("/leaves/groups"),
-          }
-        )
-      }
-
-      list.push({
-        key: "leaves",
-        title: "Leaves",
-        href: role === "ADMIN" ? "/leaves/approvals" : "/leaves/requests",
-        icon: CalendarClockIcon,
-        isActive: (current) => current.startsWith("/leaves"),
-        items: leavesItems,
-      })
-    }
+    if (!isPlatformSuperAdmin) list.push(...workforceNavigation(flags, permissions, role))
 
     if (!isPlatformSuperAdmin && canManage) {
       list.push(
@@ -177,12 +133,12 @@ export function AppSidebar() {
           icon: BarChart3Icon,
           isActive: (current) => current.startsWith("/reports"),
           items: [
-            {
+            ...(enabled("appointments") && can(["appointments.read", "appointmentCoupons.read"]) ? [{
               title: "Coupon usage",
               href: "/reports/coupon-usage",
               icon: TagIcon,
-              isActive: (current) => current === "/reports/coupon-usage",
-            },
+              isActive: (current: string) => current === "/reports/coupon-usage",
+            }] : []),
             {
               title: "Audit logs",
               href: "/reports/audit-logs",
@@ -191,71 +147,9 @@ export function AppSidebar() {
             },
           ],
         },
-        {
-          key: "inventory",
-          title: "Inventory",
-          href: "/inventory",
-          icon: PackageIcon,
-          isActive: (current) => current.startsWith("/inventory"),
-          items: [
-            { title: "Products", href: "/inventory", icon: PackageIcon, isActive: (current) => current === "/inventory" },
-            {
-              title: "Categories",
-              href: "/inventory/categories",
-              icon: TagIcon,
-              isActive: (current) => current === "/inventory/categories",
-            },
-            {
-              title: "Suppliers",
-              href: "/inventory/suppliers",
-              icon: UsersIcon,
-              isActive: (current) => current === "/inventory/suppliers",
-            },
-            {
-              title: "Purchases",
-              href: "/inventory/purchases",
-              icon: CalendarClockIcon,
-              isActive: (current) => current === "/inventory/purchases",
-            },
-          ],
-        },
-        {
-          key: "appointments",
-          title: "Appointments",
-          href: "/appointments",
-          icon: CalendarClockIcon,
-          isActive: (current) => current.startsWith("/appointments"),
-          items: [
-            {
-              title: "View",
-              href: "/appointments",
-              icon: CalendarClockIcon,
-              isActive: (current) => current === "/appointments",
-            },
-            {
-              title: "Coupons",
-              href: "/appointments/coupons",
-              icon: TagIcon,
-              isActive: (current) => current === "/appointments/coupons",
-            },
-          ],
-        },
-        {
-          key: "services",
-          title: "Services",
-          href: "/services",
-          icon: ScissorsIcon,
-          isActive: (current) => current.startsWith("/services"),
-          items: [
-            { title: "Services", href: "/services", icon: ScissorsIcon, isActive: (current) => current === "/services" },
-            {
-              title: "Categories",
-              href: "/services/categories",
-              icon: TagIcon,
-              isActive: (current) => current === "/services/categories",
-            },
-          ],
-        },
+        ...inventoryNavigation(flags, permissions),
+        ...appointmentsNavigation(flags, permissions),
+        ...servicesNavigation(flags, permissions),
         {
           key: "users",
           title: "Users",
@@ -276,34 +170,7 @@ export function AppSidebar() {
               : []),
           ],
         },
-        {
-          key: "shifts",
-          title: "Shifts",
-          href: "/shifts",
-          icon: ClockIcon,
-          isActive: (current) => current.startsWith("/shifts"),
-          items: [
-            { title: "Templates", href: "/shifts", icon: ClockIcon, isActive: (current) => current === "/shifts" },
-            {
-              title: "Schedules",
-              href: "/shifts/schedules",
-              icon: CalendarClockIcon,
-              isActive: (current) => current === "/shifts/schedules",
-            },
-            {
-              title: "Roster",
-              href: "/shifts/roster",
-              icon: CalendarClockIcon,
-              isActive: (current) => current === "/shifts/roster",
-            },
-            {
-              title: "Recurring plans",
-              href: "/shifts/recurring",
-              icon: ClockIcon,
-              isActive: (current) => current === "/shifts/recurring",
-            },
-          ],
-        }
+
       )
     }
 
@@ -339,8 +206,19 @@ export function AppSidebar() {
       })
     }
 
-    return list
-  }, [canManage, isPlatformConsoleUser, isPlatformSuperAdmin, role, flags, permissions])
+    return list.flatMap(section => {
+      if (isPlatformConsoleUser) return [section]
+      const items = section.items.filter(item => {
+        if (["/settings/roles", "/settings/modules", "/settings/seeds", "/users/invites"].includes(item.href)) return role === "ADMIN"
+        if (item.href === "/reports/audit-logs") return can("auditLogs.read")
+        if (item.href === "/users") return can("users.read")
+        if (item.href === "/settings") return can("businessSettings.read")
+        if (item.href === "/settings/taxes") return can("taxRates.read")
+        return true
+      })
+      return items.length ? [{ ...section, items, href: items[0].href }] : []
+    })
+  }, [canManage, isPlatformConsoleUser, isPlatformSuperAdmin, role, flags, permissions, enabled, can])
 
   const menuButtonClass = (active: boolean) =>
     cn("transition-colors", active && "bg-sidebar-primary/20 text-sidebar-primary font-semibold")
@@ -372,7 +250,7 @@ export function AppSidebar() {
           <SidebarGroupLabel></SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {!isPlatformConsoleUser && navItems.map((item) => {
+              {!isPlatformConsoleUser && navItems.filter(() => can("dashboard.read")).map((item) => {
                 const active = pathname === item.href
                 return (
                   <SidebarMenuItem key={item.href}>

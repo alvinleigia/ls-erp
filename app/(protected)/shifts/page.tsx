@@ -1,5 +1,16 @@
 ﻿
 "use client"
+import { useCurrentResourceAction } from "@/platform/access/view-guard"
+
+import { DraftPanel, RecordPanel, ReadOnlyFields } from "@/components/erp/record-detail"
+import { Section } from "@/components/erp/section"
+
+import { ActionDialogContent } from "@/components/erp/action-dialog"
+
+import { PageHeader, pageClass, Surface, TableToolbar } from "@/components/erp/page"
+import { TablePagination } from "@/components/erp/pagination"
+
+import { Select } from "@/components/erp/controls"
 
 import * as React from "react"
 import {
@@ -14,25 +25,14 @@ import { ArrowDownIcon, ArrowUpDownIcon, ArrowUpIcon, MoreHorizontalIcon } from 
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
+import { Dialog } from "@/components/ui/dialog"
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import {
-  DataTable,
-  DataTablePagination,
-  DataTableToolbar,
-} from "@/components/data-table"
+import { DataTable } from "@/components/data-table"
 import { useDateFormatter } from "@/hooks/use-date-formatter"
 import { useFormErrors } from "@/hooks/use-form-errors"
 import { formatTimeFrom24h } from "@/lib/formatting"
@@ -67,10 +67,15 @@ const summarizeBreaks = (
 }
 
 export default function ShiftsPage() {
+  const canCreate = useCurrentResourceAction("create")
+  const canEdit = useCurrentResourceAction("edit")
+  const canArchive = useCurrentResourceAction("archive")
+
   type PaginationState = { pageIndex: number; pageSize: number }
   const { formatDate } = useDateFormatter()
 
   const [templates, setTemplates] = React.useState<ShiftTemplateRow[]>([])
+  const [formError, setFormError] = React.useState("")
   const [loading, setLoading] = React.useState(true)
   const [totalRows, setTotalRows] = React.useState(0)
 
@@ -90,6 +95,7 @@ export default function ShiftsPage() {
   })
   const [pagination, setPagination] = React.useState({ pageIndex: 0, pageSize: 10 })
 
+  const [viewing, setViewing] = React.useState<ShiftTemplateRow | null>(null)
   const [createOpen, setCreateOpen] = React.useState(false)
   const [editOpen, setEditOpen] = React.useState(false)
   const [deleteOpen, setDeleteOpen] = React.useState(false)
@@ -124,7 +130,7 @@ export default function ShiftsPage() {
   const totalPages = Math.max(1, Math.ceil(totalRows / pagination.pageSize))
 
   const loadSettings = React.useCallback(async () => {
-    const response = await fetch("/api/settings", { cache: "no-store" })
+    const response = await fetch("/api/settings/display", { cache: "no-store" })
     if (!response.ok) {
       return
     }
@@ -256,47 +262,54 @@ export default function ShiftsPage() {
       toast.error("Template name is required.")
       return
     }
-    setSaving(true)
-    clearCreateErrors()
-    const response = await fetch("/api/shifts/templates", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name: newTemplate.name.trim(),
-        description: newTemplate.description.trim() || null,
-        color: newTemplate.color || null,
-        isActive: newTemplate.isActive,
-        startTime: newTemplate.startTime,
-        endTime: newTemplate.endTime,
-        breaks: newTemplate.breaks.map((period, index) => ({
-          startTime: period.startTime,
-          endTime: period.endTime,
-          sortOrder: period.sortOrder ?? index,
-        })),
-      }),
-    })
+    setFormError(""); setSaving(true)
+    try {
+      clearCreateErrors()
+      const response = await fetch("/api/shifts/templates", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: newTemplate.name.trim(),
+          description: newTemplate.description.trim() || null,
+          color: newTemplate.color || null,
+          isActive: newTemplate.isActive,
+          startTime: newTemplate.startTime,
+          endTime: newTemplate.endTime,
+          breaks: newTemplate.breaks.map((period, index) => ({
+            startTime: period.startTime,
+            endTime: period.endTime,
+            sortOrder: period.sortOrder ?? index,
+          })),
+        }),
+      })
 
-    if (!response.ok) {
-      const data = (await response.json()) as {
-        error?: string
-        details?: { fieldErrors?: Record<string, string[]> }
+      if (!response.ok) {
+        const data = (await response.json()) as {
+          error?: string
+          details?: { fieldErrors?: Record<string, string[]> }
+        }
+        setCreateErrorsFromResponse(data)
+        setFormError(data.error ?? "Unable to create shift template."); toast.error(data.error ?? "Unable to create shift template.")
+        setSaving(false)
+        return
       }
-      setCreateErrorsFromResponse(data)
-      toast.error(data.error ?? "Unable to create shift template.")
-      setSaving(false)
-      return
-    }
 
-    toast.success("Shift template created.")
-    setNewTemplate(defaultTemplateForm)
-    setSaving(false)
-    setCreateOpen(false)
-    await loadTemplates()
+      toast.success("Shift template created.")
+      setNewTemplate(defaultTemplateForm)
+      setSaving(false)
+      setCreateOpen(false)
+      await loadTemplates()
+    } catch {
+      setFormError("Unable to save. Please try again.")
+    } finally {
+      setSaving(false)
+    }
   }
 
   const startEdit = React.useCallback(
     (template: ShiftTemplateRow) => {
       clearEditErrors()
+      setFormError("")
       setEditingTemplate(template)
       setEditTemplate({
         name: template.name,
@@ -325,41 +338,47 @@ export default function ShiftsPage() {
       toast.error("Template name is required.")
       return
     }
-    setSaving(true)
-    const response = await fetch(`/api/shifts/templates/${editingTemplate.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name: editTemplate.name.trim(),
-        description: editTemplate.description.trim() || null,
-        color: editTemplate.color || null,
-        isActive: editTemplate.isActive,
-        startTime: editTemplate.startTime,
-        endTime: editTemplate.endTime,
-        breaks: editTemplate.breaks.map((period, index) => ({
-          startTime: period.startTime,
-          endTime: period.endTime,
-          sortOrder: period.sortOrder ?? index,
-        })),
-      }),
-    })
+    setFormError(""); setSaving(true)
+    try {
+      const response = await fetch(`/api/shifts/templates/${editingTemplate.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: editTemplate.name.trim(),
+          description: editTemplate.description.trim() || null,
+          color: editTemplate.color || null,
+          isActive: editTemplate.isActive,
+          startTime: editTemplate.startTime,
+          endTime: editTemplate.endTime,
+          breaks: editTemplate.breaks.map((period, index) => ({
+            startTime: period.startTime,
+            endTime: period.endTime,
+            sortOrder: period.sortOrder ?? index,
+          })),
+        }),
+      })
 
-    if (!response.ok) {
-      const data = (await response.json()) as {
-        error?: string
-        details?: { fieldErrors?: Record<string, string[]> }
+      if (!response.ok) {
+        const data = (await response.json()) as {
+          error?: string
+          details?: { fieldErrors?: Record<string, string[]> }
+        }
+        setEditErrorsFromResponse(data)
+        setFormError(data.error ?? "Unable to update shift template."); toast.error(data.error ?? "Unable to update shift template.")
+        setSaving(false)
+        return
       }
-      setEditErrorsFromResponse(data)
-      toast.error(data.error ?? "Unable to update shift template.")
-      setSaving(false)
-      return
-    }
 
-    toast.success("Shift template updated.")
-    setSaving(false)
-    setEditOpen(false)
-    setEditingTemplate(null)
-    await loadTemplates()
+      toast.success("Shift template updated.")
+      setSaving(false)
+      setEditOpen(false)
+      setEditingTemplate(null)
+      await loadTemplates()
+    } catch {
+      setFormError("Unable to save. Please try again.")
+    } finally {
+      setSaving(false)
+    }
   }
 
   const requestDelete = React.useCallback((template: ShiftTemplateRow) => {
@@ -370,20 +389,26 @@ export default function ShiftsPage() {
   const confirmDelete = React.useCallback(async () => {
     if (!deleteTarget) return
     setDeleting(true)
-    const response = await fetch(`/api/shifts/templates/${deleteTarget.id}`, {
-      method: "DELETE",
-    })
-    if (!response.ok) {
-      const data = (await response.json()) as { error?: string }
-      toast.error(data.error ?? "Unable to delete shift template.")
+    try {
+      const response = await fetch(`/api/shifts/templates/${deleteTarget.id}`, {
+        method: "DELETE",
+      })
+      if (!response.ok) {
+        const data = (await response.json()) as { error?: string }
+        toast.error(data.error ?? "Unable to delete shift template.")
+        setDeleting(false)
+        return
+      }
+      toast.success("Shift template deleted.")
       setDeleting(false)
-      return
+      setDeleteOpen(false)
+      setDeleteTarget(null)
+      await loadTemplates()
+    } catch {
+      toast.error("Unable to complete this action. Please try again.")
+    } finally {
+      setDeleting(false)
     }
-    toast.success("Shift template deleted.")
-    setDeleting(false)
-    setDeleteOpen(false)
-    setDeleteTarget(null)
-    await loadTemplates()
   }, [deleteTarget, loadTemplates])
   const columns = React.useMemo<ColumnDef<ShiftTemplateRow>[]>(
     () => [
@@ -407,7 +432,7 @@ export default function ShiftsPage() {
               style={{ backgroundColor: row.original.color ?? "#64748b" }}
             />
             <div className="flex flex-col">
-              <span className="font-medium">{row.original.name}</span>
+              <button type="button" className="font-medium underline underline-offset-4" onClick={() => setViewing(row.original)}>{row.original.name}</button>
               {row.original.description ? (
                 <span className="text-xs text-muted-foreground">
                   {row.original.description}
@@ -506,16 +531,16 @@ export default function ShiftsPage() {
         cell: ({ row }) => (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button size="icon" variant="ghost">
+              <Button size="icon" variant="ghost" aria-label="Record actions">
                 <MoreHorizontalIcon className="h-4 w-4" />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onSelect={() => startEdit(row.original)}>
+            <DropdownMenuContent align="end"><DropdownMenuItem onSelect={() => setViewing(row.original)}>View details</DropdownMenuItem>
+              <DropdownMenuItem disabled={!canEdit} onSelect={() => startEdit(row.original)}>
                 Edit
               </DropdownMenuItem>
               <DropdownMenuItem
-                onSelect={() => requestDelete(row.original)}
+                disabled={!canArchive} onSelect={() => requestDelete(row.original)}
                 className="text-destructive"
               >
                 Delete
@@ -525,10 +550,9 @@ export default function ShiftsPage() {
         ),
       },
     ],
-    [formatDate, formatTemplateTime, requestDelete, startEdit]
+    [formatDate, formatTemplateTime, requestDelete, startEdit, canEdit, canArchive]
   )
 
-  // eslint-disable-next-line react-hooks/incompatible-library
   const table = useReactTable({
     data: templates,
     columns,
@@ -552,23 +576,17 @@ export default function ShiftsPage() {
   })
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold">Shifts</h1>
-          <p className="text-sm text-muted-foreground">
-            Create shift templates with a single shift range and optional breaks.
-          </p>
-        </div>
-        <Button onClick={() => setCreateOpen(true)}>New template</Button>
-      </div>
+    <div className={pageClass}>
+      <PageHeader title={<> Shifts </>} description={<> Create shift templates with a single shift range and optional breaks. </>} actions={<> <Button disabled={!canCreate} onClick={() => { setFormError(""); setCreateOpen(true) }}>New template</Button> </>} />
 
-      <DataTableToolbar table={table} searchPlaceholder="Search templates">
-        <select
+      {viewing && <RecordPanel title={viewing.name || "Shift schedule"} description="Saved scheduling details." onClose={() => setViewing(null)} actions={<Button disabled={!canEdit} onClick={() => { startEdit(viewing); setViewing(null) }}>Edit details</Button>}><Section title="Template details"><ReadOnlyFields fields={[{label:"Name",value:viewing.name},{label:"Description",value:viewing.description},{label:"Status",value:viewing.isActive?"Active":"Inactive"},{label:"Shift",value:formatTemplateTime(viewing.startTime)+" - "+formatTemplateTime(viewing.endTime)},{label:"Breaks",value:summarizeBreaks(viewing.breaks,formatTemplateTime)}]} /></Section></RecordPanel>}
+      <Surface>
+      <TableToolbar table={table} searchPlaceholder="Search templates">
+        <Select
           className="h-9 rounded-md border border-input bg-background px-3 text-sm"
           value={statusFilter}
-          onChange={(event) =>
-            setStatusFilter(event.target.value as "all" | TemplateStatus)
+          onValueChange={(value) =>
+            setStatusFilter(value as "all" | TemplateStatus)
           }
         >
           <option value="all">All statuses</option>
@@ -577,12 +595,13 @@ export default function ShiftsPage() {
               {status === "ACTIVE" ? "Active" : "Inactive"}
             </option>
           ))}
-        </select>
-      </DataTableToolbar>
+        </Select>
+      </TableToolbar>
 
       <DataTable table={table} loading={loading} emptyMessage="No shift templates found." />
 
-      <DataTablePagination table={table} totalRows={totalRows} />
+      <TablePagination table={table} totalRows={totalRows} />
+      </Surface>
 
       <Dialog
         open={deleteOpen}
@@ -594,37 +613,19 @@ export default function ShiftsPage() {
           }
         }}
       >
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Delete shift template</DialogTitle>
-            <DialogDescription>
-              {deleteTarget
+        <ActionDialogContent title={<>Delete shift template</>} description={<>{deleteTarget
                 ? `Delete "${deleteTarget.name}"? This cannot be undone.`
-                : "Delete this shift template? This cannot be undone."}
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button
+                : "Delete this shift template? This cannot be undone."}</>} className="sm:max-w-md" actions={<> <Button
               variant="outline"
               onClick={() => setDeleteOpen(false)}
               disabled={deleting}
             >
               Cancel
-            </Button>
-            <Button variant="destructive" onClick={confirmDelete} disabled={deleting}>
+            </Button><Button variant="destructive" onClick={confirmDelete} disabled={deleting}>
               {deleting ? "Deleting..." : "Delete"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
+            </Button> </>}></ActionDialogContent>
       </Dialog>
-      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent className="max-h-[90vh] flex flex-col">
-          <DialogHeader>
-            <DialogTitle>New shift template</DialogTitle>
-            <DialogDescription>Define a reusable schedule.</DialogDescription>
-          </DialogHeader>
-          <div className="flex-1 overflow-y-auto">
-            <TemplateFormFields
+      {canCreate && createOpen && <DraftPanel title="New shift template" description="Update the details and scheduling rules below." fingerprint={newTemplate} saving={saving} error={formError} saveLabel="Create template" onClose={() => { setCreateOpen(false); setNewTemplate(defaultTemplateForm); clearCreateErrors(); setFormError("") }} onSubmit={() => void createTemplate()}><TemplateFormFields
               mode="create"
               template={newTemplate}
               errors={createErrors}
@@ -637,36 +638,9 @@ export default function ShiftsPage() {
                 updateBreak(setNewTemplate, index, updater)
               }
               onRemoveBreak={(index) => removeBreak(setNewTemplate, index)}
-            />
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setCreateOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={createTemplate} loading={saving} loadingText="Saving...">
-              Create template
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+            /></DraftPanel>}
 
-      <Dialog
-        open={editOpen}
-        onOpenChange={(open) => {
-          setEditOpen(open)
-          if (!open) {
-            setEditingTemplate(null)
-            clearEditErrors()
-          }
-        }}
-      >
-        <DialogContent className="max-h-[90vh] flex flex-col">
-          <DialogHeader>
-            <DialogTitle>Edit shift template</DialogTitle>
-            <DialogDescription>Update template details, shift time, and breaks.</DialogDescription>
-          </DialogHeader>
-          <div className="flex-1 overflow-y-auto">
-            <TemplateFormFields
+      {canEdit && editOpen && <DraftPanel title="Edit shift template" description="Update the details and scheduling rules below." fingerprint={editTemplate} saving={saving} error={formError} saveLabel="Save changes" onClose={() => { setEditOpen(false) }} onSubmit={() => void saveEdit()}><TemplateFormFields
               mode="edit"
               template={editTemplate}
               errors={editErrors}
@@ -679,18 +653,7 @@ export default function ShiftsPage() {
                 updateBreak(setEditTemplate, index, updater)
               }
               onRemoveBreak={(index) => removeBreak(setEditTemplate, index)}
-            />
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setEditOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={saveEdit} loading={saving} loadingText="Saving...">
-              Save changes
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+            /></DraftPanel>}
     </div>
   )
 }

@@ -16,6 +16,9 @@ import {
 } from "./staff-form-model"
 
 type StaffFormFieldsProps = {
+  editScheduling?: boolean
+  showEligibility?: boolean
+  editEligibility?: boolean
   profile: StaffProfileForm
   setProfile: React.Dispatch<React.SetStateAction<StaffProfileForm>>
   serviceOptions: ServiceOption[]
@@ -27,6 +30,9 @@ type StaffFormFieldsProps = {
 }
 
 export function StaffFormFields({
+  editScheduling = false,
+  showEligibility = true,
+  editEligibility = true,
   profile,
   setProfile,
   serviceOptions,
@@ -96,7 +102,7 @@ export function StaffFormFields({
         </FormField>
         <FormField id="scheduling-mode" label="Scheduling mode" className="mt-3">
           <select
-            id="scheduling-mode"
+            id="scheduling-mode" disabled={!editScheduling}
             className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
             value={profile.schedulingMode}
             onChange={(event) =>
@@ -113,7 +119,7 @@ export function StaffFormFields({
       </div>
     </div>
 
-      <div className="rounded-xl border bg-card p-6">
+      {showEligibility && <div className="rounded-xl border bg-card p-6">
         <div className="space-y-2">
           <div className="text-sm font-medium">Eligible services</div>
           <p className="text-xs text-muted-foreground">
@@ -131,6 +137,7 @@ export function StaffFormFields({
               filteredServices.map((option) => (
                 <label key={option.id} className="flex items-center gap-2 text-sm">
                   <input
+                    disabled={!editEligibility}
                     type="checkbox"
                     checked={selectedIds.includes(option.id)}
                     onChange={(event) => toggleService(option.id, event.target.checked)}
@@ -143,7 +150,7 @@ export function StaffFormFields({
             )}
           </div>
         </div>
-      </div>
+      </div>}
 
       <div className="rounded-xl border bg-card p-6">
         <div className="flex flex-wrap items-center justify-between gap-3">

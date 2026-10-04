@@ -1,7 +1,8 @@
+import { withInventoryApi } from "@/modules/inventory/api"
+import type { BusinessActor } from "@/platform/policy"
 import { NextResponse } from "next/server"
 
 import {
-  type ApiLogContext,
   createApiLogContext,
   logApiRequestError,
   logApiRequestStart,
@@ -9,34 +10,16 @@ import {
   withRequestId,
 } from "@/lib/api-logging"
 import { prisma } from "@/lib/prisma"
-import { canManageUsers, type Role } from "@/lib/permissions"
 import { updateInventoryCategorySchema } from "@/lib/validation"
-import { requireTenantSession } from "@/lib/tenant-auth"
 
-const ensureAuthorized = async (request: Request, logContext: ApiLogContext) => {
-  const tenantSession = await requireTenantSession(request)
-  if (tenantSession.error) {
-    const response = tenantSession.error
-    logApiRequestSuccess(logContext, response.status, { reason: "tenant_or_auth_failed" })
-    return withRequestId(response, logContext.requestId)
-  }
-  if (!canManageUsers(tenantSession.context.role as Role)) {
-    const response = NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    logApiRequestSuccess(logContext, 401, { reason: "unauthorized" })
-    return withRequestId(response, logContext.requestId)
-  }
-  return tenantSession.context
-}
 
-export async function PATCH(
-  request: Request,
+async function handlePATCH(
+  request: Request, actor: BusinessActor,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const logContext = createApiLogContext(request)
   logApiRequestStart(logContext, request)
-  const authorized = await ensureAuthorized(request, logContext)
-  if ("status" in authorized) return authorized
-  const { tenantId } = authorized
+  const { tenantId } = actor
 
   try {
     const { id } = await params
@@ -110,15 +93,13 @@ export async function PATCH(
   }
 }
 
-export async function DELETE(
-  request: Request,
+async function handleDELETE(
+  request: Request, actor: BusinessActor,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const logContext = createApiLogContext(request)
   logApiRequestStart(logContext, request)
-  const authorized = await ensureAuthorized(request, logContext)
-  if ("status" in authorized) return authorized
-  const { tenantId } = authorized
+  const { tenantId } = actor
 
   try {
     const { id } = await params
@@ -143,4 +124,14 @@ export async function DELETE(
     const response = NextResponse.json({ error: "Unable to delete category." }, { status: 500 })
     return withRequestId(response, logContext.requestId)
   }
+}
+
+export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
+  const { id } = await context.params
+  return withInventoryApi(request, "inventoryCategories", "edit", actor => handlePATCH(request, actor, context), id)
+}
+
+export async function DELETE(request: Request, context: { params: Promise<{ id: string }> }) {
+  const { id } = await context.params
+  return withInventoryApi(request, "inventoryCategories", "archive", actor => handleDELETE(request, actor, context), id)
 }

@@ -1,3 +1,4 @@
+import { withAppointmentsApi } from "@/modules/appointments/api"
 import { NextResponse } from "next/server"
 import { Prisma } from "@prisma/client"
 
@@ -67,7 +68,7 @@ const serializeCoupon = (coupon: {
   updatedAt: coupon.updatedAt.toISOString(),
 })
 
-export async function PATCH(
+async function handlePATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
@@ -167,7 +168,7 @@ export async function PATCH(
   }
 }
 
-export async function DELETE(
+async function handleDELETE(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
@@ -181,7 +182,11 @@ export async function DELETE(
   const { tenantId } = authorized.context
   try {
     const { id } = await params
-    const deleted = await prisma.coupon.deleteMany({ where: { id, tenantId } })
+    const current = await prisma.coupon.findFirst({ where: { id, tenantId } })
+    const used = current && (current.usedCount > 0 || await prisma.appointmentOrderCoupon.count({ where: { code: current.code, order: { tenantId } } }) > 0)
+    const deleted = used
+      ? await prisma.coupon.updateMany({ where: { id, tenantId }, data: { isActive: false } })
+      : await prisma.coupon.deleteMany({ where: { id, tenantId } })
     if (deleted.count === 0) {
       const response = NextResponse.json({ error: "Coupon not found." }, { status: 404 })
       logApiRequestSuccess(logContext, 404, { reason: "not_found" })
@@ -195,4 +200,16 @@ export async function DELETE(
     const response = NextResponse.json({ error: "Unable to delete coupon." }, { status: 500 })
     return withRequestId(response, logContext.requestId)
   }
+}
+
+export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
+  return withAppointmentsApi(request, "appointmentCoupons", "edit", async () => {
+    return handlePATCH(request, context)
+  }, { kind: "coupon", id: (await context.params).id })
+}
+
+export async function DELETE(request: Request, context: { params: Promise<{ id: string }> }) {
+  return withAppointmentsApi(request, "appointmentCoupons", "archive", async () => {
+    return handleDELETE(request, context)
+  }, { kind: "coupon", id: (await context.params).id })
 }

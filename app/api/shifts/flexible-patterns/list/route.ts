@@ -10,7 +10,8 @@ import {
 } from "@/lib/api-logging"
 import { canManageUsers, type Role } from "@/lib/permissions"
 import { prisma } from "@/lib/prisma"
-import { requireTenantSession } from "@/lib/tenant-auth"
+import { withWorkforceApi, workforceSession } from "@/modules/workforce/api"
+import type { BusinessActor } from "@/platform/policy"
 import type { ListResponse } from "@/types/api"
 import type { StaffFlexiblePatternListItem } from "@/types/shifts"
 
@@ -20,11 +21,11 @@ const toDateOnly = (value: Date) => value.toISOString().slice(0, 10)
 
 const toIsoTimestamp = (value: Date) => value.toISOString()
 
-export async function GET(request: Request) {
+async function handleGET(request: Request, actor: BusinessActor) {
   const logContext = createApiLogContext(request)
   logApiRequestStart(logContext, request)
 
-  const tenantSession = await requireTenantSession(request)
+  const tenantSession = workforceSession(actor)
   if (tenantSession.error) {
     logApiRequestSuccess(logContext, tenantSession.error.status, { reason: "tenant_or_auth_failed" })
     return withRequestId(tenantSession.error, logContext.requestId)
@@ -178,4 +179,8 @@ export async function GET(request: Request) {
     const response = NextResponse.json({ error: "Unable to load recurring flexible patterns." }, { status: 500 })
     return withRequestId(response, logContext.requestId)
   }
+}
+
+export async function GET(request: Request) {
+  return withWorkforceApi(request, "shifts", "shiftPlans", "read", actor => handleGET(request, actor), "flexible-patterns/list")
 }

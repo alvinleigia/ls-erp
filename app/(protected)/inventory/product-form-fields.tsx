@@ -1,14 +1,17 @@
 "use client"
 
+import { Select, Textarea, Checkbox } from "@/components/erp/controls"
+
+import { useCurrentResourceAction } from "@/platform/access/view-guard"
+
+import { Section } from "@/components/erp/section"
 import { FormField } from "@/components/form-field"
 import { Trash2Icon } from "lucide-react"
-import { SearchableSelect } from "@/components/searchable-select"
+import { RecordSelect } from "@/components/erp/record-select"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import type {
-  InventoryCategoryOption,
   InventoryProductFormValues,
-  SupplierOption,
 } from "@/types/inventory"
 import type { InventoryUnit } from "@/lib/constants/inventory"
 import type { TaxRow } from "@/types/scheduling"
@@ -20,8 +23,8 @@ import {
 type ProductFormFieldsProps = {
   values: InventoryProductFormValues
   errors: Record<string, string | undefined>
-  categories: InventoryCategoryOption[]
-  suppliers: SupplierOption[]
+  selectedCategory?: { id: string; name: string }
+  selectedSuppliers: { supplierId: string; supplierName: string }[]
   taxes: TaxRow[]
   onChange: (next: InventoryProductFormValues) => void
 }
@@ -38,24 +41,20 @@ const updateSupplierLink = (
 export function ProductFormFields({
   values,
   errors,
-  categories,
-  suppliers,
+  selectedCategory,
+  selectedSuppliers,
   taxes,
   onChange,
 }: ProductFormFieldsProps) {
-  const activeCategoryOptions = categories
-    .filter((category) => category.status === "ACTIVE")
-    .map((category) => ({ value: category.id, label: category.name }))
-  const activeSupplierOptions = suppliers
-    .filter((supplier) => supplier.status === "ACTIVE")
-    .map((supplier) => ({ value: supplier.id, label: supplier.name }))
+  const canArchive = useCurrentResourceAction("archive")
 
   return (
-    <div className="grid gap-4 py-1">
+    <div className="space-y-5"><Section title="Product details">
       <div className="grid gap-4 md:grid-cols-2">
         <FormField id="product-sku" label="SKU" error={errors.sku}>
           <Input
             id="product-sku"
+            required minLength={2}
             value={values.sku}
             onChange={(event) => onChange({ ...values, sku: event.target.value })}
           />
@@ -63,6 +62,7 @@ export function ProductFormFields({
         <FormField id="product-name" label="Product name" error={errors.name}>
           <Input
             id="product-name"
+            required minLength={2}
             value={values.name}
             onChange={(event) => onChange({ ...values, name: event.target.value })}
           />
@@ -70,21 +70,21 @@ export function ProductFormFields({
       </div>
 
       <FormField id="product-description" label="Description" error={errors.description}>
-        <Input
+        <Textarea
           id="product-description"
           value={values.description}
           onChange={(event) => onChange({ ...values, description: event.target.value })}
         />
       </FormField>
 
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2">
         <FormField id="product-unit" label="Unit" error={errors.unit}>
-          <select
+          <Select
             id="product-unit"
             className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
             value={values.unit}
-            onChange={(event) =>
-              onChange({ ...values, unit: event.target.value as InventoryUnit })
+            onValueChange={(value) =>
+              onChange({ ...values, unit: value as InventoryUnit })
             }
           >
             {inventoryProductUnitOptions.map((unit) => (
@@ -92,27 +92,28 @@ export function ProductFormFields({
                 {unit}
               </option>
             ))}
-          </select>
+          </Select>
         </FormField>
         <FormField id="product-category" label="Category" error={errors.categoryId}>
-          <SearchableSelect
+          <RecordSelect
             id="product-category"
             value={values.categoryId}
             placeholder="Select category"
-            searchPlaceholder="Search category..."
-            options={activeCategoryOptions}
+            endpoint="/api/inventory/categories?status=ACTIVE"
+            selected={selectedCategory ? { value: selectedCategory.id, label: selectedCategory.name } : undefined}
             onChange={(nextValue) => onChange({ ...values, categoryId: nextValue })}
           />
         </FormField>
         <FormField id="product-status" label="Status" error={errors.status}>
-          <select
+          <Select
             id="product-status"
+            disabled={!canArchive}
             className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
             value={values.status}
-            onChange={(event) =>
+            onValueChange={(value) =>
               onChange({
                 ...values,
-                status: event.target.value as InventoryProductFormValues["status"],
+                status: value as InventoryProductFormValues["status"],
               })
             }
           >
@@ -121,11 +122,12 @@ export function ProductFormFields({
                 {status === "ACTIVE" ? "Active" : "Inactive"}
               </option>
             ))}
-          </select>
+          </Select>
         </FormField>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-3">
+      </Section><Section title="Pricing and stock">
+      <div className="grid gap-4 sm:grid-cols-2">
         <FormField id="product-cp" label="Cost price (CP)" error={errors.costPriceCents}>
           <Input
             id="product-cp"
@@ -140,7 +142,7 @@ export function ProductFormFields({
             onChange={(event) => onChange({ ...values, mrp: event.target.value })}
           />
         </FormField>
-        <FormField id="product-on-hand" label="Opening stock" error={errors.onHandQty}>
+        <FormField id="product-on-hand" label="Stock on hand" error={errors.onHandQty}>
           <Input
             id="product-on-hand"
             type="number"
@@ -156,7 +158,7 @@ export function ProductFormFields({
         </FormField>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2">
         <FormField id="product-reorder-point" label="Reorder point" error={errors.reorderPoint}>
           <Input
             id="product-reorder-point"
@@ -186,8 +188,7 @@ export function ProductFormFields({
           />
         </FormField>
         <label className="inline-flex items-center gap-2 text-sm pt-8">
-          <input
-            type="checkbox"
+          <Checkbox
             checked={values.isPhysical}
             onChange={(event) =>
               onChange({ ...values, isPhysical: event.target.checked })
@@ -197,15 +198,14 @@ export function ProductFormFields({
         </label>
       </div>
 
+      </Section><Section title="Taxes">
       <div className="space-y-2">
-        <p className="text-sm font-medium">Taxes</p>
         <div className="grid gap-2 md:grid-cols-2">
           {taxes.map((tax) => {
             const checked = values.taxIds.includes(tax.id)
             return (
               <label key={tax.id} className="inline-flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
+                <Checkbox
                   checked={checked}
                   onChange={(event) =>
                     onChange({
@@ -223,6 +223,7 @@ export function ProductFormFields({
         </div>
       </div>
 
+      </Section><Section title="Suppliers">
       <div className="space-y-3">
         <div className="flex items-center justify-between">
           <p className="text-sm font-medium">Supplier links</p>
@@ -263,12 +264,12 @@ export function ProductFormFields({
                 label="Supplier"
                 error={errors[`supplierLinks.${index}.supplierId`]}
               >
-                <SearchableSelect
+                <RecordSelect
                   id={`supplier-${index}`}
                   value={link.supplierId}
                   placeholder="Select supplier"
-                  searchPlaceholder="Search supplier..."
-                  options={activeSupplierOptions}
+                  endpoint="/api/inventory/suppliers?status=ACTIVE"
+                  selected={selectedSuppliers.find(row => row.supplierId === link.supplierId) ? { value: link.supplierId, label: selectedSuppliers.find(row => row.supplierId === link.supplierId)!.supplierName } : undefined}
                   onChange={(nextValue) =>
                     onChange({
                       ...values,
@@ -298,7 +299,7 @@ export function ProductFormFields({
                 />
               </FormField>
             </div>
-            <div className="grid gap-3 md:grid-cols-3">
+            <div className="grid gap-3 sm:grid-cols-2">
               <FormField
                 id={`supplier-cost-${index}`}
                 label="Supplier cost"
@@ -360,8 +361,7 @@ export function ProductFormFields({
             </div>
             <div className="flex items-center justify-between">
               <label className="inline-flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
+                <Checkbox
                   checked={link.isPreferred}
                   onChange={(event) =>
                     onChange({
@@ -396,6 +396,7 @@ export function ProductFormFields({
           </div>
         ))}
       </div>
+    </Section>
     </div>
   )
 }

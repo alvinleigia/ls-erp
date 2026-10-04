@@ -1,5 +1,9 @@
 "use client"
 
+import { Section } from "@/components/erp/section"
+import { Textarea } from "@/components/erp/controls"
+import { Select } from "@/components/erp/controls"
+
 import * as React from "react"
 import { Trash2Icon } from "lucide-react"
 
@@ -32,6 +36,8 @@ type AppointmentOrderFormFieldsProps = {
   staff: AppointmentStaffOption[]
   services: AppointmentServiceOption[]
   products: AppointmentProductOption[]
+  productsEnabled?: boolean
+  couponsEnabled?: boolean
   couponOptions?: Array<{ value: string; label: string }>
   couponHints?: Array<{
     code: string
@@ -61,6 +67,8 @@ export function AppointmentOrderFormFields({
   staff,
   services,
   products,
+  productsEnabled = true,
+  couponsEnabled = true,
   couponOptions = [],
   couponHints = [],
   formatCurrencyCentsValue = formatCurrencyCents,
@@ -102,11 +110,133 @@ export function AppointmentOrderFormFields({
   }
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
-      <div className="space-y-4 rounded-xl border bg-card p-4">
+    <div className="grid gap-6">
+      <div className="space-y-4">
+        <Section title="Booking details">
+          <div className="space-y-3">
+            <FormField id="order-customer" label="Customer" error={errors.customerId}>
+              <SearchableSelect
+                id="order-customer"
+                value={values.customerId}
+                placeholder="Select customer"
+                searchPlaceholder="Search customer..."
+                options={customers.map((customer) => ({
+                  value: customer.id,
+                  label: `${customer.name?.trim() || customer.email} (${customer.email})`,
+                }))}
+                onChange={(nextValue) => update("customerId", nextValue)}
+              />
+            </FormField>
+            <FormField id="order-date" label="Date">
+              <Input
+                id="order-date"
+                type="date"
+                value={values.appointmentDate}
+                onChange={(event) => update("appointmentDate", event.target.value)}
+              />
+            </FormField>
+            <FormField id="order-start" label="Start time">
+              <TimePicker
+                id="order-start"
+                value={values.appointmentStartTime}
+                timeFormat={timeFormat}
+                minuteStep={15}
+                onChange={(nextValue) => update("appointmentStartTime", nextValue)}
+              />
+            </FormField>
+            <fieldset disabled={!couponsEnabled} className="min-w-0">
+            <FormField id="order-coupon" label="Coupon code">
+              <div className="space-y-2">
+                <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] gap-2">
+                  <SearchableSelect
+                    id="order-coupon"
+                    value={values.couponInput}
+                    placeholder="Select coupon"
+                    searchPlaceholder="Search coupon..."
+                    options={couponOptions}
+                    onChange={(nextValue) => update("couponInput", nextValue)}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      const nextCoupons = addCouponCode(values.coupons, values.couponInput)
+                      setValues((prev) => ({
+                        ...prev,
+                        coupons: nextCoupons,
+                        couponInput: "",
+                      }))
+                    }}
+                  >
+                    Apply
+                  </Button>
+                </div>
+                {values.coupons.length ? (
+                  <div className="flex flex-wrap gap-2">
+                    {values.coupons.map((coupon) => (
+                      <button
+                        key={coupon.code}
+                        type="button"
+                        className="rounded-md border border-input px-2 py-1 text-xs"
+                        onClick={() =>
+                          setValues((prev) => ({
+                            ...prev,
+                            coupons: prev.coupons.filter((item) => item.code !== coupon.code),
+                          }))
+                        }
+                      >
+                        {coupon.code} x
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground">No coupons applied.</p>
+                )}
+                {couponOptions.length ? (
+                  <p className="text-xs text-muted-foreground">
+                    Select from active coupons. Click an applied coupon chip to remove it.
+                  </p>
+                ) : null}
+                {couponHints.length ? (
+                  <div className="space-y-1 rounded-md border border-input p-2">
+                    {couponHints.map((hint) => (
+                      <p
+                        key={hint.code}
+                        className={`text-xs ${hint.eligible ? "text-emerald-600" : "text-amber-700"}`}
+                      >
+                        {hint.code}:{" "}
+                        {hint.eligible
+                          ? `Applied (${formatCurrencyCentsValue(hint.discountCents ?? 0)})`
+                          : hint.reason ?? "Not applicable"}
+                      </p>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            </FormField>
+            </fieldset>
+            <FormField id="order-customer-note" label="Customer note">
+              <Textarea
+                id="order-customer-note"
+                value={values.customerNote}
+                onChange={(event) => update("customerNote", event.target.value)}
+              />
+            </FormField>
+            <FormField id="order-internal-note" label="Internal note">
+              <Textarea
+                id="order-internal-note"
+                value={values.internalNote}
+                onChange={(event) => update("internalNote", event.target.value)}
+              />
+            </FormField>
+          </div>
+        </Section>
+      </div>
+      <Section title="Service items">
         <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold">Service items</h2>
+
           <Button
+            type="button"
             variant="outline"
             size="sm"
             disabled={!allowMultipleLines}
@@ -141,9 +271,11 @@ export function AppointmentOrderFormFields({
                   ) : null}
                 </div>
                 <Button
+                  type="button"
                   variant="ghost"
                   size="icon"
                   className="h-7 w-7"
+                  aria-label={`Remove service item ${index + 1}`}
                   onClick={() =>
                     setValues((prev) => ({
                       ...prev,
@@ -158,7 +290,7 @@ export function AppointmentOrderFormFields({
                   <Trash2Icon className="h-4 w-4 text-muted-foreground" />
                 </Button>
               </div>
-              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
+              <div className="grid gap-3 sm:grid-cols-2">
                 <FormField id={`line-service-${line.id}`} label="Service">
                   <SearchableSelect
                     id={`line-service-${line.id}`}
@@ -271,16 +403,16 @@ export function AppointmentOrderFormFields({
                   />
                 </FormField>
                 <FormField id={`line-discount-type-${line.id}`} label="Discount type">
-                  <select
+                  <Select
                     id={`line-discount-type-${line.id}`}
-                    className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                    className="w-full"
                     value={line.discountType}
-                    onChange={(event) =>
+                    onValueChange={(value) =>
                       setValues((prev) => ({
                         ...prev,
                         lines: prev.lines.map((item) =>
                           item.id === line.id
-                            ? { ...item, discountType: event.target.value as DiscountType }
+                            ? { ...item, discountType: value as DiscountType }
                             : item
                         ),
                       }))
@@ -289,7 +421,7 @@ export function AppointmentOrderFormFields({
                     <option value="NONE">None</option>
                     <option value="PERCENT">Percent</option>
                     <option value="AMOUNT">Amount</option>
-                  </select>
+                  </Select>
                 </FormField>
                 <FormField id={`line-discount-value-${line.id}`} label="Discount value">
                   <Input
@@ -373,9 +505,12 @@ export function AppointmentOrderFormFields({
           ))}
         </div>
 
-        <div className="mt-6 flex items-center justify-between">
-          <h2 className="text-sm font-semibold">Product items</h2>
+        </Section>
+      <fieldset disabled={!productsEnabled} className="min-w-0">
+      <Section title="Product items">
+        <div className="flex items-center justify-between">
           <Button
+            type="button"
             variant="outline"
             size="sm"
             onClick={() =>
@@ -401,9 +536,11 @@ export function AppointmentOrderFormFields({
                   <span className="font-medium text-muted-foreground">Product {index + 1}</span>
                 </div>
                 <Button
+                  type="button"
                   variant="ghost"
                   size="icon"
                   className="h-7 w-7"
+                  aria-label={`Remove product item ${index + 1}`}
                   onClick={() =>
                     setValues((prev) => ({
                       ...prev,
@@ -415,7 +552,7 @@ export function AppointmentOrderFormFields({
                 </Button>
               </div>
 
-              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
+              <div className="grid gap-3 sm:grid-cols-2">
                 <FormField id={`line-product-${line.id}`} label="Product">
                   <SearchableSelect
                     id={`line-product-${line.id}`}
@@ -506,16 +643,16 @@ export function AppointmentOrderFormFields({
                   />
                 </FormField>
                 <FormField id={`line-product-discount-type-${line.id}`} label="Discount type">
-                  <select
+                  <Select
                     id={`line-product-discount-type-${line.id}`}
-                    className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                    className="w-full"
                     value={line.discountType}
-                    onChange={(event) =>
+                    onValueChange={(value) =>
                       setValues((prev) => ({
                         ...prev,
                         productLines: (prev.productLines ?? []).map((item) =>
                           item.id === line.id
-                            ? { ...item, discountType: event.target.value as DiscountType }
+                            ? { ...item, discountType: value as DiscountType }
                             : item
                         ),
                       }))
@@ -524,7 +661,7 @@ export function AppointmentOrderFormFields({
                     <option value="NONE">None</option>
                     <option value="PERCENT">Percent</option>
                     <option value="AMOUNT">Amount</option>
-                  </select>
+                  </Select>
                 </FormField>
                 <FormField id={`line-product-discount-value-${line.id}`} label="Discount value">
                   <Input
@@ -583,128 +720,10 @@ export function AppointmentOrderFormFields({
             </div>
           ))}
         </div>
-      </div>
+      </Section>
+      </fieldset>
 
-      <div className="space-y-4">
-        <div className="rounded-xl border bg-card p-4">
-          <h2 className="mb-3 text-sm font-semibold">Booking details</h2>
-          <div className="space-y-3">
-            <FormField id="order-customer" label="Customer" error={errors.customerId}>
-              <SearchableSelect
-                id="order-customer"
-                value={values.customerId}
-                placeholder="Select customer"
-                searchPlaceholder="Search customer..."
-                options={customers.map((customer) => ({
-                  value: customer.id,
-                  label: `${customer.name?.trim() || customer.email} (${customer.email})`,
-                }))}
-                onChange={(nextValue) => update("customerId", nextValue)}
-              />
-            </FormField>
-            <FormField id="order-date" label="Date">
-              <Input
-                id="order-date"
-                type="date"
-                value={values.appointmentDate}
-                onChange={(event) => update("appointmentDate", event.target.value)}
-              />
-            </FormField>
-            <FormField id="order-start" label="Start time">
-              <TimePicker
-                id="order-start"
-                value={values.appointmentStartTime}
-                timeFormat={timeFormat}
-                minuteStep={15}
-                onChange={(nextValue) => update("appointmentStartTime", nextValue)}
-              />
-            </FormField>
-            <FormField id="order-coupon" label="Coupon code">
-              <div className="space-y-2">
-                <div className="flex gap-2">
-                  <SearchableSelect
-                    id="order-coupon"
-                    value={values.couponInput}
-                    placeholder="Select coupon"
-                    searchPlaceholder="Search coupon..."
-                    options={couponOptions}
-                    onChange={(nextValue) => update("couponInput", nextValue)}
-                  />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => {
-                      const nextCoupons = addCouponCode(values.coupons, values.couponInput)
-                      setValues((prev) => ({
-                        ...prev,
-                        coupons: nextCoupons,
-                        couponInput: "",
-                      }))
-                    }}
-                  >
-                    Apply
-                  </Button>
-                </div>
-                {values.coupons.length ? (
-                  <div className="flex flex-wrap gap-2">
-                    {values.coupons.map((coupon) => (
-                      <button
-                        key={coupon.code}
-                        type="button"
-                        className="rounded-md border border-input px-2 py-1 text-xs"
-                        onClick={() =>
-                          setValues((prev) => ({
-                            ...prev,
-                            coupons: prev.coupons.filter((item) => item.code !== coupon.code),
-                          }))
-                        }
-                      >
-                        {coupon.code} x
-                      </button>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-xs text-muted-foreground">No coupons applied.</p>
-                )}
-                {couponOptions.length ? (
-                  <p className="text-xs text-muted-foreground">
-                    Select from active coupons. Click an applied coupon chip to remove it.
-                  </p>
-                ) : null}
-                {couponHints.length ? (
-                  <div className="space-y-1 rounded-md border border-input p-2">
-                    {couponHints.map((hint) => (
-                      <p
-                        key={hint.code}
-                        className={`text-xs ${hint.eligible ? "text-emerald-600" : "text-amber-700"}`}
-                      >
-                        {hint.code}:{" "}
-                        {hint.eligible
-                          ? `Applied (${formatCurrencyCentsValue(hint.discountCents ?? 0)})`
-                          : hint.reason ?? "Not applicable"}
-                      </p>
-                    ))}
-                  </div>
-                ) : null}
-              </div>
-            </FormField>
-            <FormField id="order-customer-note" label="Customer note">
-              <Input
-                id="order-customer-note"
-                value={values.customerNote}
-                onChange={(event) => update("customerNote", event.target.value)}
-              />
-            </FormField>
-            <FormField id="order-internal-note" label="Internal note">
-              <Input
-                id="order-internal-note"
-                value={values.internalNote}
-                onChange={(event) => update("internalNote", event.target.value)}
-              />
-            </FormField>
-          </div>
-        </div>
-      </div>
+
     </div>
   )
 }

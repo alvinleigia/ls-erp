@@ -1,3 +1,5 @@
+import { withAppointmentsApi } from "@/modules/appointments/api"
+import { BusinessError, type BusinessActor } from "@/platform/policy"
 import { AppointmentStatus } from "@prisma/client"
 import { NextResponse } from "next/server"
 
@@ -47,7 +49,7 @@ const ensureAuthorized = async (request: Request) => {
   return { context: tenantSession.context }
 }
 
-export async function GET(
+async function handleGET(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
@@ -76,14 +78,15 @@ export async function GET(
     logApiRequestSuccess(logContext, 200, { orderId: id, status: order.status })
     return withRequestId(response, logContext.requestId)
   } catch (error) {
+    if (error instanceof BusinessError) return NextResponse.json({ error: error.message }, { status: error.status })
     logApiRequestError(logContext, error, 500)
     const response = NextResponse.json({ error: "Unable to load booking order." }, { status: 500 })
     return withRequestId(response, logContext.requestId)
   }
 }
 
-export async function PATCH(
-  request: Request,
+async function handlePATCH(
+  request: Request, actor: BusinessActor,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const logContext = createApiLogContext(request)
@@ -183,7 +186,7 @@ export async function PATCH(
   }
 
   try {
-    const resolved = await resolveOrderData(nextInput, { existingOrderId: id, tenantId })
+    const resolved = await resolveOrderData(nextInput, { existingOrderId: id, tenantId, actor })
     const existingOrderLineIds = currentOrder.lines.map((line) => line.id)
     const existingAppointments = await prisma.appointment.findMany({
       where: {
@@ -334,6 +337,7 @@ export async function PATCH(
         })),
       })
       await applyStockDelta({
+        actor,
         tx,
         deltaByProduct: stockDelta,
         orderId: order.id,
@@ -347,6 +351,7 @@ export async function PATCH(
     logApiRequestSuccess(logContext, 200, { orderId: id, status: updated.status })
     return withRequestId(response, logContext.requestId)
   } catch (error) {
+    if (error instanceof BusinessError) return NextResponse.json({ error: error.message }, { status: error.status })
     if (error instanceof AvailabilityConflictError) {
       const response = NextResponse.json(
         {
@@ -371,4 +376,16 @@ export async function PATCH(
     )
     return withRequestId(response, logContext.requestId)
   }
+}
+
+export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
+  return withAppointmentsApi(request, "appointments", "edit", actor => {
+    return handlePATCH(request, actor, context)
+  }, { kind: "order", id: (await context.params).id })
+}
+
+export function GET(request: Request, context: { params: Promise<{ id: string }> }) {
+  return withAppointmentsApi(request, "appointments", "read", () => {
+    return handleGET(request, context)
+  })
 }

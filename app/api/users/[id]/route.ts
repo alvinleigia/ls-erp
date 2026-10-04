@@ -1,3 +1,8 @@
+import { requireBusinessModule } from "@/platform/module-server"
+import { requirePermission } from "@/platform/access/policy"
+import { requireServicesAccess } from "@/modules/services/api"
+import { findAccessUser, assignedPermissions } from "@/platform/access/server"
+import { recordDomainAuditEvent } from "@/lib/domain-audit"
 import { guardUserWrite, auditUserSecurity } from "@/platform/access/user-security"
 import { BusinessError } from "@/platform/policy"
 import { NextResponse } from "next/server"
@@ -13,7 +18,8 @@ import {
 import { prisma, runWithTenantDbContext } from "@/lib/prisma"
 import { updateUserSchema } from "@/lib/validation"
 import { canManageUsers, type Role } from "@/lib/permissions"
-import { requireTenantSession } from "@/lib/tenant-auth"
+import { withCoreApi, actorSession } from "@/platform/core/api"
+import type { BusinessActor } from "@/platform/policy"
 
 const getTodayUtc = () => new Date(`${new Date().toISOString().slice(0, 10)}T00:00:00.000Z`)
 
@@ -26,15 +32,13 @@ const getCurrentWeekStartMondayUtc = (value: Date) => {
   return monday
 }
 
-export async function PATCH(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
+async function handlePATCH(request: Request,
+  { params }: { params: Promise<{ id: string }> }, actor: BusinessActor) {
   const logContext = createApiLogContext(request)
   logApiRequestStart(logContext, request)
 
   const { id } = await params
-  const tenantSession = await requireTenantSession(request)
+  const tenantSession = actorSession(actor)
   if (tenantSession.error) {
     logApiRequestSuccess(logContext, tenantSession.error.status, { reason: "tenant_or_auth_failed", targetUserId: id })
     return withRequestId(tenantSession.error, logContext.requestId)
@@ -150,6 +154,13 @@ export async function PATCH(
     try {
       const user = await prisma.$transaction(async (tx) => {
         const identity = { tenantId, userId: sessionUserId!, requestId: logContext.requestId }
+        if (role === "ADMIN" && normalizedEligibleServiceIds !== null) {
+          const accessUser = await findAccessUser(tx, tenantId, sessionUserId!)
+          if (!accessUser || accessUser.role !== "ADMIN") throw new BusinessError(403, "Service eligibility requires administrator access.")
+          await requireServicesAccess({ tenantId, userId: sessionUserId!, role: accessUser.role, permissions: assignedPermissions(accessUser) }, "edit", tx)
+          const count = await tx.service.count({ where: { tenantId, id: { in: normalizedEligibleServiceIds } } })
+          if (count !== normalizedEligibleServiceIds.length) throw new BusinessError(400, "One or more services were not found in this tenant.")
+        }
         const priorSecurity = await guardUserWrite(tx, identity, id, data, role === "ADMIN")
         const updated = await tx.user.update({
         where: { id },
@@ -214,6 +225,7 @@ export async function PATCH(
               })),
             })
           }
+          await recordDomainAuditEvent(tx, { tenantId, actorUserId: sessionUserId, actorRole: "ADMIN", requestId: logContext.requestId, event: "services.eligibility.updated", entityType: "User", entityId: id, before: { serviceIds: updated.eligibleServices.map(item => item.serviceId) }, after: { serviceIds: normalizedEligibleServiceIds } })
         } else if (targetRole && targetRole !== "STAFF" && bodyData.role) {
           await tx.staffServiceEligibility.deleteMany({ where: { userId: id } })
         }
@@ -224,7 +236,6 @@ export async function PATCH(
 
         if (targetRole === "STAFF" && staffProfileInput) {
           const managerUserId = staffProfileInput.managerUserId?.trim() || null
-          const schedulingMode = staffProfileInput.schedulingMode ?? "STANDARD"
           const todayUtc = getTodayUtc()
           const currentWeekStartUtc = getCurrentWeekStartMondayUtc(todayUtc)
           if (managerUserId) {
@@ -253,6 +264,14 @@ export async function PATCH(
             select: { id: true, schedulingMode: true },
           })
 
+          const schedulingMode = staffProfileInput.schedulingMode ?? existingProfile?.schedulingMode ?? "STANDARD"
+          if (schedulingMode !== (existingProfile?.schedulingMode ?? "STANDARD")) {
+            const accessUser = await findAccessUser(tx, tenantId, sessionUserId!)
+            if (!accessUser || accessUser.role !== "ADMIN") throw new BusinessError(403, "Scheduling mode requires administrator access.")
+            await requireBusinessModule(tx, tenantId, "shifts")
+            requirePermission({ tenantId, userId: sessionUserId!, role: accessUser.role, permissions: assignedPermissions(accessUser) }, "shiftRoster.edit")
+            await recordDomainAuditEvent(tx, { tenantId, actorUserId: sessionUserId, actorRole: accessUser.role, requestId: logContext.requestId, event: "workforce.shiftRoster.edit", entityType: "User", entityId: id, before: { schedulingMode: existingProfile?.schedulingMode ?? "STANDARD" }, after: { schedulingMode } })
+          }
           if (existingProfile && existingProfile.schedulingMode !== schedulingMode) {
             if (schedulingMode === "FLEXIBLE") {
               const overlappingAssignment = await tx.staffScheduleAssignment.findFirst({
@@ -378,15 +397,13 @@ export async function PATCH(
   })
 }
 
-export async function GET(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
+async function handleGET(request: Request,
+  { params }: { params: Promise<{ id: string }> }, actor: BusinessActor) {
   const logContext = createApiLogContext(request)
   logApiRequestStart(logContext, request)
 
   const { id } = await params
-  const tenantSession = await requireTenantSession(request)
+  const tenantSession = actorSession(actor)
   if (tenantSession.error) {
     logApiRequestSuccess(logContext, tenantSession.error.status, { reason: "tenant_or_auth_failed", targetUserId: id })
     return withRequestId(tenantSession.error, logContext.requestId)
@@ -405,23 +422,7 @@ export async function GET(
       return withRequestId(response, logContext.requestId)
     }
 
-    const ensureStaffProfile = async () => {
-      const target = await prisma.user.findUnique({
-        where: { id },
-        select: { role: true, staffProfile: { select: { id: true } } },
-      })
-      const targetInTenant = await prisma.user.findFirst({
-        where: { id, tenantId },
-        select: { id: true },
-      })
-      if (!targetInTenant) return
-      if (!target || target.role !== "STAFF" || target.staffProfile) {
-        return
-      }
-      await prisma.staffProfile.create({ data: { userId: id } })
-    }
 
-    await ensureStaffProfile()
 
     const user = await prisma.user.findUnique({
       where: { id },
@@ -505,4 +506,12 @@ export async function GET(
     logApiRequestSuccess(logContext, 200, { targetUserId: id })
     return withRequestId(response, logContext.requestId)
   })
+}
+
+export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
+  return withCoreApi(request, "users", "edit", actor => handlePATCH(request, context, actor), (await context.params).id)
+}
+
+export async function GET(request: Request, context: { params: Promise<{ id: string }> }) {
+  return withCoreApi(request, "users", "read", actor => handleGET(request, context, actor), (await context.params).id)
 }
