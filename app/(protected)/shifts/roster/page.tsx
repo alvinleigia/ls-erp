@@ -2954,7 +2954,7 @@ export default function RosterPage() {
                   />
                 </div>
                 <div className="space-y-1">
-                  <Label className="text-xs text-muted-foreground">New time</Label>
+                  <Label className="text-xs text-muted-foreground">New time ({settings.timeZone ?? "UTC"})</Label>
                   <TimePicker
                     value={conflictRescheduleTime}
                     timeFormat={settings.timeFormat ?? "H24"}

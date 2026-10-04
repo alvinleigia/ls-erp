@@ -1116,7 +1116,11 @@ export const appointmentOrderCreateSchema = z.object({
   productLines: z.array(appointmentOrderProductLineInputSchema).optional().default([]),
 })
 
-export const appointmentOrderUpdateSchema = appointmentOrderCreateSchema.partial().refine(
+// Creation defaults must not turn omitted PATCH fields into destructive clears.
+export const appointmentOrderUpdateSchema = appointmentOrderCreateSchema.partial().extend({
+  coupons: appointmentOrderCreateSchema.shape.coupons.removeDefault().optional(),
+  productLines: appointmentOrderCreateSchema.shape.productLines.removeDefault().optional(),
+}).refine(
   (value) => Object.keys(value).length > 0,
   { message: "At least one field is required." }
 )

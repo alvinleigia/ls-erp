@@ -713,3 +713,131 @@ record scopes, audit review, all six migrations and their tests/documentation.
 The previous local validation results remain applicable; this checkpoint changes
 only documentation, whitespace and Git state. Push, deployment and hosted migrations remain
 pending. Next: push/deploy when requested, using the release procedure above.
+
+## Phase 4 - real local access verification (2026-10-04)
+
+Audit review was implemented with the Phase 3 access work. This increment verifies
+it through the production Next application, real credentials sign-ins and a fully
+migrated disposable PostgreSQL database. It does not use intercepted API responses
+or mocked authorization. The app runs as the non-superuser, non-bypass RLS role.
+
+All 10 tests in tests/local-access passed. Coverage includes tenant separation,
+manager OWN/MANAGED_TEAMS/ALL scopes, explicit team-manager designation and
+revocation, staff scope ceilings and read-only actions, concurrent role edits,
+module disable/reactivate with data retention, platform allowances versus tenant
+activation, CRM module dependencies, audit actor/owner distinction, redacted
+snapshots and revocation of an already-open audit entry.
+
+The checks exposed a suspended-account sign-in loop: API access was correctly
+blocked, but the old JWT redirected the browser back into protected pages.
+The protected layout now checks current user status in tenant context and sends
+inactive sessions to sign-in recovery. Sign-in clears expired or wrong-tenant
+sessions before allowing another login. Regression coverage verifies suspension,
+rejected suspended credentials, successful login with an active account, and
+wrong-tenant recovery. Current account role also supplies the module provider.
+
+Production build/TypeScript, targeted ESLint and whitespace checks passed.
+Desktop manager/staff and mobile audit screenshots were inspected. Run
+npm.cmd run test:access:e2e using the local-only setup in BROWSER_TESTING.md.
+No new migration is required. Test tenants and audit records remain only in the
+disposable database; the test server and database are stopped after verification.
+
+This completes the local access-verification increment, not hosted rollout or
+end-to-end verification of every sales/ERP business workflow. Earlier optional
+historical migration fixture skips and unrelated lint warnings remain as recorded
+above. Changes are local only: no push, deployment or hosted database writes.
+## Phase 4 - sales and ERP workflow verification (2026-10-04)
+
+Added nine real local workflow scenarios to the existing ten access scenarios.
+`npm.cmd run test:workflows:e2e` runs all 19 against the production Next build,
+real credentials sessions and isolated PostgreSQL using the RLS runtime role.
+`npm.cmd run test:access:e2e` retains only the ten access scenarios. No hosted
+credentials, API interceptions or mail delivery are used.
+
+Verified sales: subproject Sales > New lead preselection; qualified enquiry
+conversion retaining project/subproject and preventing duplicate opportunities;
+custom Site visit completion, customer history and a single follow-up; exact
+20/80 instalments; quotation revision saved through its edit panel; original
+snapshot retention; generated quotation PDF; won/100% close; historical payment
+plans when the optional module is disabled; and structured spam loss filtering
+and CSV export. New setup and most workflow mutations use authenticated APIs;
+this is not a claim that every creation form was exercised through the UI.
+
+Verified ERP: service eligibility and assigned shifts produce bookable hours;
+purchase receiving updates stock once; draft booking does not deduct stock;
+confirmation retains product/coupon data and deducts stock; repeated cancellation
+restores stock once; invoice PDF loads; insufficient stock rolls back the booking
+change; explicit empty arrays clear products/coupons; staff leave submission,
+direct-manager approval, self-review denial, blocked booking availability and
+audit actor attribution.
+
+The tests exposed and fixed a booking partial-update bug. Zod creation defaults
+were applied to omitted coupons/productLines in the PATCH schema. A status-only
+change could remove products/coupons, change the total and skip stock deduction.
+The update schema now removes those two creation defaults, preserving omitted
+fields while accepting explicit empty arrays. It adds no queries or migration.
+
+Validation: all 19 combined real local browser/API scenarios and 20 existing
+booking/inventory integration checks passed. Production build, TypeScript,
+targeted ESLint and whitespace checks passed. Payment-plan and approved-leave
+screenshots were inspected; PDF parsing confirms generated documents are valid,
+not that every PDF page layout was visually reviewed. Test services were stopped;
+synthetic test records remain only in the disposable database.
+
+Remaining UI finding: Leaves request/approval dates still use browser locale
+formatting rather than the tenant date preference. Address that consistently in
+a focused date/time display cleanup, with a nonlocal-browser-timezone check.
+Hosted deployment/migrations and hosted workflow verification remain pending.
+Earlier historical migration-fixture skips and unrelated lint warnings remain
+as previously documented. Nothing was pushed or deployed.
+## Phase 4 - tenant dates and leave conflict rescheduling (2026-10-04)
+
+Resolved the Leaves date/time finding above. Requests, approvals, definition/group
+updated times, request details, history, confirmations and conflict previews now
+use the shared tenant formatter. Date-only leave values retain their calendar day
+when the browser timezone differs. Actual timestamps use the configured locale,
+date format, timezone and 12/24-hour clock. The shared hook keeps its legacy
+formatDate API and caches one display-settings request rather than querying per row.
+CRM history and Leaves share neutral lib/date-display and lib/business-time helpers.
+The CRM work-time module re-exports the existing conversions unchanged.
+
+The conflict reschedule endpoint previously interpreted an entered time as UTC,
+while the preview used browser time. Both now interpret it in the tenant timezone,
+reject invalid/nonexistent/ambiguous local times, and retain appointment durations
+and spacing using epoch arithmetic. Audit metadata records the interpreted zone.
+The Shifts reschedule time label also identifies that timezone. This adds one
+indexed AppSetting lookup per reschedule request, with no schema migration.
+
+Verification: production build/TypeScript and targeted ESLint passed; six date/CRM
+history unit tests and 17 existing appointment/workforce integration tests passed.
+All 20 local access/sales/ERP scenarios have passed across the full run and the
+focused ERP rerun (all five ERP scenarios passed on the final build). The new
+scenario uses a Los Angeles browser with an Asia/Kolkata tenant: date-only leave
+stays 08/10/2030, preview shows 10:00, stored appointment is 04:30 UTC, duration
+remains one hour, invalid date input leaves the appointment unchanged, and manager
+approval removes the request from the Pending queue. The test waits for review
+completion before independently reading persisted records through the API.
+Request-list, history-panel and conflict-preview screenshots were inspected.
+
+No push, deployment, hosted writes or new migration. Local test server/database
+were stopped after verification. Next is the local release-readiness review;
+hosted rollout and hosted smoke checks remain pending. Prior documented historical
+migration-fixture skips and unrelated lint warnings remain unchanged.
+
+## Phase 4 - local release checkpoint (2026-10-04)
+
+Reviewed the accumulated Phase 4 changes for a local commit under the standing
+commit-without-push instruction. RELEASE_READINESS.md consolidates current scope,
+evidence, limitations, six-migration order, rollout and recovery steps. The final
+application build and earlier focused verification remain applicable; this
+checkpoint adds documentation only. Nine read-only deployment checks passed again
+on local PostgreSQL with the non-bypass runtime role; all 96 migrations are present.
+Root ESLint again reports zero errors and four previously documented warnings.
+Package/lockfile dependency declarations match; local environment, authentication,
+host-link and generated report files are ignored and not tracked. Whitespace checks
+passed. No new migration, hosted access, push or deployment. Test database stopped.
+
+Implementation and local verification for this release are complete within the
+recorded scope. The next operational step is hosted migration/deployment and smoke
+verification when requested, following RELEASE_READINESS.md. Do not push main
+before the target database is ready, because the Git connection can auto-deploy.

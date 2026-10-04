@@ -22,7 +22,7 @@ export function LeaveRequestDetailsDialog({
   open,
   onOpenChange,
 }: LeaveRequestDetailsDialogProps) {
-  const { formatDate } = useDateFormatter()
+  const { formatDateOnly, formatDateTime } = useDateFormatter()
   const [loading, setLoading] = React.useState(false)
   const [detail, setDetail] = React.useState<LeaveRequestDetail | null>(null)
 
@@ -63,10 +63,10 @@ export function LeaveRequestDetailsDialog({
     {loading ? <p>Loading...</p> : item && detail ? <>
       <Section title="Request details"><ReadOnlyFields fields={[
         { label: "Staff", value: item.staff.name || item.staff.email }, { label: "Status", value: item.status },
-        { label: "Start date", value: formatDate(item.startDate) }, { label: "End date", value: formatDate(item.endDate) },
+        { label: "Start date", value: formatDateOnly(item.startDate) }, { label: "End date", value: formatDateOnly(item.endDate) },
         { label: "Days", value: item.daysCount }, { label: "Reason", value: item.reason },
       ]} /></Section>
-      <Section title="Timeline"><Timeline entries={detail.timeline.map(event => ({ id: event.key, icon: Clock, actor: event.byName || event.byEmail || "System", action: event.title, dateTime: event.at, timeLabel: new Date(event.at).toLocaleString(), detail: event.comment || event.title }))} /></Section>
+      <Section title="Timeline"><Timeline entries={detail.timeline.map(event => ({ id: event.key, icon: Clock, actor: event.byName || event.byEmail || "System", action: event.title, dateTime: event.at, timeLabel: formatDateTime(event.at), detail: event.comment || event.title }))} /></Section>
       <Section title="Rule checks">{detail.ruleChecks.map(check => <div key={check.key} className="space-y-1 border-b pb-3 last:border-0"><p className="font-medium">{check.label}</p><p className={check.passed ? "text-sm text-emerald-600" : "text-sm text-destructive"}>{check.detail}</p></div>)}</Section>
     </> : <p role="alert">Unable to load leave request details.</p>}
   </RecordPanel>

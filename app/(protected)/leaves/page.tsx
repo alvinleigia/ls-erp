@@ -1,4 +1,5 @@
 "use client"
+import { useDateFormatter } from "@/hooks/use-date-formatter"
 import { useCurrentResourceAction } from "@/platform/access/view-guard"
 
 import { ActionDialogContent } from "@/components/erp/action-dialog"
@@ -69,6 +70,7 @@ const SortIndicator = ({ value }: { value: false | "asc" | "desc" }) => {
 
 export default function LeavesPage() {
   const canCreate = useCurrentResourceAction("create")
+  const { formatDateTime } = useDateFormatter()
   const canArchive = useCurrentResourceAction("archive")
 
   const [loading, setLoading] = React.useState(true)
@@ -243,7 +245,7 @@ export default function LeavesPage() {
         accessorKey: "updatedAt",
         meta: { label: "Updated" },
         header: "Updated",
-        cell: ({ row }) => new Date(row.original.updatedAt).toLocaleString(),
+        cell: ({ row }) => formatDateTime(row.original.updatedAt),
       },
       {
         id: "actions",
@@ -271,7 +273,7 @@ export default function LeavesPage() {
         ),
       },
     ],
-    [requestDelete, canArchive]
+    [requestDelete, canArchive, formatDateTime]
   )
 
   const totalPages = Math.max(1, Math.ceil(totalRows / pagination.pageSize))

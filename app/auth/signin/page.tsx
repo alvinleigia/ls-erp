@@ -1,8 +1,8 @@
 "use client";
 
-import { signIn, useSession } from "next-auth/react";
+import { signIn, signOut, useSession } from "next-auth/react";
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -12,15 +12,25 @@ import { FormField } from "@/components/form-field";
 
 export default function SignInPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const resetSession = searchParams.get("sessionExpired") === "1" || searchParams.get("switchTenant") === "1";
   const { status } = useSession();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
   useEffect(() => {
+    if (resetSession) {
+      if (status === "authenticated") {
+        void signOut({ redirect: false }).then(() => router.replace("/auth/signin"));
+      } else if (status === "unauthenticated") {
+        router.replace("/auth/signin");
+      }
+      return;
+    }
     if (status === "authenticated") {
       router.replace("/dashboard");
     }
-  }, [router, status]);
+  }, [router, status, resetSession]);
 
   if (status === "authenticated") {
     return null;

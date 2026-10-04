@@ -1,4 +1,5 @@
 "use client"
+import { useDateFormatter } from "@/hooks/use-date-formatter"
 import { useBusinessModules } from "@/platform/module-provider"
 import { useCurrentResourceAction } from "@/platform/access/view-guard"
 
@@ -85,6 +86,7 @@ const SortIndicator = ({ value }: { value: false | "asc" | "desc" }) => {
 }
 
 export default function LeaveRequestsPage() {
+  const { formatDateOnly, formatDateTime } = useDateFormatter()
   const { can, enabled } = useBusinessModules()
   const canCreate = useCurrentResourceAction("create")
   const canArchive = useCurrentResourceAction("archive")
@@ -273,7 +275,7 @@ export default function LeaveRequestsPage() {
         ),
         accessorFn: (row) => row.startDate,
         cell: ({ row }) =>
-          `${new Date(row.original.startDate).toLocaleDateString()} - ${new Date(row.original.endDate).toLocaleDateString()}`,
+          `${formatDateOnly(row.original.startDate)} - ${formatDateOnly(row.original.endDate)}`,
       },
       {
         accessorKey: "daysCount",
@@ -313,7 +315,7 @@ export default function LeaveRequestsPage() {
             <SortIndicator value={column.getIsSorted()} />
           </button>
         ),
-        cell: ({ row }) => new Date(row.original.createdAt).toLocaleString(),
+        cell: ({ row }) => formatDateTime(row.original.createdAt),
       },
       {
         id: "actions",
@@ -347,7 +349,7 @@ export default function LeaveRequestsPage() {
         },
       },
     ],
-    [openDetails, requestCancel, canArchive]
+    [openDetails, requestCancel, canArchive, formatDateOnly, formatDateTime]
   )
 
   const totalPages = Math.max(1, Math.ceil(totalRows / pagination.pageSize))
@@ -452,9 +454,7 @@ export default function LeaveRequestsPage() {
         }}
       >
         <ActionDialogContent title={<>Cancel leave request</>} description={<>{cancelTarget
-                ? `Cancel ${cancelTarget.leaveDefinition.code} request from ${new Date(
-                    cancelTarget.startDate
-                  ).toLocaleDateString()} to ${new Date(cancelTarget.endDate).toLocaleDateString()}?`
+                ? `Cancel ${cancelTarget.leaveDefinition.code} request from ${formatDateOnly(cancelTarget.startDate)} to ${formatDateOnly(cancelTarget.endDate)}?`
                 : "Cancel this leave request?"}</>} className="sm:max-w-md" actions={<> <Button variant="outline" onClick={() => setCancelOpen(false)} disabled={canceling}>
               Back
             </Button><Button variant="destructive" onClick={() => void confirmCancel()} disabled={canceling}>

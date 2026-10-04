@@ -267,3 +267,17 @@ and CrmDraftPanel for small configuration editors. See CRM_RECORD_VIEWS.md.
 - Neutral components must not import business modules or authorization hooks. Callers determine allowed actions and tabs; APIs enforce them.
 - CRM compatibility wrappers use the same implementations and keep existing permission checks. Do not copy the components into each module.
 - The focused edit-panel pattern supersedes the earlier dedicated-edit-page-only guidance when migrating large record views.
+
+## Calendar dates and tenant timestamps
+
+Use `useDateFormatter().formatDateOnly` for database DATE values, including
+serialized midnight-UTC values. A leave date must not change with browser timezone.
+Use `formatDateTime`/`formatTime` for instants, using the tenant date format,
+locale, timezone and 12/24-hour setting. The hook shares one display-settings
+request; do not fetch preferences per row. Its legacy `formatDate` method remains
+for callers that intentionally supply browser-local Date objects.
+
+Use `lib/business-time.ts` to convert an entered tenant wall time to an instant.
+Reject nonexistent or ambiguous daylight-saving times rather than guessing.
+Keep API persistence as UTC instants and use epoch arithmetic for durations.
+CRM's work-time entry point re-exports these shared helpers for compatibility.

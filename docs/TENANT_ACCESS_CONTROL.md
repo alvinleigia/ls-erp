@@ -163,7 +163,7 @@ changing the record owner. Apply scopes in indexed database predicates, includin
 all list, detail, count, export and relation paths. Tenant isolation remains
 mandatory regardless of role or scope.
 
-## Stage 4: audit review and rollout — planned
+## Stage 4: audit review and local verification complete; hosted rollout pending
 
 Provide protected, paginated audit review with actor, target, action, timestamp
 and changed fields. Retain existing record timelines. Verify every role/scope
@@ -269,3 +269,16 @@ No commit, push, deployment or hosted data changes were made.
 
 Next: deployment-readiness review of the accumulated local changes and pending
 migrations, followed by hosted verification only when deployment is requested.
+
+## Phase 4 - real local access verification (2026-10-04)
+
+Ten real browser/API access scenarios passed against the production Next build
+and disposable PostgreSQL using the non-bypass runtime role. Coverage includes
+platform/tenant module controls, dependencies, CRM manager/team scopes, staff
+ceilings, live permission revocation, concurrent edits, tenant isolation and
+redacted audit detail. A suspended-account redirect loop was fixed and verified,
+including recovery to a usable sign-in form and wrong-tenant session clearing.
+
+Audit review and this local verification are complete; hosted rollout and broader
+business-workflow verification remain pending. No push/deploy or hosted writes.
+See ERP_STANDARDIZATION.md and BROWSER_TESTING.md for evidence and rerun steps.

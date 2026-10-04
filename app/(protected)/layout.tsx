@@ -6,6 +6,7 @@ import { BusinessModuleProvider } from "@/platform/module-provider";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { auth } from "@/auth";
 import { resolveTenantFromServerHeaders } from "@/lib/tenancy";
+import { prisma, runWithTenantDbContext } from "@/lib/prisma";
 
 export default async function ProtectedLayout({
   children,
@@ -21,9 +22,14 @@ export default async function ProtectedLayout({
   if (!tenant || !sessionTenantId || sessionTenantId !== tenant.id) {
     redirect("/auth/signin?switchTenant=1")
   }
+  const currentUser = await runWithTenantDbContext(tenant.id, () => prisma.user.findFirst({
+    where: { id: session.user.id, tenantId: tenant.id, status: "ACTIVE" },
+    select: { role: true },
+  }))
+  if (!currentUser) redirect("/auth/signin?sessionExpired=1")
 
   return (
-    <BusinessModuleProvider key={`${tenant.id}:${session.user.id}:${session.user.role}`} active={canUseCrm(session.user.role) && tenant.slug !== (process.env.PLATFORM_ADMIN_TENANT_SLUG?.trim().toLowerCase() || "platform")}><SidebarProvider>
+    <BusinessModuleProvider key={`${tenant.id}:${session.user.id}:${currentUser.role}`} active={canUseCrm(currentUser.role) && tenant.slug !== (process.env.PLATFORM_ADMIN_TENANT_SLUG?.trim().toLowerCase() || "platform")}><SidebarProvider>
       <div className="flex min-h-screen w-full">
         <AppSidebar />
 

@@ -19,6 +19,7 @@ import { prisma } from "@/lib/prisma"
 import { canManageUsers, type Role } from "@/lib/permissions"
 import { requireTenantSession } from "@/lib/tenant-auth"
 import { appointmentResolveSchema } from "@/lib/validation"
+import { wallTimeToInstant } from "@/lib/business-time"
 import type { ResolveAppointmentsInput } from "@/types/appointments"
 
 const ACTIVE_APPOINTMENT_STATUSES: AppointmentStatus[] = [
@@ -26,11 +27,6 @@ const ACTIVE_APPOINTMENT_STATUSES: AppointmentStatus[] = [
   AppointmentStatus.CONFIRMED,
   AppointmentStatus.IN_PROGRESS,
 ]
-
-const buildDateTime = (date: string, time: string) => {
-  if (!date || !time) return null
-  return new Date(`${date}T${time}:00.000Z`)
-}
 
 async function handlePOST(request: Request, actor: BusinessActor) {
   const logContext = createApiLogContext(request)
@@ -144,9 +140,13 @@ async function handlePOST(request: Request, actor: BusinessActor) {
       logApiRequestSuccess(logContext, 400, { reason: "missing_reschedule_datetime" })
       return withRequestId(response, logContext.requestId)
     }
-    const nextStart = buildDateTime(body.rescheduleDate, body.rescheduleTime)
-    if (!nextStart || Number.isNaN(nextStart.getTime())) {
-      const response = NextResponse.json({ error: "Invalid reschedule date/time." }, { status: 400 })
+    const settings = await prisma.appSetting.findUnique({ where: { tenantId }, select: { timeZone: true } })
+    const timeZone = settings?.timeZone ?? "UTC"
+    let nextStart: Date
+    try {
+      nextStart = new Date(wallTimeToInstant(`${body.rescheduleDate}T${body.rescheduleTime}`, timeZone))
+    } catch (error) {
+      const response = NextResponse.json({ error: (error as Error).message }, { status: 400 })
       logApiRequestSuccess(logContext, 400, { reason: "invalid_reschedule_datetime" })
       return withRequestId(response, logContext.requestId)
     }
@@ -165,14 +165,12 @@ async function handlePOST(request: Request, actor: BusinessActor) {
     const firstStartAt = appointments[0].startAt.getTime()
     const plannedMoves = appointments.map((appointment) => {
       const deltaMinutes = Math.round((appointment.startAt.getTime() - firstStartAt) / 60000)
-      const startAt = new Date(nextStart)
-      startAt.setMinutes(startAt.getMinutes() + deltaMinutes)
+      const startAt = new Date(nextStart.getTime() + deltaMinutes * 60000)
       const durationMinutes = Math.max(
         1,
         Math.round((appointment.endAt.getTime() - appointment.startAt.getTime()) / 60000)
       )
-      const endAt = new Date(startAt)
-      endAt.setMinutes(endAt.getMinutes() + durationMinutes)
+      const endAt = new Date(startAt.getTime() + durationMinutes * 60000)
       return {
         id: appointment.id,
         staffProfileId: appointment.staffProfileId,
@@ -251,6 +249,7 @@ async function handlePOST(request: Request, actor: BusinessActor) {
           updatedCount,
           rescheduleDate: body.rescheduleDate,
           rescheduleTime: body.rescheduleTime,
+          timeZone,
         },
       })
       const response = NextResponse.json({ updatedCount })

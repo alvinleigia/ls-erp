@@ -1,4 +1,6 @@
 "use client"
+import { useDateFormatter } from "@/hooks/use-date-formatter"
+import { wallTimeToInstant } from "@/lib/business-time"
 import { useBusinessModules } from "@/platform/module-provider"
 import { useCurrentResourceAction } from "@/platform/access/view-guard"
 
@@ -99,6 +101,7 @@ const SortIndicator = ({ value }: { value: false | "asc" | "desc" }) => {
 }
 
 export default function LeaveApprovalsPage() {
+  const { formatDateOnly, formatDateTime, formatTime, timeZone } = useDateFormatter()
   const { can, enabled } = useBusinessModules()
   const canApprove = useCurrentResourceAction("approve")
   const canArchive = useCurrentResourceAction("archive")
@@ -152,11 +155,11 @@ export default function LeaveApprovalsPage() {
     if (!firstAppointment) {
       return `Cannot approve due to ${countText} on this leave date range.`
     }
-    const startsAt = new Date(firstAppointment.startAt).toLocaleString()
+    const startsAt = formatDateTime(firstAppointment.startAt)
     const service = firstAppointment.serviceName ?? "Service"
     const customer = firstAppointment.customerName ?? "Customer"
     return `Cannot approve due to ${countText}. Example: ${service} for ${customer} at ${startsAt}.`
-  }, [])
+  }, [formatDateTime])
 
   const collectConflictAppointmentIds = React.useCallback((conflicts: LeaveApprovalConflict[]) => {
     return Array.from(
@@ -182,8 +185,9 @@ export default function LeaveApprovalsPage() {
 
   const reschedulePreview = React.useMemo(() => {
     if (!rescheduleDate || !rescheduleTime || conflictAppointments.length === 0) return []
-    const nextStart = new Date(`${rescheduleDate}T${rescheduleTime}:00`)
-    if (Number.isNaN(nextStart.getTime())) return []
+    let nextStart: Date
+    try { nextStart = new Date(wallTimeToInstant(`${rescheduleDate}T${rescheduleTime}`, timeZone)) }
+    catch { return [] }
 
     const firstStart = new Date(conflictAppointments[0].startAt).getTime()
     return conflictAppointments.map((appointment) => {
@@ -194,17 +198,15 @@ export default function LeaveApprovalsPage() {
         Math.round((originalEnd.getTime() - originalStart.getTime()) / 60000)
       )
       const offsetMinutes = Math.round((originalStart.getTime() - firstStart) / 60000)
-      const proposedStart = new Date(nextStart)
-      proposedStart.setMinutes(proposedStart.getMinutes() + offsetMinutes)
-      const proposedEnd = new Date(proposedStart)
-      proposedEnd.setMinutes(proposedEnd.getMinutes() + durationMinutes)
+      const proposedStart = new Date(nextStart.getTime() + offsetMinutes * 60000)
+      const proposedEnd = new Date(proposedStart.getTime() + durationMinutes * 60000)
       return {
         ...appointment,
         proposedStart,
         proposedEnd,
       }
     })
-  }, [conflictAppointments, rescheduleDate, rescheduleTime])
+  }, [conflictAppointments, rescheduleDate, rescheduleTime, timeZone])
 
   React.useEffect(() => {
     if (role && !canManage) {
@@ -421,6 +423,8 @@ export default function LeaveApprovalsPage() {
         toast.error("Select reschedule date and time.")
         return
       }
+      try { wallTimeToInstant(`${rescheduleDate}T${rescheduleTime}`, timeZone) }
+      catch (error) { toast.error((error as Error).message); return }
     }
     setProcessing(true)
     const resolveResponse = await fetch("/api/appointments/resolve", {
@@ -475,6 +479,7 @@ export default function LeaveApprovalsPage() {
     conflictResolution,
     rescheduleDate,
     rescheduleTime,
+    timeZone,
     reviewBulkRequests,
     reviewRequest,
   ])
@@ -527,7 +532,7 @@ export default function LeaveApprovalsPage() {
         ),
         accessorFn: (row) => row.startDate,
         cell: ({ row }) =>
-          `${new Date(row.original.startDate).toLocaleDateString()} - ${new Date(row.original.endDate).toLocaleDateString()}`,
+          `${formatDateOnly(row.original.startDate)} - ${formatDateOnly(row.original.endDate)}`,
       },
       {
         accessorKey: "daysCount",
@@ -558,7 +563,7 @@ export default function LeaveApprovalsPage() {
             <SortIndicator value={column.getIsSorted()} />
           </button>
         ),
-        cell: ({ row }) => new Date(row.original.createdAt).toLocaleString(),
+        cell: ({ row }) => formatDateTime(row.original.createdAt),
       },
       {
         id: "actions",
@@ -611,7 +616,7 @@ export default function LeaveApprovalsPage() {
         },
       },
     ],
-    [openDetails, openReject, openRevoke, processing, reviewRequest, canApprove, canArchive]
+    [openDetails, openReject, openRevoke, processing, reviewRequest, canApprove, canArchive, formatDateOnly, formatDateTime]
   )
 
   const totalPages = Math.max(1, Math.ceil(totalRows / pagination.pageSize))
@@ -717,7 +722,7 @@ export default function LeaveApprovalsPage() {
         }}
       >
         <ActionDialogContent title={<>Revoke approved leave</>} description={<>{revokeTarget
-                ? `Revoke ${revokeTarget.leaveDefinition.code} from ${new Date(revokeTarget.startDate).toLocaleDateString()} to ${new Date(revokeTarget.endDate).toLocaleDateString()}?`
+                ? `Revoke ${revokeTarget.leaveDefinition.code} from ${formatDateOnly(revokeTarget.startDate)} to ${formatDateOnly(revokeTarget.endDate)}?`
                 : "Revoke this approved leave request?"}</>} className="sm:max-w-md" actions={<> <Button variant="outline" onClick={() => setRevokeOpen(false)} disabled={processing}>
               Back
             </Button><Button variant="destructive" onClick={() => void confirmRevoke()} disabled={processing}>
@@ -752,7 +757,7 @@ export default function LeaveApprovalsPage() {
           }
         }}
       >
-        <ActionDialogContent title={<>Conflicting appointments found</>} description={<>Leave approval overlaps active appointments. Cancel conflicts to proceed with approval.
+        <ActionDialogContent title={<>Conflicting appointments found</>} description={<>Leave approval overlaps active appointments. Cancel or reschedule conflicts to proceed with approval.
             </>} className="sm:max-w-2xl" actions={<> <Button
               variant="outline"
               onClick={() => {
@@ -782,8 +787,8 @@ export default function LeaveApprovalsPage() {
                 <div className="mt-2 space-y-1 text-sm text-muted-foreground">
                   {conflict.conflictingAppointments.map((appointment) => (
                     <p key={appointment.id}>
-                      {new Date(appointment.startAt).toLocaleString()} -{" "}
-                      {new Date(appointment.endAt).toLocaleTimeString()} |{" "}
+                      {formatDateTime(appointment.startAt)} -{" "}
+                      {formatTime(appointment.endAt)} |{" "}
                       {appointment.serviceName ?? "Service"} |{" "}
                       {appointment.customerName ?? "Customer"}
                     </p>
@@ -800,7 +805,7 @@ export default function LeaveApprovalsPage() {
                 onChange={(event) => setRescheduleDate(event.target.value)}
               />
             </FormField>
-            <FormField id="reschedule-time" label="Reschedule start time">
+            <FormField id="reschedule-time" label={`Reschedule start time (${timeZone})`}>
               <Input
                 id="reschedule-time"
                 type="time"
@@ -815,8 +820,8 @@ export default function LeaveApprovalsPage() {
                 {reschedulePreview.map((appointment) => (
                   <p key={appointment.id}>
                     {appointment.serviceName ?? "Service"} | {appointment.customerName ?? "Customer"} |{" "}
-                    {appointment.proposedStart.toLocaleString()} -{" "}
-                    {appointment.proposedEnd.toLocaleTimeString()}
+                    {formatDateTime(appointment.proposedStart)} -{" "}
+                    {formatTime(appointment.proposedEnd)}
                   </p>
                 ))}
               </div>

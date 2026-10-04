@@ -1039,3 +1039,48 @@ deployed. Hosted migration state and end-to-end verification remain pending.
 The reviewed ERP interface/access changes and six migrations are consolidated for
 the user-authorized local commit. Validation evidence and deployment order are in
 ERP_STANDARDIZATION.md. Nothing is pushed or deployed at this checkpoint.
+
+## Phase 4 - real local access verification (2026-10-04)
+
+Ten real browser/API access scenarios passed against the production Next build
+and disposable PostgreSQL using the non-bypass runtime role. Coverage includes
+platform/tenant module controls, dependencies, CRM manager/team scopes, staff
+ceilings, live permission revocation, concurrent edits, tenant isolation and
+redacted audit detail. A suspended-account redirect loop was fixed and verified,
+including recovery to a usable sign-in form and wrong-tenant session clearing.
+
+Audit review and this local verification are complete; hosted rollout and broader
+business-workflow verification remain pending. No push/deploy or hosted writes.
+See ERP_STANDARDIZATION.md and BROWSER_TESTING.md for evidence and rerun steps.
+## Phase 4 - local sales and ERP workflows (2026-10-04)
+
+All 19 real local browser/API scenarios passed (ten access, five sales, four ERP).
+Sales covers project-linked enquiry conversion, site visits and follow-ups,
+quotation/payment schedule revisions and PDF, won close and spam filtering.
+ERP covers services/shifts, purchase receipts, booking stock changes and rollback,
+cancellation, invoice PDF and leave approval affecting availability. A booking
+PATCH bug that cleared omitted products/coupons was fixed without schema changes.
+The production build and 20 booking/inventory integration checks also passed.
+See ERP_STANDARDIZATION.md for details and limitations. Next local cleanup:
+tenant-consistent Leaves date/time display. Hosted rollout remains pending;
+no push, deployment or hosted writes.
+## Phase 4 - Leaves timezone verification (2026-10-04)
+
+Leaves display now uses tenant date/time settings and shared neutral helpers also
+used by CRM history. Date-only leave records do not shift in western browser
+zones. Appointment conflict rescheduling converts tenant wall time to UTC and
+validates daylight-saving ambiguity; preview, persisted time and audit timezone
+agree. No new migration. Build, targeted lint, six date tests, 17 existing
+appointment/workforce integration checks and five focused real ERP scenarios pass.
+Together with the access/sales results, all 20 local scenarios are verified across
+runs. See ERP_STANDARDIZATION.md for evidence and limitations. Local release review
+is next; nothing is pushed/deployed and hosted verification remains pending.
+## Phase 4 - release readiness checkpoint (2026-10-04)
+
+Local implementation/verification is consolidated for commit. See
+[RELEASE_READINESS.md](RELEASE_READINESS.md) for the current release scope,
+verification evidence, remaining hosted checks, migration order and recovery.
+Nine local read-only deployment checks passed again; lint has zero errors and
+four existing warnings. No new schema change or hosted operation. Keep push and
+deployment on hold under the user's instruction; migrate the target before a
+push that may trigger automatic deployment.

@@ -340,3 +340,68 @@ and upgrade comparison are in [CRM_SALES_PHASE_6.md](CRM_SALES_PHASE_6.md).
 Existing hosted regression: 13 passed, 1 intentional admin-only capture skip.
 All 8 screenshots were inspected. Three release gates fail on the older hosted
 version; Phases 2-5 have not yet been verified against these hosted records.
+
+## Phase 4: real local access tests (2026-10-04)
+
+`npm.cmd run test:access:e2e` uses `playwright.local-access.config.ts` and the
+production application at port 3108. It creates random synthetic local tenants
+and signs in through the real credentials form. It never loads saved hosted
+browser state, intercepts API responses, or sends email. This suite is separate
+from the default read-only hosted browser suite.
+
+Prerequisites: Chrome, a current `npm.cmd run build`, and a disposable localhost
+PostgreSQL database named `ls_salon_crm_test` with all migrations applied. The
+fixture connection must be able to insert synthetic tenants/users. The app role
+`crm_test_runtime` must have the existing test-runtime table grants and must be
+NOSUPERUSER/NOBYPASSRLS. Reuse the local release-check database; do not point this
+suite at a hosted database or run fixture/reset commands against one.
+
+```powershell
+$env:CRM_TEST_DATABASE_URL = 'postgresql://postgres@127.0.0.1:55440/ls_salon_crm_test'
+npm.cmd run test:access:e2e
+```
+
+The server script rejects nonlocal/database-name mismatches, checks its runtime
+role and audit migration, clears configured environment keys, then supplies only
+local database/auth settings. Port 3108 must be free; an existing server is never
+reused. Playwright stops the server after the suite. Stop the disposable database
+separately when finished. Fixtures remain for local inspection, with fresh random
+identifiers on subsequent runs; no unrelated data is reset.
+
+The ten serial scenarios cover module allowances/activation/dependencies,
+current role changes and concurrency, manager record scopes, staff ceilings,
+cross-tenant denial, audited manager edits, snapshot redaction and access
+revocation, suspended-session recovery and tenant-switch recovery. Desktop and
+mobile screenshots are under ignored `test-results/local-access`. Traces and
+saved authentication state are disabled. Inspect screenshots before claiming
+visual verification. This does not certify a hosted deployment or replace the
+broader enquiry-to-quotation and operational workflow tests.
+## Extended local workflow suite (2026-10-04)
+
+With the same local database/build prerequisites above, run
+`npm.cmd run test:workflows:e2e` for all 19 access and workflow scenarios.
+`npm.cmd run test:access:e2e` now selects only `access.spec.ts` (ten scenarios).
+The added `sales-workflow.spec.ts` and `erp-workflow.spec.ts` create their own
+random local tenants and records using the shared fixture and server helpers.
+Most workflow mutations use authenticated APIs; subproject navigation, quotation
+revision editing, payment-plan display and leave-list display exercise the UI.
+
+The suite validates quotation and invoice PDF parsing without sending documents.
+Outputs include payment-plan and approved-leave screenshots in the ignored local
+report directory. Each run replaces its test output; review relevant screenshots
+before starting another run. Stop the disposable database when done. The hosted
+read-only suites and saved browser sessions remain unchanged.
+## Leaves timezone regression (2026-10-04)
+
+The local workflow suite now contains 20 scenarios (ten access, five sales, five
+ERP). The ERP contexts run in America/Los_Angeles while their isolated tenant uses
+Asia/Kolkata and dd/MM/yyyy. Coverage includes calendar-date stability, timeline
+timestamps, invalid rescheduling dates, the manager conflict-dialog preview and
+persisted UTC rescheduling before leave approval. Use `npm.cmd run test:dates`
+for six date/history unit checks, including DST gaps and folds. Native date/time
+inputs remain browser controls; displayed records use tenant preferences.
+
+The focused browser command is:
+`npx.cmd playwright test --config playwright.local-access.config.ts erp-workflow.spec.ts`
+It also captures approved-leave.png, leave-history.png and leave-reschedule.png.
+Use the same disposable database and production build prerequisites above.

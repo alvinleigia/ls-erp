@@ -1,16 +1,11 @@
-import { DEFAULT_DATE_FORMAT, formatDateForDisplay } from "@/lib/date"
-import { wallTime } from "./work-time"
+import { formatDateForDisplay } from "@/lib/date"
+import { defaultDateDisplaySettings, formatInstant, type DateDisplaySettings } from "@/lib/date-display"
 
-export type WorkHistoryFormat = { timeZone: string; locale: string; dateFormat: string; timeFormat: "H12" | "H24" }
-export const defaultWorkHistoryFormat: WorkHistoryFormat = { timeZone: "UTC", locale: "en-US", dateFormat: DEFAULT_DATE_FORMAT, timeFormat: "H24" }
+export type WorkHistoryFormat = DateDisplaySettings
+export const defaultWorkHistoryFormat = defaultDateDisplaySettings
 
 export function formatWorkHistoryTime(instant: string, settings: WorkHistoryFormat) {
-  const localDate = wallTime(instant, settings.timeZone).slice(0, 10)
-  const time = new Intl.DateTimeFormat(settings.locale, {
-    timeZone: settings.timeZone, hour: "2-digit", minute: "2-digit",
-    hourCycle: settings.timeFormat === "H12" ? "h12" : "h23",
-  }).format(new Date(instant))
-  return `${formatDateForDisplay(localDate, settings.dateFormat)} ${time} (${settings.timeZone})`
+  return formatInstant(instant, settings)
 }
 
 // Localize the application's stored reschedule sentence at display time, so old
