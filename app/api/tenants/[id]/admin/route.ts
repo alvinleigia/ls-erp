@@ -10,7 +10,7 @@ import {
 } from "@/lib/api-logging"
 import { recordDomainAuditEventSafe } from "@/lib/domain-audit"
 import { requirePlatformConsoleAccess } from "@/lib/platform-console"
-import { prisma } from "@/lib/prisma"
+import { prisma, runWithRlsBypassDbContext } from "@/lib/prisma"
 import { updateTenantAdminSchema } from "@/lib/validation"
 
 const PLATFORM_TENANT_SLUG = (
@@ -52,54 +52,57 @@ export async function GET(
   }
 
   try {
-    const { id } = await params
-    const tenant = await prisma.tenant.findUnique({
-      where: { id },
-      select: {
-        id: true,
-        slug: true,
-        organization: { select: { id: true } },
-      },
-    })
-    if (!tenant) {
-      const response = NextResponse.json({ error: "Tenant not found." }, { status: 404 })
-      logApiRequestSuccess(logContext, 404, { reason: "tenant_not_found", tenantId: id })
-      return withRequestId(response, logContext.requestId)
-    }
-    if (tenant.slug === PLATFORM_TENANT_SLUG) {
-      const response = NextResponse.json(
-        { error: "Platform tenant cannot be changed from this action." },
-        { status: 409 }
-      )
-      logApiRequestSuccess(logContext, 409, { reason: "platform_tenant_restricted", tenantId: id })
-      return withRequestId(response, logContext.requestId)
-    }
-    if (
-      authorized.context.mode === "ORG_MEMBER" &&
-      (!tenant.organization?.id ||
-        !authorized.context.organizationIds.includes(tenant.organization.id))
-    ) {
-      const response = NextResponse.json({ error: "Forbidden." }, { status: 403 })
-      logApiRequestSuccess(logContext, 403, { reason: "tenant_scope_failed", tenantId: id })
-      return withRequestId(response, logContext.requestId)
-    }
+    // Scope cross-tenant work explicitly after platform authorization.
+    return await runWithRlsBypassDbContext(async () => {
+      const { id } = await params
+      const tenant = await prisma.tenant.findUnique({
+        where: { id },
+        select: {
+          id: true,
+          slug: true,
+          organization: { select: { id: true } },
+        },
+      })
+      if (!tenant) {
+        const response = NextResponse.json({ error: "Tenant not found." }, { status: 404 })
+        logApiRequestSuccess(logContext, 404, { reason: "tenant_not_found", tenantId: id })
+        return withRequestId(response, logContext.requestId)
+      }
+      if (tenant.slug === PLATFORM_TENANT_SLUG) {
+        const response = NextResponse.json(
+          { error: "Platform tenant cannot be changed from this action." },
+          { status: 409 }
+        )
+        logApiRequestSuccess(logContext, 409, { reason: "platform_tenant_restricted", tenantId: id })
+        return withRequestId(response, logContext.requestId)
+      }
+      if (
+        authorized.context.mode === "ORG_MEMBER" &&
+        (!tenant.organization?.id ||
+          !authorized.context.organizationIds.includes(tenant.organization.id))
+      ) {
+        const response = NextResponse.json({ error: "Forbidden." }, { status: 403 })
+        logApiRequestSuccess(logContext, 403, { reason: "tenant_scope_failed", tenantId: id })
+        return withRequestId(response, logContext.requestId)
+      }
 
-    const admin = await findTenantAdmin(tenant.id)
-    if (!admin) {
-      const response = NextResponse.json({ error: "Tenant admin user not found." }, { status: 404 })
-      logApiRequestSuccess(logContext, 404, { reason: "tenant_admin_not_found", tenantId: id })
-      return withRequestId(response, logContext.requestId)
-    }
+      const admin = await findTenantAdmin(tenant.id)
+      if (!admin) {
+        const response = NextResponse.json({ error: "Tenant admin user not found." }, { status: 404 })
+        logApiRequestSuccess(logContext, 404, { reason: "tenant_admin_not_found", tenantId: id })
+        return withRequestId(response, logContext.requestId)
+      }
 
-    const response = NextResponse.json({
-      admin: {
-        ...admin,
-        createdAt: admin.createdAt.toISOString(),
-        lastLoginAt: admin.lastLoginAt ? admin.lastLoginAt.toISOString() : null,
-      },
+      const response = NextResponse.json({
+        admin: {
+          ...admin,
+          createdAt: admin.createdAt.toISOString(),
+          lastLoginAt: admin.lastLoginAt ? admin.lastLoginAt.toISOString() : null,
+        },
+      })
+      logApiRequestSuccess(logContext, 200, { tenantId: id, adminId: admin.id })
+      return withRequestId(response, logContext.requestId)
     })
-    logApiRequestSuccess(logContext, 200, { tenantId: id, adminId: admin.id })
-    return withRequestId(response, logContext.requestId)
   } catch (error) {
     logApiRequestError(logContext, error, 500)
     const response = NextResponse.json({ error: "Unable to load tenant admin." }, { status: 500 })
@@ -140,117 +143,120 @@ export async function PATCH(
   }
 
   try {
-    const { id } = await params
-    const tenant = await prisma.tenant.findUnique({
-      where: { id },
-      select: {
-        id: true,
-        slug: true,
-        organization: { select: { id: true } },
-      },
-    })
-    if (!tenant) {
-      const response = NextResponse.json({ error: "Tenant not found." }, { status: 404 })
-      logApiRequestSuccess(logContext, 404, { reason: "tenant_not_found", tenantId: id })
-      return withRequestId(response, logContext.requestId)
-    }
-    if (tenant.slug === PLATFORM_TENANT_SLUG) {
-      const response = NextResponse.json(
-        { error: "Platform tenant cannot be changed from this action." },
-        { status: 409 }
-      )
-      logApiRequestSuccess(logContext, 409, { reason: "platform_tenant_restricted", tenantId: id })
-      return withRequestId(response, logContext.requestId)
-    }
-    if (
-      authorized.context.mode === "ORG_MEMBER" &&
-      (!tenant.organization?.id ||
-        !authorized.context.organizationIds.includes(tenant.organization.id))
-    ) {
-      const response = NextResponse.json({ error: "Forbidden." }, { status: 403 })
-      logApiRequestSuccess(logContext, 403, { reason: "tenant_scope_failed", tenantId: id })
-      return withRequestId(response, logContext.requestId)
-    }
-
-    const admin = await findTenantAdmin(tenant.id)
-    if (!admin) {
-      const response = NextResponse.json({ error: "Tenant admin user not found." }, { status: 404 })
-      logApiRequestSuccess(logContext, 404, { reason: "tenant_admin_not_found", tenantId: id })
-      return withRequestId(response, logContext.requestId)
-    }
-
-    const data = parsed.data
-    const nextEmail = data.email?.trim().toLowerCase()
-    if (nextEmail && nextEmail !== admin.email.toLowerCase()) {
-      const existing = await prisma.user.findFirst({
-        where: { email: nextEmail },
-        select: { id: true },
+    // Scope cross-tenant work explicitly after platform authorization.
+    return await runWithRlsBypassDbContext(async () => {
+      const { id } = await params
+      const tenant = await prisma.tenant.findUnique({
+        where: { id },
+        select: {
+          id: true,
+          slug: true,
+          organization: { select: { id: true } },
+        },
       })
-      if (existing && existing.id !== admin.id) {
-        const response = NextResponse.json({ error: "Email already in use." }, { status: 409 })
-        logApiRequestSuccess(logContext, 409, { reason: "duplicate_email", tenantId: id })
+      if (!tenant) {
+        const response = NextResponse.json({ error: "Tenant not found." }, { status: 404 })
+        logApiRequestSuccess(logContext, 404, { reason: "tenant_not_found", tenantId: id })
         return withRequestId(response, logContext.requestId)
       }
-    }
+      if (tenant.slug === PLATFORM_TENANT_SLUG) {
+        const response = NextResponse.json(
+          { error: "Platform tenant cannot be changed from this action." },
+          { status: 409 }
+        )
+        logApiRequestSuccess(logContext, 409, { reason: "platform_tenant_restricted", tenantId: id })
+        return withRequestId(response, logContext.requestId)
+      }
+      if (
+        authorized.context.mode === "ORG_MEMBER" &&
+        (!tenant.organization?.id ||
+          !authorized.context.organizationIds.includes(tenant.organization.id))
+      ) {
+        const response = NextResponse.json({ error: "Forbidden." }, { status: 403 })
+        logApiRequestSuccess(logContext, 403, { reason: "tenant_scope_failed", tenantId: id })
+        return withRequestId(response, logContext.requestId)
+      }
 
-    const passwordHash = data.password?.trim()
-      ? await bcrypt.hash(data.password.trim(), 10)
-      : undefined
+      const admin = await findTenantAdmin(tenant.id)
+      if (!admin) {
+        const response = NextResponse.json({ error: "Tenant admin user not found." }, { status: 404 })
+        logApiRequestSuccess(logContext, 404, { reason: "tenant_admin_not_found", tenantId: id })
+        return withRequestId(response, logContext.requestId)
+      }
 
-    const updated = await prisma.user.update({
-      where: { id: admin.id },
-      data: {
-        ...(data.name?.trim() ? { name: data.name.trim() } : {}),
-        ...(nextEmail ? { email: nextEmail } : {}),
-        ...(data.phone?.trim() ? { phone: data.phone.trim() } : data.phone === "" ? { phone: null } : {}),
-        ...(data.status ? { status: data.status } : {}),
-        ...(passwordHash ? { passwordHash } : {}),
-      },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        phone: true,
-        role: true,
-        status: true,
-        createdAt: true,
-        lastLoginAt: true,
-      },
+      const data = parsed.data
+      const nextEmail = data.email?.trim().toLowerCase()
+      if (nextEmail && nextEmail !== admin.email.toLowerCase()) {
+        const existing = await prisma.user.findFirst({
+          where: { email: nextEmail },
+          select: { id: true },
+        })
+        if (existing && existing.id !== admin.id) {
+          const response = NextResponse.json({ error: "Email already in use." }, { status: 409 })
+          logApiRequestSuccess(logContext, 409, { reason: "duplicate_email", tenantId: id })
+          return withRequestId(response, logContext.requestId)
+        }
+      }
+
+      const passwordHash = data.password?.trim()
+        ? await bcrypt.hash(data.password.trim(), 10)
+        : undefined
+
+      const updated = await prisma.user.update({
+        where: { id: admin.id },
+        data: {
+          ...(data.name?.trim() ? { name: data.name.trim() } : {}),
+          ...(nextEmail ? { email: nextEmail } : {}),
+          ...(data.phone?.trim() ? { phone: data.phone.trim() } : data.phone === "" ? { phone: null } : {}),
+          ...(data.status ? { status: data.status } : {}),
+          ...(passwordHash ? { passwordHash } : {}),
+        },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          phone: true,
+          role: true,
+          status: true,
+          createdAt: true,
+          lastLoginAt: true,
+        },
+      })
+
+      await recordDomainAuditEventSafe(prisma, {
+        tenantId: actorTenantId,
+        event: "tenant.admin.updated",
+        entityType: "Tenant",
+        entityId: tenant.id,
+        actorUserId: sessionUserId,
+        actorRole,
+        requestId: logContext.requestId,
+        before: {
+          adminUserId: admin.id,
+          name: admin.name,
+          email: admin.email,
+          phone: admin.phone,
+          status: admin.status,
+        },
+        after: {
+          adminUserId: updated.id,
+          name: updated.name,
+          email: updated.email,
+          phone: updated.phone,
+          status: updated.status,
+        },
+      })
+
+      const response = NextResponse.json({
+        admin: {
+          ...updated,
+          createdAt: updated.createdAt.toISOString(),
+          lastLoginAt: updated.lastLoginAt ? updated.lastLoginAt.toISOString() : null,
+        },
+      })
+      logApiRequestSuccess(logContext, 200, { tenantId: id, adminId: updated.id })
+      return withRequestId(response, logContext.requestId)
     })
-
-    await recordDomainAuditEventSafe(prisma, {
-      tenantId: actorTenantId,
-      event: "tenant.admin.updated",
-      entityType: "Tenant",
-      entityId: tenant.id,
-      actorUserId: sessionUserId,
-      actorRole,
-      requestId: logContext.requestId,
-      before: {
-        adminUserId: admin.id,
-        name: admin.name,
-        email: admin.email,
-        phone: admin.phone,
-        status: admin.status,
-      },
-      after: {
-        adminUserId: updated.id,
-        name: updated.name,
-        email: updated.email,
-        phone: updated.phone,
-        status: updated.status,
-      },
-    })
-
-    const response = NextResponse.json({
-      admin: {
-        ...updated,
-        createdAt: updated.createdAt.toISOString(),
-        lastLoginAt: updated.lastLoginAt ? updated.lastLoginAt.toISOString() : null,
-      },
-    })
-    logApiRequestSuccess(logContext, 200, { tenantId: id, adminId: updated.id })
-    return withRequestId(response, logContext.requestId)
   } catch (error) {
     logApiRequestError(logContext, error, 500)
     const response = NextResponse.json({ error: "Unable to update tenant admin." }, { status: 500 })

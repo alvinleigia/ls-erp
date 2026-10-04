@@ -24,6 +24,7 @@ logger.warn = () => {}
 logger.error = (_event, context) => { errors.push(context.error?.message || "Unknown server error") }
 const { POST, GET } = require("../app/api/tenants/route.ts")
 const { GET: moduleGet, PATCH: modulePatch } = require("../app/api/tenants/[id]/modules/route.ts")
+const { GET: adminGet, PATCH: adminPatch } = require("../app/api/tenants/[id]/admin/route.ts")
 const platformSession = { user: { id: "provision_platform_admin", tenantId: "provision_platform", role: "ADMIN" } }
 const input = (slug, extra = {}) => ({ name: "Provision test", slug, adminName: "Business admin", adminEmail: `${slug}@example.test`, adminPassword: "SyntheticTest!2026", ...extra })
 const request = (method, data, hostname = "provision-platform.localhost") => new Request(`http://${hostname}/api/tenants`, { method, headers: { "Content-Type": "application/json", host: hostname }, ...(data ? { body: JSON.stringify(data) } : {}) })
@@ -78,12 +79,40 @@ test("duplicate admin detection works across tenants without partial provisionin
   assert.equal((await root.query('SELECT id FROM "Tenant" WHERE slug=$1', ["provision-duplicate"])).rowCount, 0)
 })
 
+test("platform admin can read and edit the tenant administrator under RLS with an audit trail", async () => {
+  const tenant = (await root.query('SELECT id FROM "Tenant" WHERE slug=$1', ["provision-business"])).rows[0]
+  const context = { params: Promise.resolve({ id: tenant.id }) }
+  const req = (method, data) => new Request(`http://provision-platform.localhost/api/tenants/${tenant.id}/admin`, { method, headers: { host: "provision-platform.localhost", "Content-Type": "application/json" }, ...(data ? { body: JSON.stringify(data) } : {}) })
+  const loaded = await sessions.run(platformSession, () => adminGet(req("GET"), context))
+  assert.equal(loaded.status, 200, JSON.stringify(await loaded.clone().json()))
+  assert.equal((await loaded.json()).admin.email, "provision-business@example.test")
+  const updated = await sessions.run(platformSession, () => adminPatch(req("PATCH", { name: "Updated business admin", phone: "+919876543210" }), context))
+  assert.equal(updated.status, 200, JSON.stringify({ body: await updated.clone().json(), errors }))
+  assert.equal((await updated.json()).admin.name, "Updated business admin")
+  const audit = (await root.query('SELECT "before", "after" FROM "AuditLog" WHERE event=$1 AND "entityId"=$2 AND "tenantId"=$3', ["tenant.admin.updated", tenant.id, "provision_platform"])).rows
+  assert.equal(audit.length, 1)
+  assert.equal(audit[0].before.name, "Business admin")
+  assert.equal(audit[0].after.name, "Updated business admin")
+  const { prisma } = require("../lib/prisma.ts")
+  assert.equal(await prisma.user.count(), 0, "platform bypass must not leak to later reads")
+  assert.equal((await sessions.run(null, () => adminGet(req("GET"), context))).status, 401)
+  assert.equal((await sessions.run(null, () => adminPatch(req("PATCH", { name: "Denied" }), context))).status, 401)
+  const duplicate = await sessions.run(platformSession, () => adminPatch(req("PATCH", { email: "provision-platform@example.test" }), context))
+  assert.equal(duplicate.status, 409)
+  const platformContext = { params: Promise.resolve({ id: "provision_platform" }) }
+  assert.equal((await sessions.run(platformSession, () => adminGet(req("GET"), platformContext))).status, 409)
+  assert.equal((await sessions.run(platformSession, () => adminPatch(req("PATCH", { name: "Denied" }), platformContext))).status, 409)
+})
+
 test("unauthenticated users and business administrators cannot provision or list other tenants", async () => {
   assert.equal((await sessions.run(null, () => POST(request("POST", input("provision-denied"))))).status, 401)
   const business = (await root.query('SELECT t.id AS "tenantId", u.id FROM "Tenant" t JOIN "User" u ON u."tenantId"=t.id WHERE t.slug=$1', ["provision-business"])).rows[0]
   const session = { user: { ...business, role: "ADMIN" } }
   assert.equal((await sessions.run(session, () => POST(request("POST", input("provision-denied"), "provision-business.localhost")))).status, 403)
   assert.equal((await sessions.run(session, () => GET(request("GET", undefined, "provision-business.localhost")))).status, 403)
+  const adminContext = { params: Promise.resolve({ id: business.tenantId }) }
+  assert.equal((await sessions.run(session, () => adminGet(request("GET", undefined, "provision-business.localhost"), adminContext))).status, 403)
+  assert.equal((await sessions.run(session, () => adminPatch(request("PATCH", { name: "Denied" }, "provision-business.localhost"), adminContext))).status, 403)
   assert.equal((await root.query('SELECT id FROM "Tenant" WHERE slug=$1', ["provision-denied"])).rowCount, 0)
 })
 
@@ -100,6 +129,13 @@ test("organization-scoped platform users can provision and list only their organ
   assert.equal(body.total, 1)
   assert.equal(body.items[0].slug, "provision-own-org")
   assert.equal(body.items[0].userCount, 1)
+  const ownContext = { params: Promise.resolve({ id: body.items[0].id }) }
+  assert.equal((await sessions.run(session, () => adminGet(request("GET"), ownContext))).status, 200)
+  assert.equal((await sessions.run(session, () => adminPatch(request("PATCH", { name: "Organization business admin" }), ownContext))).status, 200)
+  const outsideId = (await root.query('SELECT id FROM "Tenant" WHERE slug=$1', ["provision-business"])).rows[0].id
+  const outsideContext = { params: Promise.resolve({ id: outsideId }) }
+  assert.equal((await sessions.run(session, () => adminGet(request("GET"), outsideContext))).status, 403)
+  assert.equal((await sessions.run(session, () => adminPatch(request("PATCH", { name: "Denied" }), outsideContext))).status, 403)
 })
 
 test("failed baseline settings creation rolls back both the tenant and its new administrator", async () => {
