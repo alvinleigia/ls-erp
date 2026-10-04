@@ -34,9 +34,9 @@ This is the baseline for new modules (API + UI) in this codebase.
 - Tenant admin profile management (name/email/phone/status/password) is handled via `/api/tenants/[id]/admin` and exposed from `/settings/tenants` row actions.
 - Platform danger reset is handled via `/api/tenants/reset-all` (confirmation token required); preserve the configured platform-admin login tenant and allow optional platform-tenant preservation.
 - Platform super-admin scope is provisioning-only:
-  - allowed UI surface: `/settings/tenants`.
-  - allowed API surface: `/api/tenants*` (plus auth/session endpoints).
-  - block platform super-admin from domain modules/data routes (`/users`, `/services`, `/appointments`, `/inventory`, `/shifts`, `/leaves`, `/reports`, `/settings/*` except tenants).
+  - allowed UI surfaces: `/settings/tenants` and `/settings/organizations`.
+  - allowed API surfaces: `/api/tenants` and `/api/organizations`, including their child routes (plus auth/session endpoints).
+  - block platform super-admin from domain modules/data routes (`/users`, `/services`, `/appointments`, `/inventory`, `/shifts`, `/leaves`, `/reports`, `/settings/*` except tenants and organizations).
 - Tenant lifecycle transitions are status-based (`ACTIVE`, `SUSPENDED`, `ARCHIVED`); never hard-delete tenants through admin flows.
 - Tenant admin credential recovery should use reset-token flow (`PasswordResetToken`) and tenant-aware reset URLs (subdomain/root-domain aware).
 - Platform tenant records (slug matching `PLATFORM_ADMIN_TENANT_SLUG`) must be protected from accidental lifecycle mutations.

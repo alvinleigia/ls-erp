@@ -51,18 +51,20 @@ export default auth((request) => {
 
   const pathname = request.nextUrl.pathname
   const isTenantApi = pathname === "/api/tenants" || pathname.startsWith("/api/tenants/")
+  const isOrganizationApi = pathname === "/api/organizations" || pathname.startsWith("/api/organizations/")
   const isAuthApi = pathname.startsWith("/api/auth/")
   const isTenantSettings = pathname === "/settings/tenants" || pathname.startsWith("/settings/tenants/")
+  const isOrganizationSettings = pathname === "/settings/organizations" || pathname.startsWith("/settings/organizations/")
   const isPublicAuthPage = pathname.startsWith("/auth/")
 
-  if (pathname.startsWith("/api/") && !isTenantApi && !isAuthApi) {
+  if (pathname.startsWith("/api/") && !isTenantApi && !isOrganizationApi && !isAuthApi) {
     return NextResponse.json({ error: "Forbidden." }, { status: 403 })
   }
-  if (isTenantApi || isAuthApi) {
+  if (isTenantApi || isOrganizationApi || isAuthApi) {
     return NextResponse.next()
   }
 
-  if (isTenantSettings || isPublicAuthPage) {
+  if (isTenantSettings || isOrganizationSettings || isPublicAuthPage) {
     return NextResponse.next()
   }
 
