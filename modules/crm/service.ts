@@ -1,3 +1,4 @@
+import { createEnquiryImportService } from "./import-service"
 import { requireWriteFields, permits, requirePermission } from "@/platform/access/policy"
 import type { Requirement } from "@/platform/access/catalog"
 import { findAccessUser, assignedPermissions } from "@/platform/access/server"
@@ -85,7 +86,7 @@ export function createCrmService<Fields extends object = object, Metadata extend
   async function audit(tx: Tx, actor: CrmActor, event: string, entityId: string, before?: Prisma.InputJsonValue, after?: Prisma.InputJsonValue) {
     await recordDomainAuditEvent(tx, {
       tenantId: actor.tenantId, actorUserId: actor.userId, actorRole: actor.role as Role,
-      requestId: actor.requestId, event, entityType: event.startsWith("crm.quotationTemplate.") ? "CrmQuotationTemplate" : event.startsWith("crm.quotation.") ? "CrmQuotation" : event.startsWith("crm.preset.") ? "CrmPreset" : event.startsWith("crm.team.") ? "CrmSalesTeam" : event.startsWith("crm.activityType.") ? "CrmActivityType" : event.startsWith("crm.lostReason.") ? "CrmLostReason" : event.startsWith("crm.source.") ? "CrmLeadSource" : event.startsWith("crm.rule.") ? "CrmFollowUpRule" : event.startsWith("crm.plan.") ? "CrmActivityPlan" : event.startsWith("crm.work") ? "CrmTask" : event.startsWith("crm.opportunity") ? "CrmOpportunity" : event.startsWith("crm.pipeline") ? "CrmPipeline" : event.startsWith("crm.account") ? "CrmAccount" : event.startsWith("crm.contact") ? "CrmContact" : "CrmEnquiry",
+      requestId: actor.requestId, event, entityType: event.startsWith("crm.enquiry.import.") ? "CrmEnquiryImport" : event.startsWith("crm.quotationTemplate.") ? "CrmQuotationTemplate" : event.startsWith("crm.quotation.") ? "CrmQuotation" : event.startsWith("crm.preset.") ? "CrmPreset" : event.startsWith("crm.team.") ? "CrmSalesTeam" : event.startsWith("crm.activityType.") ? "CrmActivityType" : event.startsWith("crm.lostReason.") ? "CrmLostReason" : event.startsWith("crm.source.") ? "CrmLeadSource" : event.startsWith("crm.rule.") ? "CrmFollowUpRule" : event.startsWith("crm.plan.") ? "CrmActivityPlan" : event.startsWith("crm.work") ? "CrmTask" : event.startsWith("crm.opportunity") ? "CrmOpportunity" : event.startsWith("crm.pipeline") ? "CrmPipeline" : event.startsWith("crm.account") ? "CrmAccount" : event.startsWith("crm.contact") ? "CrmContact" : "CrmEnquiry",
       entityId, before, after,
     })
   }
@@ -110,7 +111,51 @@ export function createCrmService<Fields extends object = object, Metadata extend
     if (!assignee) throw new CrmError(400, "Choose an active salesperson in this business.")
   }
 
+  async function createEnquiryRecord(tx: Tx, actor: CrmActor, input: unknown, validateOnly = false) {
+    const custom = splitCustomFields(input)
+    const { core, extension } = extensions.splitWrite(custom.core)
+    const data = crmEnquiryCreateSchema.parse(core)
+    requireWriteFields(actor, "enquiries", undefined, data)
+    await checkAssignee(tx, actor, data.assignedUserId)
+    const team = await resolveSalesTeam(tx, actor, data.salesTeamId, data.assignedUserId)
+    if (team?.workflow === "DIRECT") throw new CrmError(400, "This team starts with opportunities. Create an opportunity instead.")
+    if (data.newContact) requirePermission(actor, "contacts.create")
+    if (validateOnly) {
+      // Import always creates a new contact and uses configured source IDs.
+      // Preview uses the same validators without writing CRM records or audit events.
+      if (!data.newContact || data.accountId || data.source !== undefined) throw new CrmError(400, "Unsupported import contact or source.")
+      requireWriteFields(actor, "contacts", undefined, data.newContact)
+      await enquiryContext(tx, actor, "", data)
+      await extensions.validateCreate?.(tx, actor, extension)
+      await saveCustomFields(tx, actor, enquiryFields, { id: "", createdAt: new Date(), salesTeamId: team?.id ?? null }, custom.patch, true, false, true)
+      return null
+    }
+    const contact = data.newContact
+      ? await tx.crmContact.create({ data: { ...data.newContact, email: data.newContact.email || null, phone: data.newContact.phone || null, tenantId: actor.tenantId, ownerUserId: actor.userId } })
+      : await tx.crmContact.findFirst({ where: { ...contactScope(actor), id: data.contactId, archived: false } })
+    if (!contact) throw new CrmError(404, "Active contact not found.")
+    if (data.newContact) {
+      await audit(tx, actor, "crm.contact.created", contact.id, undefined, data.newContact)
+      if (data.accountId) {
+        const account = await tx.crmAccount.findFirst({ where: { ...accountScope(actor), id: data.accountId, archived: false }, select: { id: true } })
+        if (!account) throw new CrmError(404, "Active business account not found.")
+        await tx.crmAccountContact.create({ data: { tenantId: actor.tenantId, contactId: contact.id, accountId: account.id } })
+        await audit(tx, actor, "crm.contact.account.linked", contact.id, undefined, { accountId: account.id })
+        await audit(tx, actor, "crm.account.contact.linked", account.id, undefined, { contactId: contact.id })
+      }
+    }
+    const context = await enquiryContext(tx, actor, contact.id, data)
+    const enquiry = await tx.crmEnquiry.create({ data: { salesTeamId: team?.id ?? null, title: data.title, requirements: data.requirements, assignedUserId: data.assignedUserId, contactId: contact.id, ...context, tenantId: actor.tenantId }, include: enquiryInclude })
+    await extensions.save(tx, actor, "enquiry", enquiry.id, extension)
+    await saveCustomFields(tx, actor, enquiryFields, enquiry, custom.patch, true)
+    await activity(tx, actor, enquiry.id, "created", "Enquiry created.")
+    await activity(tx, actor, enquiry.id, "assigned", `Assigned to ${enquiry.assignee.name || "salesperson"}.`)
+    await audit(tx, actor, "crm.enquiry.created", enquiry.id, undefined, snapshot(enquiry))
+    return enquiry
+  }
+
   return {
+    ...createEnquiryImportService({ run, audit }, extensions, createEnquiryRecord),
     ...(install ? install({ run, audit }) : {} as Addons),
     listExtensionChoices(key: string, input: unknown) { return run(workspaceRead, (tx, actor) => extensions.choices(tx, actor, key, input)) },
     ...createSalesService({ run, audit, checkAssignee }, extensions),
@@ -302,35 +347,8 @@ export function createCrmService<Fields extends object = object, Metadata extend
       })
     },
     createEnquiry(input: unknown) {
-      const custom = splitCustomFields(input)
-      const { core, extension } = extensions.splitWrite(custom.core)
-      const data = crmEnquiryCreateSchema.parse(core)
-      return run("enquiries.create", async (tx, actor) => { requireWriteFields(actor, "enquiries", undefined, data);
-        await checkAssignee(tx, actor, data.assignedUserId)
-        const team = await resolveSalesTeam(tx, actor, data.salesTeamId, data.assignedUserId)
-        if (team?.workflow === "DIRECT") throw new CrmError(400, "This team starts with opportunities. Create an opportunity instead.")
-        if (data.newContact) requirePermission(actor, "contacts.create")
-        const contact = data.newContact
-          ? await tx.crmContact.create({ data: { ...data.newContact, email: data.newContact.email || null, phone: data.newContact.phone || null, tenantId: actor.tenantId, ownerUserId: actor.userId } })
-          : await tx.crmContact.findFirst({ where: { ...contactScope(actor), id: data.contactId, archived: false } })
-        if (!contact) throw new CrmError(404, "Active contact not found.")
-        if (data.newContact) {
-          await audit(tx, actor, "crm.contact.created", contact.id, undefined, data.newContact)
-          if (data.accountId) {
-            const account = await tx.crmAccount.findFirst({ where: { ...accountScope(actor), id: data.accountId, archived: false }, select: { id: true } })
-            if (!account) throw new CrmError(404, "Active business account not found.")
-            await tx.crmAccountContact.create({ data: { tenantId: actor.tenantId, contactId: contact.id, accountId: account.id } })
-            await audit(tx, actor, "crm.contact.account.linked", contact.id, undefined, { accountId: account.id })
-            await audit(tx, actor, "crm.account.contact.linked", account.id, undefined, { contactId: contact.id })
-          }
-        }
-        const context = await enquiryContext(tx, actor, contact.id, data)
-        const enquiry = await tx.crmEnquiry.create({ data: { salesTeamId: team?.id ?? null, title: data.title, requirements: data.requirements, assignedUserId: data.assignedUserId, contactId: contact.id, ...context, tenantId: actor.tenantId }, include: enquiryInclude })
-        await extensions.save(tx, actor, "enquiry", enquiry.id, extension)
-        await saveCustomFields(tx, actor, enquiryFields, enquiry, custom.patch, true)
-        await activity(tx, actor, enquiry.id, "created", "Enquiry created.")
-        await activity(tx, actor, enquiry.id, "assigned", `Assigned to ${enquiry.assignee.name || "salesperson"}.`)
-        await audit(tx, actor, "crm.enquiry.created", enquiry.id, undefined, snapshot(enquiry))
+      return run("enquiries.create", async (tx, actor) => {
+        const enquiry = (await createEnquiryRecord(tx, actor, input))!
         return { ...(await extensions.decorate(tx, actor, "enquiry", await maskReferrals(tx, actor, [enquiry]))).items[0], customFields: await readCustomFields(tx, actor, enquiryFields, enquiry) }
       })
     },

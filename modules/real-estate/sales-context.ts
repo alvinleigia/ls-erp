@@ -44,10 +44,10 @@ export async function withPropertyContext<T extends { id: string }>(tx: Tx, acto
   return records.map(record => ({ ...record, realEstateEnabled: enabled, propertyContext: byRecord.get(record.id) || null }))
 }
 
-export async function savePropertyContext(tx: Tx, actor: BusinessActor, kind: Kind, id: string, input: PropertyContextInput | null | undefined) {
+export async function savePropertyContext(tx: Tx, actor: BusinessActor, kind: Kind, id: string, input: PropertyContextInput | null | undefined, validateOnly = false) {
   if (input === undefined) return // Old callers and disabled-module edits preserve links.
   if (!await realEstateEnabled(tx, actor.tenantId)) throw new BusinessError(403, "Enable Real Estate before changing property context.")
-  const before = kind === "enquiry"
+  const before = validateOnly ? null : kind === "enquiry"
     ? await tx.realEstateEnquiryContext.findUnique({ where: { tenantId_enquiryId: { tenantId: actor.tenantId, enquiryId: id } } })
     : await tx.realEstateOpportunityContext.findUnique({ where: { tenantId_opportunityId: { tenantId: actor.tenantId, opportunityId: id } } })
   const projectId = input?.projectId || null, subprojectId = input?.subprojectId || null
@@ -71,6 +71,7 @@ export async function savePropertyContext(tx: Tx, actor: BusinessActor, kind: Ki
     propertyCategoryName: category ? (category.id === before?.propertyCategory ? before.propertyCategoryName : category.name) : null,
     buyingTimeframeName: timeframe ? (timeframe.id === before?.buyingTimeframe ? before.buyingTimeframeName : timeframe.name) : null,
   }
+  if (validateOnly) return
   if (kind === "enquiry") {
     if (input === null) await tx.realEstateEnquiryContext.deleteMany({ where: { tenantId: actor.tenantId, enquiryId: id } })
     else await tx.realEstateEnquiryContext.upsert({ where: { tenantId_enquiryId: { tenantId: actor.tenantId, enquiryId: id } }, create: { tenantId: actor.tenantId, enquiryId: id, ...data }, update: data })

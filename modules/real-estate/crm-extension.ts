@@ -15,6 +15,32 @@ const projectJoins = Prisma.sql`
   LEFT JOIN "RealEstateProject" sp ON sp.id = x."subprojectId" AND sp."tenantId" = r."tenantId"`
 
 export const realEstateCrmExtension: CrmExtensions<Omit<Fields, "id">, Metadata> = {
+  async importFields(tx, actor) {
+    if (!await realEstateEnabled(tx, actor.tenantId)) return []
+    const projects = await tx.realEstateProject.findMany({ where: { tenantId: actor.tenantId, archived: false,
+      ...(actor.role === "STAFF" ? { OR: [{ members: { some: { tenantId: actor.tenantId, userId: actor.userId } } }, { parent: { archived: false, members: { some: { tenantId: actor.tenantId, userId: actor.userId } } } }] } : {}),
+    }, select: { id: true, name: true, code: true, parentId: true }, orderBy: { name: "asc" }, take: 5000 })
+    const [categories, timeframes] = await Promise.all([
+      tx.realEstatePropertyCategory.findMany({ where: { tenantId: actor.tenantId, archived: false }, select: { id: true, name: true }, orderBy: { name: "asc" }, take: 5000 }),
+      tx.realEstateBuyingTimeframe.findMany({ where: { tenantId: actor.tenantId, archived: false }, select: { id: true, name: true }, orderBy: { name: "asc" }, take: 5000 }),
+    ])
+    return [
+      { key: "projectId", label: "Project", type: "choice", choices: projects.filter(p => !p.parentId).map(p => ({ ...p, aliases: [p.code] })) },
+      { key: "subprojectId", label: "Subproject", type: "choice", choices: projects.filter(p => p.parentId).map(p => ({ ...p, aliases: [p.code] })) },
+      { key: "budgetMin", label: "Minimum budget", type: "number" }, { key: "budgetMax", label: "Maximum budget", type: "number" },
+      { key: "budgetCurrency", label: "Budget currency" },
+      { key: "propertyCategory", label: "Preferred property category", aliases: ["Property category"], type: "choice", choices: categories },
+      { key: "bedrooms", label: "Bedrooms", type: "number" },
+      { key: "buyingTimeframe", label: "Buying timeframe", type: "choice", choices: timeframes },
+    ]
+  },
+  importInput(values) {
+    const propertyContext = Object.fromEntries(["projectId", "subprojectId", "budgetMin", "budgetMax", "budgetCurrency", "propertyCategory", "bedrooms", "buyingTimeframe"].filter(k => values[k] !== undefined).map(k => [k, k === "bedrooms" ? Number(values[k]) : values[k]]))
+    return Object.keys(propertyContext).length ? { propertyContext } : {}
+  },
+  async validateCreate(tx, actor, input) {
+    await savePropertyContext(tx, actor, "enquiry", "", writeSchema.parse(input).propertyContext, true)
+  },
   async quotationContext(tx, actor, opportunityId) {
     if (!await realEstateEnabled(tx, actor.tenantId)) return []
     const context = await tx.realEstateOpportunityContext.findFirst({ where: { tenantId: actor.tenantId, opportunityId }, include: { project: { select: { name: true, developerAccount: { select: { name: true } } } }, subproject: { select: { name: true } } } })

@@ -803,6 +803,7 @@ model Organization {
 }
 
 model Tenant {
+  enquiryImports CrmEnquiryImport[]
   accessRoles TenantAccessRole[]
   quotationTemplates CrmQuotationTemplate[]
   quotations CrmQuotation[]
@@ -872,6 +873,39 @@ model Tenant {
 
   @@index([status])
   @@index([organizationId])
+}
+
+model CrmEnquiryImport {
+  id String @id @default(cuid())
+  tenantId String
+  createdByUserId String
+  fileName String
+  status String @default("MAPPING")
+  headers Json
+  config Json @default("{}")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  rows CrmEnquiryImportRow[]
+  @@unique([tenantId, id])
+  @@index([tenantId, createdByUserId, createdAt, id])
+}
+
+model CrmEnquiryImportRow {
+  tenantId String
+  importId String
+  rowNumber Int
+  values Json
+  status String @default("PENDING")
+  errors Json @default("[]")
+  email String?
+  phone String?
+  enquiryId String?
+  batch CrmEnquiryImport @relation(fields: [tenantId, importId], references: [tenantId, id], onDelete: Cascade)
+  @@id([tenantId, importId, rowNumber])
+  @@index([tenantId, importId, status, rowNumber])
+  @@index([tenantId, importId, email, rowNumber])
+  @@index([tenantId, importId, phone, rowNumber])
 }
 
 model TenantDomain {

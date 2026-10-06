@@ -21,6 +21,7 @@ const routes: [string, Resource][] = [
 ]
 export function routeResource(path: string) { if (path === "/settings") return "businessSettings"; return routes.find(([base]) => path === base || path.startsWith(`${base}/`))?.[1] }
 export function routeRequirement(path: string): Requirement | undefined {
+  if (path === "/crm/enquiries/import") return ["enquiries.create", "contacts.create"]
   if (path === "/settings") return "businessSettings.read"
   if (path === "/reports/coupon-usage") return ["appointmentCoupons.read", "appointments.read"]
   if (path === "/crm/overview") return ["reports.read", "activities.read", "opportunities.read"]

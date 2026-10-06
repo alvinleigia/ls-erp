@@ -1,3 +1,11 @@
+## 2026-10-06: Enquiry spreadsheet import
+
+CSV/XLSX upload, column mapping, read-only row validation, resumable import and
+correction download are implemented. Duplicate email/phone rows are skipped with
+no updates or contact reuse. Shared enquiry, property and custom-field rules apply.
+See [enquiry import](CRM_ENQUIRY_IMPORT.md) for limits, access and verification.
+Migration: `20261006100000_enquiry_import`.
+
 ## 2026-09-29: Project detail interface (release)
 
 Projects and subprojects now share a read-only overview, record-local tabs and

@@ -135,5 +135,5 @@ export function RecordList({ kind, enquiryId, accountId, projectId: fixedProject
     <DataTable table={table} loading={loading} emptyMessage={`No ${title.toLowerCase()} found.`} />
     <CrmTablePagination table={table} totalRows={total} loading={loading} />
   </>
-  return enquiryId || accountId || fixedProjectId ? <CrmSection title={title}>{content}</CrmSection> : <section className={crmPageClass}><CrmPageHeader title={title} actions={kind !== "tasks" && !accountId && <Button asChild><Link href={"/crm/" + kind + "/new"}>New {kind === "accounts" ? "account" : kind === "contacts" ? "contact" : "enquiry"}</Link></Button>} /><CrmSurface>{content}</CrmSurface></section>
+  return enquiryId || accountId || fixedProjectId ? <CrmSection title={title}>{content}</CrmSection> : <section className={crmPageClass}><CrmPageHeader title={title} actions={kind !== "tasks" && !accountId && <>{kind === "enquiries" && <Button variant="outline" asChild><Link href="/crm/enquiries/import">Import enquiries</Link></Button>}<Button asChild><Link href={"/crm/" + kind + "/new"}>New {kind === "accounts" ? "account" : kind === "contacts" ? "contact" : "enquiry"}</Link></Button></>} /><CrmSurface>{content}</CrmSurface></section>
 }

@@ -1,5 +1,6 @@
 import { Prisma } from "@prisma/client"
 import { CrmError, type CrmActor } from "./policy"
+import type { ImportField } from "./import-types"
 
 export type CrmRecordKind = "enquiry" | "opportunity"
 type Tx = Prisma.TransactionClient
@@ -28,6 +29,9 @@ export const emptyReportExtension: CrmReportExtension = {
 // Application composition injects an implementation. Core CRM never selects an
 // industry. All hooks receive the existing transaction and freshly checked actor.
 export interface CrmExtensions<Fields extends object = object, Metadata extends object = object> {
+  importFields?(tx: Tx, actor: CrmActor): Promise<ImportField[]>
+  importInput?(values: Record<string, unknown>): object
+  validateCreate?(tx: Tx, actor: CrmActor, extension: unknown): Promise<void>
   quotationContext?(tx: Tx, actor: CrmActor, opportunityId: string): Promise<{ label: string; value: string }[]>
   splitWrite(input: unknown): { core: unknown; extension: unknown }
   assertConversionInput(extension: unknown): void

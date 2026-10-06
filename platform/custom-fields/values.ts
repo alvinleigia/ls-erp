@@ -66,7 +66,7 @@ export async function readCustomFields(tx: Tx, actor: BusinessActor, resource: F
 }
 
 // Call only after the domain service authorizes the record. Writes share its transaction/version.
-export async function saveCustomFields(tx: Tx, actor: BusinessActor, resource: FieldResource, record: { id: string; createdAt: Date; customFieldsCreatedAt?: Date | null; salesTeamId?: string | null }, patch: Record<string, FieldValue>, isNew = false, copied = false) {
+export async function saveCustomFields(tx: Tx, actor: BusinessActor, resource: FieldResource, record: { id: string; createdAt: Date; customFieldsCreatedAt?: Date | null; salesTeamId?: string | null }, patch: Record<string, FieldValue>, isNew = false, copied = false, validateOnly = false) {
   const fields = await definitions(tx, actor, resource, true, record.salesTeamId ?? null)
   const byId = new Map(fields.map(field => [field.id, field]))
   for (const id of Object.keys(patch)) {
@@ -74,7 +74,7 @@ export async function saveCustomFields(tx: Tx, actor: BusinessActor, resource: F
     if (!field || !editableField(actor, field) || (copied && field.scope === "SALES")) throw new BusinessError(400, "A custom field cannot be changed. Refresh the record and check your access.")
   }
   if (!fields.length) return
-  const rows = await tx.$queryRaw<ValueRow[]>(Prisma.sql`SELECT * FROM ${table(resource)} WHERE "tenantId"=${actor.tenantId} AND "recordId"=${record.id}`)
+  const rows = validateOnly && isNew ? [] : await tx.$queryRaw<ValueRow[]>(Prisma.sql`SELECT * FROM ${table(resource)} WHERE "tenantId"=${actor.tenantId} AND "recordId"=${record.id}`)
   const prior = new Map(rows.map(row => [row.fieldId, row]))
   const changes: { fieldId: string; before: FieldValue; after: FieldValue }[] = []
   for (const field of fields) {
@@ -86,7 +86,7 @@ export async function saveCustomFields(tx: Tx, actor: BusinessActor, resource: F
     if ((supplied || useDefault) && next !== valueOf(old)) next = validateFieldValue(field, next)
     const cohort = field.scope === "SALES" ? record.customFieldsCreatedAt ?? record.createdAt : record.createdAt
     if (field.required && (!field.requiredSince || cohort >= field.requiredSince) && (next === null || next === "")) throw new BusinessError(400, visibleField(actor, field) ? `${field.name} is required.` : "A required custom field needs a default. Ask your manager to update its configuration.")
-    if ((!supplied && !useDefault) || next === valueOf(old) || (next === null && !old)) continue
+    if (validateOnly || (!supplied && !useDefault) || next === valueOf(old) || (next === null && !old)) continue
     if (next === null) await tx.$executeRaw(Prisma.sql`DELETE FROM ${table(resource)} WHERE "tenantId"=${actor.tenantId} AND "recordId"=${record.id} AND "fieldId"=${field.id}`)
     else {
       const text = field.type === "TEXT" ? String(next) : null, number = field.type === "NUMBER" ? String(next) : null
