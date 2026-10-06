@@ -32,8 +32,11 @@ import { useDateFormatter } from "@/hooks/use-date-formatter"
 import { formatCurrencyFromCents } from "@/lib/formatting"
 import type { AppSettingsPayload } from "@/types/scheduling"
 import { useBusinessModules } from "@/platform/module-provider"
+import { SalesWidgets } from "@/components/dashboard/sales-widgets"
+import type { SalesDashboard } from "@/types/dashboard"
 
 type DashboardSummary = {
+  sales: SalesDashboard
   visibility: {
     appointments: boolean
     leaves: boolean
@@ -284,6 +287,9 @@ export default function DashboardPage() {
     [formatDate]
   )
 
+  const hasSales = !!summary && Object.values(summary.sales).some(Boolean)
+  const hasPeriod = !!summary && (summary.visibility.appointments || hasSales)
+
   const formatUpcomingTime = React.useCallback(
     (value: string) =>
       new Date(value).toLocaleTimeString([], {
@@ -300,7 +306,7 @@ export default function DashboardPage() {
       <PageHeader title="Dashboard" description="Business activity, bookings and operational summaries." />
       <Surface>
         <div className="flex flex-wrap items-center gap-3">
-          {!modulesLoading && summary?.visibility.appointments && <>
+          {!modulesLoading && hasPeriod && <>
           <Select aria-label="Period" value={range} onValueChange={value => {
             setRange(value as typeof range)
             if (value !== "custom") { setDateRange(undefined); setAppliedCustom(undefined) }
@@ -315,13 +321,14 @@ export default function DashboardPage() {
           </>}
           <Button variant="outline" onClick={() => setRefresh(value => value + 1)} disabled={loading}>Refresh</Button>
         </div>
-        {!modulesLoading && summary?.visibility.appointments && <p className="text-sm text-muted-foreground">{rangeText || "Choose a period to view metrics."}</p>}
+        {!modulesLoading && hasPeriod && <p className="text-sm text-muted-foreground">{rangeText || "Choose a period to view metrics."}</p>}
       </Surface>
       {loading || modulesLoading ? <p role="status" className="text-sm text-muted-foreground">Loading metrics...</p> : error ? <Surface><p role="alert" className="text-sm text-destructive">{error}</p></Surface> : summary && <>
-        {!Object.values(summary.visibility).some(Boolean) && <Surface>
+        {!hasSales && !Object.values(summary.visibility).some(Boolean) && <Surface>
           <p className="font-medium">No dashboard summaries available for your current modules.</p>
           <p className="text-sm text-muted-foreground">Open a module from the sidebar to get started.</p>
         </Surface>}
+        {hasSales && <SalesWidgets data={summary.sales} settings={settings} />}
         {headerCards.length > 0 && <div className="grid gap-3 sm:grid-cols-[repeat(auto-fit,minmax(14rem,1fr))]">
           {headerCards.map(card => <Surface key={card.label}>
             <div className="flex items-center justify-between gap-2 text-sm text-muted-foreground"><span>{card.label}</span><card.icon className="size-4" aria-hidden="true" /></div>

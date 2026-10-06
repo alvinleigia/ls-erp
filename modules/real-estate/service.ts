@@ -17,7 +17,7 @@ type Tx = Prisma.TransactionClient
 const manage = (actor: BusinessActor) => actor.role === "ADMIN" || actor.role === "MANAGER"
 const requireManager = (actor: BusinessActor) => { if (!manage(actor)) throw new BusinessError(403, "Only managers can change projects and staff access.") }
 const snapshot = (value: unknown): Prisma.InputJsonValue => JSON.parse(JSON.stringify(value))
-const scope = (actor: BusinessActor): Prisma.RealEstateProjectWhereInput => ({ tenantId: actor.tenantId, ...(!manage(actor) ? {
+export const projectScope = (actor: BusinessActor): Prisma.RealEstateProjectWhereInput => ({ tenantId: actor.tenantId, ...(!manage(actor) ? {
   archived: false, OR: [
     { parentId: null, members: { some: { tenantId: actor.tenantId, userId: actor.userId } } },
     { parent: { archived: false, members: { some: { tenantId: actor.tenantId, userId: actor.userId } } } },
@@ -51,7 +51,7 @@ export function createRealEstateService(db: PrismaClient, identity: Pick<Busines
     }
   }
   async function find(tx: Tx, actor: BusinessActor, id: string) {
-    const record = await tx.realEstateProject.findFirst({ where: { AND: [scope(actor), { id }] } })
+    const record = await tx.realEstateProject.findFirst({ where: { AND: [projectScope(actor), { id }] } })
     if (!record) throw new BusinessError(404, "Project not found.")
     return record
   }
@@ -84,7 +84,7 @@ export function createRealEstateService(db: PrismaClient, identity: Pick<Busines
       const query = projectListSchema.parse(input)
       return run(exporting ? ["projects.read", "projects.export"] : "projects.read", async (tx, actor) => {
         if (query.parentId) await find(tx, actor, query.parentId)
-        const where: Prisma.RealEstateProjectWhereInput = { AND: [scope(actor), {
+        const where: Prisma.RealEstateProjectWhereInput = { AND: [projectScope(actor), {
           ...await customFieldFilter(tx, actor, projectFields, query),
           parentId: query.parentId || null, archived: query.archived === "true", ...(query.lifecycle ? { lifecycle: query.lifecycle } : {}),
           ...(query.q ? { OR: ["name", "code", "location"].map(field => ({ [field]: { contains: query.q, mode: "insensitive" } })) } : {}),

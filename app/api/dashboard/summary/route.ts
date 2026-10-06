@@ -15,6 +15,7 @@ import {
 import { prisma, runWithTenantDbContext } from "@/lib/prisma"
 import { withCoreApi, actorSession } from "@/platform/core/api"
 import type { BusinessActor } from "@/platform/policy"
+import { salesDashboard } from "@/platform/dashboard/sales-summary"
 
 const BOOKING_STATUSES: AppointmentStatus[] = [
   AppointmentStatus.SCHEDULED,
@@ -38,15 +39,9 @@ const firstDayIndexMap = {
   SATURDAY: 6,
 } as const
 
-const startOfDay = (value: Date) => {
-  const next = new Date(value)
-  next.setHours(0, 0, 0, 0)
-  return next
-}
-
 const addDays = (value: Date, days: number) => {
   const next = new Date(value)
-  next.setDate(next.getDate() + days)
+  next.setUTCDate(next.getUTCDate() + days)
   return next
 }
 
@@ -149,10 +144,13 @@ const getRangeBounds = (
   range: string,
   firstDayOfWeek: keyof typeof firstDayIndexMap,
   startDateRaw: string | null,
-  endDateRaw: string | null
+  endDateRaw: string | null,
+  timeZone: string
 ) => {
   const now = new Date()
-  const today = startOfDay(now)
+  // Bounds are calendar dates; only turn them into instants after choosing the
+  // tenant's dates. Host-local midnight can otherwise shift reports by one day.
+  const today = dateKeyToUtcDate(toDateKeyInTimeZone(now, timeZone))
 
   if (range === "today") {
     const endExclusive = addDays(today, 1)
@@ -160,8 +158,8 @@ const getRangeBounds = (
   }
 
   if (range === "month") {
-    const start = new Date(today.getFullYear(), today.getMonth(), 1)
-    const endExclusive = new Date(today.getFullYear(), today.getMonth() + 1, 1)
+    const start = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 1))
+    const endExclusive = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() + 1, 1))
     return { label: "This month", start, endExclusive }
   }
 
@@ -178,7 +176,7 @@ const getRangeBounds = (
   }
 
   const firstIndex = firstDayIndexMap[firstDayOfWeek] ?? 0
-  const currentIndex = today.getDay()
+  const currentIndex = today.getUTCDay()
   const diff = (currentIndex - firstIndex + 7) % 7
   const start = addDays(today, -diff)
   return {
@@ -227,7 +225,8 @@ async function handleGET(request: Request, actor: BusinessActor) {
         range,
         (settings?.firstDayOfWeek ?? "SUNDAY") as keyof typeof firstDayIndexMap,
         startDateRaw,
-        endDateRaw
+        endDateRaw,
+        timeZone
       )
 
       const now = new Date()
@@ -235,8 +234,8 @@ async function handleGET(request: Request, actor: BusinessActor) {
       const tomorrowDateKey = addDaysToDateKey(todayDateKey, 1)
       const todayStart = zonedDateTimeToUtc(todayDateKey, timeZone, 0, 0)
       const tomorrowStart = zonedDateTimeToUtc(tomorrowDateKey, timeZone, 0, 0)
-      const rangeStartDateKey = toDateKeyInTimeZone(bounds.start, timeZone)
-      const rangeEndDateKey = toDateKeyInTimeZone(addDays(bounds.endExclusive, -1), timeZone)
+      const rangeStartDateKey = bounds.start.toISOString().slice(0, 10)
+      const rangeEndDateKey = addDays(bounds.endExclusive, -1).toISOString().slice(0, 10)
       const rangeEndExclusiveDateKey = addDaysToDateKey(rangeEndDateKey, 1)
       const rangeStart = zonedDateTimeToUtc(rangeStartDateKey, timeZone, 0, 0)
       const rangeEndExclusive = zonedDateTimeToUtc(rangeEndExclusiveDateKey, timeZone, 0, 0)
@@ -258,6 +257,7 @@ async function handleGET(request: Request, actor: BusinessActor) {
         appointmentStatusRows,
         topServiceLines,
         staffRangeAppointments,
+        sales,
       ] = await Promise.all([
         canReadBookings ? prisma.appointmentOrder.findMany({
           where: {
@@ -404,6 +404,7 @@ async function handleGET(request: Request, actor: BusinessActor) {
             staffProfile: { select: { user: { select: { name: true } } } },
           },
         }) : Promise.resolve([]),
+        salesDashboard(prisma, actor, moduleFlags, { start: rangeStart, end: rangeEndExclusive, now, today: todayDateKey }),
       ])
 
       const rangeDays = Math.max(
@@ -413,17 +414,17 @@ async function handleGET(request: Request, actor: BusinessActor) {
 
       const daySeriesMap = new Map<string, { date: string; label: string; revenueCents: number; bookings: number }>()
       for (let cursor = new Date(bounds.start); cursor < bounds.endExclusive; cursor = addDays(cursor, 1)) {
-        const key = toDateKeyInTimeZone(cursor, timeZone)
+        const key = cursor.toISOString().slice(0, 10)
         daySeriesMap.set(key, {
           date: key,
-          label: toDateLabelInTimeZone(cursor, timeZone),
+          label: toDateLabelInTimeZone(zonedDateTimeToUtc(key, timeZone), timeZone),
           revenueCents: 0,
           bookings: 0,
         })
       }
 
       for (const order of periodOrders) {
-        const key = toDateKeyInTimeZone(order.appointmentDate, timeZone)
+        const key = order.appointmentDate.toISOString().slice(0, 10)
         const point = daySeriesMap.get(key)
         if (!point) continue
         point.revenueCents += order.totalCents
@@ -466,6 +467,7 @@ async function handleGET(request: Request, actor: BusinessActor) {
       }
 
       const payload = {
+        sales,
         visibility: {
           appointments: canReadBookings,
           leaves: canReadLeaves,
@@ -545,6 +547,8 @@ async function handleGET(request: Request, actor: BusinessActor) {
           computedBounds: {
             label: bounds.label,
             timeZone,
+            rangeStart: rangeStart.toISOString(),
+            rangeEndExclusive: rangeEndExclusive.toISOString(),
             start: bounds.start.toISOString(),
             endExclusive: bounds.endExclusive.toISOString(),
             todayStart: todayStart.toISOString(),
