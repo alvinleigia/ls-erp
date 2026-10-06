@@ -31,8 +31,15 @@ import { DateRangePicker } from "@/components/date-range-picker"
 import { useDateFormatter } from "@/hooks/use-date-formatter"
 import { formatCurrencyFromCents } from "@/lib/formatting"
 import type { AppSettingsPayload } from "@/types/scheduling"
+import { useBusinessModules } from "@/platform/module-provider"
 
 type DashboardSummary = {
+  visibility: {
+    appointments: boolean
+    leaves: boolean
+    services: boolean
+    inventory: boolean
+  }
   range: {
     label: string
     startDate: string
@@ -134,6 +141,7 @@ const toDateOnlyLocal = (value: Date) => {
 }
 
 export default function DashboardPage() {
+  const { flags, permissions, loading: modulesLoading } = useBusinessModules()
   const [range, setRange] = React.useState<"today" | "week" | "month" | "custom">("week")
   const [refresh, setRefresh] = React.useState(0)
   const [appliedCustom, setAppliedCustom] = React.useState<DateRange | undefined>()
@@ -177,6 +185,7 @@ export default function DashboardPage() {
   }, [])
 
   React.useEffect(() => {
+    if (modulesLoading) return
     const controller = new AbortController()
     const query = new URLSearchParams({ range })
     if (range === "custom" && appliedCustom?.from && appliedCustom?.to) {
@@ -211,7 +220,7 @@ export default function DashboardPage() {
     return () => {
       controller.abort()
     }
-  }, [range, appliedCustom, refresh])
+  }, [range, appliedCustom, refresh, flags, permissions, modulesLoading])
 
   const rangeText = React.useMemo(() => {
     if (!summary?.range) return ""
@@ -234,29 +243,40 @@ export default function DashboardPage() {
     return [
       {
         label: "Revenue",
+        visible: summary.visibility.appointments,
         value: formatCurrencyFromCents(summary.kpis.revenueCents, settings),
         hint: `Today ${formatCurrencyFromCents(summary.kpis.revenueTodayCents, settings)}`,
         icon: CreditCardIcon,
       },
       {
         label: "Appointments",
+        visible: summary.visibility.appointments,
         value: String(summary.kpis.appointments),
         hint: `Today ${summary.kpis.appointmentsToday}`,
         icon: CalendarClockIcon,
       },
       {
         label: "Unique customers",
+        visible: summary.visibility.appointments,
         value: String(summary.kpis.distinctCustomers),
         hint: `${summary.kpis.activeStaff} active staff`,
         icon: UsersIcon,
       },
       {
         label: "Pending leaves",
+        visible: summary.visibility.leaves,
         value: String(summary.kpis.pendingLeaves),
-        hint: `${summary.kpis.activeServices} active services`,
+        hint: "Awaiting approval",
+        icon: CalendarClockIcon,
+      },
+      {
+        label: "Active services",
+        visible: summary.visibility.services,
+        value: String(summary.kpis.activeServices),
+        hint: "Available services",
         icon: ScissorsIcon,
       },
-    ]
+    ].filter(card => card.visible)
   }, [settings, summary])
 
   const formatUpcomingDate = React.useCallback(
@@ -280,6 +300,7 @@ export default function DashboardPage() {
       <PageHeader title="Dashboard" description="Business activity, bookings and operational summaries." />
       <Surface>
         <div className="flex flex-wrap items-center gap-3">
+          {!modulesLoading && summary?.visibility.appointments && <>
           <Select aria-label="Period" value={range} onValueChange={value => {
             setRange(value as typeof range)
             if (value !== "custom") { setDateRange(undefined); setAppliedCustom(undefined) }
@@ -291,19 +312,24 @@ export default function DashboardPage() {
             setDateRange(next)
             if (next?.from && next?.to) { setAppliedCustom(next); setRange("custom") }
           }} />
+          </>}
           <Button variant="outline" onClick={() => setRefresh(value => value + 1)} disabled={loading}>Refresh</Button>
         </div>
-        <p className="text-sm text-muted-foreground">{rangeText || "Choose a period to view metrics."}</p>
+        {!modulesLoading && summary?.visibility.appointments && <p className="text-sm text-muted-foreground">{rangeText || "Choose a period to view metrics."}</p>}
       </Surface>
-      {loading ? <p role="status" className="text-sm text-muted-foreground">Loading metrics...</p> : error ? <Surface><p role="alert" className="text-sm text-destructive">{error}</p></Surface> : summary && <>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      {loading || modulesLoading ? <p role="status" className="text-sm text-muted-foreground">Loading metrics...</p> : error ? <Surface><p role="alert" className="text-sm text-destructive">{error}</p></Surface> : summary && <>
+        {!Object.values(summary.visibility).some(Boolean) && <Surface>
+          <p className="font-medium">No dashboard summaries available for your current modules.</p>
+          <p className="text-sm text-muted-foreground">Open a module from the sidebar to get started.</p>
+        </Surface>}
+        {headerCards.length > 0 && <div className="grid gap-3 sm:grid-cols-[repeat(auto-fit,minmax(14rem,1fr))]">
           {headerCards.map(card => <Surface key={card.label}>
             <div className="flex items-center justify-between gap-2 text-sm text-muted-foreground"><span>{card.label}</span><card.icon className="size-4" aria-hidden="true" /></div>
             <p className="text-2xl font-semibold">{card.value}</p><p className="text-xs text-muted-foreground">{card.hint}</p>
           </Surface>)}
-        </div>
+        </div>}
 
-      <section className="grid gap-6 lg:grid-cols-[1.7fr_1fr]">
+      {summary.visibility.appointments && <section className="grid gap-6 lg:grid-cols-[1.7fr_1fr]">
         <Section title="Revenue trend" description="Revenue and booking volume by day"><div className="h-64 w-full">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={revenueSeries}>
@@ -365,9 +391,9 @@ export default function DashboardPage() {
               </div>
             ))}
           </div></Section>
-      </section>
+      </section>}
 
-      <section className="grid gap-6 lg:grid-cols-[1.2fr_1fr]">
+      {summary.visibility.appointments && <section className="grid gap-6 lg:grid-cols-[1.2fr_1fr]">
         <Section title="Daily bookings" description="Booking count by day"><div className="h-64 min-w-0">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart
@@ -408,10 +434,10 @@ export default function DashboardPage() {
               ))
             )}
           </div></Section>
-      </section>
+      </section>}
 
-      <section className="grid gap-6 xl:grid-cols-3">
-        <Section title="Upcoming appointments" description="Next confirmed/scheduled slots" className="xl:col-span-2"><div className="overflow-x-auto">
+      {(summary.visibility.appointments || summary.visibility.inventory) && <section className={`grid gap-6 ${summary.visibility.appointments && summary.visibility.inventory ? "xl:grid-cols-3" : ""}`}>
+        {summary.visibility.appointments && <Section title="Upcoming appointments" description="Next confirmed/scheduled slots" className={summary.visibility.inventory ? "xl:col-span-2" : undefined}><div className="overflow-x-auto">
             <table className="min-w-[32rem] w-full text-sm">
               <thead className="text-xs uppercase text-muted-foreground">
                 <tr className="border-b">
@@ -442,9 +468,9 @@ export default function DashboardPage() {
                 )}
               </tbody>
             </table>
-          </div></Section>
+          </div></Section>}
 
-        <Section title="Low stock alerts" description="Products at or below reorder point"><div className="space-y-3">
+        {summary.visibility.inventory && <Section title="Low stock alerts" description="Products at or below reorder point"><div className="space-y-3">
             {(summary?.lowStock ?? []).length === 0 ? (
               <div className="text-sm text-muted-foreground">No low stock items.</div>
             ) : (
@@ -462,10 +488,10 @@ export default function DashboardPage() {
                 </div>
               ))
             )}
-          </div></Section>
-      </section>
+          </div></Section>}
+      </section>}
 
-      <Section title="Top services" description="Revenue leaders in selected range"><div className="overflow-x-auto">
+      {summary.visibility.appointments && summary.visibility.services && <Section title="Top services" description="Revenue leaders in selected range"><div className="overflow-x-auto">
           <table className="min-w-[32rem] w-full text-sm">
             <thead className="text-xs uppercase text-muted-foreground">
               <tr className="border-b">
@@ -490,7 +516,7 @@ export default function DashboardPage() {
               )}
             </tbody>
           </table>
-        </div></Section>
+        </div></Section>}
       </>}
     </div>
   )

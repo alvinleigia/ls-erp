@@ -83,11 +83,15 @@ test('own profile survives directory restrictions without allowing escalation; G
 })
 test('dashboard and audit visibility require both report and underlying resource permissions',async()=>{
  await perms(['dashboard.read','auditLogs.read'])
- assert.equal((await ok(await call('dashboard/summary','GET',undefined,undefined,'MANAGER'))).kpis.activeStaff,0)
+ const hidden=await ok(await call('dashboard/summary','GET',undefined,undefined,'MANAGER'))
+ assert.equal(hidden.kpis.activeStaff,0)
+ assert.deepEqual(hidden.visibility,{appointments:false,leaves:false,services:false,inventory:false})
  for(const event of ['inventory.inventoryProducts.edit','inventory.inventorySuppliers.edit','services.services.edit','access.user.updated','crm.opportunity.updated','unknown.event'])await root.query('INSERT INTO "AuditLog" (id,"tenantId",event,"entityType",after) VALUES ($1,$2,$3,\'Test\',$4)',[a+event,a,event,{private:'snapshot'}])
  assert.equal((await ok(await call('reports/audit-logs','GET',undefined,undefined,'MANAGER'))).total,0)
  await perms(['dashboard.read','users.read','auditLogs.read','inventoryProducts.read'])
- assert.equal((await ok(await call('dashboard/summary','GET',undefined,undefined,'MANAGER'))).kpis.activeStaff,1)
+ const visible=await ok(await call('dashboard/summary','GET',undefined,undefined,'MANAGER'))
+ assert.equal(visible.kpis.activeStaff,1)
+ assert.deepEqual(visible.visibility,{appointments:false,leaves:false,services:false,inventory:true})
  const rows=await ok(await call('reports/audit-logs','GET',undefined,undefined,'MANAGER',a,'?pageSize=1'));assert.equal(rows.total,1);assert.equal(rows.items[0].event,'inventory.inventoryProducts.edit')
 })
 test('current account and tenant state override stale session claims',async()=>{

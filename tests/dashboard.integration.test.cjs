@@ -54,7 +54,21 @@ test("a newly provisioned empty business gets a valid zero-state dashboard using
   const data = await response.json()
   assert.equal(data.kpis.appointments, 0); assert.equal(data.kpis.activeStaff, 0); assert.equal(data.kpis.revenueCents, 0)
   assert.deepEqual(data.upcomingAppointments, [])
+  assert.deepEqual(data.visibility, { appointments: false, leaves: false, services: false, inventory: false })
   assert.equal(data.debug.computedBounds.timeZone, "Asia/Kolkata")
+})
+
+test("dashboard visibility follows both platform allowance and tenant activation independently", async () => {
+  const expected = { appointments: false, leaves: false, services: false, inventory: false }
+  for (const key of Object.keys(expected)) {
+    for (const [allowed, enabled] of [[false, false], [true, false], [true, true], [false, false]]) {
+      await root.query('INSERT INTO "TenantModule" ("tenantId",key,allowed,enabled,"updatedAt") VALUES ($1,$2,$3,$4,now()) ON CONFLICT ("tenantId",key) DO UPDATE SET allowed=$3,enabled=$4', ["dashboard_a", key, allowed, enabled])
+      expected[key] = allowed && enabled
+      const response = await sessions.run(session("dashboard_a"), () => GET(request("dashboard_a")))
+      assert.equal(response.status, 200)
+      assert.deepEqual((await response.json()).visibility, expected, `${key}: allowed=${allowed}, enabled=${enabled}`)
+    }
+  }
 })
 
 test("concurrent dashboards see their own staff and settings without widening later queries", async () => {

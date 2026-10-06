@@ -374,7 +374,7 @@ async function handleGET(request: Request, actor: BusinessActor) {
           },
           _count: { _all: true },
         }) : Promise.resolve([]),
-        canReadBookings ? prisma.appointmentOrderLine.findMany({
+        canReadBookings && canReadServices ? prisma.appointmentOrderLine.findMany({
           where: {
             order: {
               tenantId,
@@ -466,6 +466,12 @@ async function handleGET(request: Request, actor: BusinessActor) {
       }
 
       const payload = {
+        visibility: {
+          appointments: canReadBookings,
+          leaves: canReadLeaves,
+          services: canReadServices,
+          inventory: canReadStock,
+        },
         range: {
           label: bounds.label,
           startDate: rangeStartDateKey,
