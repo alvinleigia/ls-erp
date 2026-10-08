@@ -101,7 +101,8 @@ export function EnquiryImport() {
     <ol className="grid grid-cols-3 gap-2 text-sm" aria-label="Import steps">{["1. Upload", "2. Map and review", "3. Import"].map((step, i) => <li key={step} className={`rounded-lg border p-3 ${(!batch ? i === 0 : batch.status === "COMPLETE" || batch.status === "IMPORTING" ? i === 2 : i === 1) ? "border-primary bg-muted font-medium" : "text-muted-foreground"}`}>{step}</li>)}</ol>
     {error && <p role="alert" className="rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">{error}</p>}
     {!batch ? <>
-      <CrmSection title="Upload your sheet" description="CSV or XLSX, up to 1,000 rows and 3 MB. For Excel, use the first sheet.">
+      <CrmSection title="Upload your sheet" description="CSV or XLSX, up to 1,000 rows and 3 MB. For Excel, use the first sheet." actions={<Button variant="outline" asChild><a href={`${endpoint}/template`} download><Download className="size-4" />Download CSV template</a></Button>}>
+        <p className="text-sm text-muted-foreground">Download the template, fill in your enquiries in Excel or Google Sheets, then save as CSV UTF-8 and upload it here. Keep the headings; leave optional columns blank. Format phone cells as Text to keep the + country code.</p>
         <p className="text-sm text-muted-foreground">Include Contact name and Email or Phone. Phone numbers need a country code, such as +919876543210. Dates use YYYY-MM-DD. An enquiry title is generated if it is blank.</p>
         <FormField label="Enquiry file" id="enquiry-file"><Input ref={fileInput} id="enquiry-file" type="file" accept=".csv,.xlsx" disabled={busy} onChange={event => setFile(event.target.files?.[0] || null)} /></FormField>
         <div className="flex justify-end"><Button onClick={upload} disabled={!file || busy} loading={busy}><Upload className="size-4" /> Upload and map fields</Button></div>

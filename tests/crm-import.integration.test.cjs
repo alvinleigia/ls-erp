@@ -67,6 +67,27 @@ test("XLSX imports only first sheet, preserves dates and rejects formula rows", 
   assert.match(parsed.rows[1].errors[0].message, /formulas/)
 })
 let mixed
+test("template follows enabled modules and editable custom fields and its headers map on upload", async () => {
+  const field = await root.customFieldDefinition.create({ data: { tenantId: a, scope: "ENQUIRY", code: "template_note", name: "Contact name", type: "TEXT" } })
+  try {
+    const csv = await service.downloadEnquiryImportTemplate()
+    const rows = parse(csv, { bom: true })
+    assert.equal(rows.length, 1)
+    const headers = rows[0]
+    assert.ok(headers.includes("Contact name")); assert.ok(headers.includes("Project")); assert.ok(headers.includes("enquiry.template_note"))
+    assert.equal(new Set(headers).size, headers.length)
+    const values = headers.map(h => ({ "Contact name": "Template contact", Email: "template@example.com", "enquiry.template_note": "A note" })[h] || "")
+    const job = await upload(crmCsv(headers, [values]))
+    assert.equal(Object.keys(job.config.mapping).length, headers.length)
+    const checked = await review(job)
+    assert.equal(checked.counts.READY, 1)
+    await root.tenantModule.update({ where: { tenantId_key: { tenantId: a, key: "realEstate" } }, data: { enabled: false } })
+    assert.ok(!parse(await service.downloadEnquiryImportTemplate(), { bom: true })[0].includes("Project"))
+  } finally {
+    await root.tenantModule.update({ where: { tenantId_key: { tenantId: a, key: "realEstate" } }, data: { enabled: true } })
+    await root.customFieldDefinition.update({ where: { tenantId_id: { tenantId: a, id: field.id } }, data: { archived: true } })
+  }
+})
 test("preview writes no CRM records; duplicates, bad email, missing identity and source typos are isolated", async () => {
   await root.crmContact.create({ data: { tenantId: a, ownerUserId: admin.id, name: "Existing", email: "EXISTING@example.com", archived: true } })
   await service.createLeadSource({ name: "Website" })
@@ -155,4 +176,5 @@ test("role without contacts.create cannot upload or inspect import history", asy
   await root.tenantRoleAssignment.create({ data: { tenantId: a, userId: staff.id, roleId: role.id } })
   await assert.rejects(upload('Name,Email\nDenied,denied@example.com', restricted), e => e.status === 403)
   await assert.rejects(restricted.listEnquiryImports({}), e => e.status === 403)
+  await assert.rejects(restricted.downloadEnquiryImportTemplate(), e => e.status === 403)
 })

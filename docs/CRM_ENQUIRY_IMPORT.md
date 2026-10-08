@@ -2,6 +2,13 @@
 
 Entry: **CRM → Enquiries → Import enquiries**.
 
+Use **Download CSV template** in the upload section to get an empty sheet with
+the supported headings. It includes enabled-module fields and editable custom
+fields, whose stable `scope.code` headings map automatically. Fill it in using
+Excel or Google Sheets, keep the headings, format phone cells as Text, and save
+as CSV UTF-8 before uploading. The download requires the same import permissions;
+it contains no sample customer rows. No additional migration is needed.
+
 1. Upload a UTF-8 CSV or XLSX (first worksheet only).
 2. Check suggested field mappings. Choose defaults for salesperson, source, sales
    team and, when enabled, project/subproject. Validate before creating records.

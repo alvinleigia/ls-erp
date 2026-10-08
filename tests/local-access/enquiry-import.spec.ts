@@ -11,6 +11,14 @@ test("enquiry upload, review, correction download and reupload use shared CRM co
     await page.goto("/crm/enquiries")
     await page.getByRole("link", { name: "Import enquiries", exact: true }).click()
     await expect(page.getByRole("heading", { name: "Import enquiries", exact: true })).toBeVisible()
+    const templateDownload = page.waitForEvent("download")
+    await page.getByRole("link", { name: "Download CSV template" }).click()
+    const template = await templateDownload
+    expect(template.suggestedFilename()).toBe("enquiry-import-template.csv")
+    const templateRows = parse(await readFile((await template.path())!, "utf8"), { bom: true }) as string[][]
+    expect(templateRows).toHaveLength(1)
+    expect(templateRows[0]).toEqual(expect.arrayContaining(["Contact name", "Email", "Phone", "Project"]))
+    await page.screenshot({ path: testInfo.outputPath("import-template-download.png"), fullPage: true })
     await page.getByLabel("Enquiry file").setInputFiles({ name: "market-leads.csv", mimeType: "text/csv", buffer: Buffer.from('Contact name,Email,Phone,Requirements\nAlice,alice@example.com,+919876543210,Near a school\nDuplicate,ALICE@example.com,,Duplicate enquiry\nBob,bad-address,,Needs a villa\n') })
     await page.getByRole("button", { name: "Upload and map fields" }).click()
     await expect(page.getByRole("heading", { name: "Match your columns" })).toBeVisible()

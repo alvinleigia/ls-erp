@@ -111,6 +111,14 @@ export function createEnquiryImportService({ run, audit }: CrmServiceContext, ex
     })
   }
   return {
+    downloadEnquiryImportTemplate() {
+      return run(permission, async (tx, actor) => {
+        const catalog = await fields(tx, actor)
+        // Custom-field codes distinguish similarly named fields and are already
+        // recognized by the import mapper. No example rows become real leads.
+        return crmCsv(catalog.map(field => field.key.startsWith("custom:") ? field.aliases!.at(-1)! : field.label), [])
+      })
+    },
     getEnquiryImport: get,
     async uploadEnquiryImport(fileName: string, bytes: Uint8Array) {
       await run(permission, async () => undefined) // Reject unauthorized files before parsing.
