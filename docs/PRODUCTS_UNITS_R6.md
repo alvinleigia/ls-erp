@@ -55,8 +55,8 @@ automatic availability update on quotation save or opportunity close.
 
 The R5 release manifest remains the historical release baseline. Do not replace
 its checksums to accommodate R6. Release R6 with its own migration review and
-normal verified backup/deployment process. The source is ready for the R6 push;
-the production migration and tenant activation are separate release steps.
+normal verified backup/deployment process. Production release is complete;
+tenant activation remains an explicit platform/tenant administration step.
 
 ## Verification
 
@@ -69,11 +69,30 @@ mobile overflow, and saved a quotation with the unit reference. Availability sta
 Available. Desktop and mobile screenshots were inspected. The final isolated run
 receipt is `tmp/industry-release/ls-erp-catalog-dff913ac3b44.log` (ignored).
 
-Production migration and activation remain pending. The user authorized pushing
-this tested increment. A Git push may trigger the connected Vercel build; it does
-not apply this database migration. Keep Sales Catalog disabled until migration
-and release checks are complete. R5 is closed; further testing inside the pilot
-client account is not a prerequisite for this feature work.
+Released on 2026-10-18: Vercel production deployment
+`dpl_ByGYsLXBM7ePPiuP6bEqL3rrxD9M` at
+`144598ff5e4cd3565f98e9387c720cfc4c2f8abf` is Ready on `erp.ewissen.in`.
+Migration `20261018130000_sales_catalog` applied successfully (99 to 100).
+The fresh encrypted backup was restored in isolation and all 106 pre-release
+tables compared, including per-tenant content/identity hashes and financial totals.
+Three CHECK expressions had reviewed, equivalent associative-AND parenthesis
+regroupings on restore. Source ownership/ACL are retained in the archive; the
+isolated data/schema restore used local ownership without applying source ACL.
+Existing table fingerprints and financial totals matched immediately before and
+after migration. Both new tables have forced RLS, tenant policies, validated
+constraints and runtime CRUD grants.
+
+Ten live read-only checks passed: five existing APIs, expected disabled-catalog
+API denial, dashboard, quotation list, existing project and module settings.
+Catalog navigation and the project Units tab remain hidden while disabled.
+Screenshots were inspected; no business records or tenant settings were changed.
+Sales Catalog remains unallowed/disabled for every tenant. Platform administrators
+may now allow it per tenant; tenant administrators control Enable/Disable under
+Settings > Modules.
+
+Private recovery files are retained under ignored `backups/r6/c5f606d09600`;
+release receipts and screenshots are under ignored `tmp/catalog-release`.
+The backup encryption key is protected by this Windows account. R5 remains closed.
 
 `npm.cmd run test:catalog` replays the 99 R5 migrations with synthetic historical
 fixtures and then applies the R6 migration in a fresh disposable Docker database.

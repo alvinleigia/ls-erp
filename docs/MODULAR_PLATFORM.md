@@ -3,7 +3,11 @@
 Optional Sales Catalog with a shared product/unit model, Real Estate unit details,
 project Units tab and quotation item snapshots. Tenant activation, role permissions,
 RLS and audited concurrent saves apply. See [R6 implementation](PRODUCTS_UNITS_R6.md).
-The additive migration is local; no client data was changed.
+Released on 2026-10-18 at commit 144598ff5e4cd3565f98e9387c720cfc4c2f8abf.
+The additive migration is applied (100 migrations total). A fresh encrypted backup
+was restored and compared before release. Existing data and financial totals
+matched across migration. Live read-only checks passed; Sales Catalog remains
+unallowed/disabled for all tenants pending intentional activation.
 
 ## Industry-neutral R5: released and live tenant reads verified (2026-10-18)
 
