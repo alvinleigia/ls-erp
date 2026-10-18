@@ -2,6 +2,7 @@
 
 import * as React from "react"
 import { workforceNavigation, businessNavigation, inventoryNavigation, appointmentsNavigation, servicesNavigation } from "@/application/navigation"
+import { useTerminology } from "@/platform/terminology/provider"
 import { useBusinessModules } from "@/platform/module-provider"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
@@ -108,6 +109,7 @@ export function AppSidebar() {
     platformAccessMode === "SUPER_ADMIN"
   const [openSections, setOpenSections] = React.useState<Record<string, boolean>>({})
   const [logoLoadFailed, setLogoLoadFailed] = React.useState(false)
+  const term = useTerminology()
   const { flags, permissions, enabled, can } = useBusinessModules()
 
   const name = user?.name?.trim() || user?.email?.trim() || "Guest"
@@ -120,7 +122,7 @@ export function AppSidebar() {
 
   const sections = React.useMemo<NavSection[]>(() => {
     const list: NavSection[] = []
-    if (!isPlatformConsoleUser && canUseCrm(role)) list.push(...businessNavigation(flags, permissions))
+    if (!isPlatformConsoleUser && canUseCrm(role)) list.push(...businessNavigation(flags, permissions, term))
 
     if (!isPlatformSuperAdmin) list.push(...workforceNavigation(flags, permissions, role))
 
@@ -200,6 +202,7 @@ export function AppSidebar() {
               { title: "General", href: "/settings", icon: SettingsIcon, isActive: (current) => current === "/settings" },
               { title: "Access roles", href: "/settings/roles", icon: UsersIcon, isActive: (current) => current.startsWith("/settings/roles") },
               { title: "Modules", href: "/settings/modules", icon: PackageIcon, isActive: (current) => current === "/settings/modules" },
+              { title: "Terminology", href: "/settings/terminology", icon: TagIcon, isActive: (current) => current === "/settings/terminology" },
               { title: "Taxes", href: "/settings/taxes", icon: TagIcon, isActive: (current) => current === "/settings/taxes" },
               { title: "Seeds", href: "/settings/seeds", icon: PackageIcon, isActive: (current) => current === "/settings/seeds" },
             ],
@@ -209,7 +212,7 @@ export function AppSidebar() {
     return list.flatMap(section => {
       if (isPlatformConsoleUser) return [section]
       const items = section.items.filter(item => {
-        if (["/settings/roles", "/settings/modules", "/settings/seeds", "/users/invites"].includes(item.href)) return role === "ADMIN"
+        if (["/settings/roles", "/settings/modules", "/settings/terminology", "/settings/seeds", "/users/invites"].includes(item.href)) return role === "ADMIN"
         if (item.href === "/reports/audit-logs") return can("auditLogs.read")
         if (item.href === "/users") return can("users.read")
         if (item.href === "/settings") return can("businessSettings.read")
@@ -218,7 +221,7 @@ export function AppSidebar() {
       })
       return items.length ? [{ ...section, items, href: items[0].href }] : []
     })
-  }, [canManage, isPlatformConsoleUser, isPlatformSuperAdmin, role, flags, permissions, enabled, can])
+  }, [canManage, isPlatformConsoleUser, isPlatformSuperAdmin, role, flags, permissions, enabled, can, term])
 
   const menuButtonClass = (active: boolean) =>
     cn("transition-colors", active && "bg-sidebar-primary/20 text-sidebar-primary font-semibold")

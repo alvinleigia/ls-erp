@@ -1,3 +1,4 @@
+import { termText } from "@/platform/terminology/message"
 import { z } from "zod"
 import { workTypes } from "./work-validation"
 
@@ -17,5 +18,5 @@ export const applyPlanSchema = z.object({
   version: z.number().int().positive(), requestKey: z.uuid(), startOn: z.iso.date(),
   contactId: z.string().trim().min(1).max(100), assignedUserId: z.string().trim().min(1).max(100),
   enquiryId: z.string().trim().max(100).default(""), opportunityId: z.string().trim().max(100).default(""),
-}).strict().refine(value => !(value.enquiryId && value.opportunityId), { path: ["opportunityId"], message: "Choose either an enquiry or an opportunity." })
+}).strict().refine(value => !(value.enquiryId && value.opportunityId), { path: ["opportunityId"], message: "Choose either an enquiry or an opportunity.", params: { terminology: [termText("crm.enquiry.singular", "Choose either an enquiry", "Choose either a {label}"), " or ", termText("crm.opportunity.singular", "an opportunity.", "a {label}.")] } })
 export type PlanStep = z.infer<typeof planStepSchema>

@@ -604,9 +604,9 @@ export const shiftScheduleSchema = z
     name: z.string().trim().max(120).optional().or(z.literal("")),
     staffIds: z.array(z.string().trim().min(1)),
     isDefault: z.boolean().optional(),
-    startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-    assignmentStartDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().or(z.literal("")),
-    assignmentEndDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().or(z.literal("")),
+    startDate: z.iso.date(),
+    assignmentStartDate: z.iso.date().optional().or(z.literal("")),
+    assignmentEndDate: z.iso.date().optional().or(z.literal("")),
     weekOffDay1: weekdaySchema,
     weekOffDay2: weekdaySchema.optional().or(z.literal("")),
     weekOff2Weeks: z
@@ -706,12 +706,13 @@ export const shiftOverrideSchema = z
     staffId: z.string().trim().min(1),
     templateId: z.string().trim().min(1).optional().or(z.literal("")),
     isUnavailable: z.boolean().optional().default(false),
-    startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-    endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    startDate: z.iso.date(),
+    endDate: z.iso.date(),
     skipWeekOff: z.boolean().optional().default(true),
     skipHolidays: z.boolean().optional().default(true),
   })
   .superRefine((values, ctx) => {
+    if (values.startDate > values.endDate) ctx.addIssue({ code: "custom", message: "Start date cannot be after end date.", path: ["endDate"] })
     if (!values.isUnavailable && !values.templateId) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
@@ -726,12 +727,12 @@ export type ShiftOverrideInput = z.infer<typeof shiftOverrideSchema>
 export const flexibleSlotSchema = z
   .object({
     staffId: z.string().trim().min(1),
-    date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    date: z.iso.date(),
     slots: z
       .array(
         z.object({
-          startTime: z.string().regex(/^\d{2}:\d{2}$/),
-          endTime: z.string().regex(/^\d{2}:\d{2}$/),
+          startTime: z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/),
+          endTime: z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/),
           sortOrder: z.coerce.number().int().min(0).optional(),
         })
       )
@@ -771,14 +772,14 @@ export const flexibleSlotSchema = z
 export type FlexibleSlotInput = z.infer<typeof flexibleSlotSchema>
 
 const flexibleWeekPlanBreakSchema = z.object({
-  startTime: z.string().regex(/^\d{2}:\d{2}$/),
-  endTime: z.string().regex(/^\d{2}:\d{2}$/),
+  startTime: z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/),
+  endTime: z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/),
   sortOrder: z.coerce.number().int().min(0).optional(),
 })
 
 const flexibleWeekPlanSlotSchema = z.object({
-  startTime: z.string().regex(/^\d{2}:\d{2}$/),
-  endTime: z.string().regex(/^\d{2}:\d{2}$/),
+  startTime: z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/),
+  endTime: z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/),
   sortOrder: z.coerce.number().int().min(0).optional(),
   breaks: z.array(flexibleWeekPlanBreakSchema).optional().default([]),
 })
@@ -793,7 +794,7 @@ const flexibleWeekPlanDaySchema = z.object({
 export const flexibleWeekPlanSchema = z
   .object({
     staffId: z.string().trim().min(1),
-    weekStartDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    weekStartDate: z.iso.date(),
     days: z.array(flexibleWeekPlanDaySchema).length(7),
   })
   .superRefine((values, ctx) => {
@@ -893,14 +894,14 @@ export const flexibleWeekPlanSchema = z
 export type FlexibleWeekPlanInput = z.infer<typeof flexibleWeekPlanSchema>
 
 const flexiblePatternBreakSchema = z.object({
-  startTime: z.string().regex(/^\d{2}:\d{2}$/),
-  endTime: z.string().regex(/^\d{2}:\d{2}$/),
+  startTime: z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/),
+  endTime: z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/),
   sortOrder: z.coerce.number().int().min(0).optional(),
 })
 
 const flexiblePatternSlotSchema = z.object({
-  startTime: z.string().regex(/^\d{2}:\d{2}$/),
-  endTime: z.string().regex(/^\d{2}:\d{2}$/),
+  startTime: z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/),
+  endTime: z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/),
   sortOrder: z.coerce.number().int().min(0).optional(),
   breaks: z.array(flexiblePatternBreakSchema).optional().default([]),
 })
@@ -923,8 +924,8 @@ export const flexiblePatternSchema = z
     staffId: z.string().trim().min(1),
     name: z.string().trim().max(120).optional().or(z.literal("")),
     cycleLengthWeeks: z.coerce.number().int().min(1).max(12),
-    validFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-    validTo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().or(z.literal("")),
+    validFrom: z.iso.date(),
+    validTo: z.iso.date().optional().or(z.literal("")),
     isActive: z.boolean().optional().default(true),
     weeks: z.array(flexiblePatternWeekSchema),
   })
@@ -1082,14 +1083,14 @@ export const appointmentOrderLineInputSchema = z.object({
   serviceId: z.string().trim().min(1),
   staffId: z.string().trim().min(1),
   quantity: z.coerce.number().int().min(1).max(20),
-  durationMinutes: z.coerce.number().int().min(5).max(600),
+  durationMinutes: z.coerce.number().int().min(5).max(12000),
   unitPriceCents: z.coerce.number().int().min(0).max(100000000),
   discountType: z.enum(["NONE", "PERCENT", "AMOUNT"]),
   discountValue: z.coerce.number().min(0).max(1000000),
-  taxIds: z.array(z.string().trim().min(1)).optional().default([]),
-  taxMode: taxModeSchema.default("EXCLUSIVE"),
+  taxIds: z.array(z.string().trim().min(1)).max(50).optional(),
+  taxMode: taxModeSchema.optional(),
   note: z.string().trim().max(500).optional().or(z.literal("")),
-})
+}).refine(line => line.discountType !== "PERCENT" || line.discountValue <= 100, { message: "Percentage discount cannot exceed 100.", path: ["discountValue"] })
 
 export const appointmentOrderProductLineInputSchema = z.object({
   id: z.string().optional(),
@@ -1098,22 +1099,22 @@ export const appointmentOrderProductLineInputSchema = z.object({
   unitPriceCents: z.coerce.number().int().min(0).max(100000000),
   discountType: z.enum(["NONE", "PERCENT", "AMOUNT"]),
   discountValue: z.coerce.number().min(0).max(1000000),
-  taxIds: z.array(z.string().trim().min(1)).optional().default([]),
-  taxMode: taxModeSchema.default("EXCLUSIVE"),
+  taxIds: z.array(z.string().trim().min(1)).max(50).optional(),
+  taxMode: taxModeSchema.optional(),
   note: z.string().trim().max(500).optional().or(z.literal("")),
-})
+}).refine(line => line.discountType !== "PERCENT" || line.discountValue <= 100, { message: "Percentage discount cannot exceed 100.", path: ["discountValue"] })
 
 export const appointmentOrderCreateSchema = z.object({
   customerId: z.string().trim().min(1),
-  appointmentDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  appointmentStartTime: z.string().regex(/^\d{2}:\d{2}$/),
+  appointmentDate: z.iso.date(),
+  appointmentStartTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
   appointmentStartAt: z.string().datetime({ offset: true }),
   status: z.enum(["DRAFT", "CONFIRMED", "COMPLETED", "CANCELED"]).optional(),
   customerNote: z.string().trim().max(500).optional().or(z.literal("")),
   internalNote: z.string().trim().max(2000).optional().or(z.literal("")),
-  coupons: z.array(z.string().trim().min(2).max(40)).optional().default([]),
-  lines: z.array(appointmentOrderLineInputSchema).min(1),
-  productLines: z.array(appointmentOrderProductLineInputSchema).optional().default([]),
+  coupons: z.array(z.string().trim().min(2).max(40)).max(50).optional().default([]),
+  lines: z.array(appointmentOrderLineInputSchema).min(1).max(100),
+  productLines: z.array(appointmentOrderProductLineInputSchema).max(100).optional().default([]),
 })
 
 // Creation defaults must not turn omitted PATCH fields into destructive clears.
@@ -1141,19 +1142,27 @@ export const couponCreateSchema = z.object({
   discountType: z.enum(["NONE", "PERCENT", "AMOUNT"]),
   discountValue: z.coerce.number().min(0).max(1000000),
   isActive: z.boolean().optional().default(true),
-  validFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().or(z.literal("")),
-  validTo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().or(z.literal("")),
-  maxUses: z.coerce.number().int().min(1).max(1000000).optional(),
-  maxUsesPerCustomer: z.coerce.number().int().min(1).max(1000000).optional(),
+  validFrom: z.iso.date().optional().or(z.literal("")),
+  validTo: z.iso.date().optional().or(z.literal("")),
+  maxUses: z.coerce.number().int().min(1).max(1000000).nullable().optional(),
+  maxUsesPerCustomer: z.coerce.number().int().min(1).max(1000000).nullable().optional(),
   appliesTo: couponAppliesToSchema.optional().default("ORDER"),
-  allowedServiceIds: z.array(z.string().trim().min(1)).optional().default([]),
-  allowedCategoryIds: z.array(z.string().trim().min(1)).optional().default([]),
-  allowedProductIds: z.array(z.string().trim().min(1)).optional().default([]),
+  allowedServiceIds: z.array(z.string().trim().min(1)).max(500).optional().default([]),
+  allowedCategoryIds: z.array(z.string().trim().min(1)).max(500).optional().default([]),
+  allowedProductIds: z.array(z.string().trim().min(1)).max(500).optional().default([]),
   minSubtotalCents: z.coerce.number().int().min(0).max(100000000).optional().default(0),
   stackingMode: couponStackingModeSchema.optional().default("STACKABLE"),
 })
 
-export const couponUpdateSchema = couponCreateSchema.partial().refine(
+export const couponUpdateSchema = couponCreateSchema.partial().extend({
+  isActive: couponCreateSchema.shape.isActive.removeDefault().optional(),
+  appliesTo: couponCreateSchema.shape.appliesTo.removeDefault().optional(),
+  allowedServiceIds: couponCreateSchema.shape.allowedServiceIds.removeDefault().optional(),
+  allowedCategoryIds: couponCreateSchema.shape.allowedCategoryIds.removeDefault().optional(),
+  allowedProductIds: couponCreateSchema.shape.allowedProductIds.removeDefault().optional(),
+  minSubtotalCents: couponCreateSchema.shape.minSubtotalCents.removeDefault().optional(),
+  stackingMode: couponCreateSchema.shape.stackingMode.removeDefault().optional(),
+}).refine(
   (value) => Object.keys(value).length > 0,
   { message: "At least one field is required." }
 )
@@ -1163,11 +1172,11 @@ export type CouponUpdateInput = z.infer<typeof couponUpdateSchema>
 
 export const appointmentResolveSchema = z
   .object({
-    appointmentIds: z.array(z.string().trim().min(1)).min(1),
+    appointmentIds: z.array(z.string().trim().min(1)).min(1).max(100),
     action: z.enum(["cancel", "reassign", "reschedule"]),
     targetStaffId: z.string().trim().min(1).optional(),
-    rescheduleDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-    rescheduleTime: z.string().regex(/^\d{2}:\d{2}$/).optional(),
+    rescheduleDate: z.iso.date().optional(),
+    rescheduleTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).optional(),
   })
   .superRefine((values, ctx) => {
     if (values.action === "reassign" && !values.targetStaffId) {
@@ -1247,6 +1256,21 @@ export const createLeaveDefinitionSchema = leaveDefinitionBaseSchema.superRefine
 
 export const updateLeaveDefinitionSchema = leaveDefinitionBaseSchema
   .partial()
+  // PATCH must not apply creation defaults to omitted fields.
+  .extend({
+    allowedUsers: leaveDefinitionBaseSchema.shape.allowedUsers.removeDefault().optional(),
+    allowWithOtherLeaves: leaveDefinitionBaseSchema.shape.allowWithOtherLeaves.removeDefault().optional(),
+    priorEntryAllowed: leaveDefinitionBaseSchema.shape.priorEntryAllowed.removeDefault().optional(),
+    noticeDays: leaveDefinitionBaseSchema.shape.noticeDays.removeDefault().optional(),
+    allowCarryForward: leaveDefinitionBaseSchema.shape.allowCarryForward.removeDefault().optional(),
+    weekOffSingleSideAllowed: leaveDefinitionBaseSchema.shape.weekOffSingleSideAllowed.removeDefault().optional(),
+    weekOffBothSideAllowed: leaveDefinitionBaseSchema.shape.weekOffBothSideAllowed.removeDefault().optional(),
+    holidaySingleSideAllowed: leaveDefinitionBaseSchema.shape.holidaySingleSideAllowed.removeDefault().optional(),
+    holidayBothSideAllowed: leaveDefinitionBaseSchema.shape.holidayBothSideAllowed.removeDefault().optional(),
+    status: leaveDefinitionBaseSchema.shape.status.removeDefault().optional(),
+    sortOrder: leaveDefinitionBaseSchema.shape.sortOrder.removeDefault().optional(),
+    nonClubbableWithIds: leaveDefinitionBaseSchema.shape.nonClubbableWithIds.removeDefault().optional(),
+  })
   .refine((value) => Object.keys(value).length > 0, {
     message: "At least one field is required.",
   })
@@ -1313,6 +1337,13 @@ export const createLeaveGroupSchema = leaveGroupBaseSchema.superRefine((value, c
 
 export const updateLeaveGroupSchema = leaveGroupBaseSchema
   .partial()
+  // PATCH must not apply creation defaults to omitted fields.
+  .extend({
+    assignmentMode: leaveGroupBaseSchema.shape.assignmentMode.removeDefault().optional(),
+    status: leaveGroupBaseSchema.shape.status.removeDefault().optional(),
+    sortOrder: leaveGroupBaseSchema.shape.sortOrder.removeDefault().optional(),
+    staffIds: leaveGroupBaseSchema.shape.staffIds.removeDefault().optional(),
+  })
   .refine((value) => Object.keys(value).length > 0, {
     message: "At least one field is required.",
   })

@@ -1,4 +1,4 @@
-import { serializationConflict } from "@/modules/crm/database-errors"
+import { serializationConflict } from "@/platform/database-errors"
 import type { Prisma, PrismaClient } from "@prisma/client"
 import { recordDomainAuditEvent } from "@/lib/domain-audit"
 import { BusinessError, type BusinessActor } from "../policy"

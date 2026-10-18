@@ -1,3 +1,4 @@
+import { termText } from "@/platform/terminology/message"
 import { requireWriteFields, permits } from "@/platform/access/policy"
 import type { PermissionRun } from "@/platform/access/server"
 import type { Prisma, CrmWorkType } from "@prisma/client"
@@ -19,7 +20,7 @@ export async function resolveActivityTypes(tx: Tx, actor: CrmActor, choices: Cho
   return choices.map(choice => {
     if (!choice.activityTypeId) return { activityTypeId: null, activityTypeName: null }
     const row = byId.get(choice.activityTypeId)
-    if (!row || row.baseType !== choice.type) throw new CrmError(400, "Choose an active activity type with matching behaviour from this business.")
+    if (!row || row.baseType !== choice.type) throw new CrmError(400, termText("crm.activity.singular", "Choose an active activity type with matching behaviour from this business.", "Choose an active {label} type with matching behaviour from this business."))
     return { activityTypeId: row.id, activityTypeName: row.name }
   })
 }
@@ -31,12 +32,12 @@ export async function resolveActivityType(tx: Tx, actor: CrmActor, choice: Choic
   return (await resolveActivityTypes(tx, actor, [{ ...choice, activityTypeId: id }]))[0]
 }
 export function createActivityTypeService({ run, audit }: Context) {
-  const manage = (actor: CrmActor) => { if (!canManageCrm(actor.role)) throw new CrmError(403, "Only a manager can configure activity types.") }
+  const manage = (actor: CrmActor) => { if (!canManageCrm(actor.role)) throw new CrmError(403, termText("crm.activity.singular", "Only a manager can configure activity types.", "Only a manager can configure {label} types.")) }
   return {
     getActivityType(id: string) {
       return run("activityTypes.read", async (tx, actor) => {
         const row = await tx.crmActivityType.findFirst({ where: { tenantId: actor.tenantId, id } })
-        if (!row) throw new CrmError(404, "Activity type not found.")
+        if (!row) throw new CrmError(404, termText("crm.activity.singular", "Activity type not found.", "{label} type not found."))
         return row
       })
     },
@@ -65,10 +66,10 @@ export function createActivityTypeService({ run, audit }: Context) {
         manage(actor)
         const before = await tx.crmActivityType.findFirst({ where: { tenantId: actor.tenantId, id } })
         requireWriteFields(actor, "activityTypes", before ?? undefined, data)
-        if (!before) throw new CrmError(404, "Activity type not found.")
-        if (before.baseType !== data.baseType) throw new CrmError(400, "Behaviour cannot change after creation. Create a new activity type instead.")
+        if (!before) throw new CrmError(404, termText("crm.activity.singular", "Activity type not found.", "{label} type not found."))
+        if (before.baseType !== data.baseType) throw new CrmError(400, termText("crm.activity.singular", "Behaviour cannot change after creation. Create a new activity type instead.", "Behaviour cannot change after creation. Create a new {label} type instead."))
         const changed = await tx.crmActivityType.updateMany({ where: { tenantId: actor.tenantId, id, version }, data: { ...data, nameKey: data.name.toLowerCase(), version: { increment: 1 } } })
-        if (!changed.count) throw new CrmError(409, "This activity type changed. Refresh before saving.")
+        if (!changed.count) throw new CrmError(409, termText("crm.activity.singular", "This activity type changed. Refresh before saving.", "This {label} type changed. Refresh before saving."))
         await audit(tx, actor, "crm.activityType.updated", id, { name: before.name, archived: before.archived, defaultInstructions: before.defaultInstructions }, data)
         return tx.crmActivityType.findFirstOrThrow({ where: { tenantId: actor.tenantId, id } })
       })

@@ -1,10 +1,12 @@
 "use client"
+import { useTerminology, useTerminologyReader } from "@/platform/terminology/provider"
 import { useBusinessModules } from "@/platform/module-provider"
 import { History, MessageSquare } from "lucide-react"
-import { CrmSection, CrmEmptyState } from "./crm-section"
-import { CrmTimeline, TimelinePagination } from "./crm-timeline"
-import { CrmActionBar } from "./crm-page"
-import { CrmTextarea } from "./crm-controls"
+import { Section, EmptyState } from "@/components/erp/section"
+import { Timeline } from "@/components/erp/timeline"
+import { Pagination } from "@/components/erp/pagination"
+import { ActionBar } from "@/components/erp/page"
+import { Textarea } from "@/components/erp/controls"
 import * as React from "react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
@@ -16,6 +18,8 @@ import type { CrmActivityRow } from "@/types/crm"
 import { WorkList } from "./work-list"
 
 export function EnquiryTimeline({ enquiryId, contactId, revision, includeWork = true }: { enquiryId: string; contactId: string; revision: number; includeWork?: boolean }) {
+  const readTerm = useTerminologyReader()
+  const term = useTerminology()
   const { can } = useBusinessModules()
   const { formatDate } = useDateFormatter()
   const [note, setNote] = React.useState("")
@@ -34,13 +38,13 @@ export function EnquiryTimeline({ enquiryId, contactId, revision, includeWork = 
       try {
         const response = await fetch(`/api/crm/enquiries/${enquiryId}/activity?page=${page}`, { signal: controller.signal, cache: "no-store" })
         const data = await response.json()
-        if (!response.ok) throw new Error(data.error || "Unable to load activity.")
+        if (!response.ok) throw new Error(data.error || readTerm("crm.activity.singular", "Unable to load activity.", "Unable to load {label}."))
         setActivity(data)
       } catch (error) { if (!controller.signal.aborted) setActivityError((error as Error).message) }
       finally { if (!controller.signal.aborted) setActivityLoading(false) }
     })()
     return () => controller.abort()
-  }, [enquiryId, page, refresh, revision])
+  }, [readTerm, enquiryId, page, refresh, revision])
   async function add(event: React.FormEvent) {
     event.preventDefault(); setSaving(true)
     noteErrors.clearErrors()
@@ -53,11 +57,11 @@ export function EnquiryTimeline({ enquiryId, contactId, revision, includeWork = 
       setNote(""); changed(); toast.success("Note added.")
     } catch (error) { toast.error((error as Error).message) } finally { setSaving(false) }
   }
-  return <div className="space-y-6">{includeWork && <WorkList enquiryId={enquiryId} contactId={contactId} />}<CrmSection title="Activity history and internal notes" description="Updates and notes for your team." icon={History}>
-    {can("enquiries.edit") && <form onSubmit={event => void add(event)} className="space-y-3 rounded-lg border bg-muted/20 p-4"><FormField id="note" label="Add an enquiry note" error={noteErrors.errors.message}><CrmTextarea id="note" required maxLength={5000} value={note} onChange={event => setNote(event.target.value)} /></FormField><CrmActionBar><Button type="submit" loading={saving}>Add note</Button></CrmActionBar></form>}
+  return <div className="space-y-6">{includeWork && <WorkList enquiryId={enquiryId} contactId={contactId} />}<Section title="Activity history and internal notes" description="Updates and notes for your team." icon={History}>
+    {can("enquiries.edit") && <form onSubmit={event => void add(event)} className="space-y-3 rounded-lg border bg-muted/20 p-4"><FormField id="note" label={term("crm.enquiry.singular", "Add an enquiry note", "Add a note for this {label}")} error={noteErrors.errors.message}><Textarea id="note" required maxLength={5000} value={note} onChange={event => setNote(event.target.value)} /></FormField><ActionBar><Button type="submit" loading={saving}>Add note</Button></ActionBar></form>}
     {activityError && <p role="alert" className="text-destructive">{activityError}</p>}
-    {activityLoading ? <p className="text-sm text-muted-foreground">Loading history…</p> : !activityError && activity && <CrmTimeline entries={activity.items.map(item => ({ id: item.id, icon: item.event.includes("note") ? MessageSquare : History, actor: item.actor.name || "Staff member", action: item.event.includes("note") ? "added an internal note" : "recorded an update", dateTime: item.createdAt, timeLabel: formatDate(item.createdAt), detail: <p className="whitespace-pre-wrap break-words">{item.message}</p> }))} />}
-    {!activityLoading && !activityError && activity?.total === 0 && <CrmEmptyState title="No activity history yet" description="Updates and internal notes will appear here." />}
-    {activity && <TimelinePagination label="Activity history pages" page={page} pageSize={activity.pageSize} total={activity.total} totalPages={activity.totalPages} loading={activityLoading} onPageChange={setPage} />}
-  </CrmSection></div>
+    {activityLoading ? <p className="text-sm text-muted-foreground">Loading history…</p> : !activityError && activity && <Timeline entries={activity.items.map(item => ({ id: item.id, icon: item.event.includes("note") ? MessageSquare : History, actor: item.actor.name || "Staff member", action: item.event.includes("note") ? "added an internal note" : "recorded an update", dateTime: item.createdAt, timeLabel: formatDate(item.createdAt), detail: <p className="whitespace-pre-wrap break-words">{item.message}</p> }))} />}
+    {!activityLoading && !activityError && activity?.total === 0 && <EmptyState title="No activity history yet" description="Updates and internal notes will appear here." />}
+    {activity && <Pagination label="Activity history pages" page={page} pageSize={activity.pageSize} total={activity.total} totalPages={activity.totalPages} loading={activityLoading} onPageChange={setPage} />}
+  </Section></div>
 }

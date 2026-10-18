@@ -1,8 +1,10 @@
 "use client"
-import { CrmPageHeader, CrmSurface, crmPageClass } from "./crm-page"
-import { CrmTableToolbar } from "./crm-page"
-import { CrmTablePagination } from "./crm-pagination"
-import { CrmSelect } from "./crm-controls"
+import { useTerminology } from "@/platform/terminology/provider"
+import { AccessPageHeader } from "@/platform/access/record-page"
+import { Surface, pageClass } from "@/components/erp/page"
+import { TableToolbar } from "@/components/erp/page"
+import { TablePagination } from "@/components/erp/pagination"
+import { Select } from "@/components/erp/controls"
 import * as React from "react"
 import Link from "@/platform/access/link"
 import { getCoreRowModel, useReactTable, type ColumnDef } from "@tanstack/react-table"
@@ -11,6 +13,7 @@ import { DataTable } from "@/components/data-table"
 import { selectClass } from "./record-list"
 import type { FollowUpRuleRow } from "@/types/crm-follow-ups"
 export function FollowUpRuleList() {
+  const term = useTerminology()
   const [items, setItems] = React.useState<FollowUpRuleRow[]>([]), [total, setTotal] = React.useState(0)
   const [q, setQ] = React.useState(""), [archived, setArchived] = React.useState("false")
   const [canManage, setCanManage] = React.useState(false), [loading, setLoading] = React.useState(true), [error, setError] = React.useState("")
@@ -28,10 +31,10 @@ export function FollowUpRuleList() {
   const columns = React.useMemo<ColumnDef<FollowUpRuleRow>[]>(() => [
     { accessorKey: "name", header: "Rule", cell: ({ row }) => <Link className="underline" href={`/crm/follow-up-rules/${row.original.id}`}>{row.original.name}</Link> },
     { id: "trigger", header: "Trigger", cell: ({ row }) => `${row.original.sourceType} · ${row.original.outcome.replaceAll("_", " ")}` },
-    { id: "next", header: "Next activity", cell: ({ row }) => row.original.nextStep.title },
+    { id: "next", header: term("crm.activity.singular", "Next activity", "Next {label}"), cell: ({ row }) => row.original.nextStep.title },
     { id: "delay", header: "Days after completion", cell: ({ row }) => row.original.nextStep.dayOffset },
     { accessorKey: "maxDepth", header: "Chain limit" },
-  ], [])
+  ], [term])
   const table = useReactTable({ data: items, columns, getCoreRowModel: getCoreRowModel(), manualPagination: true, manualFiltering: true, rowCount: total, state: { pagination, globalFilter: q }, onPaginationChange: updater => setPagination(previous => { const next = typeof updater === "function" ? updater(previous) : updater; return next.pageSize !== previous.pageSize ? { ...next, pageIndex: 0 } : next }), onGlobalFilterChange: value => { setQ(String(value)); setPagination(previous => ({ ...previous, pageIndex: 0 })) } })
-  return <section className={crmPageClass}><CrmPageHeader title="Follow-up rules" description="One rule per base behaviour and outcome, including custom types using that behaviour. Edit or restore the existing rule to change that trigger. Rules create work after staff review; they do not send messages." actions={canManage && <Button asChild><Link href="/crm/follow-up-rules/new">New rule</Link></Button>} /><CrmSurface><CrmTableToolbar table={table} searchPlaceholder="Search rules…" showColumnToggle={false}><CrmSelect aria-label="Rule status" className={selectClass} value={archived} onValueChange={event => { setArchived(event); setPagination(previous => ({ ...previous, pageIndex: 0 })) }}><option value="false">Active</option><option value="true">Archived</option></CrmSelect></CrmTableToolbar>{error && <p role="alert" className="text-destructive">{error}</p>}<DataTable table={table} loading={loading} emptyMessage="No follow-up rules. A manager can create one." /><CrmTablePagination table={table} totalRows={total} loading={loading} /></CrmSurface></section>
+  return <section className={pageClass}><AccessPageHeader title="Follow-up rules" description="One rule per base behaviour and outcome, including custom types using that behaviour. Edit or restore the existing rule to change that trigger. Rules create work after staff review; they do not send messages." actions={canManage && <Button asChild><Link href="/crm/follow-up-rules/new">New rule</Link></Button>} /><Surface><TableToolbar table={table} searchPlaceholder="Search rules…" showColumnToggle={false}><Select aria-label="Rule status" className={selectClass} value={archived} onValueChange={event => { setArchived(event); setPagination(previous => ({ ...previous, pageIndex: 0 })) }}><option value="false">Active</option><option value="true">Archived</option></Select></TableToolbar>{error && <p role="alert" className="text-destructive">{error}</p>}<DataTable table={table} loading={loading} emptyMessage="No follow-up rules. A manager can create one." /><TablePagination table={table} totalRows={total} loading={loading} /></Surface></section>
 }

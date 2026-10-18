@@ -14,7 +14,7 @@ test("quotation template, immutable versions, PDF and standard mobile controls",
   await page.goto("/crm/configuration/quotation-templates/new")
   const name = `Reference template ${Date.now()}`
   await page.getByLabel("Template name", { exact: true }).fill(name)
-  await page.getByLabel("Business / developer name", { exact: true }).fill("Example Developer")
+  await page.getByLabel("Business name", { exact: true }).fill("Example Developer")
   await page.getByLabel("Description", { exact: true }).fill("Plot 29")
   await page.getByLabel("Quantity / area", { exact: true }).fill("247")
   await page.getByLabel("Unit", { exact: true }).fill("sq. m")

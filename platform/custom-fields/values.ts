@@ -125,7 +125,8 @@ export async function customFieldExport(tx: Tx, actor: BusinessActor, resource: 
   const fields = await definitions(tx, actor, resource)
   if (ids.length * fields.length > 20000) throw new BusinessError(400, "This export exceeds 20,000 custom-field cells. Narrow the filters and try again.")
   const rows = ids.length && fields.length ? await tx.$queryRaw<ValueRow[]>(Prisma.sql`SELECT * FROM ${table(resource)} WHERE "tenantId"=${actor.tenantId} AND "recordId" IN (${Prisma.join(ids)}) AND "fieldId" IN (${Prisma.join(fields.map(field => field.id))})`) : []
-  const teamByRecord = resource.scopes.includes("PROJECT") || !ids.length || !fields.some(field => field.salesTeamId) ? new Map<string, string | null>() : new Map((await tx.$queryRaw<{ id: string; salesTeamId: string | null }[]>(Prisma.sql`SELECT id, "salesTeamId" FROM ${Prisma.raw('"' + resource.table.replace('FieldValue', '') + '"')} WHERE "tenantId"=${actor.tenantId} AND id IN (${Prisma.join(ids)})`)).map(row => [row.id, row.salesTeamId]))
+  const teamByRecord = resource.recordTeams && ids.length && fields.some(field => field.salesTeamId)
+    ? await resource.recordTeams(tx, actor, ids) : new Map<string, string | null>()
   const fieldTeams = new Map(fields.map(field => [field.id, field.salesTeamId]))
   const records = new Map<string, Map<string, ValueRow>>()
   for (const row of rows) { if (fieldTeams.get(row.fieldId) && fieldTeams.get(row.fieldId) !== teamByRecord.get(row.recordId)) continue; if (!records.has(row.recordId)) records.set(row.recordId, new Map()); records.get(row.recordId)!.set(row.fieldId, row) }

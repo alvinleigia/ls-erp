@@ -1,3 +1,5 @@
+import { termText } from "@/platform/terminology/message"
+import type { TermReader } from "@/platform/terminology/read"
 import { requireWriteFields, requirePermission } from "@/platform/access/policy"
 import type { PermissionRun } from "@/platform/access/server"
 import { resolveSalesTeam, teamSelect } from "./team-service"
@@ -16,7 +18,7 @@ import { businessDate } from "./work-time"
 import type { CrmExtensions } from "./extensions"
 
 type Tx = Prisma.TransactionClient
-type Context = {
+type Context = { readTerms: TermReader;
   run: PermissionRun
   audit: (tx: Tx, actor: CrmActor, event: string, id: string, before?: Prisma.InputJsonValue, after?: Prisma.InputJsonValue) => Promise<void>
   checkAssignee: (tx: Tx, actor: CrmActor, id: string, existingAssigneeId?: string) => Promise<void>
@@ -27,11 +29,11 @@ const page = <T>(items: T[], total: number, page: number, pageSize: number) => (
 const snapshot = (value: unknown): Prisma.InputJsonValue => JSON.parse(JSON.stringify(value))
 const scope = enquiryScope // Opportunities follow the same salesperson assignment rule.
 
-export function createSalesService<Fields extends object, Metadata extends object>({ run, audit, checkAssignee }: Context, extensions: CrmExtensions<Fields, Metadata>) {
+export function createSalesService<Fields extends object, Metadata extends object>({ run, audit, checkAssignee, readTerms }: Context, extensions: CrmExtensions<Fields, Metadata>) {
   const manage = (actor: CrmActor) => { if (!canManageCrm(actor.role)) throw new CrmError(403, "Only a manager can configure sales pipelines.") }
   async function find(tx: Tx, actor: CrmActor, id: string) {
     const record = await tx.crmOpportunity.findFirst({ where: { ...scope(actor), id }, include })
-    if (!record) throw new CrmError(404, "Opportunity not found.")
+    if (!record) throw new CrmError(404, termText("crm.opportunity.singular", "Opportunity not found.", "{label} not found."))
     return { ...(await extensions.decorate(tx, actor, "opportunity", await maskReferrals(tx, actor, [record]))).items[0], customFields: await readCustomFields(tx, actor, opportunityFields, record) }
   }
   async function destination(tx: Tx, actor: CrmActor, pipelineId: string, stageId: string, changing = true) {
@@ -47,12 +49,12 @@ export function createSalesService<Fields extends object, Metadata extends objec
   }
   async function relations(tx: Tx, actor: CrmActor, contactId: string, accountId: string, before?: CrmOpportunity) {
     const contact = await tx.crmContact.findFirst({ where: { ...contactScope(actor), id: contactId } })
-    if (!contact) throw new CrmError(404, "Contact not found.")
-    if (contact.archived && before?.contactId !== contactId) throw new CrmError(409, "Restore the contact before creating an opportunity.")
+    if (!contact) throw new CrmError(404, termText("crm.contact.singular", "Contact not found.", "{label} not found."))
+    if (contact.archived && before?.contactId !== contactId) throw new CrmError(409, ["Restore the ", termText("crm.contact.singular", "contact"), " before creating an ", termText("crm.opportunity.singular", "opportunity"), "."])
     if (accountId) {
       const account = await tx.crmAccount.findFirst({ where: { ...accountScope(actor), id: accountId } })
-      if (!account) throw new CrmError(404, "Business account not found.")
-      if (account.archived && before?.accountId !== accountId) throw new CrmError(409, "Choose an active business account.")
+      if (!account) throw new CrmError(404, termText("crm.account.singular", "Business account not found.", "{label} not found."))
+      if (account.archived && before?.accountId !== accountId) throw new CrmError(409, termText("crm.account.singular", "Choose an active business account.", "Choose an active {label}."))
     }
   }
   async function history(tx: Tx, actor: CrmActor, id: string, event: string, message: string, before?: unknown, after?: unknown) {
@@ -102,7 +104,7 @@ export function createSalesService<Fields extends object, Metadata extends objec
           if (!stage.id) continue
           const old = before.stages.find(item => item.id === stage.id)
           if (!old) throw new CrmError(400, "A stage belongs to another pipeline.")
-          if (old.kind !== stage.kind && await tx.crmOpportunity.count({ where: { tenantId: actor.tenantId, stageId: stage.id } })) throw new CrmError(409, "A stage in use cannot change outcome type. Create a new stage and move its opportunities.")
+          if (old.kind !== stage.kind && await tx.crmOpportunity.count({ where: { tenantId: actor.tenantId, stageId: stage.id } })) throw new CrmError(409, termText("crm.opportunity.plural", "A stage in use cannot change outcome type. Create a new stage and move its opportunities.", "A stage in use cannot change outcome type. Create a new stage and move its {label}."))
         }
         const updated = await tx.crmPipeline.updateMany({ where: { tenantId: actor.tenantId, id, version: data.version }, data: { name: data.name, archived: data.archived, version: { increment: 1 } } })
         if (!updated.count) throw new CrmError(409, "This pipeline changed. Refresh before saving.")
@@ -119,9 +121,10 @@ export function createSalesService<Fields extends object, Metadata extends objec
       })
     },
     listOpportunities(input: unknown, exporting = false) {
-      const query = opportunityListSchema.parse(input)
+      const split = extensions.splitQuery(input)
+      const query = opportunityListSchema.strict().parse(split.core)
       return run(exporting ? ["opportunities.read", "opportunities.export"] : "opportunities.read", async (tx, actor) => {
-        const extensionFilter = await extensions.filters(tx, actor, query)
+        const extensionFilter = await extensions.filters(tx, actor, split.extension)
         const where: Prisma.CrmOpportunityWhereInput = { AND: [scope(actor), {
           salesTeamId: query.salesTeamId, pipelineId: query.pipelineId, stageId: query.stageId, assignedUserId: query.assignedUserId, sourceId: query.sourceId, lostReasonId: query.lostReasonId,
           ...extensionFilter.opportunity,
@@ -138,8 +141,8 @@ export function createSalesService<Fields extends object, Metadata extends objec
           OR: [{ startsAt: { lt: now } }, { startsAt: null, dueOn: { lt: new Date(`${businessDate(now, timeZone)}T00:00:00Z`) } }],
         }] }, _count: { _all: true } }) : []
         const counts = new Map(overdue.map(item => [item.opportunityId, item._count._all]))
-        const decorated = await extensions.decorate(tx, actor, "opportunity", await maskReferrals(tx, actor, items))
-        return { ...page(decorated.items.map(item => ({ ...item, overdueActivityCount: counts.get(item.id) || 0 })), total, query.page, query.pageSize), ...decorated.metadata, customFieldExport: exporting ? await customFieldExport(tx, actor, opportunityFields, items.map(item => item.id)) : undefined }
+        const decorated = await extensions.decorate(tx, actor, "opportunity", await maskReferrals(tx, actor, items), exporting)
+        return { ...page(decorated.items.map(item => ({ ...item, overdueActivityCount: counts.get(item.id) || 0 })), total, query.page, query.pageSize), ...decorated.metadata, exportTerms: exporting ? await readTerms(tx, actor) : undefined, extensionExport: decorated.exportFields, customFieldExport: exporting ? await customFieldExport(tx, actor, opportunityFields, items.map(item => item.id)) : undefined }
       })
     },
     getOpportunity(id: string) { return run("opportunities.read", (tx, actor) => find(tx, actor, id)) },
@@ -152,18 +155,18 @@ export function createSalesService<Fields extends object, Metadata extends objec
         if (data.enquiryId) {
           requirePermission(actor, "enquiries.read")
           const enquiry = await tx.crmEnquiry.findFirst({ where: { ...enquiryScope(actor), id: data.enquiryId } })
-          if (!enquiry) throw new CrmError(404, "Enquiry not found.")
+          if (!enquiry) throw new CrmError(404, termText("crm.enquiry.singular", "Enquiry not found.", "{label} not found."))
           const existing = await tx.crmOpportunity.findFirst({ where: { tenantId: actor.tenantId, enquiryId: enquiry.id } })
           if (existing) return find(tx, actor, existing.id)
-          if (enquiryVersion !== undefined && enquiry.version !== enquiryVersion) throw new CrmError(409, "This enquiry changed. Refresh before converting.")
-          if (enquiry.contactId !== data.contactId) throw new CrmError(400, "Use the enquiry's contact when converting.")
-          if (enquiry.status === "CLOSED") throw new CrmError(409, "Reopen this enquiry before converting it.")
+          if (enquiryVersion !== undefined && enquiry.version !== enquiryVersion) throw new CrmError(409, termText("crm.enquiry.singular", "This enquiry changed. Refresh before converting.", "This {label} changed. Refresh before converting."))
+          if (enquiry.contactId !== data.contactId) throw new CrmError(400, ["Use the ", termText("crm.enquiry.singular", "enquiry"), "'s ", termText("crm.contact.singular", "contact"), " when converting."])
+          if (enquiry.status === "CLOSED") throw new CrmError(409, termText("crm.enquiry.singular", "Reopen this enquiry before converting it.", "Reopen this {label} before converting it."))
           sourceEnquiry = enquiry
         }
         await checkAssignee(tx, actor, data.assignedUserId)
         const team = await resolveSalesTeam(tx, actor, data.salesTeamId === undefined ? sourceEnquiry?.salesTeamId : data.salesTeamId, data.assignedUserId)
-        if (sourceEnquiry && (team?.id ?? null) !== sourceEnquiry.salesTeamId) throw new CrmError(400, "Conversion keeps the enquiry's sales team.")
-        if (team?.workflow === "ENQUIRY_FIRST" && (!sourceEnquiry || sourceEnquiry.status !== "QUALIFIED")) throw new CrmError(400, "This team requires a qualified enquiry before creating an opportunity.")
+        if (sourceEnquiry && (team?.id ?? null) !== sourceEnquiry.salesTeamId) throw new CrmError(400, termText("crm.enquiry.singular", "Conversion keeps the enquiry's sales team.", "Conversion keeps the {label}'s sales team."))
+        if (team?.workflow === "ENQUIRY_FIRST" && (!sourceEnquiry || sourceEnquiry.status !== "QUALIFIED")) throw new CrmError(400, ["This team requires a qualified ", termText("crm.enquiry.singular", "enquiry"), " before creating an ", termText("crm.opportunity.singular", "opportunity"), "."])
         if (sourceEnquiry) extensions.assertConversionInput(extension)
         const expectedCloseOn = data.expectedCloseOn || sourceEnquiry?.targetCloseOn?.toISOString().slice(0, 10)
         if (!expectedCloseOn) throw new CrmError(400, "Enter an expected close date.")
@@ -197,8 +200,8 @@ export function createSalesService<Fields extends object, Metadata extends objec
       return run("opportunities.edit", async (tx, actor) => {
         const before = await find(tx, actor, id)
         requireWriteFields(actor, "opportunities", before ?? undefined, data)
-        if (before.enquiryId && before.contactId !== data.contactId) throw new CrmError(409, "A converted opportunity keeps the enquiry's contact.")
-        if (before.contactId !== data.contactId && await tx.crmTask.count({ where: { tenantId: actor.tenantId, opportunityId: id } })) throw new CrmError(409, "This opportunity has activities. Keep its contact to preserve interaction history.")
+        if (before.enquiryId && before.contactId !== data.contactId) throw new CrmError(409, ["A converted ", termText("crm.opportunity.singular", "opportunity"), " keeps the ", termText("crm.enquiry.singular", "enquiry"), "'s ", termText("crm.contact.singular", "contact"), "."])
+        if (before.contactId !== data.contactId && await tx.crmTask.count({ where: { tenantId: actor.tenantId, opportunityId: id } })) throw new CrmError(409, ["This ", termText("crm.opportunity.singular", "opportunity"), " has ", termText("crm.activity.plural", "activities"), ". Keep its ", termText("crm.contact.singular", "contact"), " to preserve interaction history."])
         await checkAssignee(tx, actor, data.assignedUserId, before.assignedUserId)
         const team = await resolveSalesTeam(tx, actor, data.salesTeamId, data.assignedUserId, before)
         await relations(tx, actor, data.contactId, data.accountId, before)
@@ -210,7 +213,7 @@ export function createSalesService<Fields extends object, Metadata extends objec
           expectedCloseOn: new Date(`${data.expectedCloseOn}T00:00:00Z`), version: { increment: 1 },
           closedAt: stage.kind === "OPEN" ? null : before.closedAt ?? new Date(),
         } })
-        if (!updated.count) throw new CrmError(409, "This opportunity changed. Refresh before saving.")
+        if (!updated.count) throw new CrmError(409, termText("crm.opportunity.singular", "This opportunity changed. Refresh before saving.", "This {label} changed. Refresh before saving."))
         await extensions.save(tx, actor, "opportunity", id, extension)
         await saveCustomFields(tx, actor, opportunityFields, { ...before, salesTeamId: team?.id ?? null }, custom.patch)
         const after = await tx.crmOpportunity.findFirstOrThrow({ where: { tenantId: actor.tenantId, id }, include })
@@ -224,14 +227,14 @@ export function createSalesService<Fields extends object, Metadata extends objec
       return run("opportunities.edit", async (tx, actor) => {
         const before = await find(tx, actor, id)
         requireWriteFields(actor, "opportunities", before ?? undefined, data)
-        if (before.version !== data.version) throw new CrmError(409, "This opportunity changed. Refresh before moving it.")
+        if (before.version !== data.version) throw new CrmError(409, termText("crm.opportunity.singular", "This opportunity changed. Refresh before moving it.", "This {label} changed. Refresh before moving it."))
         const stage = await destination(tx, actor, data.pipelineId, data.stageId)
         if (before.stageId === stage.id) return before
         const fields = { ...outcome(stage, data.lossReason), ...await resolveLostReason(tx, actor, stage.kind === "LOST", data.lostReasonId, before.stage.kind === "LOST" ? before : undefined) }
         const updated = await tx.crmOpportunity.updateMany({ where: { ...scope(actor), id, version: data.version }, data: {
           ...fields, stageId: stage.id, pipelineId: data.pipelineId, version: { increment: 1 }, closedAt: stage.kind === "OPEN" ? null : before.closedAt ?? new Date(),
         } })
-        if (!updated.count) throw new CrmError(409, "This opportunity changed. Refresh before moving it.")
+        if (!updated.count) throw new CrmError(409, termText("crm.opportunity.singular", "This opportunity changed. Refresh before moving it.", "This {label} changed. Refresh before moving it."))
         const after = await find(tx, actor, id)
         await history(tx, actor, id, "crm.opportunity.stage.changed", `${before.pipeline.name} / ${before.stage.name} → ${stage.pipeline.name} / ${stage.name}.${fields.lostReasonName ? ` Lost reason: ${fields.lostReasonName}.` : ""}${fields.lossReason ? ` Closing note: ${fields.lossReason}` : ""}`, before, after)
         return after

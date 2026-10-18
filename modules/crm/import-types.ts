@@ -1,18 +1,34 @@
 export type ImportChoice = { id: string; name: string; aliases?: string[]; parentId?: string | null }
 export type ImportField = {
+  terminologyKey?: string; labelTemplate?: string
+  customField?: { name: string; scope: string }
   key: string; label: string; type?: "text" | "date" | "number" | "boolean" | "choice"
   required?: boolean; choices?: ImportChoice[]; aliases?: string[]; defaultValue?: string; salesTeamId?: string | null
+  allowDefault?: boolean; dependsOn?: string
 }
 export type ImportConfig = { mapping: Record<string, number>; defaults: Record<string, string> }
 export type ImportIssue = { field: string; message: string }
 export const IMPORT_MAX_ROWS = 1000
 export const IMPORT_MAX_BYTES = 3 * 1024 * 1024
 export const importReportColumns = ["Import row", "Import status", "Import errors"]
+// Both preview and the form use the same code-owned dependency metadata.
+export function importChoices(field: ImportField, values: Record<string, unknown>) {
+  return (field.choices || []).filter(choice => !field.dependsOn || (!!values[field.dependsOn] && choice.parentId === values[field.dependsOn]))
+}
+export function changeImportDefault(fields: ImportField[], defaults: Record<string, string>, key: string, value: string) {
+  const next = { ...defaults, [key]: value }, changed = new Set([key])
+  for (let i = 0; i < fields.length; i++) {
+    for (const field of fields) if (field.dependsOn && changed.has(field.dependsOn) && !changed.has(field.key)) {
+      next[field.key] = ""; changed.add(field.key)
+    }
+  }
+  return next
+}
 export const baseImportFields: ImportField[] = [
-  { key: "name", label: "Contact name", required: true, aliases: ["name", "customer", "customer name", "full name"] },
+  { key: "name", label: "Contact name", terminologyKey: "crm.contact.singular", labelTemplate: "{label} name", required: true, aliases: ["name", "customer", "customer name", "full name"] },
   { key: "email", label: "Email", aliases: ["email address", "e-mail"] },
   { key: "phone", label: "Phone", aliases: ["mobile", "mobile number", "phone number", "telephone"] },
-  { key: "title", label: "Enquiry title", aliases: ["title", "enquiry", "lead title"] },
+  { key: "title", label: "Enquiry title", terminologyKey: "crm.enquiry.singular", labelTemplate: "{label} title", aliases: ["title", "enquiry", "lead title"] },
   { key: "requirements", label: "Requirements", aliases: ["notes", "description", "comments"] },
   { key: "targetCloseOn", label: "Target close date", type: "date", aliases: ["target close"] },
   ...["addressLine1", "addressLine2", "city", "region", "postalCode", "country"].map((key, i) => ({ key, label: ["Address line 1", "Address line 2", "City", "State / region", "Postal code", "Country"][i] })),
@@ -21,7 +37,14 @@ export function suggestImportMapping(headers: string[], fields: ImportField[]) {
   const normalize = (s: string) => s.trim().toLowerCase().replace(/[_-]/g, " ")
   const mapping: Record<string, number> = {}
   const used = new Set<number>()
+  // Explicit stable keys take precedence over labels. Unknown bracketed keys
+  // are never guessed, and each source column can only map once.
   for (const field of fields) {
+    const column = headers.findIndex((h, i) => !used.has(i) && h.trim().endsWith(` [${field.key}]`))
+    if (column >= 0) { mapping[field.key] = column; used.add(column) }
+  }
+  for (const field of fields) {
+    if (mapping[field.key] !== undefined) continue
     const names = [field.key, field.label, ...(field.aliases || [])].map(normalize)
     const column = headers.findIndex((h, i) => !used.has(i) && names.includes(normalize(h)))
     if (column >= 0) { mapping[field.key] = column; used.add(column) }

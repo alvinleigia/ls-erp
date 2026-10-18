@@ -30,7 +30,7 @@ import {
   logApiRequestSuccess,
   withRequestId,
 } from "@/lib/api-logging"
-import { checkStaffAppointmentAvailability } from "@/app/api/appointments/_availability"
+import { checkStaffAppointmentAvailability } from "@/modules/workforce/availability"
 import { canManageUsers } from "@/lib/permissions"
 import { prisma } from "@/lib/prisma"
 import { requireTenantSession } from "@/lib/tenant-auth"

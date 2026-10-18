@@ -1,8 +1,10 @@
 "use client"
-import { CrmPageHeader, CrmSurface, crmPageClass } from "./crm-page"
-import { CrmTableToolbar } from "./crm-page"
-import { CrmTablePagination } from "./crm-pagination"
-import { CrmSelect } from "./crm-controls"
+import { useTerminology } from "@/platform/terminology/provider"
+import { AccessPageHeader } from "@/platform/access/record-page"
+import { Surface, pageClass } from "@/components/erp/page"
+import { TableToolbar } from "@/components/erp/page"
+import { TablePagination } from "@/components/erp/pagination"
+import { Select } from "@/components/erp/controls"
 import * as React from "react"
 import Link from "@/platform/access/link"
 import { getCoreRowModel, useReactTable, type ColumnDef } from "@tanstack/react-table"
@@ -11,6 +13,7 @@ import { DataTable } from "@/components/data-table"
 import { selectClass } from "./record-list"
 import type { ActivityPlanRow } from "@/types/crm-plans"
 export function ActivityPlanList() {
+  const term = useTerminology()
   const [items, setItems] = React.useState<ActivityPlanRow[]>([]), [total, setTotal] = React.useState(0)
   const [q, setQ] = React.useState(""), [archived, setArchived] = React.useState("false")
   const [canManage, setCanManage] = React.useState(false), [loading, setLoading] = React.useState(true), [error, setError] = React.useState("")
@@ -27,10 +30,10 @@ export function ActivityPlanList() {
   }, [q, archived, pagination])
   const columns = React.useMemo<ColumnDef<ActivityPlanRow>[]>(() => [
     { accessorKey: "name", header: "Plan", cell: ({ row }) => <Link className="underline" href={`/crm/activity-plans/${row.original.id}`}>{row.original.name}</Link> },
-    { id: "steps", header: "Activities", cell: ({ row }) => row.original.steps.length },
+    { id: "steps", header: term("crm.activity.plural", "Activities"), cell: ({ row }) => row.original.steps.length },
     { accessorKey: "version", header: "Version" },
     { id: "apply", header: "Action", cell: ({ row }) => !row.original.archived && <Link className="underline" href={`/crm/activity-plans/apply?planId=${row.original.id}`}>Apply plan</Link> },
-  ], [])
+  ], [term])
   const table = useReactTable({ data: items, columns, getCoreRowModel: getCoreRowModel(), manualPagination: true, manualFiltering: true, rowCount: total, state: { pagination, globalFilter: q }, onPaginationChange: updater => setPagination(previous => { const next = typeof updater === "function" ? updater(previous) : updater; return next.pageSize !== previous.pageSize ? { ...next, pageIndex: 0 } : next }), onGlobalFilterChange: value => { setQ(String(value)); setPagination(previous => ({ ...previous, pageIndex: 0 })) } })
-  return <section className={crmPageClass}><CrmPageHeader title="Activity plans" description="Reusable follow-up steps, scheduled from a chosen start date. Applying a plan creates all activities for the selected staff member." actions={canManage && <Button asChild><Link href="/crm/activity-plans/new">New plan</Link></Button>} /><CrmSurface><CrmTableToolbar table={table} searchPlaceholder="Search plans…" showColumnToggle={false}><CrmSelect aria-label="Plan status" className={selectClass} value={archived} onValueChange={event => { setArchived(event); setPagination(previous => ({ ...previous, pageIndex: 0 })) }}><option value="false">Active</option><option value="true">Archived</option></CrmSelect></CrmTableToolbar>{error && <p role="alert" className="text-destructive">{error}</p>}<DataTable table={table} loading={loading} emptyMessage="No activity plans. A manager can create one." /><CrmTablePagination table={table} totalRows={total} loading={loading} /></CrmSurface></section>
+  return <section className={pageClass}><AccessPageHeader title={term("crm.activity.singular", "Activity plans", "{label} plans")} description={term("crm.activity.plural", "Reusable follow-up steps, scheduled from a chosen start date. Applying a plan creates all activities for the selected staff member.", "Reusable follow-up steps, scheduled from a chosen start date. Applying a plan creates all {label} for the selected staff member.")} actions={canManage && <Button asChild><Link href="/crm/activity-plans/new">New plan</Link></Button>} /><Surface><TableToolbar table={table} searchPlaceholder="Search plans…" showColumnToggle={false}><Select aria-label="Plan status" className={selectClass} value={archived} onValueChange={event => { setArchived(event); setPagination(previous => ({ ...previous, pageIndex: 0 })) }}><option value="false">Active</option><option value="true">Archived</option></Select></TableToolbar>{error && <p role="alert" className="text-destructive">{error}</p>}<DataTable table={table} loading={loading} emptyMessage={term("crm.activity.singular", "No activity plans. A manager can create one.", "No {label} plans. A manager can create one.")} /><TablePagination table={table} totalRows={total} loading={loading} /></Surface></section>
 }

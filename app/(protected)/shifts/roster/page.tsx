@@ -47,6 +47,8 @@ import {
   UNAVAILABLE_COLOR,
   buildScheduleMap,
   buildShiftSegments,
+  historyPeriods,
+  rosterPaidMinutes,
   buildTemplateColorMap,
   buildTemplateMap,
   formatDateKey,
@@ -600,26 +602,21 @@ export default function RosterPage() {
 
   const scheduleMaps = React.useMemo(() => {
     const maps: Record<string, Record<string, string | null>> = {}
-    const viewEnd = availabilityDates[availabilityDates.length - 1]
-    const viewEndDate = viewEnd ? new Date(viewEnd) : null
+    const cache = new Map<string, Record<string, string | null>>()
+    const scheduleMap = (schedule: ShiftSchedule) => {
+      if (!cache.has(schedule.id)) cache.set(schedule.id, buildScheduleMap(schedule, availabilityDates))
+      return cache.get(schedule.id)!
+    }
     for (const member of filteredStaff) {
-      const assignments = staffAssignments[member.id] ?? []
-      const baseMap: Record<string, string | null> = {}
+      // Apply older assignments first; the latest start (then ID) wins.
+      const assignments = [...(staffAssignments[member.id] ?? [])].sort((a, b) =>
+        a.startDate.localeCompare(b.startDate) || a.id.localeCompare(b.id))
+      const baseMap = { ...(defaultSchedule ? scheduleMap(defaultSchedule) : {}) }
       for (const assignment of assignments) {
-        const startDate = parseISODate(assignment.startDate)
-        if (!startDate) continue
-        const endDate = assignment.endDate ? parseISODate(assignment.endDate) : viewEndDate
-        if (!endDate) continue
-        const map = buildScheduleMap(
-          assignment.schedule,
-          availabilityDates,
-          startDate,
-          endDate
-        )
-        Object.assign(baseMap, map)
-      }
-      if (!assignments.length && defaultSchedule) {
-        Object.assign(baseMap, buildScheduleMap(defaultSchedule, availabilityDates))
+        const start = assignment.startDate.slice(0, 10), end = assignment.endDate?.slice(0, 10)
+        for (const [day, templateId] of Object.entries(scheduleMap(assignment.schedule))) {
+          if (day >= start && (!end || day <= end)) baseMap[day] = templateId
+        }
       }
       maps[member.id] = baseMap
     }
@@ -791,15 +788,7 @@ export default function RosterPage() {
         return []
       }
       const history = getHistoryDay(value, staffId)
-      if (history) {
-        if (history.templateId && templateMap[history.templateId]) {
-          return buildShiftSegments(templateMap[history.templateId])
-        }
-        if (!history.startTime || !history.endTime) {
-          return []
-        }
-        return [{ startTime: history.startTime, endTime: history.endTime }]
-      }
+      if (history) return historyPeriods(history)
       const dateKey = formatDateKey(value)
       const override = overrideMap[staffId]?.[dateKey]
       if (override !== undefined) {
@@ -939,13 +928,7 @@ export default function RosterPage() {
           continue
         }
         const periods = getStaffPeriodsForDate(day, member.id)
-        minutesTotal += periods.reduce((sum, period) => {
-          const [startHour, startMinute] = period.startTime.split(":").map((value) => Number(value))
-          const [endHour, endMinute] = period.endTime.split(":").map((value) => Number(value))
-          const start = (Number.isNaN(startHour) ? 0 : startHour) * 60 + (Number.isNaN(startMinute) ? 0 : startMinute)
-          const end = (Number.isNaN(endHour) ? 0 : endHour) * 60 + (Number.isNaN(endMinute) ? 0 : endMinute)
-          return sum + Math.max(0, end - start)
-        }, 0)
+        minutesTotal += rosterPaidMinutes(history, periods)
       }
       map[member.id] = minutesTotal / 60
     }
@@ -962,13 +945,7 @@ export default function RosterPage() {
             return staffSum
           }
           const periods = getStaffPeriodsForDate(day, member.id)
-          const minutes = periods.reduce((sum, period) => {
-            const [startHour, startMinute] = period.startTime.split(":").map((value) => Number(value))
-            const [endHour, endMinute] = period.endTime.split(":").map((value) => Number(value))
-            const start = (Number.isNaN(startHour) ? 0 : startHour) * 60 + (Number.isNaN(startMinute) ? 0 : startMinute)
-            const end = (Number.isNaN(endHour) ? 0 : endHour) * 60 + (Number.isNaN(endMinute) ? 0 : endMinute)
-            return sum + Math.max(0, end - start)
-          }, 0)
+          const minutes = rosterPaidMinutes(history, periods)
           return staffSum + minutes
         }, 0)
         return totalMinutes / 60

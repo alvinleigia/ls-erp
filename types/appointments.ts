@@ -185,6 +185,15 @@ export type AppointmentOrderFormValues = {
 
 export type AppointmentOrderStatus = "DRAFT" | "CONFIRMED" | "COMPLETED" | "CANCELED"
 
+export type AppointmentOrderCouponHint = { code: string; eligible: boolean; reason?: string; discountCents?: number }
+export type AppointmentOrderPricingPreview = {
+  source: "saved" | "current"
+  totals: AppointmentOrderTotals
+  lines: { taxCents: number; totalCents: number }[]
+  productLines: { taxCents: number; totalCents: number }[]
+  couponHints: AppointmentOrderCouponHint[]
+}
+
 export type CouponRow = {
   id: string
   code: string

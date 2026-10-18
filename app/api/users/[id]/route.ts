@@ -1,6 +1,6 @@
-import { requireBusinessModule } from "@/platform/module-server"
-import { requirePermission } from "@/platform/access/policy"
-import { requireServicesAccess } from "@/modules/services/api"
+import { scheduleTransaction } from "@/modules/workforce/schedule-transaction"
+import { setStaffSchedulingMode } from "@/modules/workforce/staff-scheduling-mode"
+import { requireServicesAccess } from "@/modules/services/policy"
 import { findAccessUser, assignedPermissions } from "@/platform/access/server"
 import { recordDomainAuditEvent } from "@/lib/domain-audit"
 import { guardUserWrite, auditUserSecurity } from "@/platform/access/user-security"
@@ -20,17 +20,6 @@ import { updateUserSchema } from "@/lib/validation"
 import { canManageUsers, type Role } from "@/lib/permissions"
 import { withCoreApi, actorSession } from "@/platform/core/api"
 import type { BusinessActor } from "@/platform/policy"
-
-const getTodayUtc = () => new Date(`${new Date().toISOString().slice(0, 10)}T00:00:00.000Z`)
-
-const getCurrentWeekStartMondayUtc = (value: Date) => {
-  const monday = new Date(value)
-  const day = monday.getUTCDay()
-  const delta = day === 0 ? -6 : 1 - day
-  monday.setUTCDate(monday.getUTCDate() + delta)
-  monday.setUTCHours(0, 0, 0, 0)
-  return monday
-}
 
 async function handlePATCH(request: Request,
   { params }: { params: Promise<{ id: string }> }, actor: BusinessActor) {
@@ -152,7 +141,7 @@ async function handlePATCH(request: Request,
         : null
 
     try {
-      const user = await prisma.$transaction(async (tx) => {
+      const user = await scheduleTransaction(tenantId, async (tx) => {
         const identity = { tenantId, userId: sessionUserId!, requestId: logContext.requestId }
         if (role === "ADMIN" && normalizedEligibleServiceIds !== null) {
           const accessUser = await findAccessUser(tx, tenantId, sessionUserId!)
@@ -162,10 +151,7 @@ async function handlePATCH(request: Request,
           if (count !== normalizedEligibleServiceIds.length) throw new BusinessError(400, "One or more services were not found in this tenant.")
         }
         const priorSecurity = await guardUserWrite(tx, identity, id, data, role === "ADMIN")
-        const updated = await tx.user.update({
-        where: { id },
-        data,
-        select: {
+        const select = {
           id: true,
           name: true,
           email: true,
@@ -211,8 +197,9 @@ async function handlePATCH(request: Request,
               },
             },
           },
-        },
-      })
+        } as const
+        if (priorSecurity?.role !== existingUser.role) throw new BusinessError(409, "This user's role changed. Refresh before saving.")
+        const updated = await tx.user.update({ where: { id }, data, select })
 
       if (role === "ADMIN") {
         if (normalizedEligibleServiceIds !== null) {
@@ -236,8 +223,6 @@ async function handlePATCH(request: Request,
 
         if (targetRole === "STAFF" && staffProfileInput) {
           const managerUserId = staffProfileInput.managerUserId?.trim() || null
-          const todayUtc = getTodayUtc()
-          const currentWeekStartUtc = getCurrentWeekStartMondayUtc(todayUtc)
           if (managerUserId) {
             const managerUser = await tx.user.findUnique({
               where: { id: managerUserId },
@@ -248,83 +233,19 @@ async function handlePATCH(request: Request,
               managerUser.role !== "MANAGER" ||
               managerUser.status !== "ACTIVE"
             ) {
-              throw new Error("Selected manager is invalid or inactive.")
+              throw new BusinessError(400, "Selected manager is invalid or inactive.")
             }
             const managerInTenant = await tx.user.findFirst({
               where: { id: managerUserId, tenantId },
               select: { id: true },
             })
             if (!managerInTenant) {
-              throw new Error("Selected manager does not belong to this tenant.")
+              throw new BusinessError(400, "Selected manager does not belong to this tenant.")
             }
           }
 
-          const existingProfile = await tx.staffProfile.findUnique({
-            where: { userId: id },
-            select: { id: true, schedulingMode: true },
-          })
-
-          const schedulingMode = staffProfileInput.schedulingMode ?? existingProfile?.schedulingMode ?? "STANDARD"
-          if (schedulingMode !== (existingProfile?.schedulingMode ?? "STANDARD")) {
-            const accessUser = await findAccessUser(tx, tenantId, sessionUserId!)
-            if (!accessUser || accessUser.role !== "ADMIN") throw new BusinessError(403, "Scheduling mode requires administrator access.")
-            await requireBusinessModule(tx, tenantId, "shifts")
-            requirePermission({ tenantId, userId: sessionUserId!, role: accessUser.role, permissions: assignedPermissions(accessUser) }, "shiftRoster.edit")
-            await recordDomainAuditEvent(tx, { tenantId, actorUserId: sessionUserId, actorRole: accessUser.role, requestId: logContext.requestId, event: "workforce.shiftRoster.edit", entityType: "User", entityId: id, before: { schedulingMode: existingProfile?.schedulingMode ?? "STANDARD" }, after: { schedulingMode } })
-          }
-          if (existingProfile && existingProfile.schedulingMode !== schedulingMode) {
-            if (schedulingMode === "FLEXIBLE") {
-              const overlappingAssignment = await tx.staffScheduleAssignment.findFirst({
-                where: {
-                  staffProfileId: existingProfile.id,
-                  OR: [{ endDate: null }, { endDate: { gte: todayUtc } }],
-                },
-                select: { id: true },
-              })
-              if (overlappingAssignment) {
-                throw new Error(
-                  "Cannot switch to Flexible while active/future shift schedule assignments exist. Remove schedule assignments first."
-                )
-              }
-            } else {
-              const [activePattern, currentOrFutureWeekPlan, currentOrFutureSlot] = await Promise.all([
-                tx.staffFlexiblePattern.findFirst({
-                  where: {
-                    staffProfileId: existingProfile.id,
-                    isActive: true,
-                    OR: [{ validTo: null }, { validTo: { gte: todayUtc } }],
-                  },
-                  select: { id: true },
-                }),
-                tx.staffFlexibleWeekPlan.findFirst({
-                  where: {
-                    staffProfileId: existingProfile.id,
-                    weekStartDate: { gte: currentWeekStartUtc },
-                  },
-                  select: { id: true },
-                }),
-                tx.staffFlexibleAvailability.findFirst({
-                  where: {
-                    staffProfileId: existingProfile.id,
-                    date: { gte: todayUtc },
-                  },
-                  select: { id: true },
-                }),
-              ])
-
-              if (activePattern || currentOrFutureWeekPlan || currentOrFutureSlot) {
-                throw new Error(
-                  "Cannot switch to Standard while active/future flexible availability exists. Clear flexible plans/slots first."
-                )
-              }
-            }
-          }
-
-          const profile = await tx.staffProfile.upsert({
-            where: { userId: id },
-            update: { managerUserId, schedulingMode },
-            create: { userId: id, managerUserId, schedulingMode },
-          })
+          const modeProfile = await setStaffSchedulingMode(tx, identity, id, staffProfileInput.schedulingMode)
+          const profile = await tx.staffProfile.update({ where: { id: modeProfile.id }, data: { managerUserId } })
 
           if (staffProfileInput.documents) {
             await tx.staffDocument.deleteMany({
@@ -372,7 +293,7 @@ async function handlePATCH(request: Request,
       }
 
         await auditUserSecurity(tx, identity, id, priorSecurity, updated)
-        return updated
+        return tx.user.findUniqueOrThrow({ where: { id }, select })
       })
 
       const response = NextResponse.json({
@@ -385,11 +306,6 @@ async function handlePATCH(request: Request,
       return withRequestId(response, logContext.requestId)
     } catch (error) {
       if (error instanceof BusinessError) return withRequestId(NextResponse.json({ error: error.message }, { status: error.status }), logContext.requestId)
-      if (error instanceof Error) {
-        logApiRequestError(logContext, error, 400, { targetUserId: id })
-        const response = NextResponse.json({ error: error.message }, { status: 400 })
-        return withRequestId(response, logContext.requestId)
-      }
       logApiRequestError(logContext, error, 500, { targetUserId: id })
       const response = NextResponse.json({ error: "Unable to update user." }, { status: 500 })
       return withRequestId(response, logContext.requestId)

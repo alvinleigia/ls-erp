@@ -1,3 +1,4 @@
+import { termText } from "@/platform/terminology/message"
 import { customFilterShape } from "@/platform/custom-fields/validation"
 import { z } from "zod"
 import { COUNTRY_OPTIONS } from "@/lib/constants/countries"
@@ -42,7 +43,7 @@ const enquiryFields = z.object({
   assignedUserId: id, salesTeamId: z.string().max(100).nullable().optional(),
 }).strict()
 export const crmEnquiryCreateSchema = enquiryFields.extend({ contactId: id.optional(), newContact: crmContactSchema.optional() }).refine(
-  value => !!value.contactId !== !!value.newContact, { path: ["contactId"], message: "Choose an existing contact or enter a new contact." },
+  value => !!value.contactId !== !!value.newContact, { path: ["contactId"], message: "Choose an existing contact or enter a new contact.", params: { terminology: termText("crm.contact.singular", "Choose an existing contact or enter a new contact.", "Choose an existing {label} or enter a new {label}.") } },
 )
 export const crmEnquiryUpdateSchema = enquiryFields.extend({
   version: z.number().int().positive(),
@@ -59,7 +60,6 @@ export const crmTaskCompleteSchema = z.object({ completed: z.literal(true) }).st
 export const crmListSchema = z.object({
   ...customFilterShape,
   salesTeamId: id.optional(),
-  projectId: id.optional(), subprojectId: id.optional(),
   page: z.coerce.number().int().min(1).max(100000).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(20),
   q: text(200),

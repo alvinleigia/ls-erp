@@ -1,3 +1,7 @@
+import { termText } from "@/platform/terminology/message"
+import type { TermReader } from "@/platform/terminology/read"
+import { createTermResolver } from "@/platform/terminology/resolver"
+import { importFieldLabel, importTemplateHeader } from "./import-labels"
 import { Prisma } from "@prisma/client"
 import { z } from "zod"
 import { permits } from "@/platform/access/policy"
@@ -9,7 +13,7 @@ import { CrmError, assigneeScope, type CrmActor } from "./policy"
 import { teamScope } from "./team-service"
 import { enquiryFields } from "./custom-fields"
 import { crmListSchema } from "./validation"
-import { baseImportFields, importReportColumns, suggestImportMapping, type ImportConfig, type ImportField, type ImportIssue } from "./import-types"
+import { baseImportFields, importChoices, importReportColumns, suggestImportMapping, type ImportConfig, type ImportField, type ImportIssue } from "./import-types"
 import { crmCsv } from "./csv"
 
 type Tx = Prisma.TransactionClient
@@ -41,7 +45,7 @@ function inputFor(values: string[], config: ImportConfig, fields: ImportField[],
     const raw = (column === undefined ? "" : values[column] || "").trim() || config.defaults[field.key] || field.defaultValue || ""
     if (!raw) continue
     if (field.type === "choice") {
-      const choices = (field.choices || []).filter(c => (field.key !== "subprojectId" || c.parentId === result.projectId) && [c.id, c.name, ...(c.aliases || [])].some(s => clean(s) === clean(raw)))
+      const choices = importChoices(field, result).filter(c => [c.id, c.name, ...(c.aliases || [])].some(s => clean(s) === clean(raw)))
       if (choices.length !== 1) errors.push({ field: field.label, message: choices.length ? "More than one match. Use the exact ID or unique code." : `No active matching choice for “${raw.slice(0, 100)}”. Check the spelling or select a default.` })
       else result[field.key] = choices[0].id
     } else if (field.type === "boolean") {
@@ -66,7 +70,7 @@ function inputFor(values: string[], config: ImportConfig, fields: ImportField[],
   }
 }
 
-export function createEnquiryImportService({ run, audit }: CrmServiceContext, extensions: CrmExtensions, create: Create) {
+export function createEnquiryImportService({ run, audit, readTerms }: CrmServiceContext & { readTerms: TermReader }, extensions: CrmExtensions, create: Create) {
   const owner = (actor: CrmActor, id: string) => ({ id, tenantId: actor.tenantId, createdByUserId: actor.userId })
   async function batch(tx: Tx, actor: CrmActor, id: string) {
     const record = await tx.crmEnquiryImport.findFirst({ where: owner(actor, id) })
@@ -82,11 +86,11 @@ export function createEnquiryImportService({ run, audit }: CrmServiceContext, ex
     ])
     return [
       ...baseImportFields,
-      { key: "assignedUserId", label: "Salesperson", type: "choice", required: true, defaultValue: actor.userId, choices: users.map(u => ({ id: u.id, name: u.name || u.email, aliases: [u.email] })) },
-      { key: "sourceId", label: "Source", type: "choice", choices: sources },
-      { key: "salesTeamId", label: "Sales team", type: "choice", choices: teams },
+      { key: "assignedUserId", label: "Salesperson", type: "choice", allowDefault: true, required: true, defaultValue: actor.userId, choices: users.map(u => ({ id: u.id, name: u.name || u.email, aliases: [u.email] })) },
+      { key: "sourceId", label: "Source", type: "choice", allowDefault: true, choices: sources },
+      { key: "salesTeamId", label: "Sales team", type: "choice", allowDefault: true, choices: teams },
       ...extension,
-      ...custom.filter(f => editableField(actor, f)).map(f => ({ key: `custom:${f.id}`, label: `${f.name} (${f.scope.toLowerCase()}${f.salesTeamId ? ", team field" : ""})`, aliases: [f.name, `${f.scope.toLowerCase()}.${f.code}`], type: f.type.toLowerCase() === "select" ? "choice" as const : f.type.toLowerCase() as ImportField["type"], required: f.required, salesTeamId: f.salesTeamId, choices: f.options.filter(o => !o.archived).map(o => ({ id: o.id, name: o.name })) })),
+      ...custom.filter(f => editableField(actor, f)).map(f => ({ key: `custom:${f.id}`, customField: { name: f.name, scope: f.scope }, label: `${f.name} (${f.scope.toLowerCase()}${f.salesTeamId ? ", team field" : ""})`, aliases: [f.name, `${f.scope.toLowerCase()}.${f.code}`], type: f.type.toLowerCase() === "select" ? "choice" as const : f.type.toLowerCase() as ImportField["type"], required: f.required, salesTeamId: f.salesTeamId, choices: f.options.filter(o => !o.archived).map(o => ({ id: o.id, name: o.name })) })),
     ]
   }
   async function duplicate(tx: Tx, actor: CrmActor, id: string, rowNumber: number, email: string, phone: string) {
@@ -116,7 +120,8 @@ export function createEnquiryImportService({ run, audit }: CrmServiceContext, ex
         const catalog = await fields(tx, actor)
         // Custom-field codes distinguish similarly named fields and are already
         // recognized by the import mapper. No example rows become real leads.
-        return crmCsv(catalog.map(field => field.key.startsWith("custom:") ? field.aliases!.at(-1)! : field.label), [])
+        const term = createTermResolver(await readTerms(tx, actor))
+        return crmCsv(catalog.map(field => importTemplateHeader(field, term)), [])
       })
     },
     getEnquiryImport: get,
@@ -126,8 +131,9 @@ export function createEnquiryImportService({ run, audit }: CrmServiceContext, ex
       const sheet = await parseImportFile(fileName, bytes)
       const id = await run(permission, async (tx, actor) => {
         const catalog = await fields(tx, actor)
+        const term = createTermResolver(await readTerms(tx, actor))
         const record = await tx.crmEnquiryImport.create({ data: { tenantId: actor.tenantId, createdByUserId: actor.userId, fileName: fileName.slice(0, 200), headers: sheet.headers,
-          config: json({ mapping: suggestImportMapping(sheet.headers, catalog), defaults: {} }),
+          config: json({ mapping: suggestImportMapping(sheet.headers, catalog.map(field => ({ ...field, aliases: [...(field.aliases || []), importFieldLabel(field, term)] }))), defaults: {} }),
         } })
         await tx.crmEnquiryImportRow.createMany({ data: sheet.rows.map(row => ({ tenantId: actor.tenantId, importId: record.id, rowNumber: row.rowNumber, values: row.values, status: row.errors.length ? "INVALID" : "PENDING", errors: json(row.errors) })) })
         await audit(tx, actor, "crm.enquiry.import.uploaded", record.id, undefined, { fileName: record.fileName, rows: sheet.rows.length })
@@ -151,9 +157,9 @@ export function createEnquiryImportService({ run, audit }: CrmServiceContext, ex
         const headers = record.headers as string[], catalog = await fields(tx, actor), keys = new Set(catalog.map(f => f.key))
         if (Object.keys(config.mapping).some(k => !keys.has(k) || config.mapping[k] >= headers.length) || Object.keys(config.defaults).some(k => !keys.has(k))) throw new CrmError(400, "A mapped field is unavailable. Refresh and check module settings.")
         if (new Set(Object.values(config.mapping)).size !== Object.values(config.mapping).length) throw new CrmError(400, "Map each sheet column once.")
-        if (config.mapping.name === undefined || (config.mapping.email === undefined && config.mapping.phone === undefined)) throw new CrmError(400, "Map Contact name and at least one of Email or Phone.")
+        if (config.mapping.name === undefined || (config.mapping.email === undefined && config.mapping.phone === undefined)) throw new CrmError(400, termText("crm.contact.singular", "Map Contact name and at least one of Email or Phone.", "Map {label} name and at least one of Email or Phone."))
         // Identity defaults could turn missing/invalid identities into duplicates.
-        if (["name", "email", "phone"].some(k => config.defaults[k])) throw new CrmError(400, "Contact name, email and phone must come from the sheet.")
+        if (["name", "email", "phone"].some(k => config.defaults[k])) throw new CrmError(400, termText("crm.contact.singular", "Contact name, email and phone must come from the sheet.", "{label} name, email and phone must come from the sheet."))
         await tx.crmEnquiryImport.update({ where: { id, tenantId: actor.tenantId }, data: { config: json(config), status: "VALIDATING" } })
       })
       return get(id)

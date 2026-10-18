@@ -841,7 +841,7 @@ export default function TenantsPageClient({
           </DialogHeader>
           <div className="grid gap-3">
             <div className="rounded-md border border-border/60 bg-muted/30 p-3 text-sm text-muted-foreground">
-              Attach this salon tenant to a parent company, or leave it unassigned for now.
+              Attach this business tenant to a parent company, or leave it unassigned for now.
             </div>
             <FormField
               id="tenant-organization-edit"

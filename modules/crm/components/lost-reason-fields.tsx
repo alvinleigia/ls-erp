@@ -1,8 +1,8 @@
 "use client"
 import Link from "@/platform/access/link"
 import { FormField } from "@/components/form-field"
-import { RecordSelect } from "./record-select"
-import { CrmTextarea } from "./crm-controls"
+import { RecordSelect } from "@/components/erp/record-select"
+import { Textarea } from "@/components/erp/controls"
 
 export function LostReasonFields({ value, name, note, onReasonChange, onNoteChange, legacy = false }: {
   value: string; name?: string | null; note: string; legacy?: boolean;
@@ -16,7 +16,7 @@ export function LostReasonFields({ value, name, note, onReasonChange, onNoteChan
       <p className="text-xs text-muted-foreground">{legacy ? "This older record has no structured reason. Its existing note is preserved." : "Required when marking this record Lost."} <Link href="/crm/lost-reasons" target="_blank" rel="noreferrer" className="underline">Manage lost reasons</Link></p>
     </FormField>
     <FormField id="closing-note" label="Closing note (optional)">
-      <CrmTextarea id="closing-note" maxLength={2000} value={note} onChange={e => onNoteChange(e.target.value)} />
+      <Textarea id="closing-note" maxLength={2000} value={note} onChange={e => onNoteChange(e.target.value)} />
     </FormField>
   </div>
 }

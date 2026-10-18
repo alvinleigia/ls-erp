@@ -1,4 +1,5 @@
 "use client"
+import { useTerminology } from "@/platform/terminology/provider"
 import * as React from "react"
 import { SearchableSelect } from "@/components/searchable-select"
 import { workTypes } from "../work-validation"
@@ -9,6 +10,7 @@ export const activityTypeFilter = (value: string): Record<string, string> => !va
 export function ActivityTypeSelect({ id, value, selectedName, onChange, filter = false }: {
   id: string; value: string; selectedName?: string | null; onChange: (value: string, choice?: Choice) => void; filter?: boolean
 }) {
+  const term = useTerminology()
   const [q, setQ] = React.useState("")
   const [rows, setRows] = React.useState<Choice[]>([])
   const [picked, setPicked] = React.useState<Choice>()
@@ -35,8 +37,8 @@ export function ActivityTypeSelect({ id, value, selectedName, onChange, filter =
   }, [q, filter])
   const builtins = workTypes.map(type => ({ value: type, label: type.charAt(0) + type.slice(1).toLowerCase() + (filter ? " (all types with this behaviour)" : "") })).filter(option => option.label.toLowerCase().includes(q.toLowerCase()))
   const options = [...(filter && !q ? [{ value: "", label: "All types" }] : []), ...builtins, ...rows.map(row => ({ value: row.id, label: (row.id === value && selectedName ? selectedName : row.name) + (row.archived ? " (archived)" : "") }))]
-  const retained = options.find(option => option.value === value) || (value ? { value, label: picked?.id === value ? picked.name : selectedName || "Selected activity type" } : undefined)
-  return <SearchableSelect id={id} value={value} selectedOption={retained} options={options} placeholder={filter ? "All types" : "Choose activity type"} emptyLabel={message}
+  const retained = options.find(option => option.value === value) || (value ? { value, label: picked?.id === value ? picked.name : selectedName || term("crm.activity.singular", "Selected activity type", "Selected {label} type") } : undefined)
+  return <SearchableSelect id={id} value={value} selectedOption={retained} options={options} placeholder={filter ? "All types" : term("crm.activity.singular", "Choose activity type", "Choose {label} type")} emptyLabel={message}
     onSearchChange={next => { if (next === q) return; const current = rows.find(row => row.id === value); if (current) setPicked(current); setRows([]); setQ(next) }}
     onChange={next => { const choice = rows.find(row => row.id === next); setPicked(choice); onChange(next, choice) }} />
 }

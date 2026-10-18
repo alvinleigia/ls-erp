@@ -1,5 +1,7 @@
 "use client"
-import { CrmSelect } from "./crm-controls"
+import { useTerminology } from "@/platform/terminology/provider"
+import { resolveTermText } from "@/platform/terminology/message"
+import { Select } from "@/components/erp/controls"
 import * as React from "react"
 import { Input } from "@/components/ui/input"
 import { FormField } from "@/components/form-field"
@@ -32,16 +34,18 @@ export function useFollowUpReview(id: string | undefined, version: number | unde
   return { data, error: current?.error || "", loading: !!id && !!outcome && !current, action, setAction, reason, setReason, applying, ready, decision }
 }
 export function FollowUpReview({ review }: { review: ReturnType<typeof useFollowUpReview> }) {
+  const term = useTerminology()
   const { data } = review
+  const blockedReason = data?.blockedReasonText ? resolveTermText(data.blockedReasonText, term) : data?.blockedReason
   return <div className="space-y-3">
     {review.loading && <p role="status" className="text-sm">Checking follow-up rules…</p>}
     {review.error && <p role="alert" className="text-sm text-destructive">{review.error} Use Refresh to review again.</p>}
     {data?.rule && <section className="space-y-3 rounded-lg border p-4"><h3 className="font-medium">Suggested next step: {data.rule.name}</h3>
-      {data.schedule && <><p className="text-sm">{data.schedule.activityTypeName || data.schedule.type}: {data.schedule.title} · Due {data.schedule.dueOn} ({data.timeZone}). Assigned to the same staff member.</p>{data.schedule.description && <p className="whitespace-pre-wrap text-sm">{data.schedule.description}</p>}{data.schedule.reminderAt && <p className="text-sm">Reminder: {wallTime(data.schedule.reminderAt, data.timeZone || "UTC").replace("T", " ")}</p>}<p className="text-xs text-muted-foreground">This rule permits up to {data.rule.maxDepth} consecutive generated follow-ups. Dates are based on when you complete this activity.</p></>}
-      {data.blockedReason && <p className="text-sm">{data.blockedReason}</p>}
-      <FormField id="follow-up-decision" label="Next step"><CrmSelect id="follow-up-decision" className={`${selectClass} w-full`} value={review.action} onValueChange={event => review.setAction(event as "APPLY" | "SKIP")}><option value="APPLY" disabled={!data.schedule}>Create the suggested follow-up</option><option value="SKIP">Skip this suggestion / choose a manual follow-up</option></CrmSelect></FormField>
+      {data.schedule && <><p className="text-sm">{data.schedule.activityTypeName || data.schedule.type}: {data.schedule.title} · Due {data.schedule.dueOn} ({data.timeZone}). Assigned to the same staff member.</p>{data.schedule.description && <p className="whitespace-pre-wrap text-sm">{data.schedule.description}</p>}{data.schedule.reminderAt && <p className="text-sm">Reminder: {wallTime(data.schedule.reminderAt, data.timeZone || "UTC").replace("T", " ")}</p>}<p className="text-xs text-muted-foreground">This rule permits up to {data.rule.maxDepth} consecutive generated follow-ups. {term("crm.activity.singular", "Dates are based on when you complete this activity.", "Dates are based on when you complete this {label}.")}</p></>}
+      {blockedReason && <p className="text-sm">{blockedReason}</p>}
+      <FormField id="follow-up-decision" label="Next step"><Select id="follow-up-decision" className={`${selectClass} w-full`} value={review.action} onValueChange={event => review.setAction(event as "APPLY" | "SKIP")}><option value="APPLY" disabled={!data.schedule}>Create the suggested follow-up</option><option value="SKIP">Skip this suggestion / choose a manual follow-up</option></Select></FormField>
       {review.action === "SKIP" && <FormField id="follow-up-skip-reason" label="Reason for skipping the suggestion"><Input id="follow-up-skip-reason" required maxLength={2000} value={review.reason} onChange={event => review.setReason(event.target.value)} /></FormField>}
     </section>}
-    {!data?.rule && data?.blockedReason && <p className="text-sm text-muted-foreground">{data.blockedReason}</p>}
+    {!data?.rule && blockedReason && <p className="text-sm text-muted-foreground">{blockedReason}</p>}
   </div>
 }

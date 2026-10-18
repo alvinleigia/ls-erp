@@ -5,19 +5,21 @@ import { EditSectionContext } from "./edit-sections"
 import { FileText, type LucideIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
 
-export function Section({ title, description, icon: Icon = FileText, actions, children, className, id }: {
+export function Section({ title, description, icon: Icon = FileText, actions, children, className, id, sectionKey }: {
   title: ReactNode
   description?: ReactNode
   icon?: LucideIcon
   actions?: ReactNode
   children: ReactNode
   className?: string
+  sectionKey?: string
   id?: string
 }) {
   const headingId = useId()
   const edit = useContext(EditSectionContext)
-  if (edit && typeof title === "string") return <details open={edit.active === title} onToggle={event => { if (event.currentTarget.open && edit.active !== title) edit.setActive(title) }} className={cn("min-w-0 rounded-xl border bg-card", className)}>
-    <summary className="cursor-pointer p-4 text-sm font-semibold" onClick={event => { event.preventDefault(); edit.setActive(edit.active === title ? "" : title) }}>{title}</summary>
+  const identity = sectionKey ?? title
+  if (edit && typeof title === "string") return <details open={edit.active === identity} onToggle={event => { if (event.currentTarget.open && edit.active !== identity) edit.setActive(identity as string) }} className={cn("min-w-0 rounded-xl border bg-card", className)}>
+    <summary className="cursor-pointer p-4 text-sm font-semibold" onClick={event => { event.preventDefault(); edit.setActive(edit.active === identity ? "" : identity as string) }}>{title}</summary>
     <div className="space-y-4 border-t p-4">{description && <p className="text-sm text-muted-foreground">{description}</p>}{actions && <div className="flex flex-wrap justify-end gap-2">{actions}</div>}{children}</div>
   </details>
   return <section id={id} aria-labelledby={headingId} className={cn("min-w-0 overflow-hidden rounded-xl border bg-card shadow-sm", className)}>

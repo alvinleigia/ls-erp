@@ -1,3 +1,4 @@
+import { termText } from "@/platform/terminology/message"
 import { z } from "zod"
 import { crmListSchema } from "./validation"
 export const workTypes = ["TASK", "CALL", "MEETING", "EMAIL"] as const
@@ -22,7 +23,7 @@ export const workScheduleSchema = z.object({
   if (value.startsAt && value.reminderAt && Date.parse(value.reminderAt) > Date.parse(value.startsAt)) ctx.addIssue({ code: "custom", path: ["reminderAt"], message: "Set the reminder at or before the scheduled start." })
 })
 const completion = z.object({ summary: z.string().trim().min(1, "Record a summary for the next staff member.").max(5000), outcome: z.string().min(1).max(40), occurredAt: instant, durationMinutes: z.number().int().min(0).max(1440).nullable().default(null) }).strict()
-export const workCreateSchema = workScheduleSchema.safeExtend({ contactId: id, enquiryId: text(100), opportunityId: text(100), completion: completion.optional() }).refine(value => !(value.enquiryId && value.opportunityId), { path: ["opportunityId"], message: "Link either an enquiry or an opportunity." })
+export const workCreateSchema = workScheduleSchema.safeExtend({ contactId: id, enquiryId: text(100), opportunityId: text(100), completion: completion.optional() }).refine(value => !(value.enquiryId && value.opportunityId), { path: ["opportunityId"], message: "Link either an enquiry or an opportunity.", params: { terminology: [termText("crm.enquiry.singular", "Link either an enquiry", "Link either a {label}"), " or ", termText("crm.opportunity.singular", "an opportunity.", "a {label}.")] } })
 export const workUpdateSchema = workScheduleSchema.safeExtend({ version: z.number().int().positive(), status: z.enum(["OPEN", "IN_PROGRESS"]) })
 export const workCompleteSchema = completion.extend({ version: z.number().int().positive(), followUp: workScheduleSchema.optional(), ruleDecision: z.object({
   id, version: z.number().int().positive(), action: z.enum(["APPLY", "SKIP"]), reason: text(2000),

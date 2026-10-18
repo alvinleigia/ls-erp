@@ -2,7 +2,7 @@
 
 CRM owns contacts, business accounts, contact/account relationships, enquiries,
 configurable pipelines, opportunities, follow-up tasks and activity. Contacts do
-not need login accounts. Existing salon records and authentication are preserved.
+not need login accounts. Existing business records and authentication are preserved.
 See `docs/MODULAR_PLATFORM.md` for boundaries, migration and deferred work.
 See `docs/CRM_ODOO_PHASE_1.md` for the current extension boundary and Configuration
 entry point. `extensions.ts` defines injected transaction hooks; application

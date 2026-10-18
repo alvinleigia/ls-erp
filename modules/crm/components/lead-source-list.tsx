@@ -1,16 +1,19 @@
 "use client"
+import { useTerminology } from "@/platform/terminology/provider"
 import * as React from "react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { DropdownSelect } from "@/components/ui/dropdown-select"
-import { CrmDraftPanel } from "./crm-record-detail"
+import { DraftPanel } from "@/components/erp/record-detail"
 import { FormField } from "@/components/form-field"
-import { CrmPageHeader, CrmSurface, crmPageClass } from "./crm-page"
-import { CrmPagination } from "./crm-pagination"
+import { AccessPageHeader } from "@/platform/access/record-page"
+import { Surface, pageClass } from "@/components/erp/page"
+import { Pagination } from "@/components/erp/pagination"
 
 type Source = { id: string; name: string; archived: boolean; version: number }
 export function LeadSourceList() {
+  const term = useTerminology()
   const [rows, setRows] = React.useState<Source[]>([])
   const [query, setQuery] = React.useState({ q: "", archived: "false", page: 1, pageSize: 20 })
   const [total, setTotal] = React.useState(0)
@@ -46,14 +49,14 @@ export function LeadSourceList() {
       setEditing(null); setRevision(value => value + 1); toast.success("Lead source saved.")
     } catch (error) { setSaveError((error as Error).message) } finally { setSaving(false) }
   }
-  return <div className={crmPageClass}>
-    <CrmPageHeader title="Lead sources" description="Manage how enquiries reach your business. Existing records keep their original source labels." backHref="/crm/enquiries" backLabel="Back to enquiries" actions={canManage && <Button onClick={() => { setSaveError(""); setEditing({ id: "", name: "", archived: false, version: 1 }) }}>New source</Button>} />
-    <CrmSurface>
+  return <div className={pageClass}>
+    <AccessPageHeader title={term("crm.enquiry.singular", "Lead sources", "{label} sources")} description={term("crm.enquiry.plural", "Manage how enquiries reach your business. Existing records keep their original source labels.", "Manage how {label} reach your business. Existing records keep their original source labels.")} backHref="/crm/enquiries" backLabel={term("crm.enquiry.plural", "Back to enquiries", "Back to {label}")} actions={canManage && <Button onClick={() => { setSaveError(""); setEditing({ id: "", name: "", archived: false, version: 1 }) }}>New source</Button>} />
+    <Surface>
       <div className="flex flex-wrap gap-3"><Input aria-label="Search lead sources" placeholder="Search sources…" className="min-w-0 flex-1 basis-48" value={query.q} onChange={event => setQuery({ ...query, q: event.target.value, page: 1 })} /><DropdownSelect label="Source status" value={query.archived} options={[{ value: "false", label: "Active sources" }, { value: "true", label: "Archived sources" }]} onValueChange={archived => setQuery({ ...query, archived, page: 1 })} /><Button variant="outline" onClick={() => setRevision(value => value + 1)}>Refresh</Button></div>
       {error && <p role="alert" className="text-destructive">{error}</p>}
       <div className="overflow-x-auto rounded-lg border"><table className="w-full text-sm"><thead className="bg-muted/50"><tr><th className="p-3 text-left">Source</th><th className="p-3 text-left">Status</th>{canManage && <th className="p-3 text-right">Action</th>}</tr></thead><tbody>{rows.map(row => <tr key={row.id} className="border-t"><td className="p-3">{row.name}</td><td className="p-3">{row.archived ? "Archived" : "Active"}</td>{canManage && <td className="p-3 text-right"><Button variant="outline" size="sm" onClick={() => { setSaveError(""); setEditing(row) }}>Edit<span className="sr-only"> {row.name}</span></Button></td>}</tr>)}{!rows.length && <tr><td className="p-6 text-center text-muted-foreground" colSpan={canManage ? 3 : 2}>{loading ? "Loading sources…" : "No sources found."}</td></tr>}</tbody></table></div>
-      <CrmPagination {...query} total={total} loading={loading} onPageChange={page => setQuery({ ...query, page })} onPageSizeChange={pageSize => setQuery({ ...query, pageSize, page: 1 })} />
-    </CrmSurface>
-    {editing && <CrmDraftPanel title={editing.id ? "Edit lead source" : "New lead source"} description="Archive a source to stop new selections while keeping historical records." onClose={() => setEditing(null)} onSubmit={save} saving={saving} fingerprint={editing} error={saveError} saveLabel="Save source"><fieldset disabled={saving} className="space-y-4"><FormField id="source-name" label="Source name"><Input id="source-name" required maxLength={100} value={editing.name} onChange={event => setEditing({ ...editing, name: event.target.value })} /></FormField>{editing.id && <FormField id="source-status" label="Status"><DropdownSelect id="source-status" className="w-full" value={editing.archived ? "archived" : "active"} options={[{ value: "active", label: "Active" }, { value: "archived", label: "Archived" }]} onValueChange={value => setEditing({ ...editing, archived: value === "archived" })} /></FormField>}</fieldset></CrmDraftPanel>}
+      <Pagination {...query} total={total} loading={loading} onPageChange={page => setQuery({ ...query, page })} onPageSizeChange={pageSize => setQuery({ ...query, pageSize, page: 1 })} />
+    </Surface>
+    {editing && <DraftPanel title={editing.id ? "Edit lead source" : "New lead source"} description="Archive a source to stop new selections while keeping historical records." onClose={() => setEditing(null)} onSubmit={save} saving={saving} fingerprint={editing} error={saveError} saveLabel="Save source"><fieldset disabled={saving} className="space-y-4"><FormField id="source-name" label="Source name"><Input id="source-name" required maxLength={100} value={editing.name} onChange={event => setEditing({ ...editing, name: event.target.value })} /></FormField>{editing.id && <FormField id="source-status" label="Status"><DropdownSelect id="source-status" className="w-full" value={editing.archived ? "archived" : "active"} options={[{ value: "active", label: "Active" }, { value: "archived", label: "Archived" }]} onValueChange={value => setEditing({ ...editing, archived: value === "archived" })} /></FormField>}</fieldset></DraftPanel>}
   </div>
 }

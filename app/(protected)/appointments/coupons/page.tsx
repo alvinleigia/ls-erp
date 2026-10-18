@@ -283,10 +283,10 @@ export default function AppointmentCouponsPage() {
     const payload = {
       ...formValues,
       minSubtotalCents: Number(formValues.minSubtotalCents || 0),
-      maxUses: formValues.maxUses ? Number(formValues.maxUses) : undefined,
+      maxUses: formValues.maxUses ? Number(formValues.maxUses) : null,
       maxUsesPerCustomer: formValues.maxUsesPerCustomer
         ? Number(formValues.maxUsesPerCustomer)
-        : undefined,
+        : null,
     }
     const response = await fetch(
       editing ? `/api/appointments/coupons/${editing.id}` : "/api/appointments/coupons",

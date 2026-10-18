@@ -1,0 +1,10 @@
+import { registerTerms } from "@/platform/terminology/catalog"
+import { crmTerms } from "@/modules/crm/terminology"
+import { realEstateTerms } from "@/modules/real-estate/terminology"
+import { salesDocumentTerms } from "@/modules/sales-documents/terminology"
+
+// Existing fixed controls must remain distinguishable from configurable record names.
+const reservedLabels = ["Title", "Name", "Status", "Source", "Salesperson", "Sales team", "Pipeline", "Stage", "Currency", "Expected value", "Expected close date", "Target close", "Created", "Actions", "ID", "Configuration", "Overview", "Reports", "Settings", "Project name", "Project code", "Location", "Description", "Email", "Phone", "Code", "My Work", "Calendar", "Sales reports", "Templates", "Real Estate", "Sales Documents", "Terminology", "Search", "Filters", "Team", "Sales", "History and notes", "Outcome and next step", "Type", "Priority", "Related to", "Pricing and charges", "Bank and terms", "Terms and remarks", "Calculated summary", "Template configuration", "Property and pricing"]
+const importExportLabels = ["Record type", "Assigned staff", "Status / outcome", "Deal value", "Currency", "Created (UTC)", "Closed (UTC)", "Due date", "Lost reason", "Closing note", "Sales lifecycle", "Requirements", "Target close date", "Address line 1", "Address line 2", "City", "State / region", "Postal code", "Country", "Minimum budget", "Maximum budget", "Budget currency", "Preferred property category", "Bedrooms", "Buying timeframe", "Import row", "Import status", "Import errors", "Skip column", "Not specified"]
+const documentLabels = ["Reference details", "Price", "Charges and payment conditions", "Bank details", "Registration", "Summary", "Detail", "Value", "Amount", "Quantity", "Unit", "Rate", "Milestone", "Total instalments"]
+export const terminologyCatalog = registerTerms([...crmTerms, ...realEstateTerms, ...salesDocumentTerms].map(term => ({ ...term, reservedLabels: [...reservedLabels, ...importExportLabels, ...documentLabels] })))

@@ -1,33 +1,29 @@
 import type { Resource, Requirement } from "./catalog"
-import { crmConfigurationGroups } from "@/modules/crm/configuration"
 
-const routes: [string, Resource][] = [
-  ["/dashboard", "dashboard"], ["/reports/audit-logs", "auditLogs"],
-  ["/users", "users"], ["/settings/taxes", "taxRates"],
-  ["/leaves/requests", "leaveRequests"], ["/leaves/approvals", "leaveApprovals"], ["/leaves/groups", "leaveGroups"], ["/leaves", "leaveDefinitions"],
-  ["/shifts/recurring", "shiftPlans"], ["/shifts/roster", "shiftRoster"], ["/shifts/schedules", "shiftSchedules"], ["/shifts", "shiftTemplates"],
-  ["/reports/coupon-usage", "appointmentCoupons"],
-  ["/appointments/coupons", "appointmentCoupons"], ["/appointments", "appointments"],
-  ["/services/categories", "serviceCategories"], ["/services", "services"],
-  ["/inventory/categories", "inventoryCategories"], ["/inventory/suppliers", "inventorySuppliers"],
-  ["/inventory/purchases", "inventoryPurchases"], ["/inventory", "inventoryProducts"],
-  ["/crm/configuration/quotation-templates", "quotationTemplates"], ["/crm/configuration/real-estate", "projectSettings"],
-  ["/crm/configuration/custom-fields", "customFields"], ["/crm/configuration/sales-teams", "salesTeams"], ["/crm/configuration/presets", "pipelines"],
-  ["/crm/contacts", "contacts"], ["/crm/accounts", "accounts"], ["/crm/enquiries", "enquiries"], ["/crm/opportunities", "opportunities"],
-  ["/crm/activities", "activities"], ["/crm/tasks", "activities"], ["/crm/calendar", "activities"],
-  ["/crm/overview", "reports"], ["/crm/sales", "reports"], ["/crm/pipelines", "pipelines"], ["/crm/lead-sources", "leadSources"],
-  ["/crm/lost-reasons", "lostReasons"], ["/crm/activity-types", "activityTypes"], ["/crm/activity-plans", "activityPlans"], ["/crm/follow-up-rules", "followUpRules"],
-  ["/crm/projects", "projects"], ["/crm/quotations", "quotations"],
-]
-export function routeResource(path: string) { if (path === "/settings") return "businessSettings"; return routes.find(([base]) => path === base || path.startsWith(`${base}/`))?.[1] }
-export function routeRequirement(path: string): Requirement | undefined {
-  if (path === "/crm/enquiries/import") return ["enquiries.create", "contacts.create"]
-  if (path === "/settings") return "businessSettings.read"
-  if (path === "/reports/coupon-usage") return ["appointmentCoupons.read", "appointments.read"]
-  if (path === "/crm/overview") return ["reports.read", "activities.read", "opportunities.read"]
-  if (path === "/crm/sales" || path.startsWith("/crm/sales/")) return ["reports.read", "enquiries.read", "opportunities.read", "activities.read"]
-  const resource = routeResource(path)
-  if (resource) return `${resource}.${path.endsWith("/new") ? "create" : "read"}`
-  if (path === "/crm/configuration" || path === "/crm/activity-configuration") return { any: crmConfigurationGroups[path === "/crm/configuration" ? 0 : 1].items.map(item => `${routeResource(item.href)!}.read` as const) }
-  return undefined
+export type RouteAccessPolicy = {
+  resources: readonly (readonly [string, Resource])[]
+  exactResources?: Readonly<Record<string, Resource>>
+  exactRequirements?: Readonly<Record<string, Requirement>>
+  prefixRequirements?: readonly (readonly [string, Requirement])[]
+  protectedLinkPrefixes?: readonly string[]
 }
+const matches = (path: string, base: string) => path === base || path.startsWith(`${base}/`)
+
+// Route metadata is composed by the application. The platform only resolves it.
+// More specific resource prefixes must precede their parent, as with navigation.
+export function createRouteAccess(policy: RouteAccessPolicy) {
+  function routeResource(path: string): Resource | undefined {
+    return policy.exactResources?.[path] ?? policy.resources.find(([base]) => matches(path, base))?.[1]
+  }
+  function routeRequirement(path: string): Requirement | undefined {
+    const explicit = policy.exactRequirements?.[path] ?? policy.prefixRequirements?.find(([base]) => matches(path, base))?.[1]
+    if (explicit) return explicit
+    const resource = routeResource(path)
+    return resource ? `${resource}.${path.endsWith("/new") ? "create" : "read"}` : undefined
+  }
+  function linkRequirement(path: string) {
+    return policy.protectedLinkPrefixes?.some(base => matches(path, base)) ? routeRequirement(path) : undefined
+  }
+  return { routeResource, routeRequirement, linkRequirement }
+}
+export type RouteAccess = ReturnType<typeof createRouteAccess>

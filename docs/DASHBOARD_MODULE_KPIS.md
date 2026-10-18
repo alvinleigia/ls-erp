@@ -1,8 +1,16 @@
 # Module dashboard summaries
 
 The business dashboard uses its existing period selector, ERP sections and surfaces,
-and Recharts charts. Sales widgets live in `components/dashboard/sales-widgets.tsx`;
-the server aggregate is `platform/dashboard/sales-summary.ts`.
+and Recharts charts. Application composition lives in `application/dashboard/`.
+CRM, Real Estate and Sales Documents own their queries, result types and widgets
+in their respective `modules/*/dashboard.ts`, `dashboard-types.ts` and
+`components/dashboard-widgets.tsx` files. Shared chart/table/metric presentation
+lives in `components/dashboard/widgets.tsx`; it does not import business modules.
+The platform no longer composes sales dashboard queries. Operational query providers
+live in `modules/{appointments,workforce,services,inventory}/dashboard.ts` and enforce
+their own module/read gates. `application/dashboard/summary.ts` assembles the existing
+response, with calendar boundaries in `application/dashboard/period.ts`. Current
+account authorization is supplied once by the dashboard's core API wrapper.
 
 ## Definitions
 

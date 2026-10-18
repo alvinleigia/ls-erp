@@ -1,4 +1,4 @@
-import { withCustomFieldApi } from "@/application/crm/custom-fields"
+import { withCustomFieldApi } from "@/application/custom-fields/http"
 import { readJson } from "@/platform/business-api"
 export const dynamic = "force-dynamic"
 type Context = { params: Promise<{ id: string }> }

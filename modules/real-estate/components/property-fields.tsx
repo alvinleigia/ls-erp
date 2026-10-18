@@ -1,11 +1,12 @@
 "use client"
+import { useTerminology } from "@/platform/terminology/provider"
 import * as React from "react"
 import { useBusinessModules } from "@/platform/module-provider"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { FormField } from "@/components/form-field"
-import { CrmSection } from "@/modules/crm/components/crm-section"
-import { RecordSelect } from "@/modules/crm/components/record-select"
+import { Section } from "@/components/erp/section"
+import { RecordSelect } from "@/components/erp/record-select"
 import { ChoiceSelect } from "./choice-select"
 import type { PropertyDefaults } from "../choices"
 import type { PropertyContextInput } from "../sales-validation"
@@ -19,6 +20,7 @@ export function useRealEstateEnabled() {
   return useBusinessModules().enabled("realEstate")
 }
 export function PropertyFields({ value, onChange, selected, disabled, readOnly, error, isNew = false }: { isNew?: boolean; error?: string; value: PropertyContextInput; onChange: (value: PropertyContextInput) => void; selected?: PropertyContext | null; disabled?: boolean; readOnly?: boolean }) {
+  const term = useTerminology()
   const [defaultsLoading, setDefaultsLoading] = React.useState(isNew)
   const [defaultsError, setDefaultsError] = React.useState("")
   const latest = React.useRef({ value, onChange })
@@ -52,15 +54,15 @@ export function PropertyFields({ value, onChange, selected, disabled, readOnly, 
   }, [value.projectId, value.subprojectId, selected?.project?.id, selected?.subproject?.id])
   const project = selected?.project?.id === value.projectId ? selected.project : choices[value.projectId]
   const subproject = selected?.subproject?.id === value.subprojectId ? selected.subproject : choices[value.subprojectId]
-  return <CrmSection title="Property interest" description={readOnly ? "Conversion preserves the enquiry's project and requirements. Change them on the saved opportunity if needed." : "Optional project selection and buyer requirements. Budget is separate from the deal value."}>
+  return <Section title="Property interest" description={readOnly ? term("crm.enquiry.singular", "Conversion preserves the enquiry's", "Conversion preserves the {label}'s") + " " + term("realEstate.project.singular", "project and requirements.", "{label} and requirements.") + " " + term("crm.opportunity.singular", "Change them on the saved opportunity if needed.", "Change them on the saved {label} if needed.") : term("realEstate.project.singular", "Optional project selection and buyer requirements.", "Optional {label} selection and buyer requirements.") + " " + term("crm.opportunity.singular", "Budget is separate from the deal value.", "Budget is separate from the {label} value.")}>
     {(error || defaultsError) && <p role="alert" className="text-sm text-destructive">{error || defaultsError}</p>}
     <fieldset disabled={locked} className="grid gap-4 sm:grid-cols-2">
-      <FormField id="property-project" label="Project (optional)"><RecordSelect id="property-project" endpoint="/api/real-estate/projects" value={value.projectId} disabled={locked} selected={project ? { value: project.id, label: `${project.name}${project.archived ? " (archived)" : ""}` } : undefined} onChange={projectId => onChange({ ...value, projectId, subprojectId: "" })} />{value.projectId && !readOnly && <Button type="button" variant="link" size="sm" onClick={() => onChange({ ...value, projectId: "", subprojectId: "" })}>Clear project</Button>}</FormField>
-      <FormField id="property-subproject" label="Subproject (optional)"><RecordSelect key={value.projectId} id="property-subproject" endpoint={`/api/real-estate/projects?parentId=${encodeURIComponent(value.projectId)}`} value={value.subprojectId} disabled={locked || !value.projectId} selected={subproject ? { value: subproject.id, label: `${subproject.name}${subproject.archived ? " (archived)" : ""}` } : undefined} onChange={subprojectId => onChange({ ...value, subprojectId })} />{value.subprojectId && !readOnly && <Button type="button" variant="link" size="sm" onClick={() => onChange({ ...value, subprojectId: "" })}>Clear subproject</Button>}</FormField>
+      <FormField id="property-project" label={term("realEstate.project.singular", "Project (optional)", "{label} (optional)")}><RecordSelect id="property-project" endpoint="/api/real-estate/projects" value={value.projectId} disabled={locked} selected={project ? { value: project.id, label: `${project.name}${project.archived ? " (archived)" : ""}` } : undefined} onChange={projectId => onChange({ ...value, projectId, subprojectId: "" })} />{value.projectId && !readOnly && <Button type="button" variant="link" size="sm" onClick={() => onChange({ ...value, projectId: "", subprojectId: "" })}>{term("realEstate.project.singular", "Clear project", "Clear {label}")}</Button>}</FormField>
+      <FormField id="property-subproject" label={term("realEstate.subproject.singular", "Subproject (optional)", "{label} (optional)")}><RecordSelect key={value.projectId} id="property-subproject" endpoint={`/api/real-estate/projects?parentId=${encodeURIComponent(value.projectId)}`} value={value.subprojectId} disabled={locked || !value.projectId} selected={subproject ? { value: subproject.id, label: `${subproject.name}${subproject.archived ? " (archived)" : ""}` } : undefined} onChange={subprojectId => onChange({ ...value, subprojectId })} />{value.subprojectId && !readOnly && <Button type="button" variant="link" size="sm" onClick={() => onChange({ ...value, subprojectId: "" })}>{term("realEstate.subproject.singular", "Clear subproject", "Clear {label}")}</Button>}</FormField>
       {([['budgetMin', 'Minimum budget'], ['budgetMax', 'Maximum budget'], ['budgetCurrency', 'Budget currency (e.g. INR)']] as const).map(([key, label]) => <FormField key={key} id={`property-${key}`} label={label}><Input id={`property-${key}`} maxLength={key === "budgetCurrency" ? 3 : 19} value={value[key]} onChange={event => onChange({ ...value, [key]: event.target.value })} /></FormField>)}
       <FormField id="property-category" label="Preferred property category"><ChoiceSelect kind="property-categories" id="property-category" value={value.propertyCategory || ""} name={selected && selected.propertyCategory === value.propertyCategory ? selected.propertyCategoryName : undefined} disabled={locked} clearable={!readOnly} placeholder="Not specified" onChange={propertyCategory => onChange({ ...value, propertyCategory })} /></FormField>
       <FormField id="property-bedrooms" label="Bedrooms (0 for studio)"><Input id="property-bedrooms" type="number" min={0} max={50} value={value.bedrooms ?? ""} onChange={event => onChange({ ...value, bedrooms: event.target.value === "" ? null : Number(event.target.value) })} /></FormField>
       <FormField id="property-timeframe" label="Buying timeframe"><ChoiceSelect kind="buying-timeframes" id="property-timeframe" value={value.buyingTimeframe || ""} name={selected && selected.buyingTimeframe === value.buyingTimeframe ? selected.buyingTimeframeName : undefined} disabled={locked} clearable={!readOnly} placeholder="Not specified" onChange={buyingTimeframe => onChange({ ...value, buyingTimeframe })} /></FormField>
     </fieldset>
-  </CrmSection>
+  </Section>
 }

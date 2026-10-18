@@ -1,17 +1,19 @@
+import { termText } from "@/platform/terminology/message"
 import { requireWriteFields } from "@/platform/access/policy"
 import type { Requirement } from "@/platform/access/catalog"
 import { moduleEnabled } from "@/platform/modules"
-import type { CrmServiceContext } from "@/modules/crm/service-context"
 import type { Prisma } from "@prisma/client"
-import { CrmError, canManageCrm, enquiryScope, type CrmActor } from "@/modules/crm/policy"
-import { crmListSchema } from "@/modules/crm/validation"
-import { quotationSaveSchema, quotationTemplateSchema, emptyQuotationContent, type QuotationContent } from "./quotation-validation"
+import { BusinessError, type BusinessActor } from "@/platform/policy"
+import { quotationListSchema, quotationSaveSchema, quotationTemplateSchema, emptyQuotationContent, type QuotationContent } from "./quotation-validation"
 import { calculateQuotation, type QuotationCalculation } from "./quotation-calculation"
-import type { CrmExtensions } from "@/modules/crm/extensions"
+import type { QuotationDependencies } from "./quotation-contracts"
 import type { AppSettingsPayload } from "@/types/scheduling"
+import { createTermResolver } from "@/platform/terminology/resolver"
+import { quotationDocumentLabels, type QuotationDocumentLabels } from "./quotation-labels"
 
 type Tx = Prisma.TransactionClient
 export type QuotationSnapshot = {
+  labels?: QuotationDocumentLabels;
   content: QuotationContent; calculation: QuotationCalculation;
   customer: { name: string; email: string | null; phone: string | null };
   opportunity: string; actor: string; template: { id: string; name: string; version: number } | null;
@@ -20,27 +22,28 @@ export type QuotationSnapshot = {
 }
 const json = (value: unknown): Prisma.InputJsonValue => JSON.parse(JSON.stringify(value))
 const page = <T>(items: T[], total: number, q: { page: number; pageSize: number }) => ({ items, total, page: q.page, pageSize: q.pageSize, totalPages: Math.max(1, Math.ceil(total / q.pageSize)) })
-function calculate(content: QuotationContent) { try { return calculateQuotation(content) } catch (error) { throw new CrmError(400, (error as Error).message) } }
-export function createQuotationService({ run: checkedRun, audit }: CrmServiceContext, extensions: CrmExtensions) {
-  function run<T>(requirement: Requirement, operation: (tx: Tx, actor: CrmActor, paymentPlans: boolean) => Promise<T>) {
+function calculate(content: QuotationContent) { try { return calculateQuotation(content) } catch (error) { throw new BusinessError(400, (error as Error).message) } }
+const canManageTemplates = (role: string) => role === "ADMIN" || role === "MANAGER"
+export function createQuotationService({ run: checkedRun, audit, opportunityScope, documentContext, readTerms }: QuotationDependencies) {
+  function run<T>(requirement: Requirement, operation: (tx: Tx, actor: BusinessActor, paymentPlans: boolean) => Promise<T>) {
     return checkedRun(requirement, async (tx, actor) => {
       const flags = await tx.tenantModule.findMany({ where: { tenantId: actor.tenantId } })
-      if (!moduleEnabled(flags, "salesDocuments")) throw new CrmError(403, "Sales Documents is not enabled for this business.")
+      if (!moduleEnabled(flags, "salesDocuments")) throw new BusinessError(403, "Sales Documents is not enabled for this business.")
       return operation(tx, actor, moduleEnabled(flags, "paymentPlans"))
     })
   }
   function assertScheduleWrite(enabled: boolean, content: QuotationContent, previous?: QuotationContent) {
-    if (!enabled && (content.instalments.length || previous?.instalments.length)) throw new CrmError(403, "Enable Payment Plans before saving a document or template with an instalment schedule. Saved versions remain available.")
+    if (!enabled && (content.instalments.length || previous?.instalments.length)) throw new BusinessError(403, "Enable Payment Plans before saving a document or template with an instalment schedule. Saved versions remain available.")
   }
-  const manage = (actor: CrmActor) => { if (!canManageCrm(actor.role)) throw new CrmError(403, "Only managers can configure quotation templates.") }
-  async function opportunity(tx: Tx, actor: CrmActor, id: string) {
-    const row = await tx.crmOpportunity.findFirst({ where: { ...enquiryScope(actor), id }, include: { contact: { select: { name: true, email: true, phone: true, archived: true } } } })
-    if (!row) throw new CrmError(404, "Opportunity not found.")
+  const manage = (actor: BusinessActor) => { if (!canManageTemplates(actor.role)) throw new BusinessError(403, termText("salesDocuments.quotation.singular", "Only managers can configure quotation templates.", "Only managers can configure {label} templates.")) }
+  async function opportunity(tx: Tx, actor: BusinessActor, id: string) {
+    const row = await tx.crmOpportunity.findFirst({ where: { ...opportunityScope(actor), id }, select: { id: true, title: true, currency: true, amount: true, contact: { select: { name: true, email: true, phone: true, archived: true } } } })
+    if (!row) throw new BusinessError(404, termText("crm.opportunity.singular", "Opportunity not found.", "{label} not found."))
     return row
   }
-  async function find(tx: Tx, actor: CrmActor, id: string) {
-    const row = await tx.crmQuotation.findFirst({ where: { tenantId: actor.tenantId, id, opportunity: enquiryScope(actor) } })
-    if (!row) throw new CrmError(404, "Quotation not found.")
+  async function find(tx: Tx, actor: BusinessActor, id: string) {
+    const row = await tx.crmQuotation.findFirst({ where: { tenantId: actor.tenantId, id, opportunity: opportunityScope(actor) } })
+    if (!row) throw new BusinessError(404, termText("salesDocuments.quotation.singular", "Quotation not found.", "{label} not found."))
     return row
   }
   return {
@@ -48,39 +51,40 @@ export function createQuotationService({ run: checkedRun, audit }: CrmServiceCon
       return run("quotations.create", async (tx, actor, paymentPlans) => {
         const row = await opportunity(tx, actor, opportunityId)
         const tenant = await tx.tenant.findUniqueOrThrow({ where: { id: actor.tenantId }, select: { name: true } })
-        const context = await extensions.quotationContext?.(tx, actor, row.id) || []
-        return { paymentPlansEnabled: paymentPlans, opportunity: row.title, context, content: { ...emptyQuotationContent, supplierName: tenant.name, currency: row.currency, lines: [{ description: row.title, quantity: "1", unit: "", rate: row.amount.toString() }] } }
+        const term = createTermResolver(await readTerms?.(tx, actor) || {})
+        const context = await documentContext?.(tx, actor, row.id, term) || []
+        return { paymentPlansEnabled: paymentPlans, opportunity: row.title, context, content: { ...emptyQuotationContent, title: term("salesDocuments.quotation.singular", emptyQuotationContent.title), supplierName: tenant.name, currency: row.currency, lines: [{ description: row.title, quantity: "1", unit: "", rate: row.amount.toString() }] } }
       })
     },
     listQuotationTemplates(input: unknown) {
-      const q = crmListSchema.parse(input)
+      const q = quotationListSchema.parse(input)
       return run("quotationTemplates.read", async (tx, actor, paymentPlans) => {
-        const where = { tenantId: actor.tenantId, archived: canManageCrm(actor.role) && q.archived === "true", name: { contains: q.q, mode: "insensitive" as const } }
+        const where = { tenantId: actor.tenantId, archived: canManageTemplates(actor.role) && q.archived === "true", name: { contains: q.q, mode: "insensitive" as const } }
         const [items, total] = await Promise.all([tx.crmQuotationTemplate.findMany({ where, select: { id: true, name: true, archived: true, version: true }, orderBy: [{ name: "asc" }, { id: "asc" }], skip: (q.page - 1) * q.pageSize, take: q.pageSize }), tx.crmQuotationTemplate.count({ where })])
-        return { ...page(items, total, q), canManage: canManageCrm(actor.role), paymentPlansEnabled: paymentPlans }
+        return { ...page(items, total, q), canManage: canManageTemplates(actor.role), paymentPlansEnabled: paymentPlans }
       })
     },
     getQuotationTemplate(id: string) {
       return run("quotationTemplates.read", async (tx, actor, paymentPlans) => {
-        const row = await tx.crmQuotationTemplate.findFirst({ where: { tenantId: actor.tenantId, id, ...(!canManageCrm(actor.role) ? { archived: false } : {}) } })
-        if (!row) throw new CrmError(404, "Template not found.")
-        return { ...row, canManage: canManageCrm(actor.role), paymentPlansEnabled: paymentPlans }
+        const row = await tx.crmQuotationTemplate.findFirst({ where: { tenantId: actor.tenantId, id, ...(!canManageTemplates(actor.role) ? { archived: false } : {}) } })
+        if (!row) throw new BusinessError(404, "Template not found.")
+        return { ...row, canManage: canManageTemplates(actor.role), paymentPlansEnabled: paymentPlans }
       })
     },
     saveQuotationTemplate(input: unknown, id?: string) {
       const data = quotationTemplateSchema.parse(input)
       // Templates may have zero prices; evaluate the percentage schedule when used.
-      if (data.content.bookingDate || data.content.validUntil) throw new CrmError(400, "Set dates on individual quotations, not on reusable templates.")
+      if (data.content.bookingDate || data.content.validUntil) throw new BusinessError(400, termText("salesDocuments.quotation.plural", "Set dates on individual quotations, not on reusable templates.", "Set dates on individual {label}, not on reusable templates."))
       return run(id ? "quotationTemplates.edit" : "quotationTemplates.create", async (tx, actor, paymentPlans) => {
         let recordId = id
         manage(actor)
         const before = id ? await tx.crmQuotationTemplate.findFirst({ where: { tenantId: actor.tenantId, id } }) : null
         requireWriteFields(actor, "quotationTemplates", before ?? undefined, data)
-        if (id && !before) throw new CrmError(404, "Template not found.")
+        if (id && !before) throw new BusinessError(404, "Template not found.")
         assertScheduleWrite(paymentPlans, data.content, before?.content as QuotationContent | undefined)
         const values = { name: data.name, content: json(data.content), archived: data.archived }
         if (before) {
-          if (data.version !== before.version) throw new CrmError(409, "This template changed. Refresh before saving.")
+          if (data.version !== before.version) throw new BusinessError(409, "This template changed. Refresh before saving.")
           await tx.crmQuotationTemplate.updateMany({ where: { tenantId: actor.tenantId, id, version: before.version }, data: { ...values, version: { increment: 1 } } })
         } else { recordId = (await tx.crmQuotationTemplate.create({ data: { ...values, tenantId: actor.tenantId } })).id }
         await audit(tx, actor, "crm.quotationTemplate.saved", recordId!, before ? { version: before.version } : undefined, { name: data.name, archived: data.archived })
@@ -88,10 +92,10 @@ export function createQuotationService({ run: checkedRun, audit }: CrmServiceCon
       })
     },
     listQuotations(opportunityId: string | undefined, input: unknown) {
-      const q = crmListSchema.parse(input)
+      const q = quotationListSchema.parse(input)
       return run("quotations.read", async (tx, actor, paymentPlans) => {
         if (opportunityId) await opportunity(tx, actor, opportunityId)
-        const where = { tenantId: actor.tenantId, ...(opportunityId ? { opportunityId } : {}), opportunity: enquiryScope(actor), title: { contains: q.q, mode: "insensitive" as const } }
+        const where = { tenantId: actor.tenantId, ...(opportunityId ? { opportunityId } : {}), opportunity: opportunityScope(actor), title: { contains: q.q, mode: "insensitive" as const } }
         const [items, total] = await Promise.all([tx.crmQuotation.findMany({ where, orderBy: [{ createdAt: "desc" }, { id: "asc" }], skip: (q.page - 1) * q.pageSize, take: q.pageSize }), tx.crmQuotation.count({ where })])
         return { ...page(items, total, q), paymentPlansEnabled: paymentPlans }
       })
@@ -100,7 +104,7 @@ export function createQuotationService({ run: checkedRun, audit }: CrmServiceCon
       return run(exporting ? ["quotations.read", "quotations.export"] : "quotations.read", async (tx, actor, paymentPlans) => {
         const row = await find(tx, actor, id)
         const item = await tx.crmQuotationRevision.findUnique({ where: { tenantId_quotationId_number: { tenantId: actor.tenantId, quotationId: id, number: revision ?? row.version } } })
-        if (!item) throw new CrmError(404, "Quotation version not found.")
+        if (!item) throw new BusinessError(404, termText("salesDocuments.quotation.singular", "Quotation version not found.", "{label} version not found."))
         return { ...row, revision: item.number, revisionCreatedAt: item.createdAt, snapshot: item.snapshot as unknown as QuotationSnapshot, paymentPlansEnabled: paymentPlans }
       })
     },
@@ -109,18 +113,19 @@ export function createQuotationService({ run: checkedRun, audit }: CrmServiceCon
       return run(id ? "quotations.edit" : "quotations.create", async (tx, actor, paymentPlans) => {
         let recordId = id
         const row = await opportunity(tx, actor, opportunityId)
-        if (row.contact.archived) throw new CrmError(409, "Restore the contact before saving a new quotation version.")
+        if (row.contact.archived) throw new BusinessError(409, ["Restore the ", termText("crm.contact.singular", "contact"), " before saving a new ", termText("salesDocuments.quotation.singular", "quotation"), " version."])
         const before = id ? await find(tx, actor, id) : null
-        if (before && before.opportunityId !== opportunityId) throw new CrmError(404, "Quotation not found.")
-        if (before && data.version !== before.version) throw new CrmError(409, "This quotation changed. Refresh before saving.")
+        if (before && before.opportunityId !== opportunityId) throw new BusinessError(404, termText("salesDocuments.quotation.singular", "Quotation not found.", "{label} not found."))
+        if (before && data.version !== before.version) throw new BusinessError(409, termText("salesDocuments.quotation.singular", "This quotation changed. Refresh before saving.", "This {label} changed. Refresh before saving."))
         const prior = before ? await tx.crmQuotationRevision.findUniqueOrThrow({ where: { tenantId_quotationId_number: { tenantId: actor.tenantId, quotationId: before.id, number: before.version } } }) : null
         assertScheduleWrite(paymentPlans, data.content, prior ? (prior.snapshot as unknown as QuotationSnapshot).content : undefined)
         const template = data.templateId ? await tx.crmQuotationTemplate.findFirst({ where: { tenantId: actor.tenantId, id: data.templateId, archived: false }, select: { id: true, name: true, version: true } }) : null
-        if (data.templateId && !template) throw new CrmError(400, "Choose an active template.")
+        if (data.templateId && !template) throw new BusinessError(400, "Choose an active template.")
         const settings = await tx.appSetting.findUnique({ where: { tenantId: actor.tenantId }, select: { locale: true, dateFormat: true, numberFormat: true, currencySymbolPlacement: true } })
         const author = await tx.user.findFirstOrThrow({ where: { tenantId: actor.tenantId, id: actor.userId }, select: { name: true } })
-        const context = await extensions.quotationContext?.(tx, actor, row.id) || []
-        const snapshot: QuotationSnapshot = { content: data.content, calculation, context, customer: { name: row.contact.name, email: row.contact.email, phone: row.contact.phone }, opportunity: row.title, actor: author.name || "Staff", template, locale: settings?.locale || "en-US", dateFormat: settings?.dateFormat || "yyyy-MM-dd", numberFormat: settings?.numberFormat || "US_UK", currencySymbolPlacement: settings?.currencySymbolPlacement || "BEFORE" }
+        const term = createTermResolver(await readTerms?.(tx, actor) || {})
+        const context = await documentContext?.(tx, actor, row.id, term) || []
+        const snapshot: QuotationSnapshot = { labels: quotationDocumentLabels(term), content: data.content, calculation, context, customer: { name: row.contact.name, email: row.contact.email, phone: row.contact.phone }, opportunity: row.title, actor: author.name || "Staff", template, locale: settings?.locale || "en-US", dateFormat: settings?.dateFormat || "yyyy-MM-dd", numberFormat: settings?.numberFormat || "US_UK", currencySymbolPlacement: settings?.currencySymbolPlacement || "BEFORE" }
         const values = { title: data.content.title, currency: data.content.currency, consideration: calculation.consideration }
         if (before) await tx.crmQuotation.updateMany({ where: { tenantId: actor.tenantId, id, version: before.version }, data: { ...values, version: { increment: 1 } } })
         else recordId = (await tx.crmQuotation.create({ data: { ...values, tenantId: actor.tenantId, opportunityId } })).id

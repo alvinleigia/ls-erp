@@ -1,3 +1,4 @@
+import { termText } from "@/platform/terminology/message"
 import { salesRecordAccess } from "@/platform/access/record-scope"
 import { requireWriteFields } from "@/platform/access/policy"
 import type { PermissionRun } from "@/platform/access/server"
@@ -103,7 +104,7 @@ export function createTeamService({ run, audit }: Context) {
             tx.crmEnquiry.count({ where: { ...where, status: { not: "CLOSED" }, opportunities: { none: {} } } }),
             tx.crmOpportunity.count({ where: { ...where, stage: { kind: "OPEN" } } }),
           ])
-          if (leads || deals) throw new CrmError(409, "Reassign this member's open enquiries and opportunities before removing them.")
+          if (leads || deals) throw new CrmError(409, ["Reassign this member's open ", termText("crm.enquiry.plural", "enquiries"), " and ", termText("crm.opportunity.plural", "opportunities"), " before removing them."])
           await tx.crmSalesTeamMember.deleteMany({ where: { tenantId: actor.tenantId, teamId: id, userId: data.userId } })
         } else {
           if (!await tx.user.findFirst({ where: { tenantId: actor.tenantId, id: data.userId, status: "ACTIVE", role: { in: ["ADMIN", "MANAGER", "STAFF"] } } })) throw new CrmError(400, "Choose an active salesperson in this business.")

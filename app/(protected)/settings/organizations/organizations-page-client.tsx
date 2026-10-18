@@ -476,7 +476,7 @@ export default function OrganizationsPageClient({
         <div>
           <h1 className="text-2xl font-semibold">Organizations</h1>
           <p className="text-sm text-muted-foreground">
-            Manage parent companies that will own groups of salon tenants.
+            Manage parent companies that will own groups of business tenants.
           </p>
         </div>
         {canCreateOrganizations ? (
@@ -513,7 +513,7 @@ export default function OrganizationsPageClient({
           </DialogHeader>
           <div className="grid gap-3">
             <div className="rounded-md border border-border/60 bg-muted/30 p-3 text-sm text-muted-foreground">
-              This creates the parent-company record. Child salon tenants can be linked from the
+              This creates the parent-company record. Child business tenants can be linked from the
               tenant management screen.
             </div>
             <FormField id="organization-name" label="Organization name" error={errors.name}>

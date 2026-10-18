@@ -1,0 +1,123 @@
+import { test, expect } from "@playwright/test"
+import { seed, login, json } from "./fixtures"
+import { emptyQuotationContent } from "../../modules/sales-documents/quotation-validation"
+
+test.describe.configure({ mode: "serial" })
+let fixture: Awaited<ReturnType<typeof seed>>, admin: Awaited<ReturnType<typeof login>>
+let project: { id: string }, quote: { id: string }, deal: { id: string }
+const labels = { "crm.enquiry.singular": "Prospect", "crm.enquiry.plural": "Prospects", "crm.opportunity.singular": "Deal", "crm.opportunity.plural": "Deals", "crm.contact.singular": "Person", "crm.activity.singular": "Touchpoint", "crm.activity.plural": "Touchpoints", "realEstate.project.singular": "Development", "realEstate.project.plural": "Developments", "realEstate.subproject.singular": "Phase", "realEstate.subproject.plural": "Phases", "salesDocuments.quotation.singular": "Offer", "salesDocuments.quotation.plural": "Offers", "paymentPlans.paymentPlan.plural": "Payment schedules" }
+async function rename(changes: Record<string, string | null>) {
+  const current = await json(admin.context, "/api/settings/terminology")
+  await json(admin.context, "/api/settings/terminology", 200, "PATCH", { version: current.version, changes: Object.entries(changes).map(([key, label]) => ({ key, label })) })
+  await admin.page.evaluate(() => window.dispatchEvent(new Event("terminology-changed")))
+}
+test.beforeAll(async ({ browser }) => {
+  fixture = await seed(); admin = await login(browser, fixture.origin, fixture.users.admin.email)
+  // Isolated local fixture: hide unrelated modules to exercise the sales dashboard layout.
+  for (const key of ["appointments", "leaves", "shifts", "services", "inventory"]) await json(admin.context, "/api/modules", 200, "PATCH", { key, enabled: false })
+  const contact = await json(admin.context, "/api/crm/contacts", 201, "POST", { name: "Original contact", email: "reports@example.test" })
+  project = await json(admin.context, "/api/real-estate/projects", 201, "POST", { name: "No project", code: "REPORT-P", location: "Pune", currency: "INR" })
+  for (let i = 0; i < 12; i++) await json(admin.context, "/api/crm/enquiries", 201, "POST", { title: `Original enquiry ${i}`, contactId: contact.id, assignedUserId: fixture.users.admin.id, ...(i === 0 ? { propertyContext: { projectId: project.id } } : {}) })
+  const pipeline = await json(admin.context, "/api/crm/pipelines", 201, "POST", { name: "Original pipeline", stages: [
+    { name: "Original stage", kind: "OPEN", probability: 20, color: "#123456" }, { name: "Won", kind: "WON", probability: 100, color: "#008800" }, { name: "Lost", kind: "LOST", probability: 0, color: "#880000" },
+  ] })
+  deal = await json(admin.context, "/api/crm/opportunities", 201, "POST", { title: "Original opportunity", contactId: contact.id, assignedUserId: fixture.users.admin.id, pipelineId: pipeline.id, stageId: pipeline.stages[0].id, amount: "1000", currency: "INR", expectedCloseOn: "2030-11-06", propertyContext: { projectId: project.id } })
+  const activityType = await json(admin.context, "/api/crm/activity-types", 201, "POST", { name: "Original site visit", baseType: "MEETING" })
+  const visit = await json(admin.context, "/api/crm/work", 201, "POST", { title: "Original activity", type: "MEETING", activityTypeId: activityType.id, contactId: contact.id, opportunityId: deal.id, assignedUserId: fixture.users.admin.id, dueOn: "2030-11-01" })
+  await json(admin.context, `/api/crm/work/${visit.id}/complete`, 200, "POST", { version: visit.version, outcome: "HELD", summary: "Original visit notes", occurredAt: new Date().toISOString() })
+  await json(admin.context, "/api/crm/work", 201, "POST", { title: "Original follow-up", type: "TASK", contactId: contact.id, opportunityId: deal.id, assignedUserId: fixture.users.admin.id, dueOn: "2030-11-02" })
+  quote = await json(admin.context, `/api/crm/opportunities/${deal.id}/quotations`, 201, "POST", { content: { ...structuredClone(emptyQuotationContent), title: "Original quotation", supplierName: "Original supplier", currency: "INR", bookingDate: new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" }), lines: [{ description: "Original line", quantity: "1", unit: "unit", rate: "1000" }], instalments: [{ label: "Original instalment", percent: "100", days: 1, note: "Original note" }] } })
+  await rename(labels)
+})
+test.afterAll(async () => { await admin?.context.close(); await fixture?.db.end() })
+
+test("report labels preserve grouping, pagination and totals during terminology refresh", async ({}, testInfo) => {
+  const baseline = await json(admin.context, "/api/crm/reports/sales?scope=mine")
+  await admin.page.goto("/crm/sales")
+  await expect(admin.page.getByRole("button", { name: "Prospects created 12", exact: true })).toBeVisible()
+  await admin.page.getByRole("button", { name: "Group Prospects by", exact: true }).click()
+  await admin.page.getByRole("menuitemradio", { name: "By Development", exact: true }).click()
+  const breakdown = admin.page.getByRole("region", { name: "Prospect conversion", exact: true })
+  await expect(breakdown.getByRole("cell", { name: "No project", exact: true })).toBeVisible()
+  await expect(breakdown.getByRole("cell", { name: "No Development", exact: true })).toBeVisible()
+  await breakdown.getByRole("row").filter({ has: admin.page.getByRole("cell", { name: "No Development", exact: true }) }).getByRole("button", { name: "11", exact: true }).click()
+  const records = admin.page.locator("#sales-records")
+  await records.getByRole("button", { name: "Rows per page", exact: true }).click()
+  await admin.page.getByRole("menuitemradio", { name: "10 / page", exact: true }).click()
+  await records.getByRole("button", { name: "Next page", exact: true }).click()
+  await expect(records.getByText("Page 2 of 2", { exact: true })).toBeVisible()
+  await expect(records.locator("tbody a")).toHaveCount(1)
+  const beforeTitles = await records.locator("tbody a").allTextContents()
+  let reportReads = 0
+  const countRead = (request: import("@playwright/test").Request) => { if (request.url().includes("/api/crm/reports/sales")) reportReads++ }
+  admin.page.on("request", countRead)
+  await rename({ "crm.enquiry.plural": "Leads", "realEstate.project.singular": "Estate" })
+  await expect(records.getByRole("heading", { name: "Leads created", exact: true })).toBeVisible()
+  await expect(records.getByText(/^Selected: No Estate\./)).toBeVisible()
+  await expect(records.getByText("Page 2 of 2", { exact: true })).toBeVisible()
+  await expect(records.getByRole("columnheader", { name: "Estate", exact: true })).toBeVisible()
+  expect(await records.locator("tbody a").allTextContents()).toEqual(beforeTitles)
+  expect(reportReads).toBe(0)
+  admin.page.off("request", countRead)
+  expect((await json(admin.context, "/api/crm/reports/sales?scope=mine")).totals).toEqual(baseline.totals)
+  await admin.page.screenshot({ path: testInfo.outputPath("reports-desktop.png"), fullPage: true, animations: "disabled" })
+  await admin.page.setViewportSize({ width: 390, height: 844 })
+  expect(await admin.page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+  await records.screenshot({ path: testInfo.outputPath("reports-mobile.png"), animations: "disabled" })
+  await admin.page.setViewportSize({ width: 1280, height: 900 })
+  await rename(labels)
+})
+
+test("dashboard cards, charts and tables share labels while names, values and links stay intact", async ({}, testInfo) => {
+  const before = await json(admin.context, "/api/dashboard/summary?range=week")
+  const original = await json(admin.context, `/api/crm/quotations/${quote.id}`)
+  await admin.page.goto("/dashboard")
+  await expect(admin.page.getByText("New Prospects", { exact: true }).first()).toBeVisible()
+  await expect(admin.page.getByRole("heading", { name: "Prospect status", exact: true })).toBeVisible()
+  await expect(admin.page.getByRole("heading", { name: "Completed Touchpoints by type", exact: true })).toBeVisible()
+  await expect(admin.page.getByText("Active Developments", { exact: true })).toBeVisible()
+  await expect(admin.page.getByRole("link", { name: "No project", exact: true })).toHaveAttribute("href", `/crm/projects/${project.id}`)
+  await expect(admin.page.getByRole("heading", { name: "Payment schedules", exact: true })).toBeVisible()
+  await expect(admin.page.getByText("Original instalment", { exact: true })).toBeVisible()
+  await expect(admin.page.getByRole("link", { name: "Original quotation", exact: true }).first()).toHaveAttribute("href", `/crm/quotations/${quote.id}`)
+  const chart = admin.page.getByRole("region", { name: "Prospect status", exact: true })
+  await chart.locator(".recharts-bar-rectangle").first().hover()
+  await expect(chart.locator(".recharts-tooltip-item-name")).toHaveText("Prospects")
+  await admin.page.screenshot({ path: testInfo.outputPath("dashboard-desktop.png"), fullPage: true, animations: "disabled" })
+  let dashboardReads = 0
+  const countRead = (request: import("@playwright/test").Request) => { if (request.url().includes("/api/dashboard/summary")) dashboardReads++ }
+  admin.page.on("request", countRead)
+  await rename({ "salesDocuments.quotation.singular": "Proposal", "salesDocuments.quotation.plural": "Proposals" })
+  await expect(admin.page.getByText("Proposals created", { exact: true })).toBeVisible()
+  await expect(admin.page.getByRole("columnheader", { name: "Proposal", exact: true }).first()).toBeVisible()
+  expect(dashboardReads).toBe(0)
+  admin.page.off("request", countRead)
+  const after = await json(admin.context, "/api/dashboard/summary?range=week")
+  expect(after.sales).toEqual(before.sales)
+  expect((await json(admin.context, `/api/crm/quotations/${quote.id}`)).snapshot).toEqual(original.snapshot)
+  await admin.page.setViewportSize({ width: 390, height: 844 })
+  expect(await admin.page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+  await admin.page.getByRole("region", { name: "Payment schedules", exact: true }).screenshot({ path: testInfo.outputPath("dashboard-mobile.png"), animations: "disabled" })
+  await admin.page.setViewportSize({ width: 1280, height: 900 })
+})
+
+test("terminology reset and disabled modules retain default report labels and widget gating", async () => {
+  await rename(Object.fromEntries(Object.keys(labels).map(key => [key, null])))
+  await admin.page.goto("/crm/sales")
+  await expect(admin.page.getByRole("button", { name: "Leads created 12", exact: true })).toBeVisible()
+  await expect(admin.page.getByRole("button", { name: "Group leads by", exact: true })).toBeVisible()
+  for (const key of ["paymentPlans", "salesDocuments", "realEstate"]) await json(admin.context, "/api/modules", 200, "PATCH", { key, enabled: false })
+  await admin.page.reload()
+  await admin.page.getByRole("button", { name: "Group leads by", exact: true }).click()
+  await expect(admin.page.getByRole("menuitemradio", { name: "By project", exact: true })).toHaveCount(0)
+  await admin.page.keyboard.press("Escape")
+  await expect(admin.page.getByRole("columnheader", { name: "Project", exact: true })).toHaveCount(0)
+  await admin.page.goto("/dashboard")
+  await expect(admin.page.getByRole("heading", { name: "Enquiry status", exact: true })).toBeVisible()
+  for (const name of ["Real Estate", "Sales Documents", "Payment Plans"]) await expect(admin.page.getByRole("heading", { name, exact: true })).toHaveCount(0)
+  await json(admin.context, "/api/modules", 200, "PATCH", { key: "crm", enabled: false })
+  await admin.page.reload()
+  await expect(admin.page.getByRole("heading", { name: "CRM and sales", exact: true })).toHaveCount(0)
+  const summary = await json(admin.context, "/api/dashboard/summary?range=week")
+  for (const key of ["enquiries", "opportunities", "activities", "projects", "quotations", "paymentPlans"]) expect(summary.sales[key]).toBeNull()
+})

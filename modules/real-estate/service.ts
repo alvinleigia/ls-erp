@@ -1,3 +1,6 @@
+import { termText } from "@/platform/terminology/message"
+import { readTermReplacements } from "@/platform/terminology/read"
+import { realEstateTerms } from "./terminology"
 import { requireWriteFields, permits } from "@/platform/access/policy"
 import type { Requirement } from "@/platform/access/catalog"
 import { findAccessUser, assignedPermissions } from "@/platform/access/server"
@@ -15,7 +18,7 @@ import { createPropertyChoiceService, propertyChoiceDefaults, resolvePropertyCho
 
 type Tx = Prisma.TransactionClient
 const manage = (actor: BusinessActor) => actor.role === "ADMIN" || actor.role === "MANAGER"
-const requireManager = (actor: BusinessActor) => { if (!manage(actor)) throw new BusinessError(403, "Only managers can change projects and staff access.") }
+const requireManager = (actor: BusinessActor) => { if (!manage(actor)) throw new BusinessError(403, termText("realEstate.project.plural", "Only managers can change projects and staff access.", "Only managers can change {label} and staff access.")) }
 const snapshot = (value: unknown): Prisma.InputJsonValue => JSON.parse(JSON.stringify(value))
 export const projectScope = (actor: BusinessActor): Prisma.RealEstateProjectWhereInput => ({ tenantId: actor.tenantId, ...(!manage(actor) ? {
   archived: false, OR: [
@@ -52,7 +55,7 @@ export function createRealEstateService(db: PrismaClient, identity: Pick<Busines
   }
   async function find(tx: Tx, actor: BusinessActor, id: string) {
     const record = await tx.realEstateProject.findFirst({ where: { AND: [projectScope(actor), { id }] } })
-    if (!record) throw new BusinessError(404, "Project not found.")
+    if (!record) throw new BusinessError(404, termText("realEstate.project.singular", "Project not found.", "{label} not found."))
     return record
   }
   async function audit(tx: Tx, actor: BusinessActor, event: string, entityId: string, before: unknown, after: unknown) {
@@ -62,16 +65,16 @@ export function createRealEstateService(db: PrismaClient, identity: Pick<Busines
     const defaults = !before && (!data.lifecycle || data.categories === undefined) ? await propertyChoiceDefaults(tx, actor.tenantId) : null
     const lifecycle = data.lifecycle || before?.lifecycle || defaults?.["project-statuses"]?.id
     const categories = data.categories ?? before?.categories ?? (defaults?.["property-categories"] ? [defaults["property-categories"].id] : [])
-    if (!lifecycle) throw new BusinessError(400, "Choose a project status or configure a default.")
+    if (!lifecycle) throw new BusinessError(400, termText("realEstate.project.singular", "Choose a project status or configure a default.", "Choose a {label} status or configure a default."))
     await resolvePropertyChoice(tx, actor.tenantId, "project-statuses", lifecycle, before?.lifecycle)
     await validatePropertyCategories(tx, actor.tenantId, categories, before?.categories)
-    if (before && (data.parentId || null) !== before.parentId) throw new BusinessError(400, "A project's parent cannot be changed. Create a subproject under the correct project.")
+    if (before && (data.parentId || null) !== before.parentId) throw new BusinessError(400, ["A ", termText("realEstate.project.singular", "project"), "'s parent cannot be changed. Create a ", termText("realEstate.subproject.singular", "subproject"), " under the correct ", termText("realEstate.project.singular", "project"), "."])
     if (data.parentId) {
       const parent = await tx.realEstateProject.findFirst({ where: { tenantId: actor.tenantId, id: data.parentId, parentId: null } })
-      if (!parent) throw new BusinessError(400, "Choose a top-level project in this business.")
-      if (parent.archived && (!before || !data.archived)) throw new BusinessError(409, "Restore the parent project before creating or restoring a subproject.")
+      if (!parent) throw new BusinessError(400, termText("realEstate.project.singular", "Choose a top-level project in this business.", "Choose a top-level {label} in this business."))
+      if (parent.archived && (!before || !data.archived)) throw new BusinessError(409, ["Restore the parent ", termText("realEstate.project.singular", "project"), " before creating or restoring a ", termText("realEstate.subproject.singular", "subproject"), "."])
     }
-    if (data.developerAccountId && data.developerAccountId !== before?.developerAccountId && !await tx.crmAccount.findFirst({ where: { tenantId: actor.tenantId, id: data.developerAccountId, archived: false } })) throw new BusinessError(400, "Choose an active developer business account.")
+    if (data.developerAccountId && data.developerAccountId !== before?.developerAccountId && !await tx.crmAccount.findFirst({ where: { tenantId: actor.tenantId, id: data.developerAccountId, archived: false } })) throw new BusinessError(400, termText("crm.account.singular", "Choose an active developer business account.", "Choose an active developer {label}."))
     const priceMin = data.priceMin ? new Prisma.Decimal(data.priceMin) : null
     const priceMax = data.priceMax ? new Prisma.Decimal(data.priceMax) : null
     if ((priceMin || priceMax) && !data.currency) throw new BusinessError(400, "Choose a currency for the indicative price range.")
@@ -92,7 +95,7 @@ export function createRealEstateService(db: PrismaClient, identity: Pick<Busines
         const [items, total] = await Promise.all([tx.realEstateProject.findMany({ where, orderBy: [{ name: "asc" }, { id: "asc" }], skip: exporting ? 0 : (query.page - 1) * query.pageSize, take: exporting ? CRM_EXPORT_LIMIT : query.pageSize,
           select: { id: true, parentId: true, name: true, code: true, location: true, lifecycle: true, lifecycleName: true, categoryNames: true, archived: true, version: true, categories: true, priceMin: true, priceMax: true, currency: true } }), tx.realEstateProject.count({ where })])
         if (exporting) checkExportLimit(total)
-        return { ...pageResult(items, total, query.page, query.pageSize), canManage: manage(actor) && permits(actor, "projects.edit"), customFieldExport: exporting ? await customFieldExport(tx, actor, projectFields, items.map(item => item.id)) : undefined }
+        return { ...pageResult(items, total, query.page, query.pageSize), canManage: manage(actor) && permits(actor, "projects.edit"), exportTerms: exporting ? await readTermReplacements(tx, actor.tenantId, realEstateTerms) : undefined, customFieldExport: exporting ? await customFieldExport(tx, actor, projectFields, items.map(item => item.id)) : undefined }
       })
     },
     getProject(id: string) {
@@ -123,7 +126,7 @@ export function createRealEstateService(db: PrismaClient, identity: Pick<Busines
         requireWriteFields(actor, "projects", before ?? undefined, data)
         const next = await values(tx, actor, data, before)
         const changed = await tx.realEstateProject.updateMany({ where: { tenantId: actor.tenantId, id, version }, data: { ...next, version: { increment: 1 } } })
-        if (!changed.count) throw new BusinessError(409, "This project changed. Refresh before saving.")
+        if (!changed.count) throw new BusinessError(409, termText("realEstate.project.singular", "This project changed. Refresh before saving.", "This {label} changed. Refresh before saving."))
         const record = await find(tx, actor, id)
         await saveCustomFields(tx, actor, projectFields, record, custom.patch)
         await audit(tx, actor, "realEstate.project.updated", id, before, record)
@@ -145,10 +148,10 @@ export function createRealEstateService(db: PrismaClient, identity: Pick<Busines
       return run("projects.assign", async (tx, actor) => {
         requireManager(actor)
         const project = await find(tx, actor, id)
-        if (project.parentId || project.archived) throw new BusinessError(409, "Manage staff access on an active top-level project.")
+        if (project.parentId || project.archived) throw new BusinessError(409, termText("realEstate.project.singular", "Manage staff access on an active top-level project.", "Manage staff access on an active top-level {label}."))
         if (!remove && !await tx.user.findFirst({ where: { tenantId: actor.tenantId, id: userId, status: "ACTIVE", role: { in: ["ADMIN", "MANAGER", "STAFF"] } } })) throw new BusinessError(400, "Choose an active staff member in this business.")
         const changed = await tx.realEstateProject.updateMany({ where: { tenantId: actor.tenantId, id, version }, data: { version: { increment: 1 } } })
-        if (!changed.count) throw new BusinessError(409, "This project changed. Refresh before saving.")
+        if (!changed.count) throw new BusinessError(409, termText("realEstate.project.singular", "This project changed. Refresh before saving.", "This {label} changed. Refresh before saving."))
         if (remove) await tx.realEstateProjectMember.deleteMany({ where: { tenantId: actor.tenantId, projectId: id, userId } })
         else await tx.realEstateProjectMember.upsert({ where: { tenantId_projectId_userId: { tenantId: actor.tenantId, projectId: id, userId } }, create: { tenantId: actor.tenantId, projectId: id, userId }, update: {} })
         await audit(tx, actor, remove ? "realEstate.member.removed" : "realEstate.member.added", id, null, { userId })

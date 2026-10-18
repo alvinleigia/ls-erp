@@ -33,3 +33,31 @@ test('Workforce upgrade preserves legacy access and explicit decisions; future t
     assert.equal((await db.query('SELECT * FROM "TenantModule"')).rowCount, 2)
   } finally { await db.query('ROLLBACK'); await db.end() }
 })
+
+
+test('tenant default schedule index preserves rows and permits separate tenant defaults', async () => {
+  const url = new URL(process.env.CRM_TEST_DATABASE_URL || 'http://invalid')
+  if (!['localhost', '127.0.0.1'].includes(url.hostname) || url.pathname !== '/ls_salon_crm_test') throw Error('Local disposable database only.')
+  const db = new Client({ connectionString: url.toString() })
+  await db.connect()
+  try {
+    await db.query('BEGIN')
+    const schema = `schedule_${randomUUID().replaceAll('-', '')}`
+    await db.query(`CREATE SCHEMA ${schema}; SET LOCAL search_path TO ${schema};
+      CREATE TABLE "ShiftSchedule" (id text PRIMARY KEY, "tenantId" text, "isDefault" boolean, name text);
+      CREATE UNIQUE INDEX "ShiftSchedule_default_unique" ON "ShiftSchedule" ("isDefault") WHERE "isDefault"=true;
+      INSERT INTO "ShiftSchedule" VALUES ('a-default','a',true,'Original'),('a-other','a',false,'Other'),('b-other','b',false,'Other tenant');`)
+    const before = (await db.query('SELECT * FROM "ShiftSchedule" ORDER BY id')).rows
+    await db.query('SAVEPOINT duplicate')
+    await assert.rejects(db.query(`INSERT INTO "ShiftSchedule" VALUES ('b-default','b',true,'Blocked before migration')`), e=>e.code==='23505')
+    await db.query('ROLLBACK TO SAVEPOINT duplicate')
+    const migration = fs.readFileSync('prisma/migrations/20261016170000_tenant_default_shift_schedule/migration.sql','utf8').replace(/^BEGIN;/,'').replace(/COMMIT;\s*$/,'')
+    await db.query(migration)
+    assert.deepEqual((await db.query('SELECT * FROM "ShiftSchedule" ORDER BY id')).rows,before)
+    await db.query(`INSERT INTO "ShiftSchedule" VALUES ('b-default','b',true,'Allowed after migration')`)
+    await db.query('SAVEPOINT duplicate_after')
+    await assert.rejects(db.query(`INSERT INTO "ShiftSchedule" VALUES ('a-duplicate','a',true,'Still blocked')`), e=>e.code==='23505')
+    await db.query('ROLLBACK TO SAVEPOINT duplicate_after')
+    assert.equal((await db.query('SELECT * FROM "ShiftSchedule" WHERE "isDefault"=true')).rowCount,2)
+  } finally { await db.query('ROLLBACK'); await db.end() }
+})

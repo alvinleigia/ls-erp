@@ -1,5 +1,4 @@
 import type { NextResponse } from "next/server"
-import type { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 import { canManageUsers, type Role } from "@/lib/permissions"
 import { recordDomainAuditEventSafe } from "@/lib/domain-audit"
@@ -13,13 +12,6 @@ type ServiceResource = "services" | "serviceCategories"
 const findRecord = (resource: ServiceResource, tenantId: string, id: string) => resource === "services"
   ? prisma.service.findFirst({ where: { tenantId, id }, include: { defaultTaxes: true, packageItems: true } })
   : prisma.serviceCategory.findFirst({ where: { tenantId, id } })
-
-// Catalog use is also enforced at booking/eligibility entry points.
-export async function requireServicesAccess(actor: BusinessActor, action: PermissionAction = "read", db: Pick<Prisma.TransactionClient, "tenantModule"> = prisma) {
-  if (!canManageUsers(actor.role as Role)) throw new BusinessError(403, "Services requires administrator or manager access.")
-  await requireBusinessModule(db, actor.tenantId, "services")
-  requirePermission(actor, `services.${action}`)
-}
 
 export function withServicesApi(request: Request, resource: ServiceResource, action: PermissionAction, handler: (actor: BusinessActor) => Promise<NextResponse>, id?: string) {
   return withBusinessApi(request, async actor => {

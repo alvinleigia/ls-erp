@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import type { CrmViewReferences } from "../view-context"
 
 export type ExtensionEditorProps = {
   value: unknown
@@ -16,7 +17,8 @@ export type ExtensionFilterProps = {
   onChange: (primaryId: string, secondaryId: string) => void
 }
 export type CrmExtensionView = {
-  initial: (references: { primaryId: string; secondaryId: string }) => unknown
+  filterQuery: (primaryId: string, secondaryId: string) => Record<string, string>
+  initial: (references: CrmViewReferences) => unknown
   load: (record: unknown) => unknown
   payload: (value: unknown) => Record<string, unknown>
   Editor: React.ComponentType<ExtensionEditorProps>
@@ -26,38 +28,44 @@ export type CrmExtensionView = {
   OpportunityPanels?: React.ComponentType<{ opportunityId: string }>
 }
 const emptyView: CrmExtensionView = {
+  filterQuery: () => ({}),
   initial: () => undefined, load: () => undefined, payload: () => ({}),
   Editor: () => null, Caption: () => null, Filter: () => null,
 }
 const ExtensionContext = React.createContext(emptyView)
-export function CrmExtensionProvider({ view, children }: { view: CrmExtensionView; children: React.ReactNode }) {
-  return <ExtensionContext.Provider value={view}>{children}</ExtensionContext.Provider>
+const ExtensionActiveContext = React.createContext(false)
+export function CrmExtensionProvider({ view, active, children }: { view: CrmExtensionView; active: boolean; children: React.ReactNode }) {
+  return <ExtensionContext.Provider value={view}><ExtensionActiveContext.Provider value={active}>{children}</ExtensionActiveContext.Provider></ExtensionContext.Provider>
 }
 
 // The editor owns only an opaque extension draft. Validation and field rendering
 // belong to the installed extension; unchanged drafts are omitted from saves.
-export function useCrmExtensionEditor(primaryId = "", secondaryId = "") {
+export function useCrmExtensionEditor({ primaryId = "", secondaryId = "" }: Partial<CrmViewReferences> = {}) {
   const view = React.useContext(ExtensionContext)
+  const active = React.useContext(ExtensionActiveContext)
   const [value, setValue] = React.useState(() => view.initial({ primaryId, secondaryId }))
   const [record, setRecord] = React.useState<unknown>(null)
   const [dirty, setDirty] = React.useState(!!primaryId)
+  const loadValue = view.load
   const load = React.useCallback((next: unknown) => {
-    setRecord(next); setValue(view.load(next)); setDirty(false)
-  }, [view])
+    setRecord(next); setValue(loadValue(next)); setDirty(false)
+  }, [loadValue])
   return {
     load,
-    summary: () => view.Summary ? <view.Summary record={record} /> : null,
-    payload: dirty ? view.payload(value) : {},
-    fields: (props: Omit<ExtensionEditorProps, "value" | "record" | "onChange">) => <view.Editor {...props} value={value} record={record} onChange={next => { setValue(next); setDirty(true) }} />,
+    summary: () => active && view.Summary ? <view.Summary record={record} /> : null,
+    payload: active && dirty ? view.payload(value) : {},
+    fields: (props: Omit<ExtensionEditorProps, "value" | "record" | "onChange">) => active ? <view.Editor {...props} value={value} record={record} onChange={next => { setValue(next); setDirty(true) }} /> : null,
   }
 }
 export function CrmExtensionCaption(props: { record: unknown }) {
   const { Caption } = React.useContext(ExtensionContext)
-  return <Caption {...props} />
+  const active = React.useContext(ExtensionActiveContext)
+  return active ? <Caption {...props} /> : null
 }
 export function CrmExtensionFilter(props: ExtensionFilterProps) {
   const { Filter } = React.useContext(ExtensionContext)
-  return <Filter {...props} />
+  const active = React.useContext(ExtensionActiveContext)
+  return active ? <Filter {...props} /> : null
 }
 export function CrmOpportunityPanels(props: { opportunityId: string }) {
   const { OpportunityPanels } = React.useContext(ExtensionContext)
@@ -65,3 +73,9 @@ export function CrmOpportunityPanels(props: { opportunityId: string }) {
 }
 
 export function useCrmOpportunityPanelsAvailable() { return !!React.useContext(ExtensionContext).OpportunityPanels }
+
+export function useCrmExtensionFilterQuery(primaryId: string, secondaryId: string) {
+  const view = React.useContext(ExtensionContext)
+  const active = React.useContext(ExtensionActiveContext)
+  return active ? view.filterQuery(primaryId, secondaryId) : {}
+}

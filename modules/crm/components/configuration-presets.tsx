@@ -3,9 +3,10 @@ import * as React from "react"
 import { Button } from "@/components/ui/button"
 import { FormField } from "@/components/form-field"
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table"
-import { CrmSelect } from "./crm-controls"
-import { CrmPageHeader, CrmActionBar, crmPageClass } from "./crm-page"
-import { CrmSection } from "./crm-section"
+import { Select } from "@/components/erp/controls"
+import { AccessPageHeader } from "@/platform/access/record-page"
+import { ActionBar, pageClass } from "@/components/erp/page"
+import { Section } from "@/components/erp/section"
 
 type Preset = { id: string; name: string; version: number }
 type Review = Preset & { token: string; items: { key: string; label: string; description: string; action: string }[] }
@@ -27,14 +28,14 @@ export function ConfigurationPresets() {
       if (apply) setMessage("Preset applied. Existing configuration was preserved.")
     } catch (error) { setError((error as Error).message); setReview(null) } finally { setBusy(false) }
   }
-  return <div className={crmPageClass}><CrmPageHeader title="Configuration presets" backHref="/crm/configuration" description="Preview reusable sales settings before adding them to your business." />
-    <CrmSection title="Choose a preset" description="Existing choices, fields, defaults and archived items are kept. Presets do not change teams, pipelines, permissions or existing sales records.">
-      <div className="grid items-end gap-3 sm:grid-cols-[1fr_auto]"><FormField id="preset" label="Preset"><CrmSelect id="preset" value={selected} disabled={busy} onValueChange={value => { setSelected(value); setReview(null); setMessage("") }}><option value="">Select a preset</option>{items.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</CrmSelect></FormField><Button variant="outline" disabled={!selected} loading={busy} onClick={() => void load()}>Preview changes</Button></div>
+  return <div className={pageClass}><AccessPageHeader title="Configuration presets" backHref="/crm/configuration" description="Preview reusable sales settings before adding them to your business." />
+    <Section title="Choose a preset" description="Existing choices, fields, defaults and archived items are kept. Presets do not change teams, pipelines, permissions or existing sales records.">
+      <div className="grid items-end gap-3 sm:grid-cols-[1fr_auto]"><FormField id="preset" label="Preset"><Select id="preset" value={selected} disabled={busy} onValueChange={value => { setSelected(value); setReview(null); setMessage("") }}><option value="">Select a preset</option>{items.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</Select></FormField><Button variant="outline" disabled={!selected} loading={busy} onClick={() => void load()}>Preview changes</Button></div>
       {error && <p role="alert" className="text-destructive">{error}</p>}{message && <p role="status">{message}</p>}
-    </CrmSection>
-    {review && <CrmSection title={`${review.name} — version ${review.version}`} description="Only the items marked Add will be created.">
+    </Section>
+    {review && <Section title={`${review.name} — version ${review.version}`} description="Only the items marked Add will be created.">
       <Table><TableHeader><TableRow><TableHead>Setting</TableHead><TableHead>Details</TableHead><TableHead>Action</TableHead></TableRow></TableHeader><TableBody>{review.items.map(item => <TableRow key={item.key}><TableCell className="font-medium">{item.label}</TableCell><TableCell className="whitespace-normal">{item.description}</TableCell><TableCell>{item.action === "ADD" ? "Add" : "Keep existing"}</TableCell></TableRow>)}</TableBody></Table>
-      <CrmActionBar><Button variant="outline" disabled={busy} onClick={() => setReview(null)}>Cancel</Button><Button loading={busy} disabled={!review.items.some(item => item.action === "ADD")} onClick={() => void load(true)}>Apply missing settings</Button></CrmActionBar>
-    </CrmSection>}
+      <ActionBar><Button variant="outline" disabled={busy} onClick={() => setReview(null)}>Cancel</Button><Button loading={busy} disabled={!review.items.some(item => item.action === "ADD")} onClick={() => void load(true)}>Apply missing settings</Button></ActionBar>
+    </Section>}
   </div>
 }

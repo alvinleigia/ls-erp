@@ -69,6 +69,39 @@ test("site visit completion keeps customer history and schedules one follow-up",
   expect(history.items.some((r: { summary: string }) => r.summary === completion.summary)).toBe(true)
 })
 
+test("sales report extension grouping, filters and module-off rendering use the same shared view", async ({}, testInfo) => {
+  const page = staff.page
+  await page.goto("/crm/sales")
+  await page.getByRole("button", { name: "Group leads by", exact: true }).click()
+  await page.getByRole("menuitemradio", { name: "By project", exact: true }).click()
+  await expect(page.getByRole("columnheader", { name: "Subproject", exact: true })).toBeVisible()
+  await page.getByRole("button", { name: /^Filters/ }).click()
+  await page.getByLabel("Project", { exact: true }).click()
+  await page.getByRole("option", { name: "Green Meadows Local", exact: true }).click()
+  await page.getByLabel("Subproject", { exact: true }).click()
+  const filtered = page.waitForResponse(response => response.url().includes("/api/crm/reports/sales?") && response.url().includes(`subprojectId=${child.id}`))
+  await page.getByRole("option", { name: "Green Meadows Phase 1", exact: true }).click()
+  expect((await filtered).status()).toBe(200)
+  await page.keyboard.press("Escape")
+  await expect(page.locator("#sales-records").getByRole("link", { name: "Apartment enquiry", exact: true })).toBeVisible()
+  await page.screenshot({ path: testInfo.outputPath("report-extension-desktop.png"), fullPage: true })
+  await page.setViewportSize({ width: 390, height: 844 })
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBeTruthy()
+  await page.screenshot({ path: testInfo.outputPath("report-extension-mobile.png"), fullPage: true })
+  await page.setViewportSize({ width: 1280, height: 900 })
+  await json(admin.context, "/api/modules", 200, "PATCH", { key: "realEstate", enabled: false })
+  try {
+    await page.reload()
+    await page.getByRole("button", { name: "Group leads by", exact: true }).click()
+    await expect(page.getByRole("menuitemradio", { name: "By project", exact: true })).toHaveCount(0)
+    await page.keyboard.press("Escape")
+    await expect(page.getByRole("columnheader", { name: "Project", exact: true })).toHaveCount(0)
+    await expect(page.getByRole("columnheader", { name: "Subproject", exact: true })).toHaveCount(0)
+    await expect(page.locator("#sales-records").getByRole("link", { name: "Apartment enquiry", exact: true })).toBeVisible()
+    await page.screenshot({ path: testInfo.outputPath("report-no-extension.png"), fullPage: true })
+  } finally { await json(admin.context, "/api/modules", 200, "PATCH", { key: "realEstate", enabled: true }) }
+})
+
 test("quotation UI saves a revision and preserves exact payment totals and original snapshots", async () => {
   const template = await json(admin.context, "/api/crm/quotation-templates", 201, "POST", { name: "20 / 80 plan", content: { ...content, bookingDate: "" } })
   quote = await json(staff.context, `/api/crm/opportunities/${deal.id}/quotations`, 201, "POST", { content, templateId: template.id })

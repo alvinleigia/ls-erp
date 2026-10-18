@@ -1,3 +1,4 @@
+import { termText } from "@/platform/terminology/message"
 import { Prisma } from "@prisma/client"
 import { BusinessError, type BusinessActor } from "@/platform/policy"
 import { recordDomainAuditEvent } from "@/lib/domain-audit"
@@ -5,6 +6,7 @@ import type { PropertyContextInput } from "./sales-validation"
 import { enquiryScope, canManageCrm } from "@/modules/crm/policy"
 import { projectListSchema } from "./validation"
 import { propertyChoiceDefaults, resolvePropertyChoice } from "./choice-service"
+import { requirePermission } from "@/platform/access/policy"
 
 type Tx = Prisma.TransactionClient
 type Kind = "enquiry" | "opportunity"
@@ -28,8 +30,8 @@ export async function projectFilterChoices(tx: Tx, actor: BusinessActor, input: 
   return { items, total, page: query.page, pageSize: query.pageSize, totalPages: Math.max(1, Math.ceil(total / query.pageSize)) }
 }
 export async function requirePropertyFilter(tx: Tx, actor: BusinessActor, query: { projectId?: string; subprojectId?: string }) {
-  if ((query.projectId || query.subprojectId) && !await realEstateEnabled(tx, actor.tenantId)) throw new BusinessError(403, "Enable Real Estate to filter by project.")
-  if (query.subprojectId && !query.projectId) throw new BusinessError(400, "Select a project before a subproject.")
+  if ((query.projectId || query.subprojectId) && !await realEstateEnabled(tx, actor.tenantId)) throw new BusinessError(403, termText("realEstate.project.singular", "Enable Real Estate to filter by project.", "Enable Real Estate to filter by {label}."))
+  if (query.subprojectId && !query.projectId) throw new BusinessError(400, ["Select a ", termText("realEstate.project.singular", "project"), " before a ", termText("realEstate.subproject.singular", "subproject"), "."])
   return query.projectId ? { projectId: query.projectId, ...(query.subprojectId ? { subprojectId: query.subprojectId } : {}) } : undefined
 }
 
@@ -57,11 +59,12 @@ export async function savePropertyContext(tx: Tx, actor: BusinessActor, kind: Ki
   const category = await resolvePropertyChoice(tx, actor.tenantId, "property-categories", propertyCategory, before?.propertyCategory)
   const timeframe = await resolvePropertyChoice(tx, actor.tenantId, "buying-timeframes", buyingTimeframe, before?.buyingTimeframe)
   if (projectId && (projectId !== before?.projectId || (subprojectId && subprojectId !== before?.subprojectId))) {
+    requirePermission(actor, "projects.read")
     const project = await tx.realEstateProject.findFirst({ where: { tenantId: actor.tenantId, id: projectId, parentId: null, archived: false,
       ...(actor.role === "STAFF" ? { members: { some: { tenantId: actor.tenantId, userId: actor.userId } } } : {}),
     } })
-    if (!project) throw new BusinessError(400, "Choose an active project you can access.")
-    if (subprojectId && !await tx.realEstateProject.findFirst({ where: { tenantId: actor.tenantId, id: subprojectId, parentId: projectId, archived: false } })) throw new BusinessError(400, "Choose an active subproject belonging to this project.")
+    if (!project) throw new BusinessError(400, termText("realEstate.project.singular", "Choose an active project you can access.", "Choose an active {label} you can access."))
+    if (subprojectId && !await tx.realEstateProject.findFirst({ where: { tenantId: actor.tenantId, id: subprojectId, parentId: projectId, archived: false } })) throw new BusinessError(400, ["Choose an active ", termText("realEstate.subproject.singular", "subproject"), " belonging to this ", termText("realEstate.project.singular", "project"), "."])
   }
   const budgetMin = input?.budgetMin ? new Prisma.Decimal(input.budgetMin) : null
   const budgetMax = input?.budgetMax ? new Prisma.Decimal(input.budgetMax) : null

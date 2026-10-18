@@ -109,7 +109,7 @@ test("selected calendar dates stay in the tenant timezone, including daylight sa
 
 test("sales KPIs reconcile scoped records, custom activity types, currencies and latest payment schedules", async () => {
   const { runWithTenantDbContext } = require("../lib/prisma.ts")
-  const { salesDashboard } = require("../platform/dashboard/sales-summary.ts")
+  const { salesDashboard } = require("../application/dashboard/sales-summary.ts")
   const tenant = "dashboard_a", now = new Date("2026-10-06T12:00:00Z")
   const period = { start: new Date("2026-10-01T00:00:00Z"), end: new Date("2026-11-01T00:00:00Z"), now, today: "2026-10-06" }
   const flags = ["crm", "realEstate", "salesDocuments", "paymentPlans"].map(key => ({ key, allowed: true, enabled: true }))

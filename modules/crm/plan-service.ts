@@ -1,3 +1,4 @@
+import { termText } from "@/platform/terminology/message"
 import { requireWriteFields, permits } from "@/platform/access/policy"
 import type { PermissionRun } from "@/platform/access/server"
 import { resolveActivityTypes } from "./activity-type-service"
@@ -17,10 +18,10 @@ type Context = {
 }
 const snapshot = (value: unknown): Prisma.InputJsonValue => JSON.parse(JSON.stringify(value))
 export function createPlanService({ run, audit, checkAssignee, createWork }: Context) {
-  const manage = (actor: CrmActor) => { if (!canManageCrm(actor.role)) throw new CrmError(403, "Only a manager can configure activity plans.") }
+  const manage = (actor: CrmActor) => { if (!canManageCrm(actor.role)) throw new CrmError(403, termText("crm.activity.singular", "Only a manager can configure activity plans.", "Only a manager can configure {label} plans.")) }
   async function find(tx: Tx, actor: CrmActor, id: string) {
     const plan = await tx.crmActivityPlan.findFirst({ where: { tenantId: actor.tenantId, id } })
-    if (!plan) throw new CrmError(404, "Activity plan not found.")
+    if (!plan) throw new CrmError(404, termText("crm.activity.singular", "Activity plan not found.", "{label} plan not found."))
     return plan
   }
   async function prepare(tx: Tx, actor: CrmActor, id: string, data: ReturnType<typeof applyPlanSchema.parse>) {
@@ -28,9 +29,9 @@ export function createPlanService({ run, audit, checkAssignee, createWork }: Con
     if (plan.archived) throw new CrmError(409, "Restore the plan before applying it.")
     if (plan.version !== data.version) throw new CrmError(409, "This plan changed. Reload it and review the schedule.")
     await checkAssignee(tx, actor, data.assignedUserId)
-    if (!await tx.crmContact.findFirst({ where: { ...contactScope(actor), id: data.contactId, archived: false } })) throw new CrmError(404, "Active contact not found.")
-    if (data.enquiryId && !await tx.crmEnquiry.findFirst({ where: { ...enquiryScope(actor), id: data.enquiryId, contactId: data.contactId, status: { not: "CLOSED" } } })) throw new CrmError(404, "Matching open enquiry not found.")
-    if (data.opportunityId && !await tx.crmOpportunity.findFirst({ where: { ...enquiryScope(actor), id: data.opportunityId, contactId: data.contactId, stage: { kind: "OPEN", archived: false }, pipeline: { archived: false } } })) throw new CrmError(404, "Matching active opportunity not found.")
+    if (!await tx.crmContact.findFirst({ where: { ...contactScope(actor), id: data.contactId, archived: false } })) throw new CrmError(404, termText("crm.contact.singular", "Active contact not found.", "Active {label} not found."))
+    if (data.enquiryId && !await tx.crmEnquiry.findFirst({ where: { ...enquiryScope(actor), id: data.enquiryId, contactId: data.contactId, status: { not: "CLOSED" } } })) throw new CrmError(404, termText("crm.enquiry.singular", "Matching open enquiry not found.", "Matching open {label} not found."))
+    if (data.opportunityId && !await tx.crmOpportunity.findFirst({ where: { ...enquiryScope(actor), id: data.opportunityId, contactId: data.contactId, stage: { kind: "OPEN", archived: false }, pipeline: { archived: false } } })) throw new CrmError(404, termText("crm.opportunity.singular", "Matching active opportunity not found.", "Matching active {label} not found."))
     const timeZone = (await tx.appSetting.findUnique({ where: { tenantId: actor.tenantId }, select: { timeZone: true } }))?.timeZone || "UTC"
     const template = activityPlanSchema.parse({ name: plan.name, description: plan.description || "", steps: plan.steps })
     const resolved = await resolveActivityTypes(tx, actor, template.steps)
@@ -85,7 +86,7 @@ export function createPlanService({ run, audit, checkAssignee, createWork }: Con
           return { id: existing.id, count: (existing.steps as unknown[]).length, reused: true }
         }
         const { plan, steps, targetKey } = await prepare(tx, actor, id, data)
-        if (await tx.crmPlanLaunch.findFirst({ where: { tenantId: actor.tenantId, planId: id, targetKey, workItems: { some: { status: { in: ["OPEN", "IN_PROGRESS"] } } } } })) throw new CrmError(409, "This plan already has open activities on this record. Complete or cancel those activities before applying it again.")
+        if (await tx.crmPlanLaunch.findFirst({ where: { tenantId: actor.tenantId, planId: id, targetKey, workItems: { some: { status: { in: ["OPEN", "IN_PROGRESS"] } } } } })) throw new CrmError(409, termText("crm.activity.plural", "This plan already has open activities on this record. Complete or cancel those activities before applying it again.", "This plan already has open {label} on this record. Complete or cancel those {label} before applying it again."))
         const launch = await tx.crmPlanLaunch.create({ data: { tenantId: actor.tenantId, planId: id, actorUserId: actor.userId, requestKey: data.requestKey, targetKey, planName: plan.name, planVersion: plan.version, input: snapshot(data), steps: snapshot(steps) } })
         for (const [planPosition, step] of steps.entries()) await createWork(tx, actor, step, { planLaunchId: launch.id, planPosition })
         await audit(tx, actor, "crm.plan.applied", id, undefined, snapshot({ launchId: launch.id, targetKey, count: steps.length, version: plan.version }))

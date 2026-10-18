@@ -1,3 +1,4 @@
+import { termText } from "@/platform/terminology/message"
 import type { PermissionRun } from "@/platform/access/server"
 import type { Prisma } from "@prisma/client"
 import { CrmError, canManageCrm, enquiryScope, assigneeScope, type CrmActor } from "./policy"
@@ -15,7 +16,7 @@ const pageResult = <T>(items: T[], total: number, page: number, pageSize: number
 export function createReportService({ run }: Context) {
   async function context(tx: Tx, actor: CrmActor, query: ActivityReportInput) {
     const canManage = canManageCrm(actor.role)
-    if (!canManage && (query.scope === "team" || (query.assignedUserId && query.assignedUserId !== actor.userId))) throw new CrmError(403, "Team activity reporting is available to managers only.")
+    if (!canManage && (query.scope === "team" || (query.assignedUserId && query.assignedUserId !== actor.userId))) throw new CrmError(403, termText("crm.activity.singular", "Team activity reporting is available to managers only.", "Team {label} reporting is available to managers only."))
     if (query.scope === "mine" && query.assignedUserId && query.assignedUserId !== actor.userId) throw new CrmError(400, "Choose team scope to report on another staff member.")
     const timeZone = (await tx.appSetting.findUnique({ where: { tenantId: actor.tenantId }, select: { timeZone: true } }))?.timeZone || "UTC"
     const now = new Date(), today = businessDate(now, timeZone)

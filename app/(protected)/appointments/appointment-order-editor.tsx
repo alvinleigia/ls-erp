@@ -15,6 +15,7 @@ import { useFormErrors } from "@/hooks/use-form-errors"
 import type {
   AppointmentCustomerOption,
   AppointmentOrderStatus,
+  AppointmentOrderPricingPreview,
   CouponRow,
   AppointmentOrderRow,
   AppointmentOrderFormValues,
@@ -23,14 +24,15 @@ import type {
   AppointmentStaffOption,
   TaxMode,
 } from "@/types/appointments"
-import type { AppSettingsPayload, TaxRow } from "@/types/scheduling"
-import { formatCurrencyFromCents, formatTimeFromDate } from "@/lib/formatting"
+import type { AppSettingsPayload } from "@/types/scheduling"
+import { formatCurrencyFromCents, formatTimeFrom24h } from "@/lib/formatting"
 import { AppointmentOrderFormFields } from "./appointment-order-form-fields"
 import {
-  calculateCouponDiscountFromCodes,
+  orderFormInput,
   defaultAppointmentOrderFormValues,
 } from "./appointment-order-form-model"
-import { combineLocalDateTimeToISO } from "./appointment-form-model"
+import { subtotalAfterLineDiscounts } from "@/modules/appointments/order-pricing"
+import { wallTime, wallTimeToInstant } from "@/lib/business-time"
 
 type AppointmentOrderEditorProps = {
   mode: "create" | "edit"
@@ -44,68 +46,6 @@ type StartSuggestion = {
 }
 
 type LineScheduleSnapshot = Record<string, { startAt: string; endAt: string }>
-
-const sumPercent = (percents: number[]) => percents.reduce((sum, value) => sum + Math.max(0, value), 0)
-
-const extractTaxFromInclusiveGross = (grossCents: number, percents: number[]) => {
-  const totalPercent = sumPercent(percents)
-  if (grossCents <= 0 || totalPercent <= 0) return 0
-  const netCents = Math.round((grossCents * 100) / (100 + totalPercent))
-  return Math.max(0, grossCents - netCents)
-}
-
-const calculateExclusiveTaxFromNet = (netCents: number, percents: number[]) =>
-  percents.reduce(
-    (sum, percent) => sum + Math.max(0, Math.round((Math.max(0, netCents) * Math.max(0, percent)) / 100)),
-    0
-  )
-
-const allocateCouponByWeight = (amounts: number[], couponCents: number) => {
-  const total = amounts.reduce((sum, value) => sum + Math.max(0, value), 0)
-  if (total <= 0 || couponCents <= 0) return amounts.map(() => 0)
-
-  const rawAllocations = amounts.map((value) => ({
-    base: Math.floor((couponCents * Math.max(0, value)) / total),
-    remainder: (couponCents * Math.max(0, value)) % total,
-  }))
-  let assigned = rawAllocations.reduce((sum, item) => sum + item.base, 0)
-  let remaining = couponCents - assigned
-  const ranked = rawAllocations
-    .map((item, index) => ({ ...item, index }))
-    .sort((a, b) => b.remainder - a.remainder)
-  for (let i = 0; i < ranked.length && remaining > 0; i += 1) {
-    rawAllocations[ranked[i].index].base += 1
-    remaining -= 1
-    assigned += 1
-  }
-  return rawAllocations.map((item) => item.base)
-}
-
-const calculateDiscountCents = (
-  discountType: "NONE" | "PERCENT" | "AMOUNT",
-  discountValue: number,
-  baseCents: number
-) => {
-  const normalizedBase = Math.max(0, baseCents)
-  if (discountType === "NONE" || discountValue <= 0 || normalizedBase <= 0) return 0
-  if (discountType === "AMOUNT") {
-    return Math.min(normalizedBase, Math.round(discountValue * 100))
-  }
-  return Math.min(normalizedBase, Math.round((normalizedBase * discountValue) / 100))
-}
-
-const toDateInput = (value: Date) => {
-  const year = value.getFullYear()
-  const month = String(value.getMonth() + 1).padStart(2, "0")
-  const day = String(value.getDate()).padStart(2, "0")
-  return `${year}-${month}-${day}`
-}
-
-const toTimeInput = (value: Date) => {
-  const hours = String(value.getHours()).padStart(2, "0")
-  const minutes = String(value.getMinutes()).padStart(2, "0")
-  return `${hours}:${minutes}`
-}
 
 const formatCouponScopeLabel = (coupon: CouponRow) => {
   if (coupon.appliesTo === "SERVICE_LINES") return "Services"
@@ -148,6 +88,8 @@ export function AppointmentOrderEditor({ mode, appointmentId }: AppointmentOrder
   const canEmail = canExport && can("appointments.edit")
   const router = useRouter()
   const [loading, setLoading] = React.useState(true)
+  const [settingsReady, setSettingsReady] = React.useState(false)
+  const initializedSettings = React.useRef(false)
   const [savedOrder, setSavedOrder] = React.useState<AppointmentOrderRow | null>(null)
   const canWrite = servicesAllowed && can(mode === "create" ? "appointments.create" : "appointments.edit") && (!savedOrder?.productLines?.length || productsAllowed) && (!savedOrder?.coupons.length || couponsAllowed)
   const [editOpen, setEditOpen] = React.useState(false)
@@ -166,7 +108,6 @@ export function AppointmentOrderEditor({ mode, appointmentId }: AppointmentOrder
   const [services, setServices] = React.useState<AppointmentServiceOption[]>([])
   const [products, setProducts] = React.useState<AppointmentProductOption[]>([])
   const [coupons, setCoupons] = React.useState<CouponRow[]>([])
-  const [taxes, setTaxes] = React.useState<TaxRow[]>([])
   const [startSuggestion, setStartSuggestion] = React.useState<StartSuggestion | null>(null)
   const [savedLineSchedule, setSavedLineSchedule] = React.useState<LineScheduleSnapshot>({})
   const [savedLineScheduleKey, setSavedLineScheduleKey] = React.useState<string | null>(null)
@@ -178,6 +119,15 @@ export function AppointmentOrderEditor({ mode, appointmentId }: AppointmentOrder
     timeFormat: "H24",
   })
   const { errors } = useFormErrors()
+
+  const timeZone = settings.timeZone ?? "UTC"
+  const toDateInput = (value: Date) => wallTime(value, timeZone).slice(0, 10)
+  const toTimeInput = (value: Date) => wallTime(value, timeZone).slice(11, 16)
+  const formatTimeFromDate = (value: Date, format: Pick<AppSettingsPayload, "timeFormat">) => formatTimeFrom24h(toTimeInput(value), format)
+  const bookingInstant = React.useMemo(() => {
+    try { return wallTimeToInstant(`${values.appointmentDate}T${values.appointmentStartTime}`, timeZone) }
+    catch { return null }
+  }, [values.appointmentDate, values.appointmentStartTime, timeZone])
 
   const buildRequestKey = React.useCallback(
     (nextValues: AppointmentOrderFormValues) =>
@@ -195,326 +145,40 @@ export function AppointmentOrderEditor({ mode, appointmentId }: AppointmentOrder
     []
   )
 
-  const pricingPreview = React.useMemo(() => {
-    const toLineBase = (
-      quantity: number,
-      unitPriceCents: number,
-      discountType: "NONE" | "PERCENT" | "AMOUNT",
-      discountValue: number
-    ) => {
-      const subtotalCents = Math.max(0, quantity) * Math.max(0, unitPriceCents)
-      const discountCents =
-        discountType === "NONE"
-          ? 0
-          : discountType === "AMOUNT"
-            ? Math.round(Math.max(0, discountValue) * 100)
-            : Math.round((subtotalCents * Math.max(0, discountValue)) / 100)
-      return {
-        subtotalCents,
-        discountCents: Math.min(subtotalCents, Math.max(0, discountCents)),
+  const orderInput = React.useMemo(() => bookingInstant ? orderFormInput(values, bookingInstant, savedOrder) : null, [values, bookingInstant, savedOrder])
+  const hasPricingInputs = Boolean(values.customerId && values.lines.length && values.lines.every(line => line.serviceId && line.staffId) &&
+    (values.productLines ?? []).every(line => line.productId))
+  const previewKey = orderInput && hasPricingInputs ? JSON.stringify({ orderId: editingId ?? undefined, input: {
+    ...orderInput, customerNote: undefined, internalNote: undefined,
+    lines: orderInput.lines.map(line => ({ ...line, note: undefined })),
+    productLines: orderInput.productLines.map(line => ({ ...line, note: undefined })),
+  } }) : null
+  const [previewState, setPreviewState] = React.useState<{ key: string; data?: AppointmentOrderPricingPreview; error?: string } | null>(null)
+  const [previewAttempt, retryPreview] = React.useReducer(count => count + 1, 0)
+  const previewActive = settingsReady && !loading && (mode === "create" || editOpen)
+  React.useEffect(() => {
+    if (!previewActive || !previewKey) return
+    const controller = new AbortController()
+    const timer = setTimeout(async () => {
+      try {
+        const response = await fetch("/api/appointments/orders/preview", { method: "POST", cache: "no-store",
+          headers: { "Content-Type": "application/json" }, body: previewKey, signal: controller.signal })
+        const data = await response.json()
+        const validationMessage = Object.values(data.details?.fieldErrors ?? {}).flat().filter(item => typeof item === "string").join(" ")
+        if (!controller.signal.aborted) setPreviewState(response.ok ? { key: previewKey, data } : { key: previewKey, error: validationMessage || data.error || "Unable to calculate pricing." })
+      } catch {
+        if (!controller.signal.aborted) setPreviewState({ key: previewKey, error: "Pricing is unavailable. Please retry." })
       }
-    }
-
-    const serviceBase = values.lines.map((line) => {
-      const base = toLineBase(
-        line.quantity,
-        line.unitPriceCents,
-        line.discountType,
-        line.discountValue
-      )
-      return {
-        line,
-        ...base,
-        afterDiscountCents: Math.max(0, base.subtotalCents - base.discountCents),
-      }
-    })
-
-    const productBase = (values.productLines ?? []).map((line) => {
-      const base = toLineBase(
-        line.quantity,
-        line.unitPriceCents,
-        line.discountType,
-        line.discountValue
-      )
-      return {
-        line,
-        ...base,
-        afterDiscountCents: Math.max(0, base.subtotalCents - base.discountCents),
-      }
-    })
-
-    const serviceNetBeforeCoupon = serviceBase.map((entry) => {
-      const percents = entry.line.taxIds
-        .map((taxId) => taxes.find((tax) => tax.id === taxId)?.percent ?? 0)
-      if (entry.line.taxMode === "INCLUSIVE") {
-        return Math.max(
-          0,
-          entry.afterDiscountCents -
-            extractTaxFromInclusiveGross(entry.afterDiscountCents, percents)
-        )
-      }
-      return entry.afterDiscountCents
-    })
-
-    const productNetBeforeCoupon = productBase.map((entry) => {
-      const percents = entry.line.taxIds
-        .map((taxId) => taxes.find((tax) => tax.id === taxId)?.percent ?? 0)
-      if (entry.line.taxMode === "INCLUSIVE") {
-        return Math.max(
-          0,
-          entry.afterDiscountCents -
-            extractTaxFromInclusiveGross(entry.afterDiscountCents, percents)
-        )
-      }
-      return entry.afterDiscountCents
-    })
-
-    const allNetBeforeCoupon = [...serviceNetBeforeCoupon, ...productNetBeforeCoupon]
-    const netSubtotalAfterDiscount = allNetBeforeCoupon.reduce((sum, value) => sum + value, 0)
-    const couponDiscountCents = calculateCouponDiscountFromCodes(
-      netSubtotalAfterDiscount,
-      values.coupons,
-      coupons.map((coupon) => ({
-        code: coupon.code,
-        discountType: coupon.discountType,
-        discountValue: coupon.discountValue,
-      }))
-    )
-    const couponAllocations = allocateCouponByWeight(allNetBeforeCoupon, couponDiscountCents)
-    const serviceCouponAllocations = couponAllocations.slice(0, serviceBase.length)
-    const productCouponAllocations = couponAllocations.slice(serviceBase.length)
-    const lineTaxCents = serviceBase.map((entry, index) => {
-      const percents = entry.line.taxIds
-        .map((taxId) => taxes.find((tax) => tax.id === taxId)?.percent ?? 0)
-      const netAfterCoupon = Math.max(
-        0,
-        serviceNetBeforeCoupon[index] - serviceCouponAllocations[index]
-      )
-      return calculateExclusiveTaxFromNet(netAfterCoupon, percents)
-    })
-    const productLineTaxCents = productBase.map((entry, index) => {
-      const percents = entry.line.taxIds
-        .map((taxId) => taxes.find((tax) => tax.id === taxId)?.percent ?? 0)
-      const netAfterCoupon = Math.max(
-        0,
-        productNetBeforeCoupon[index] - productCouponAllocations[index]
-      )
-      return calculateExclusiveTaxFromNet(netAfterCoupon, percents)
-    })
-    const taxCents =
-      lineTaxCents.reduce((sum, value) => sum + value, 0) +
-      productLineTaxCents.reduce((sum, value) => sum + value, 0)
-
-    const subtotalCents = allNetBeforeCoupon.reduce((sum, value) => sum + value, 0)
-    const lineDiscountCents =
-      serviceBase.reduce((sum, entry) => sum + entry.discountCents, 0) +
-      productBase.reduce((sum, entry) => sum + entry.discountCents, 0)
-    const serviceTotalCents = serviceNetBeforeCoupon
-      .map((netBeforeCoupon, index) =>
-        Math.max(0, netBeforeCoupon - serviceCouponAllocations[index]) + lineTaxCents[index]
-      )
-      .reduce((sum, value) => sum + value, 0)
-    const productTotalCents = productNetBeforeCoupon
-      .map((netBeforeCoupon, index) =>
-        Math.max(0, netBeforeCoupon - productCouponAllocations[index]) + productLineTaxCents[index]
-      )
-      .reduce((sum, value) => sum + value, 0)
-    const totalCents = serviceTotalCents + productTotalCents
-    return {
-      totals: {
-        subtotalCents,
-        lineDiscountCents,
-        couponDiscountCents,
-        taxCents,
-        totalCents,
-      },
-      lineTaxById: Object.fromEntries(
-        values.lines.map((line, index) => [line.id, lineTaxCents[index] ?? 0])
-      ) as Record<string, number>,
-    }
-  }, [coupons, taxes, values.coupons, values.lines, values.productLines])
-  const totals = pricingPreview.totals
-
-  const couponHints = React.useMemo(() => {
-    if (!values.coupons.length) return []
-    const serviceById = new Map(services.map((service) => [service.id, service]))
-    const productById = new Map(products.map((product) => [product.id, product]))
-
-    const toLineBase = (
-      quantity: number,
-      unitPriceCents: number,
-      discountType: "NONE" | "PERCENT" | "AMOUNT",
-      discountValue: number
-    ) => {
-      const subtotalCents = Math.max(0, quantity) * Math.max(0, unitPriceCents)
-      const discountCents = calculateDiscountCents(discountType, Math.max(0, discountValue), subtotalCents)
-      return {
-        subtotalCents,
-        discountCents,
-        afterDiscountCents: Math.max(0, subtotalCents - discountCents),
-      }
-    }
-
-    const serviceBase = values.lines.map((line) => {
-      const base = toLineBase(line.quantity, line.unitPriceCents, line.discountType, line.discountValue)
-      const percents = line.taxIds
-        .map((taxId) => taxes.find((tax) => tax.id === taxId)?.percent ?? 0)
-      return {
-        line,
-        ...base,
-        netBeforeCoupon:
-          line.taxMode === "INCLUSIVE"
-            ? Math.max(0, base.afterDiscountCents - extractTaxFromInclusiveGross(base.afterDiscountCents, percents))
-            : base.afterDiscountCents,
-      }
-    })
-
-    const productBase = (values.productLines ?? []).map((line) => {
-      const base = toLineBase(line.quantity, line.unitPriceCents, line.discountType, line.discountValue)
-      const percents = line.taxIds
-        .map((taxId) => taxes.find((tax) => tax.id === taxId)?.percent ?? 0)
-      return {
-        line,
-        ...base,
-        netBeforeCoupon:
-          line.taxMode === "INCLUSIVE"
-            ? Math.max(0, base.afterDiscountCents - extractTaxFromInclusiveGross(base.afterDiscountCents, percents))
-            : base.afterDiscountCents,
-      }
-    })
-
-    const couponByCode = new Map(coupons.map((coupon) => [coupon.code.toUpperCase(), coupon]))
-    const scopeLines = [
-      ...serviceBase.map((entry) => ({
-        type: "SERVICE" as const,
-        serviceId: entry.line.serviceId,
-        categoryId: serviceById.get(entry.line.serviceId)?.categoryId,
-      })),
-      ...productBase.map((entry) => ({
-        type: "PRODUCT" as const,
-        productId: entry.line.productId,
-        categoryId: productById.get(entry.line.productId)?.categoryId,
-      })),
-    ]
-    const runningAmounts = [
-      ...serviceBase.map((entry) => entry.netBeforeCoupon),
-      ...productBase.map((entry) => entry.netBeforeCoupon),
-    ]
-
-    let hasAppliedAnyCoupon = false
-    let hasAppliedExclusiveCoupon = false
-
-    return values.coupons.map((applied) => {
-      const coupon = couponByCode.get(applied.code.toUpperCase())
-      if (!coupon) {
-        return {
-          code: applied.code,
-          eligible: false,
-          reason: "Coupon is not active or not found.",
-        }
-      }
-
-      if (hasAppliedExclusiveCoupon) {
-        return {
-          code: applied.code,
-          eligible: false,
-          reason: "Another exclusive coupon is already applied.",
-        }
-      }
-
-      if (coupon.stackingMode === "EXCLUSIVE" && hasAppliedAnyCoupon) {
-        return {
-          code: applied.code,
-          eligible: false,
-          reason: "Exclusive coupon cannot be combined with other coupons.",
-        }
-      }
-
-      const eligibleIndices = runningAmounts
-        .map((amount, index) => ({ amount, index }))
-        .filter(({ amount, index }) => {
-          if (amount <= 0) return false
-          const line = scopeLines[index]
-          if (coupon.appliesTo === "SERVICE_LINES" && line.type !== "SERVICE") return false
-          if (coupon.appliesTo === "PRODUCT_LINES" && line.type !== "PRODUCT") return false
-
-          if (line.type === "SERVICE") {
-            if (coupon.allowedServiceIds.length && !coupon.allowedServiceIds.includes(line.serviceId)) {
-              return false
-            }
-            if (coupon.allowedCategoryIds.length) {
-              if (!line.categoryId || !coupon.allowedCategoryIds.includes(line.categoryId)) {
-                return false
-              }
-            }
-            return true
-          }
-
-          if (coupon.allowedProductIds.length && !coupon.allowedProductIds.includes(line.productId)) {
-            return false
-          }
-          if (coupon.allowedCategoryIds.length) {
-            if (!line.categoryId || !coupon.allowedCategoryIds.includes(line.categoryId)) {
-              return false
-            }
-          }
-          return true
-        })
-        .map(({ index }) => index)
-
-      if (!eligibleIndices.length) {
-        return {
-          code: applied.code,
-          eligible: false,
-          reason: "No eligible services/products for this coupon.",
-        }
-      }
-
-      const eligibleSubtotal = eligibleIndices.reduce((sum, index) => sum + runningAmounts[index], 0)
-      if (eligibleSubtotal < coupon.minSubtotalCents) {
-        return {
-          code: applied.code,
-          eligible: false,
-          reason: `Minimum eligible subtotal is ${formatCurrencyFromCents(coupon.minSubtotalCents, settings)}.`,
-        }
-      }
-
-      const discountCents = calculateDiscountCents(
-        coupon.discountType,
-        coupon.discountValue,
-        eligibleSubtotal
-      )
-      if (discountCents <= 0) {
-        return {
-          code: applied.code,
-          eligible: false,
-          reason: "Coupon discount is zero for current cart values.",
-        }
-      }
-
-      const allocations = allocateCouponByWeight(
-        eligibleIndices.map((index) => runningAmounts[index]),
-        discountCents
-      )
-      eligibleIndices.forEach((lineIndex, allocationIndex) => {
-        runningAmounts[lineIndex] = Math.max(
-          0,
-          runningAmounts[lineIndex] - (allocations[allocationIndex] ?? 0)
-        )
-      })
-
-      hasAppliedAnyCoupon = true
-      if (coupon.stackingMode === "EXCLUSIVE") {
-        hasAppliedExclusiveCoupon = true
-      }
-
-      return {
-        code: applied.code,
-        eligible: true,
-        discountCents,
-      }
-    })
-  }, [coupons, products, services, settings, taxes, values.coupons, values.lines, values.productLines])
+    }, 350)
+    return () => { clearTimeout(timer); controller.abort() }
+  }, [previewActive, previewKey, previewAttempt])
+  const pricingPreview = previewState?.key === previewKey ? previewState?.data : undefined
+  const previewError = previewState?.key === previewKey ? previewState?.error : undefined
+  const totals = pricingPreview?.totals
+  const linePricingById = pricingPreview ? Object.fromEntries([
+    ...values.lines.map((line, index) => [line.id, pricingPreview.lines[index]]),
+    ...(values.productLines ?? []).map((line, index) => [line.id, pricingPreview.productLines[index]]),
+  ]) : {}
 
   const requestKey = React.useMemo(
     () => buildRequestKey(values),
@@ -522,13 +186,11 @@ export function AppointmentOrderEditor({ mode, appointmentId }: AppointmentOrder
   )
 
   const schedulePreview = React.useMemo(() => {
-    if (!values.appointmentDate || !values.appointmentStartTime) return []
-    const start = new Date(
-      combineLocalDateTimeToISO(values.appointmentDate, values.appointmentStartTime)
-    )
+    if (!bookingInstant) return []
+    const start = new Date(bookingInstant)
     if (Number.isNaN(start.getTime())) return []
 
-    const formatTime = (value: Date) => formatTimeFromDate(value, settings)
+    const formatTime = (value: Date) => formatTimeFrom24h(wallTime(value, timeZone).slice(11, 16), settings)
 
     const useSavedSchedule = savedLineScheduleKey === requestKey
     let cursor = new Date(start)
@@ -536,13 +198,13 @@ export function AppointmentOrderEditor({ mode, appointmentId }: AppointmentOrder
     return values.lines.map((line, index) => {
       const service = services.find((item) => item.id === line.serviceId)
       const staffMember = staff.find((member) => member.id === line.staffId)
-      const durationMinutes = (service?.durationMinutes ?? line.durationMinutes ?? 0) * Math.max(1, line.quantity)
+      const savedLine = savedOrder?.lines.find(saved => saved.id === line.id)
+      const durationMinutes = savedLine && savedLine.serviceId === line.serviceId && savedLine.quantity === line.quantity
+        ? savedLine.durationMinutes : (service?.durationMinutes ?? line.durationMinutes ?? 0) * Math.max(1, line.quantity)
       const savedWindow = useSavedSchedule ? savedLineSchedule[line.id] : undefined
       const startsAt = savedWindow ? new Date(savedWindow.startAt) : new Date(cursor)
       const endsAt = savedWindow ? new Date(savedWindow.endAt) : new Date(cursor)
-      if (!savedWindow) {
-        endsAt.setMinutes(endsAt.getMinutes() + Math.max(0, durationMinutes))
-      }
+      if (!savedWindow) endsAt.setTime(endsAt.getTime() + Math.max(0, durationMinutes) * 60000)
       const waitMinutes = previousEnd
         ? Math.max(0, Math.round((startsAt.getTime() - previousEnd.getTime()) / 60000))
         : 0
@@ -560,14 +222,13 @@ export function AppointmentOrderEditor({ mode, appointmentId }: AppointmentOrder
       }
     })
   }, [
+    bookingInstant, timeZone, savedOrder,
     requestKey,
     savedLineSchedule,
     savedLineScheduleKey,
     settings,
     services,
     staff,
-    values.appointmentDate,
-    values.appointmentStartTime,
     values.lines,
   ])
 
@@ -589,13 +250,11 @@ export function AppointmentOrderEditor({ mode, appointmentId }: AppointmentOrder
   const applyOrderToForm = React.useCallback(
     (order: AppointmentOrderRow) => {
       setSavedOrder(order)
-      const start = new Date(order.appointmentStartAt)
+      const start = wallTime(order.appointmentStartAt, timeZone)
       const nextValues: AppointmentOrderFormValues = {
         customerId: order.customerId,
-        appointmentDate: order.appointmentDate,
-        appointmentStartTime: `${String(start.getHours()).padStart(2, "0")}:${String(
-          start.getMinutes()
-        ).padStart(2, "0")}`,
+        appointmentDate: start.slice(0, 10),
+        appointmentStartTime: start.slice(11, 16),
         couponInput: "",
         coupons: order.coupons.map((coupon) => ({ code: coupon.code })),
         customerNote: order.customerNote ?? "",
@@ -637,12 +296,12 @@ export function AppointmentOrderEditor({ mode, appointmentId }: AppointmentOrder
       setSavedLineScheduleKey(buildRequestKey(nextValues))
       setEditingId(order.id)
     },
-    [buildRequestKey]
+    [buildRequestKey, timeZone]
   )
 
   React.useEffect(() => {
     const loadLookups = async () => {
-      const [customerRes, staffRes, serviceRes, productRes, couponRes, taxesRes, settingsRes] = await Promise.all([
+      const [customerRes, staffRes, serviceRes, productRes, couponRes, settingsRes] = await Promise.all([
         fetch("/api/directory?role=CUSTOMER&status=ACTIVE&page=1&pageSize=100", {
           cache: "no-store",
         }),
@@ -658,7 +317,6 @@ export function AppointmentOrderEditor({ mode, appointmentId }: AppointmentOrder
         couponsAllowed ? fetch("/api/appointments/coupons?page=1&pageSize=100&active=true", {
           cache: "no-store",
         }) : Promise.resolve(new Response(JSON.stringify({ items: [] }), { status: 200 })),
-        fetch("/api/lookups/taxes?page=1&pageSize=100&active=true", { cache: "no-store" }),
         fetch("/api/settings/operations", { cache: "no-store" }),
       ])
 
@@ -725,21 +383,25 @@ export function AppointmentOrderEditor({ mode, appointmentId }: AppointmentOrder
         setCoupons(data.items ?? [])
       }
 
-      if (taxesRes.ok) {
-        const data = (await taxesRes.json()) as { items?: TaxRow[] }
-        setTaxes(data.items ?? [])
-      }
-
+      if (!settingsRes.ok) throw new Error("Booking settings unavailable")
       if (settingsRes.ok) {
         const data = (await settingsRes.json()) as { settings?: AppSettingsPayload }
         if (data.settings) {
           setSettings((prev) => ({ ...prev, ...data.settings }))
+          if (!initializedSettings.current && mode === "create") {
+            const local = wallTime(new Date(), data.settings.timeZone ?? "UTC")
+            setValues(prev => ({ ...prev, appointmentDate: local.slice(0, 10), appointmentStartTime: local.slice(11, 16) }))
+          }
+          initializedSettings.current = true
         }
       }
     }
 
-    void loadLookups().catch(() => toast.error("Unable to load booking choices. Please refresh."))
-  }, [servicesAllowed, productsAllowed, couponsAllowed])
+    void loadLookups().catch(() => {
+      setLoadError("Unable to load booking settings and choices. Please refresh.")
+      toast.error("Unable to load booking choices. Please refresh.")
+    }).finally(() => setSettingsReady(true))
+  }, [servicesAllowed, productsAllowed, couponsAllowed, mode])
 
   React.useEffect(() => {
     if (mode !== "edit") { setLoading(false); return }
@@ -770,22 +432,16 @@ export function AppointmentOrderEditor({ mode, appointmentId }: AppointmentOrder
     void load().catch(() => { setLoadError("Unable to load booking. Please refresh."); setLoading(false) })
   }, [appointmentId, applyOrderToForm, mode])
 
-  const bookingStartAt = React.useMemo(() => {
-    if (!values.appointmentDate || !values.appointmentStartTime) return null
-    const parsed = new Date(
-      combineLocalDateTimeToISO(values.appointmentDate, values.appointmentStartTime)
-    )
-    return Number.isNaN(parsed.getTime()) ? null : parsed
-  }, [values.appointmentDate, values.appointmentStartTime])
+  const bookingStartAt = React.useMemo(() => bookingInstant ? new Date(bookingInstant) : null, [bookingInstant])
 
   const isHistoricalStatus = values.status === "COMPLETED" || values.status === "CANCELED"
   const isAfterBookingDay = React.useMemo(() => {
     if (!bookingStartAt) return false
     const now = new Date()
-    const bookingDateKey = toDateInput(bookingStartAt)
-    const nowDateKey = toDateInput(now)
+    const bookingDateKey = wallTime(bookingStartAt, timeZone).slice(0, 10)
+    const nowDateKey = wallTime(now, timeZone).slice(0, 10)
     return nowDateKey > bookingDateKey
-  }, [bookingStartAt])
+  }, [bookingStartAt, timeZone])
   const isReadOnlyBooking = mode === "edit" && (isHistoricalStatus || isAfterBookingDay)
   const currentStatus: AppointmentOrderStatus = values.status ?? "DRAFT"
   const currentStatusMeta = ORDER_STATUS_META[currentStatus]
@@ -793,7 +449,7 @@ export function AppointmentOrderEditor({ mode, appointmentId }: AppointmentOrder
   const primaryActionLabel = currentStatus === "DRAFT" ? "Confirm booking" : "Save changes"
 
   const handleSave = async (target: "draft" | "confirm") => {
-    if (!canWrite) return
+    if (!canWrite || !pricingPreview || !orderInput) return
     if (isReadOnlyBooking) {
       toast.error("This booking is historical and cannot be modified.")
       return
@@ -819,44 +475,7 @@ export function AppointmentOrderEditor({ mode, appointmentId }: AppointmentOrder
         {
           method: editingId ? "PATCH" : "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            customerId: values.customerId,
-            appointmentDate: values.appointmentDate,
-            appointmentStartTime: values.appointmentStartTime,
-            appointmentStartAt: combineLocalDateTimeToISO(
-              values.appointmentDate,
-              values.appointmentStartTime
-            ),
-            status: target === "confirm" ? "CONFIRMED" : "DRAFT",
-            customerNote: values.customerNote,
-            internalNote: values.internalNote,
-            coupons: values.coupons.map((coupon) => coupon.code),
-            lines: values.lines.map((line) => ({
-              serviceId: line.serviceId,
-              staffId: line.staffId,
-              quantity: line.quantity,
-              durationMinutes: line.durationMinutes,
-              unitPriceCents:
-                line.unitPriceCents > 0
-                  ? line.unitPriceCents
-                  : services.find((service) => service.id === line.serviceId)?.priceCents ?? 0,
-              discountType: line.discountType,
-              discountValue: line.discountValue,
-              taxMode: line.taxMode,
-              taxIds: line.taxIds,
-              note: line.note,
-            })),
-            productLines: (values.productLines ?? []).map((line) => ({
-              productId: line.productId,
-              quantity: line.quantity,
-              unitPriceCents: line.unitPriceCents,
-              discountType: line.discountType,
-              discountValue: line.discountValue,
-              taxMode: line.taxMode,
-              taxIds: line.taxIds,
-              note: line.note,
-            })),
-          }),
+          body: JSON.stringify({ ...orderInput, status: target === "confirm" ? "CONFIRMED" : "DRAFT" }),
         }
       )
 
@@ -931,7 +550,7 @@ export function AppointmentOrderEditor({ mode, appointmentId }: AppointmentOrder
     }
   }, [requestKey, savedLineScheduleKey])
 
-  if (loading) {
+  if (loading || !settingsReady) {
     return <div className="text-sm text-muted-foreground">Loading appointment...</div>
   }
 
@@ -986,14 +605,15 @@ export function AppointmentOrderEditor({ mode, appointmentId }: AppointmentOrder
           productsEnabled={productsAllowed}
           couponsEnabled={couponsAllowed}
           timeFormat={settings.timeFormat}
+          timeZone={timeZone}
           couponOptions={coupons.map((coupon) => ({
             value: coupon.code,
             label: `${coupon.code} (${formatCouponScopeLabel(coupon)})`,
           }))}
-          couponHints={couponHints}
+          couponHints={pricingPreview?.couponHints ?? []}
           formatCurrencyCentsValue={(valueInCents) => formatCurrencyFromCents(valueInCents, settings)}
           allowMultipleLines
-          lineTaxCentsById={pricingPreview.lineTaxById}
+          linePricingById={linePricingById}
           lineScheduleMeta={scheduleMetaByLineId}
         />
       </div>
@@ -1029,26 +649,30 @@ export function AppointmentOrderEditor({ mode, appointmentId }: AppointmentOrder
       </Section>
 
       <Section title="Totals">
-        <div className="grid gap-2 text-sm sm:grid-cols-2">
-          <div className="text-muted-foreground">Subtotal</div>
-          <div className="text-right">{formatCurrencyFromCents(totals.subtotalCents, settings)}</div>
-          <div className="text-muted-foreground">Line discounts</div>
-          <div className="text-right">- {formatCurrencyFromCents(totals.lineDiscountCents, settings)}</div>
+        {totals ? <div className="grid gap-2 text-sm sm:grid-cols-2">
+          <div className="text-muted-foreground">Subtotal after line discounts (excl. tax)</div>
+          <div className="text-right">{formatCurrencyFromCents(subtotalAfterLineDiscounts(totals), settings)}</div>
+          <div className="text-muted-foreground">Line discounts included</div>
+          <div className="text-right">{formatCurrencyFromCents(totals.lineDiscountCents, settings)}</div>
           <div className="text-muted-foreground">Coupon</div>
           <div className="text-right">- {formatCurrencyFromCents(totals.couponDiscountCents, settings)}</div>
           <div className="text-muted-foreground">Tax</div>
           <div className="text-right">{formatCurrencyFromCents(totals.taxCents, settings)}</div>
           <div className="font-semibold">Grand total</div>
           <div className="text-right font-semibold">{formatCurrencyFromCents(totals.totalCents, settings)}</div>
-        </div>
+        </div> : <div role="status" className="text-sm text-muted-foreground">
+          {previewError ?? (!previewKey ? "Select a customer and items with attendants, and enter a valid date and start time to calculate pricing." : "Calculating pricing...")}
+          {previewError && <Button type="button" variant="outline" size="sm" className="ml-3" onClick={() => { setPreviewState(null); retryPreview() }}>Retry pricing</Button>}
+        </div>}
+        {pricingPreview?.source === "saved" && <p className="mt-3 text-xs text-muted-foreground">Saved prices and taxes retained. Changing items, prices or coupons recalculates pricing.</p>}
       </Section>
   </>
   if (loadError) return <div className={pageClass}><PageHeader title="Booking" backHref="/appointments" /><p role="alert" className="text-destructive">{loadError}</p></div>
   return <div className={pageClass}>
     <PageHeader title={mode === "create" ? "New booking" : "Booking"} description={canWrite ? currentStatusMeta.helperText : "View saved booking details and pricing."} badge={<span className={`rounded-full border px-2 py-0.5 text-xs ${currentStatusMeta.badgeClass}`}>{currentStatusMeta.label}</span>} actions={mode === "create" ? <>
       <Button variant="outline" disabled={saving} onClick={closeCreate}>Cancel</Button>
-      <Button variant="outline" disabled={!canWrite} loading={saving} onClick={() => void handleSave("draft")}>Save draft</Button>
-      <Button disabled={!canWrite} loading={saving} onClick={() => void handleSave("confirm")}>Confirm booking</Button>
+      <Button variant="outline" disabled={!canWrite || !pricingPreview} loading={saving} onClick={() => void handleSave("draft")}>Save draft</Button>
+      <Button disabled={!canWrite || !pricingPreview} loading={saving} onClick={() => void handleSave("confirm")}>Confirm booking</Button>
     </> : <>
       <Button variant="outline" onClick={() => router.push("/appointments")}>Back</Button>
       <Button variant="outline" onClick={handlePrintInvoice} disabled={!savedOrder || !canExport}>Print invoice</Button>
@@ -1057,7 +681,7 @@ export function AppointmentOrderEditor({ mode, appointmentId }: AppointmentOrder
     </>} />
     {isReadOnlyBooking && <p className="text-sm text-muted-foreground">This booking is in the past or in a closed status and is read-only.</p>}
     {mode === "create" ? <>{formError && <p role="alert" className="text-destructive">{formError}</p>}<fieldset disabled={saving || !canWrite} className="min-w-0 space-y-6">{formContent}</fieldset></> : savedOrder && <AppointmentOrderSummary order={savedOrder} settings={settings} />}
-    {editOpen && savedOrder && <DraftPanel disabled={!canWrite} title="Edit booking" description="Update booking details, items and schedule." fingerprint={values} saving={saving} error={formError} footerActions={canSaveDraft ? <Button type="button" disabled={saving} onClick={() => void handleSave("draft")}>Save draft</Button> : undefined} saveLabel={primaryActionLabel} onClose={() => { applyOrderToForm(savedOrder); setStartSuggestion(null); setEditOpen(false) }} onSubmit={() => void handleSave("confirm")}>
+    {editOpen && savedOrder && <DraftPanel disabled={!canWrite || !pricingPreview} title="Edit booking" description="Update booking details, items and schedule." fingerprint={values} saving={saving} error={formError} footerActions={canSaveDraft ? <Button type="button" disabled={saving || !pricingPreview} onClick={() => void handleSave("draft")}>Save draft</Button> : undefined} saveLabel={primaryActionLabel} onClose={() => { applyOrderToForm(savedOrder); setStartSuggestion(null); setEditOpen(false) }} onSubmit={() => void handleSave("confirm")}>
       {formContent}
     </DraftPanel>}
     {discardCreate && <ConfirmAction title="Discard unsaved booking?" description="Your booking has not been saved." label="Discard changes" busy={false} onCancel={() => setDiscardCreate(false)} onConfirm={() => router.push("/appointments")} />}

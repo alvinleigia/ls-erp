@@ -12,7 +12,7 @@ if (!["127.0.0.1", "localhost"].includes(url.hostname) || url.pathname !== "/ls_
 const root = new Client({ connectionString: rawUrl })
 url.username = "crm_test_runtime"; url.password = ""
 process.env.DATABASE_URL = url.toString()
-process.env.RLS_POOL_MAX = "1"
+process.env.RLS_POOL_MAX = "2"
 const sessions = new AsyncLocalStorage()
 // Only authentication is stubbed. Routes, authorization, Prisma and RLS are real.
 const authPath = path.resolve(__dirname, "../auth.ts")
@@ -26,8 +26,8 @@ const { prisma, runWithTenantDbContext } = require("../lib/prisma.ts")
 const { allPermissions, workspaceRead } = require("../platform/access/catalog.ts")
 const { satisfies } = require("../platform/access/policy.ts")
 const { inventoryNavigation } = require("../application/navigation.ts")
-const { applyStockDelta } = require("../app/api/appointments/orders/_inventory.ts")
-const { resolveOrderData } = require("../app/api/appointments/orders/_resolve.ts")
+const { applyStockDelta } = require("../modules/appointments/order-stock.ts")
+const { resolveOrderData } = require("../modules/appointments/order-resolution.ts")
 const seedRoute = require("../app/api/seeds/route.ts")
 const bookingOrders = require("../app/api/appointments/orders/route.ts")
 const dashboard = require("../app/api/dashboard/summary/route.ts")
@@ -154,6 +154,27 @@ test("stock deduction/restoration is transactional for an authorized appointment
   assert.equal((await root.query('SELECT "onHandQty" FROM "InventoryProduct" WHERE id=$1', [product.id])).rows[0].onHandQty, 7)
 })
 
+test("shared stock service accepts non-booking movements and rolls back with its caller", async () => {
+  const { applyInventoryStockDelta, StockConflictError } = require("../modules/inventory/stock-service.ts")
+  const actor = { tenantId: tenantA, userId: `${tenantA}_admin`, role: "ADMIN" }
+  const note = "Operational stock check"
+  const movement = delta => ({ type: delta < 0 ? "ADJUSTMENT_SUB" : "ADJUSTMENT_ADD", note })
+  const apply = (delta, extra = {}) => runWithTenantDbContext(tenantA, () => prisma.$transaction(tx =>
+    applyInventoryStockDelta({ tx, actor, tenantId: tenantA, deltaByProduct: new Map([[product.id, delta]]), movement, ...extra })))
+  await apply(-1)
+  await apply(1)
+  const rows = (await root.query('SELECT type,"quantityDelta",note FROM "InventoryStockMovement" WHERE "tenantId"=$1 AND note=$2 ORDER BY "quantityDelta"', [tenantA, note])).rows
+  assert.deepEqual(rows, [{ type: "ADJUSTMENT_SUB", quantityDelta: -1, note }, { type: "ADJUSTMENT_ADD", quantityDelta: 1, note }])
+  await assert.rejects(apply(-100), error => error instanceof StockConflictError)
+  await assert.rejects(apply(-1, { tenantId: tenantB }), error => error.status === 403)
+  await assert.rejects(runWithTenantDbContext(tenantA, () => prisma.$transaction(async tx => {
+    await applyInventoryStockDelta({ tx, actor, tenantId: tenantA, deltaByProduct: new Map([[product.id, -1]]), movement })
+    throw new Error("Source record failed")
+  })), /Source record failed/)
+  assert.equal((await root.query('SELECT "onHandQty" FROM "InventoryProduct" WHERE id=$1', [product.id])).rows[0].onHandQty, 7)
+  assert.equal((await root.query('SELECT count(*)::int n FROM "InventoryStockMovement" WHERE "tenantId"=$1 AND note=$2', [tenantA, note])).rows[0].n, 2)
+})
+
 test("maintenance cannot bypass module activation or restricted roles", async () => {
   await flag(false)
   for (const body of [{ action: "seed", groups: ["purchases"] }, { action: "clear" }, { action: "clearModules", modules: ["taxes"] }]) {
@@ -189,4 +210,104 @@ test("inventory navigation is independent of CRM and uses the first permitted vi
   assert.deepEqual(inventoryNavigation([{ key: "inventory", enabled: true, allowed: false }]), [])
   assert.equal(satisfies({ permissions: ["inventoryProducts.read"] }, workspaceRead), false)
   assert.ok(allPermissions.includes("inventoryProducts.archive"))
+})
+
+test("catalog keeps shared relationship validation, duplicate protection and bounded paging", async () => {
+  const foreignCategory = (await ok(await invoke("categories", "POST", { name: "Foreign catalog" }, undefined, tenantB), 201)).item
+  const input = { sku: "CATALOG-A", name: "Catalog A", categoryId: category.id, costPriceCents: 100, mrpCents: 150, supplierLinks: [{ supplierId: supplier.id, isPreferred: true }] }
+  const item = (await ok(await invoke("products", "POST", input), 201)).item
+  assert.equal((await invoke("products", "POST", input)).status, 409)
+  assert.equal((await invoke("products", "POST", { ...input, sku: "FOREIGN", categoryId: foreignCategory.id })).status, 404)
+  assert.equal((await invoke("products", "PATCH", { categoryId: foreignCategory.id }, item.id)).status, 404)
+  for (const body of [{ supplierLinks: [{ supplierId: "missing" }] }, { taxIds: ["missing"] }]) {
+    assert.equal((await invoke("products", "POST", { ...input, sku: "INVALID", ...body })).status, 400)
+    assert.equal((await invoke("products", "PATCH", body, item.id)).status, 400)
+  }
+  const edited = (await ok(await invoke("products", "PATCH", { supplierLinks: [], name: "Catalog Updated" }, item.id))).item
+  assert.equal(edited.name, "Catalog Updated"); assert.deepEqual(edited.supplierLinks, [])
+  await ok(await invoke("products", "POST", { ...input, sku: "CATALOG-B", name: "Catalog B" }), 201)
+  const result = await ok(await sessions.run(session(), () => routes.products.list.GET(request("GET", undefined, tenantA, "/inventory/products?pageSize=1&sort=name&order=asc&q=Catalog"))))
+  assert.equal(result.total, 2); assert.equal(result.items.length, 1); assert.equal(result.items[0].name, "Catalog B")
+  await ok(await invoke("products", "DELETE", undefined, item.id))
+  assert.equal((await root.query('SELECT count(*)::int n FROM "InventoryProduct" WHERE id=$1', [item.id])).rows[0].n, 0)
+})
+
+test("concurrent purchase receipts and reopened statuses never receive the same quantity twice", async () => {
+  const taxId = `${tenantA}_receipt_tax`
+  await root.query('INSERT INTO "Tax" (id,"tenantId",name,percent,"updatedAt") VALUES ($1,$2,\'Receipt tax\',18,now())', [taxId, tenantA])
+  const item = (await ok(await invoke("products", "POST", { sku: "RECEIPT", name: "Receipt kit", categoryId: category.id, costPriceCents: 0, mrpCents: 150, taxIds: [taxId] }), 201)).item
+  const body = { supplierId: supplier.id, orderDate: "2026-10-16", items: [{ productId: item.id, quantity: 3, unitCostCents: 101 }] }
+  const order = (await ok(await invoke("purchases", "POST", body), 201)).item
+  assert.equal(order.subtotalCents, 303); assert.equal(order.taxCents, 55); assert.equal(order.totalCents, 358)
+  let calls, waiting = 0
+  await root.query("BEGIN")
+  try {
+    await root.query('SELECT id FROM "PurchaseOrder" WHERE id=$1 FOR UPDATE', [order.id])
+    calls = Promise.all([1, 2].map(() => invoke("purchases", "PATCH", { status: "RECEIVED" }, order.id)))
+    const deadline = Date.now() + 3000
+    while (Date.now() < deadline && waiting < 2) {
+      await root.query("SELECT pg_stat_clear_snapshot()")
+      waiting = (await root.query("SELECT count(*)::int n FROM pg_stat_activity WHERE usename='crm_test_runtime' AND wait_event_type='Lock'")).rows[0].n
+      if (waiting < 2) await new Promise(resolve => setTimeout(resolve, 20))
+    }
+  } finally { await root.query("COMMIT") }
+  const responses = await calls
+  assert.equal(waiting, 2, "Both receipt transactions must contend for the locked purchase")
+  for (const response of responses) {
+    const received = (await ok(response)).item
+    assert.equal(received.items[0].receivedQty, 3)
+  }
+  for (let cycle = 0; cycle < 2; cycle++) {
+    await ok(await invoke("purchases", "PATCH", { status: "ORDERED" }, order.id))
+    const received = (await ok(await invoke("purchases", "PATCH", { status: "RECEIVED", notes: "Retain receipt" }, order.id))).item
+    assert.equal(received.items[0].receivedQty, 3); assert.equal(received.notes, "Retain receipt")
+  }
+  assert.equal((await root.query('SELECT "onHandQty" FROM "InventoryProduct" WHERE id=$1', [item.id])).rows[0].onHandQty, 3)
+  assert.equal((await root.query('SELECT count(*)::int n FROM "InventoryStockMovement" WHERE "productId"=$1', [item.id])).rows[0].n, 1)
+  const direct = (await ok(await invoke("purchases", "POST", { ...body, status: "RECEIVED" }), 201)).item
+  assert.equal(direct.items[0].receivedQty, 3)
+  assert.equal((await root.query('SELECT "onHandQty" FROM "InventoryProduct" WHERE id=$1', [item.id])).rows[0].onHandQty, 6)
+  assert.equal((await invoke("purchases", "PATCH", { status: "RECEIVED" }, order.id, tenantB)).status, 404)
+})
+
+
+test("inventory categories retain duplicate checks, paging and referenced archive behavior", async () => {
+  const first=(await ok(await invoke("categories","POST",{name:"Batch three stock",description:"Original",sortOrder:5}),201)).item
+  const second=(await ok(await invoke("categories","POST",{name:"Batch three spare"}),201)).item
+  await ok(await invoke("categories","POST",{name:first.name}),409)
+  await ok(await invoke("categories","PATCH",{name:first.name},second.id),409)
+  const changed=(await ok(await invoke("categories","PATCH",{description:"",sortOrder:0},first.id))).item
+  assert.equal(changed.description,null);assert.equal(changed.sortOrder,0);assert.equal(changed.name,first.name)
+  const list=query=>sessions.run(session(),()=>routes.categories.list.GET(request("GET",undefined,tenantA,`/inventory/categories${query}`)))
+  const page=await ok(await list("?q=batch%20three&pageSize=1&sort=name"))
+  assert.equal(page.total,2);assert.equal(page.items.length,1);assert.equal(page.totalPages,2)
+  await ok(await list("?pageSize=101"),400)
+  const linked=(await ok(await invoke("products","POST",{sku:"CAT-REFERENCE",name:"Linked stock",categoryId:first.id,costPriceCents:10,mrpCents:20}),201)).item
+  await ok(await invoke("categories","DELETE",undefined,first.id,tenantB),404)
+  await ok(await invoke("categories","DELETE",undefined,first.id))
+  assert.equal((await root.query('SELECT status FROM "InventoryCategory" WHERE id=$1',[first.id])).rows[0].status,"INACTIVE")
+  assert.equal((await root.query('SELECT "categoryId" FROM "InventoryProduct" WHERE id=$1',[linked.id])).rows[0].categoryId,first.id)
+  await ok(await invoke("categories","DELETE",undefined,second.id))
+  assert.equal((await root.query('SELECT id FROM "InventoryCategory" WHERE id=$1',[second.id])).rowCount,0)
+})
+
+test("supplier partial edits, search and referenced archives retain purchase links", async () => {
+  const vendor=(await ok(await invoke("suppliers","POST",{name:"Batch three vendor",contactPerson:"Original",email:"vendor@example.test",city:"Pune",notes:"Keep note",leadTimeDays:3}),201)).item
+  const changed=(await ok(await invoke("suppliers","PATCH",{contactPerson:"",email:"",leadTimeDays:0},vendor.id))).item
+  assert.equal(changed.contactPerson,null);assert.equal(changed.email,null);assert.equal(changed.leadTimeDays,0)
+  assert.equal(changed.city,"Pune");assert.equal(changed.notes,"Keep note")
+  await ok(await invoke("suppliers","PATCH",{name:"Foreign change"},vendor.id,tenantB),404)
+  const list=query=>sessions.run(session(),()=>routes.suppliers.list.GET(request("GET",undefined,tenantA,`/inventory/suppliers${query}`)))
+  const page=await ok(await list("?q=batch%20three&pageSize=1&sort=name"))
+  assert.equal(page.total,1);assert.equal(page.items[0].id,vendor.id)
+  await ok(await list("?pageSize=101"),400)
+  const order=(await ok(await invoke("purchases","POST",{supplierId:vendor.id,orderDate:"2026-10-16",items:[{productId:product.id,quantity:1,unitCostCents:10}]}),201)).item
+  await ok(await invoke("suppliers","DELETE",undefined,vendor.id))
+  assert.equal((await root.query('SELECT status FROM "Supplier" WHERE id=$1',[vendor.id])).rows[0].status,"INACTIVE")
+  assert.equal((await root.query('SELECT "supplierId" FROM "PurchaseOrder" WHERE id=$1',[order.id])).rows[0].supplierId,vendor.id)
+  const spare=(await ok(await invoke("suppliers","POST",{name:"Unreferenced vendor"}),201)).item
+  await ok(await invoke("suppliers","DELETE",undefined,spare.id))
+  assert.equal((await root.query('SELECT id FROM "Supplier" WHERE id=$1',[spare.id])).rowCount,0)
+  const events=(await root.query('SELECT event,after FROM "AuditLog" WHERE "entityId"=$1',[vendor.id])).rows
+  assert.ok(events.some(row=>row.event==='inventory.inventorySuppliers.archive'&&row.after.status==='INACTIVE'))
 })

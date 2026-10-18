@@ -141,6 +141,17 @@ test("team fields apply only to matching records; transfers preserve history wit
   assert.equal(exported.customFieldExport.values[lead.id].includes("Retained"), false)
   const restored = await crm.updateEnquiry(lead.id, leadUpdate(moved, { salesTeamId: a.id }))
   assert.equal(restored.customFields.find(item => item.id === field.id).value, "Retained")
+  const qualified = await crm.updateEnquiry(lead.id, leadUpdate(restored, { status: "QUALIFIED" }))
+  const deal = await crm.createOpportunity(dealInput({ enquiryId: lead.id, enquiryVersion: qualified.version }))
+  const { customFieldExport } = require("../platform/custom-fields/values.ts")
+  const exportActor = { tenantId: tenant, userId: manager.id, role: "MANAGER" }
+  queries = []
+  const dealExport = await db.$transaction(tx => customFieldExport(tx, exportActor, opportunityFields, [deal.id]))
+  assert.ok(dealExport.values[deal.id].includes("Retained"))
+  assert.equal(queries.filter(query => /FROM "public"\."CrmOpportunity" /.test(query)).length, 1, "Team lookup must be batched")
+  await root.crmOpportunity.update({ where: { tenantId_id: { tenantId: tenant, id: deal.id } }, data: { salesTeamId: b.id } })
+  const movedExport = await db.$transaction(tx => customFieldExport(tx, exportActor, opportunityFields, [deal.id]))
+  assert.equal(movedExport.values[deal.id].includes("Retained"), false)
   await assert.rejects(configB.save(definition("cross_team", { salesTeamId: a.id })), status(400))
 })
 

@@ -1,6 +1,6 @@
 "use client"
 import * as React from "react"
-import { RecordSelect } from "@/modules/crm/components/record-select"
+import { RecordSelect } from "@/components/erp/record-select"
 import { Button } from "@/components/ui/button"
 import type { ChoiceKind } from "../choices"
 

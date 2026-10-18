@@ -1,8 +1,10 @@
 "use client"
-import { CrmPageHeader, CrmSurface, crmPageClass } from "./crm-page"
-import { CrmTableToolbar } from "./crm-page"
-import { CrmTablePagination } from "./crm-pagination"
-import { CrmSelect } from "./crm-controls"
+import { useTerminology } from "@/platform/terminology/provider"
+import { AccessPageHeader } from "@/platform/access/record-page"
+import { Surface, pageClass } from "@/components/erp/page"
+import { TableToolbar } from "@/components/erp/page"
+import { TablePagination } from "@/components/erp/pagination"
+import { Select } from "@/components/erp/controls"
 import * as React from "react"
 import Link from "@/platform/access/link"
 import { getCoreRowModel, useReactTable, type ColumnDef } from "@tanstack/react-table"
@@ -12,6 +14,7 @@ import type { CrmPipelineRow } from "@/types/crm"
 import { selectClass } from "./record-list"
 
 export function PipelineList() {
+  const term = useTerminology()
   const [items, setItems] = React.useState<CrmPipelineRow[]>([])
   const [total, setTotal] = React.useState(0)
   const [canManage, setCanManage] = React.useState(false)
@@ -42,8 +45,8 @@ export function PipelineList() {
     onPaginationChange: updater => setPagination(previous => { const next = typeof updater === "function" ? updater(previous) : updater; return next.pageSize !== previous.pageSize ? { ...next, pageIndex: 0 } : next }),
     onGlobalFilterChange: value => { setQ(String(value)); setPagination(previous => ({ ...previous, pageIndex: 0 })) },
   })
-  return <section className={crmPageClass}><CrmPageHeader title="Sales pipelines" description="Manage the stages your team uses to track opportunities." actions={canManage && <Button asChild><Link href="/crm/pipelines/new">New pipeline</Link></Button>} />
-    <CrmSurface><CrmTableToolbar table={table} searchPlaceholder="Search pipelines…" showColumnToggle={false}><CrmSelect aria-label="Pipeline status" className={selectClass} value={archived} onValueChange={event => { setArchived(event); setPagination(previous => ({ ...previous, pageIndex: 0 })) }}><option value="false">Active</option><option value="true">Archived</option></CrmSelect></CrmTableToolbar>
-    {error && <p role="alert" className="text-destructive">{error}</p>}<DataTable table={table} loading={loading} emptyMessage="No pipelines. A manager can create one to get started." /><CrmTablePagination table={table} totalRows={total} loading={loading} /></CrmSurface>
+  return <section className={pageClass}><AccessPageHeader title="Sales pipelines" description={term("crm.opportunity.plural", "Manage the stages your team uses to track opportunities.", "Manage the stages your team uses to track {label}.")} actions={canManage && <Button asChild><Link href="/crm/pipelines/new">New pipeline</Link></Button>} />
+    <Surface><TableToolbar table={table} searchPlaceholder="Search pipelines…" showColumnToggle={false}><Select aria-label="Pipeline status" className={selectClass} value={archived} onValueChange={event => { setArchived(event); setPagination(previous => ({ ...previous, pageIndex: 0 })) }}><option value="false">Active</option><option value="true">Archived</option></Select></TableToolbar>
+    {error && <p role="alert" className="text-destructive">{error}</p>}<DataTable table={table} loading={loading} emptyMessage="No pipelines. A manager can create one to get started." /><TablePagination table={table} totalRows={total} loading={loading} /></Surface>
   </section>
 }

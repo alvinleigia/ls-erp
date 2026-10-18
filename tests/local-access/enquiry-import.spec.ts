@@ -24,7 +24,12 @@ test("enquiry upload, review, correction download and reupload use shared CRM co
     await expect(page.getByRole("heading", { name: "Match your columns" })).toBeVisible()
     await page.screenshot({ path: testInfo.outputPath("import-mapping-desktop.png"), fullPage: true })
     await page.setViewportSize({ width: 390, height: 844 })
-    await page.screenshot({ path: testInfo.outputPath("import-mapping-mobile.png"), fullPage: true })
+    for (const name of ["Salesperson", "Source", "Sales team", "Project", "Subproject"]) {
+      await expect(page.getByRole("combobox", { name, exact: true })).toBeVisible()
+    }
+    await page.getByRole("combobox", { name: "Salesperson", exact: true }).click()
+    await page.getByRole("option", { name: "Access admin", exact: true }).click()
+    await page.screenshot({ path: testInfo.outputPath("import-mapping-mobile.png"), fullPage: true, animations: "disabled" })
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBeTruthy()
     await page.setViewportSize({ width: 1440, height: 1000 })
     await page.getByRole("button", { name: "Validate rows", exact: true }).click()

@@ -38,3 +38,11 @@ export const emptyQuotationContent: QuotationContent = {
   instalments: [],
   bank: { accountName: "", accountNumber: "", accountType: "", bankName: "", branch: "", routingCode: "" }, terms: "",
 }
+
+// Documents support bounded paging/search and template archive selection only.
+export const quotationListSchema = z.object({
+  page: z.coerce.number().int().min(1).max(100000).default(1),
+  pageSize: z.coerce.number().int().min(1).max(100).default(20),
+  q: z.string().trim().max(200).default(""),
+  archived: z.enum(["true", "false"]).default("false"),
+})

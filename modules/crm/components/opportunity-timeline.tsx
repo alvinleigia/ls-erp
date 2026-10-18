@@ -1,10 +1,11 @@
 "use client"
 import { useBusinessModules } from "@/platform/module-provider"
 import { History, MessageSquare } from "lucide-react"
-import { CrmSection, CrmEmptyState } from "./crm-section"
-import { CrmTimeline, TimelinePagination } from "./crm-timeline"
-import { CrmActionBar } from "./crm-page"
-import { CrmTextarea } from "./crm-controls"
+import { Section, EmptyState } from "@/components/erp/section"
+import { Timeline } from "@/components/erp/timeline"
+import { Pagination } from "@/components/erp/pagination"
+import { ActionBar } from "@/components/erp/page"
+import { Textarea } from "@/components/erp/controls"
 import * as React from "react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
@@ -38,11 +39,11 @@ export function OpportunityTimeline({ id, revision }: { id: string; revision: nu
     try { const response = await fetch(`/api/crm/opportunities/${id}/activity`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message }) }); const result = await response.json(); if (!response.ok) throw new Error(result.error || "Unable to save note."); setMessage(""); setPage(1); setRefresh(value => value + 1); toast.success("Note added.") }
     catch (error) { setError((error as Error).message) } finally { setSaving(false) }
   }
-  return <CrmSection title="Activity history and internal notes" description="Updates and notes for your team." icon={History}>
-    {can("opportunities.edit") && <form onSubmit={add} className="space-y-3 rounded-lg border bg-muted/20 p-4"><FormField id="opportunity-note" label="Add a note"><CrmTextarea id="opportunity-note" required maxLength={5000} value={message} onChange={event => setMessage(event.target.value)} /></FormField><CrmActionBar><Button type="submit" loading={saving}>Add note</Button></CrmActionBar></form>}
+  return <Section title="Activity history and internal notes" description="Updates and notes for your team." icon={History}>
+    {can("opportunities.edit") && <form onSubmit={add} className="space-y-3 rounded-lg border bg-muted/20 p-4"><FormField id="opportunity-note" label="Add a note"><Textarea id="opportunity-note" required maxLength={5000} value={message} onChange={event => setMessage(event.target.value)} /></FormField><ActionBar><Button type="submit" loading={saving}>Add note</Button></ActionBar></form>}
     {error && <p role="alert" className="text-destructive">{error}</p>}
-    {loading ? <p className="text-sm text-muted-foreground">Loading history…</p> : !error && data && <CrmTimeline entries={data.items.map(item => ({ id: item.id, icon: item.event.includes("note") ? MessageSquare : History, actor: item.actor.name || "Staff member", action: item.event.includes("note") ? "added an internal note" : "recorded an update", dateTime: item.createdAt, timeLabel: formatDate(item.createdAt), detail: <p className="whitespace-pre-wrap break-words">{item.message}</p> }))} />}
-    {!loading && !error && data?.total === 0 && <CrmEmptyState title="No activity history yet" description="Updates and internal notes will appear here." />}
-    {data && <TimelinePagination label="Activity history pages" page={page} pageSize={data.pageSize} total={data.total} totalPages={data.totalPages} loading={loading} onPageChange={setPage} />}
-  </CrmSection>
+    {loading ? <p className="text-sm text-muted-foreground">Loading history…</p> : !error && data && <Timeline entries={data.items.map(item => ({ id: item.id, icon: item.event.includes("note") ? MessageSquare : History, actor: item.actor.name || "Staff member", action: item.event.includes("note") ? "added an internal note" : "recorded an update", dateTime: item.createdAt, timeLabel: formatDate(item.createdAt), detail: <p className="whitespace-pre-wrap break-words">{item.message}</p> }))} />}
+    {!loading && !error && data?.total === 0 && <EmptyState title="No activity history yet" description="Updates and internal notes will appear here." />}
+    {data && <Pagination label="Activity history pages" page={page} pageSize={data.pageSize} total={data.total} totalPages={data.totalPages} loading={loading} onPageChange={setPage} />}
+  </Section>
 }

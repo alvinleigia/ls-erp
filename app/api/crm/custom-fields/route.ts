@@ -1,4 +1,4 @@
-import { withCustomFieldApi } from "@/application/crm/custom-fields"
+import { withCustomFieldApi } from "@/application/custom-fields/http"
 import { readJson } from "@/platform/business-api"
 export const dynamic = "force-dynamic"
 export function GET(request: Request) { return withCustomFieldApi(request, service => service.list(Object.fromEntries(new URL(request.url).searchParams))) }

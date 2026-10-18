@@ -1,6 +1,8 @@
 "use client"
-import { CrmPageHeader, CrmSurface, CrmFilters, crmPageClass } from "./crm-page"
-import { CrmSelect } from "./crm-controls"
+import { useTerminology, useTerminologyReader } from "@/platform/terminology/provider"
+import { AccessPageHeader } from "@/platform/access/record-page"
+import { Surface, Filters, pageClass } from "@/components/erp/page"
+import { Select } from "@/components/erp/controls"
 import * as React from "react"
 import Link from "@/platform/access/link"
 import { useRouter } from "next/navigation"
@@ -15,11 +17,13 @@ import type { CrmWorkRow, WorkListResponse } from "@/types/crm-work"
 import { wallTime, wallTimeToInstant } from "../work-time"
 import { ActivityTypeSelect, activityTypeFilter } from "./activity-type-select"
 import { workForm, workPayload } from "./work-schedule-fields"
-import { RecordSelect } from "./record-select"
+import { RecordSelect } from "@/components/erp/record-select"
 import { selectClass } from "./record-list"
 
 const colors = { TASK: "#64748b", CALL: "#2563eb", MEETING: "#7c3aed", EMAIL: "#059669" }
 export function ActivityCalendar() {
+  const readTerm = useTerminologyReader()
+  const term = useTerminology()
   const router = useRouter()
   const [settings, setSettings] = React.useState<AppSettingsPayload | null>(null)
   const [range, setRange] = React.useState<{ from: string; to: string } | null>(null)
@@ -76,16 +80,16 @@ export function ActivityCalendar() {
       }
       const response = await fetch(`/api/crm/work/${record.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...workPayload(values, timeZone), version: record.version, status: record.status }) })
       const result = await response.json()
-      if (!response.ok) throw new Error(result.error || "Unable to reschedule activity.")
-      toast.success("Activity rescheduled.")
+      if (!response.ok) throw new Error(result.error || readTerm("crm.activity.singular", "Unable to reschedule activity.", "Unable to reschedule {label}."))
+      toast.success(term("crm.activity.singular", "Activity rescheduled.", "{label} rescheduled."))
     } catch (error) { setError((error as Error).message); toast.error((error as Error).message) }
     finally { setSaving(false); setRevision(value => value + 1) }
   }
   const entries = React.useMemo(() => items.map(item => ({ id: item.id, title: `${item.activityTypeName || item.type}: ${item.title} Â· ${item.contact.name}`, date: item.dueOn.slice(0, 10), startsAt: item.startsAt, endsAt: item.endsAt, editable: item.canEdit && ["OPEN", "IN_PROGRESS"].includes(item.status), color: ["COMPLETED", "CANCELLED"].includes(item.status) ? "#6b7280" : colors[item.type] })), [items])
-  return <section className={crmPageClass}><CrmPageHeader title="Activity calendar" actions={<><Button variant="outline" asChild><Link href="/crm/activities">My Work</Link></Button><Button asChild><Link href="/crm/activities/new">Schedule activity</Link></Button></>} />
-    <p className="text-sm text-muted-foreground">Dates and times use {timeZone}. Click an activity to see its customer history and record an outcome. Drag open activities to reschedule.</p>
-    <CrmSurface><div className="flex flex-wrap items-end gap-3"><FormField id="calendar-search" label="Search"><Input id="calendar-search" value={q} onChange={event => setQ(event.target.value)} /></FormField><CrmFilters activeCount={[scope !== "mine", !!type, state !== "open", !!owner].filter(Boolean).length} onReset={() => { setScope("mine"); setType(""); setState("open"); setOwner("") }}><FormField id="calendar-scope" label="Scope"><CrmSelect id="calendar-scope" className={selectClass} value={scope} onValueChange={event => { setScope(event); setOwner("") }}><option value="mine">Assigned to me</option><option value="visible">All I can access</option></CrmSelect></FormField><FormField id="calendar-type" label="Type"><div className="min-w-0 w-60"><ActivityTypeSelect id="calendar-type" filter value={type} onChange={value => { setType(value) }} /></div></FormField><FormField id="calendar-state" label="Status"><CrmSelect id="calendar-state" className={selectClass} value={state} onValueChange={event => setState(event)}><option value="open">Open</option><option value="all">All statuses</option><option value="completed">Completed</option><option value="cancelled">Cancelled</option></CrmSelect></FormField>{canManage && scope === "visible" && <div className="w-52"><FormField id="calendar-owner" label="Staff"><RecordSelect id="calendar-owner" endpoint="/api/crm/assignees" value={owner} onChange={setOwner} /></FormField></div>}</CrmFilters><Button variant="outline" disabled={saving} onClick={() => setRevision(value => value + 1)}>Refresh</Button></div></CrmSurface>
-    {error && <p role="alert" className="text-destructive">{error}</p>}{loading && <p role="status">Loading calendarâ€¦</p>}{total > items.length && !loading && <p role="status">Showing {items.length} of {total} activities. Narrow the filters or use My Work to see the remaining records.</p>}
+  return <section className={pageClass}><AccessPageHeader title={term("crm.activity.singular", "Activity calendar", "{label} calendar")} actions={<><Button variant="outline" asChild><Link href="/crm/activities">My Work</Link></Button><Button asChild><Link href="/crm/activities/new">{term("crm.activity.singular", "Schedule activity", "Schedule {label}")}</Link></Button></>} />
+    <p className="text-sm text-muted-foreground">Dates and times use {timeZone}. {term("crm.activity.singular", "Click an activity to see its customer history and record an outcome.", "Click a {label} to see its customer history and record an outcome.")} {term("crm.activity.plural", "Drag open activities to reschedule.", "Drag open {label} to reschedule.")}</p>
+    <Surface><div className="flex flex-wrap items-end gap-3"><FormField id="calendar-search" label="Search"><Input id="calendar-search" value={q} onChange={event => setQ(event.target.value)} /></FormField><Filters activeCount={[scope !== "mine", !!type, state !== "open", !!owner].filter(Boolean).length} onReset={() => { setScope("mine"); setType(""); setState("open"); setOwner("") }}><FormField id="calendar-scope" label="Scope"><Select id="calendar-scope" className={selectClass} value={scope} onValueChange={event => { setScope(event); setOwner("") }}><option value="mine">Assigned to me</option><option value="visible">All I can access</option></Select></FormField><FormField id="calendar-type" label="Type"><div className="min-w-0 w-60"><ActivityTypeSelect id="calendar-type" filter value={type} onChange={value => { setType(value) }} /></div></FormField><FormField id="calendar-state" label="Status"><Select id="calendar-state" className={selectClass} value={state} onValueChange={event => setState(event)}><option value="open">Open</option><option value="all">All statuses</option><option value="completed">Completed</option><option value="cancelled">Cancelled</option></Select></FormField>{canManage && scope === "visible" && <div className="w-52"><FormField id="calendar-owner" label="Staff"><RecordSelect id="calendar-owner" endpoint="/api/crm/assignees" value={owner} onChange={setOwner} /></FormField></div>}</Filters><Button variant="outline" disabled={saving} onClick={() => setRevision(value => value + 1)}>Refresh</Button></div></Surface>
+    {error && <p role="alert" className="text-destructive">{error}</p>}{loading && <p role="status">Loading calendarâ€¦</p>}{total > items.length && !loading && <p role="status">Showing {items.length} of {total} {term("crm.activity.plural", "activities. Narrow the filters or use My Work to see the remaining records.", "{label}. Narrow the filters or use My Work to see the remaining records.")}</p>}
     {settings && <div className="min-w-0 overflow-hidden rounded-xl border bg-card"><BusinessCalendar entries={entries} timeZone={timeZone} firstDayOfWeek={weekdayToSchedulerFirstDay(settings.firstDayOfWeek)} today={wallTime(new Date(), timeZone).slice(0, 10)} busy={loading || saving} onRange={onRange} onOpen={id => router.push(`/crm/activities/${id}`)} onMove={change => void move(change)} onCreate={(date, startsLocal, endsLocal) => {
       try { const query = new URLSearchParams({ dueOn: date, ...(startsLocal ? { startsAt: wallTimeToInstant(startsLocal, timeZone), endsAt: wallTimeToInstant(endsLocal, timeZone) } : {}) }); router.push(`/crm/activities/new?${query}`) } catch (error) { setError((error as Error).message) }
     }} /></div>}

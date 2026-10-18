@@ -8,6 +8,13 @@ test("dashboard widgets follow module activation, including changes on an open p
   try {
     admin = await login(browser, fixture.origin, fixture.users.admin.email)
     const { page, context } = admin
+    async function refreshModules() {
+      const summary = page.waitForResponse(response => new URL(response.url()).pathname === "/api/dashboard/summary")
+      await page.evaluate(() => window.dispatchEvent(new Event("business-modules-changed")))
+      expect((await summary).ok()).toBe(true)
+      await expect(page.getByRole("button", { name: "Refresh", exact: true })).toBeEnabled()
+      await expect(page.getByText("Loading metrics...", { exact: true })).toHaveCount(0)
+    }
     const project = await json(context, "/api/real-estate/projects", 201, "POST", { name: "Green Meadows", code: "DASH", location: "Pune", currency: "INR" })
     const contact = await json(context, "/api/crm/contacts", 201, "POST", { name: "Dashboard buyer" })
     const pipeline = await json(context, "/api/crm/pipelines", 201, "POST", { name: "Property sales", stages: [
@@ -35,24 +42,24 @@ test("dashboard widgets follow module activation, including changes on an open p
 
     for (const [key, label] of [["leaves", "Pending leaves"], ["inventory", "Low stock alerts"], ["services", "Active services"]]) {
       await json(context, "/api/modules", 200, "PATCH", { key, enabled: false })
-      await page.evaluate(() => window.dispatchEvent(new Event("business-modules-changed")))
+      await refreshModules()
       await expect(page.getByText(label, { exact: true })).toHaveCount(0)
       await expect(page.getByRole("heading", { name: "Revenue trend", exact: true })).toBeVisible()
     }
     await expect(page.getByRole("heading", { name: "Top services", exact: true })).toHaveCount(0)
     await json(context, "/api/modules", 200, "PATCH", { key: "appointments", enabled: false })
-    await page.evaluate(() => window.dispatchEvent(new Event("business-modules-changed")))
+    await refreshModules()
     await expect(page.getByRole("heading", { name: "CRM and sales", exact: true })).toBeVisible()
     for (const label of ["Revenue", "Unique customers", "Pending leaves", "Revenue trend", "Appointment status mix", "Daily bookings", "Staff load", "Upcoming appointments", "Low stock alerts", "Top services", "Active services"]) {
       await expect(page.getByText(label, { exact: true })).toHaveCount(0)
     }
-    await page.screenshot({ path: testInfo.outputPath("crm-only.png"), fullPage: true })
+    await page.screenshot({ path: testInfo.outputPath("crm-only.png"), fullPage: true, animations: "disabled" })
     await page.setViewportSize({ width: 390, height: 844 })
     await page.screenshot({ path: testInfo.outputPath("sales-mobile.png"), fullPage: true })
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
     for (const [key, heading] of [["paymentPlans", "Payment Plans"], ["salesDocuments", "Sales Documents"], ["realEstate", "Real Estate"], ["crm", "CRM and sales"]]) {
       await json(context, "/api/modules", 200, "PATCH", { key, enabled: false })
-      await page.evaluate(() => window.dispatchEvent(new Event("business-modules-changed")))
+      await refreshModules()
       await expect(page.getByRole("heading", { name: heading, exact: true })).toHaveCount(0)
       await expect(page.getByRole("status")).toHaveCount(0)
     }

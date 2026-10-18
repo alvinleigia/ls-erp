@@ -3,7 +3,7 @@ const { test } = require("node:test")
 const assert = require("node:assert/strict")
 const { crmContactSchema, crmEnquiryUpdateSchema, crmEnquiryCreateSchema, crmTaskSchema, crmListSchema } = require("../modules/crm/validation.ts")
 const { contactScope, enquiryScope, canUseCrm } = require("../modules/crm/policy.ts")
-const pricing = require("../lib/appointments/order-pricing.ts")
+const pricing = require("../modules/appointments/order-pricing.ts")
 const { crmAccountSchema, crmAccountLinkSchema } = require("../modules/crm/validation.ts")
 const { pipelineSchema, opportunitySchema, opportunityMoveSchema } = require("../modules/crm/sales-validation.ts")
 const { workCreateSchema, workCompleteSchema, workListSchema } = require("../modules/crm/work-validation.ts")
@@ -117,10 +117,22 @@ test("staff scopes include tenant and ownership, and customers cannot use CRM", 
   assert.equal(canUseCrm("CUSTOMER"), false)
   assert.throws(() => enquiryScope({ ...actor, role: "CUSTOMER" }), { status: 403 })
 })
-test("existing salon pricing keeps discount caps and tax calculation", () => {
+test("booking pricing keeps discount caps and tax calculation", () => {
   assert.deepEqual(pricing.calculateLineAmounts({ quantity: 2, unitPriceCents: 10000, discountType: "PERCENT", discountValue: 10 }), { lineSubtotalCents: 20000, lineDiscountCents: 2000, lineTotalCents: 18000 })
   assert.equal(pricing.calculateDiscountCents("AMOUNT", 500, 10000), 10000)
   assert.equal(pricing.calculateTaxBreakdown(18000, [{ id: "tax", name: "GST", percent: 18 }])[0].taxCents, 3240)
+})
+
+test("booking stock transitions aggregate repeated lines and restore canceled quantities", () => {
+  const { buildStockDeltaForOrderUpdate: delta } = require("../modules/appointments/order-stock.ts")
+  const lines = [{ productId: "a", quantity: 2 }, { productId: "a", quantity: 1 }, { productId: "b", quantity: 1 }]
+  const update = (previousStatus, nextStatus, previousLines = lines, nextLines = lines) =>
+    [...delta({ previousStatus, nextStatus, previousLines, nextLines })]
+  assert.deepEqual(update("DRAFT", "DRAFT"), [])
+  assert.deepEqual(update("DRAFT", "CONFIRMED"), [["a", -3], ["b", -1]])
+  assert.deepEqual(update("CONFIRMED", "COMPLETED"), [])
+  assert.deepEqual(update("CONFIRMED", "CANCELED"), [["a", 3], ["b", 1]])
+  assert.deepEqual(update("CONFIRMED", "CONFIRMED", lines, [{ productId: "a", quantity: 4 }]), [["a", -1], ["b", 1]])
 })
 test("business accounts normalize contact details and allow only safe website protocols", () => {
   const account = crmAccountSchema.parse({ name: " Example Ltd ", email: " OFFICE@EXAMPLE.COM ", website: " https://example.com " })

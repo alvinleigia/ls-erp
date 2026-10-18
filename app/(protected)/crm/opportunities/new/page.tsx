@@ -1,2 +1,6 @@
-import { OpportunityEditor } from "@/modules/crm/components/opportunity-editor"
-export default async function Page({ searchParams }: { searchParams: Promise<{ enquiryId?: string; projectId?: string; subprojectId?: string }> }) { const query = await searchParams; return <OpportunityEditor key={`${query.enquiryId}-${query.projectId}-${query.subprojectId}`} enquiryId={query.enquiryId} initialProjectId={query.projectId} initialSubprojectId={query.subprojectId} /> }
+import { NewOpportunity } from "@/application/crm/create-pages"
+import type { CrmCreateQuery } from "@/modules/crm/view-context"
+
+export default async function Page({ searchParams }: { searchParams: Promise<CrmCreateQuery> }) {
+  return <NewOpportunity query={await searchParams} />
+}

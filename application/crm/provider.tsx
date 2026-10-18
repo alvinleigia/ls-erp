@@ -11,5 +11,5 @@ export function ApplicationCrmProvider({ children }: { children: React.ReactNode
   const { enabled, can } = useBusinessModules()
   const documents = enabled("salesDocuments") && can("quotations.read")
   const view = useMemo(() => ({ ...realEstateCrmView, OpportunityPanels: documents ? OpportunityDocuments : undefined }), [documents])
-  return <CrmExtensionProvider view={view}>{children}</CrmExtensionProvider>
+  return <CrmExtensionProvider view={view} active={enabled("realEstate")}>{children}</CrmExtensionProvider>
 }

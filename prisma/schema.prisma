@@ -803,6 +803,8 @@ model Organization {
 }
 
 model Tenant {
+  terminologyRevision TenantTerminologyRevision?
+  terminology TenantTerminology[]
   enquiryImports CrmEnquiryImport[]
   accessRoles TenantAccessRole[]
   quotationTemplates CrmQuotationTemplate[]
@@ -1260,6 +1262,21 @@ model ServicePackageItem {
   @@unique([packageId, itemServiceId])
   @@index([packageId])
   @@index([itemServiceId])
+}
+
+model TenantTerminologyRevision {
+  tenantId String @id
+  version Int @default(0)
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+}
+
+model TenantTerminology {
+  tenantId String
+  key String
+  label String
+  updatedAt DateTime @updatedAt
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  @@id([tenantId, key])
 }
 
 model AppSetting {

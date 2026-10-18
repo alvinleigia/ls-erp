@@ -1,3 +1,5 @@
+import { BusinessError } from "@/platform/policy"
+import { updateInventoryCategory, archiveInventoryCategory } from "@/modules/inventory/category-service"
 import { withInventoryApi } from "@/modules/inventory/api"
 import type { BusinessActor } from "@/platform/policy"
 import { NextResponse } from "next/server"
@@ -9,7 +11,6 @@ import {
   logApiRequestSuccess,
   withRequestId,
 } from "@/lib/api-logging"
-import { prisma } from "@/lib/prisma"
 import { updateInventoryCategorySchema } from "@/lib/validation"
 
 
@@ -34,50 +35,8 @@ async function handlePATCH(
       return withRequestId(response, logContext.requestId)
     }
 
-    const data = parsed.data
-    if (data.name?.trim()) {
-      const existing = await prisma.inventoryCategory.findUnique({
-        where: { tenantId_name: { tenantId, name: data.name.trim() } },
-        select: { id: true },
-      })
-      if (existing && existing.id !== id) {
-        const response = NextResponse.json(
-          { error: "Category name already exists." },
-          { status: 409 }
-        )
-        logApiRequestSuccess(logContext, 409, { reason: "duplicate_name" })
-        return withRequestId(response, logContext.requestId)
-      }
-    }
+    const updatedItem = await updateInventoryCategory(tenantId, id, parsed.data)
 
-    const item = await prisma.inventoryCategory.updateManyAndReturn({
-      where: { id, tenantId },
-      data: {
-        ...(data.name?.trim() ? { name: data.name.trim() } : {}),
-        ...(data.description?.trim()
-          ? { description: data.description.trim() }
-          : data.description === ""
-            ? { description: null }
-            : {}),
-        ...(data.status ? { status: data.status } : {}),
-        ...(typeof data.sortOrder === "number" ? { sortOrder: data.sortOrder } : {}),
-      },
-      select: {
-        id: true,
-        name: true,
-        description: true,
-        status: true,
-        sortOrder: true,
-        createdAt: true,
-      },
-    })
-
-    const updatedItem = item[0]
-    if (!updatedItem) {
-      const response = NextResponse.json({ error: "Category not found." }, { status: 404 })
-      logApiRequestSuccess(logContext, 404, { reason: "not_found", itemId: id })
-      return withRequestId(response, logContext.requestId)
-    }
     const response = NextResponse.json({
       item: {
         ...updatedItem,
@@ -87,6 +46,7 @@ async function handlePATCH(
     logApiRequestSuccess(logContext, 200, { itemId: updatedItem.id })
     return withRequestId(response, logContext.requestId)
   } catch (error) {
+    if (error instanceof BusinessError) throw error
     logApiRequestError(logContext, error, 500)
     const response = NextResponse.json({ error: "Unable to update category." }, { status: 500 })
     return withRequestId(response, logContext.requestId)
@@ -103,23 +63,13 @@ async function handleDELETE(
 
   try {
     const { id } = await params
-    const linkedProducts = await prisma.inventoryProduct.count({
-      where: { tenantId, categoryId: id },
-    })
-
-    if (linkedProducts > 0) {
-      await prisma.inventoryCategory.updateMany({
-        where: { id, tenantId },
-        data: { status: "INACTIVE" },
-      })
-    } else {
-      await prisma.inventoryCategory.deleteMany({ where: { id, tenantId } })
-    }
+    const { linkedProducts } = await archiveInventoryCategory(tenantId, id)
 
     const response = NextResponse.json({ ok: true })
     logApiRequestSuccess(logContext, 200, { itemId: id, linkedProducts })
     return withRequestId(response, logContext.requestId)
   } catch (error) {
+    if (error instanceof BusinessError) throw error
     logApiRequestError(logContext, error, 500)
     const response = NextResponse.json({ error: "Unable to delete category." }, { status: 500 })
     return withRequestId(response, logContext.requestId)

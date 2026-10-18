@@ -4,7 +4,7 @@ const assert = require("node:assert/strict")
 const { randomUUID } = require("node:crypto")
 const { Pool } = require("pg")
 const { PrismaClient } = require("@prisma/client")
-const { PrismaPg } = require("@prisma/adapter-pg")
+const { TenantPgAdapter } = require("../lib/tenant-pg-adapter.ts")
 const ExcelJS = require("exceljs")
 const { parse } = require("csv-parse/sync")
 const { createApplicationCrmService } = require("../application/crm/service.ts")
@@ -18,8 +18,8 @@ const pools = [], clients = []
 function client(tenant, root = false) {
   const connection = new URL(raw)
   if (!root) { connection.username = "crm_test_runtime"; connection.password = "" }
-  const pool = new Pool({ connectionString: connection.toString(), max: 4, ...(!root ? { options: `-c app.tenant_id=${tenant || ""} -c app.rls_bypass=off` } : {}) })
-  const db = new PrismaClient({ adapter: new PrismaPg(pool) }); pools.push(pool); clients.push(db); return db
+  const pool = new Pool({ connectionString: connection.toString(), max: 4 })
+  const db = new PrismaClient({ adapter: new TenantPgAdapter(pool, { tenantId: tenant || undefined, bypass: root }) }); pools.push(pool); clients.push(db); return db
 }
 const root = client(null, true), dbA = client(a), dbB = client(b), none = client(null)
 let admin, staff, other, service, restricted, second, project, subproject
@@ -177,4 +177,68 @@ test("role without contacts.create cannot upload or inspect import history", asy
   await assert.rejects(upload('Name,Email\nDenied,denied@example.com', restricted), e => e.status === 403)
   await assert.rejects(restricted.listEnquiryImports({}), e => e.status === 403)
   await assert.rejects(restricted.downloadEnquiryImportTemplate(), e => e.status === 403)
+})
+
+test("custom roles cannot browse or assign projects through import or direct writes", async () => {
+  const user = await root.user.create({ data: { tenantId: a, role: "MANAGER", name: "Restricted importer", email: `${prefix}-restricted@test.example` } })
+  const permissions = ["contacts.read", "contacts.create", "enquiries.read", "enquiries.create", "enquiries.edit"]
+  const role = await root.tenantAccessRole.create({ data: { tenantId: a, name: "Import without projects", nameKey: "import without projects", permissions } })
+  await root.tenantRoleAssignment.create({ data: { tenantId: a, userId: user.id, roleId: role.id } })
+  const scoped = createApplicationCrmService(dbA, { tenantId: a, userId: user.id })
+  const headers = parse(await scoped.downloadEnquiryImportTemplate(), { bom: true })[0]
+  assert.equal(headers.includes("Project"), false)
+  assert.equal(headers.includes("Subproject"), false)
+  const contact = await root.crmContact.create({ data: { tenantId: a, name: "Scoped customer", ownerUserId: user.id } })
+  const input = { title: "Scoped lead", contactId: contact.id, assignedUserId: user.id, propertyContext: { projectId: project.id } }
+  await assert.rejects(scoped.createEnquiry(input), e => e.status === 403)
+  assert.equal(await root.crmEnquiry.count({ where: { tenantId: a, title: input.title } }), 0)
+  await root.tenantAccessRole.update({ where: { id: role.id }, data: { permissions: [...permissions, "projects.read"] } })
+  const lead = await scoped.createEnquiry(input)
+  const job = await review(await upload('Name,Email,Project\nRevoked,revoked-project@example.com,GM', scoped), undefined, scoped)
+  await root.tenantAccessRole.update({ where: { id: role.id }, data: { permissions } })
+  const result = await finish(job, scoped)
+  assert.equal(result.counts.INVALID, 1)
+  assert.equal(await root.crmContact.count({ where: { tenantId: a, email: "revoked-project@example.com" } }), 0)
+  // Linked evidence and a core-only edit do not grant browsing or drop the link.
+  assert.equal((await scoped.getEnquiry(lead.id)).propertyContext.project.id, project.id)
+  await scoped.updateEnquiry(lead.id, { title: "Edited core only", assignedUserId: user.id, status: lead.status, version: lead.version })
+  assert.equal((await scoped.getEnquiry(lead.id)).propertyContext.project.id, project.id)
+})
+
+test("configured template headers and exports preserve mappings, correction rows and tenant isolation", async () => {
+  const replacements = { "crm.contact.singular": "Person", "crm.enquiry.singular": "Prospect", "realEstate.project.singular": "Development", "realEstate.subproject.singular": "Phase" }
+  await root.tenantTerminology.createMany({ data: Object.entries(replacements).map(([key, label]) => ({ tenantId: a, key, label })) })
+  const headers = parse(await service.downloadEnquiryImportTemplate(), { bom: true })[0]
+  assert.ok(headers.includes("Person name [name]")); assert.ok(headers.includes("Prospect title [title]")); assert.ok(headers.includes("Development [projectId]")); assert.ok(headers.includes("Phase [subprojectId]"))
+  const csv = crmCsv(headers, [
+    headers.map(h => ({ "Person name [name]": "Fresh", Email: "fresh-terms@example.com", "Development [projectId]": "GM", "Phase [subprojectId]": "GM-1" })[h] || ""),
+    headers.map(h => ({ "Person name [name]": "Bad", Email: "bad-address", "Development [projectId]": "GM" })[h] || ""),
+    headers.map(h => ({ "Person name [name]": "Duplicate", Email: "FRESH-TERMS@example.com" })[h] || ""),
+  ])
+  const job = await upload(csv)
+  assert.equal(job.config.mapping.projectId, headers.indexOf("Development [projectId]"))
+  const originalMapping = job.config.mapping
+  // A downloaded file and an existing mapping remain valid after a reset.
+  await root.tenantTerminology.deleteMany({ where: { tenantId: a } })
+  assert.deepEqual((await service.getEnquiryImport(job.id)).config.mapping, originalMapping)
+  const reviewed = await review(job)
+  assert.equal(reviewed.counts.READY, 1); assert.equal(reviewed.counts.INVALID, 1); assert.equal(reviewed.counts.DUPLICATE, 1)
+  const done = await finish(reviewed); assert.equal(done.counts.IMPORTED, 1)
+  const correction = await service.downloadEnquiryImportErrors(job.id), rows = parse(correction, { bom: true })
+  assert.deepEqual(rows[0].slice(0, headers.length), headers); assert.equal(rows.length, 3)
+  const again = await upload(correction.replace("bad-address", "corrected-terms@example.com"))
+  assert.deepEqual(again.config.mapping, originalMapping)
+  const corrected = await review(again); assert.equal(corrected.counts.READY, 1); assert.equal(corrected.counts.DUPLICATE, 1)
+  const before = parse(await service.exportEnquiries({}), { bom: true })
+  await root.tenantTerminology.createMany({ data: Object.entries(replacements).map(([key, label]) => ({ tenantId: a, key, label })) })
+  const after = parse(await service.exportEnquiries({}), { bom: true })
+  assert.deepEqual(after.slice(1), before.slice(1)); assert.ok(after[0].includes("Person")); assert.ok(after[0].includes("Development")); assert.ok(after[0].includes("Phase"))
+  const report = parse(await service.exportSalesReport({ view: "leads" }), { bom: true })
+  assert.ok(report[0].includes("Person")); assert.ok(report[0].includes("Development"))
+  await root.tenantModule.update({ where: { tenantId_key: { tenantId: b, key: "crm" } }, data: { enabled: true } })
+  assert.ok((await second.downloadEnquiryImportTemplate()).includes("Contact name")); assert.ok(!(await second.downloadEnquiryImportTemplate()).includes("Person name"))
+  await root.tenantModule.update({ where: { tenantId_key: { tenantId: a, key: "realEstate" } }, data: { enabled: false } })
+  assert.ok(!(await service.downloadEnquiryImportTemplate()).includes("Development"))
+  assert.ok(!parse(await service.exportEnquiries({}), { bom: true })[0].includes("Development"))
+  await root.tenantTerminology.deleteMany({ where: { tenantId: a } })
 })

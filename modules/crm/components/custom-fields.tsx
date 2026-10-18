@@ -1,22 +1,17 @@
 "use client"
+import { useTerminology } from "@/platform/terminology/provider"
 import * as React from "react"
-import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { FormField } from "@/components/form-field"
-import { SearchableSelect } from "@/components/searchable-select"
-import { CrmSelect } from "./crm-controls"
-import { CrmSection } from "./crm-section"
-import { CrmReadOnlyFields } from "./crm-record-detail"
-import { RecordSelect } from "./record-select"
+import { FieldControl } from "@/components/erp/custom-field-control"
+import { Select } from "@/components/erp/controls"
+import { Section } from "@/components/erp/section"
+import { ReadOnlyFields } from "@/components/erp/record-detail"
+import { RecordSelect } from "@/components/erp/record-select"
 import type { FieldValue, FieldView } from "@/platform/custom-fields/validation"
 
-export function FieldControl({ field, value, onChange, disabled, id }: { field: Pick<FieldView, "type" | "maxLength" | "minimum" | "maximum" | "options" | "optionName">; value: FieldValue; onChange: (value: FieldValue) => void; disabled?: boolean; id: string }) {
-  if (field.type === "BOOLEAN") return <CrmSelect id={id} className="w-full" value={value === null ? "" : String(value)} disabled={disabled} onValueChange={next => onChange(next === "" ? null : next === "true")}><option value="">Not set</option><option value="true">Yes</option><option value="false">No</option></CrmSelect>
-  if (field.type === "SELECT") return <SearchableSelect id={id} value={String(value ?? "")} disabled={disabled} options={field.options.filter(option => !option.archived).map(option => ({ value: option.id, label: option.name }))} selectedOption={value ? { value: String(value), label: field.optionName || field.options.find(option => option.id === value)?.name || "Saved option" } : undefined} preferSelectedOption onChange={onChange} placeholder="Choose an option" />
-  return <Input id={id} disabled={disabled} type={field.type === "DATE" ? "date" : field.type === "NUMBER" ? "number" : "text"} step={field.type === "NUMBER" ? "0.000001" : undefined} min={field.minimum ?? undefined} max={field.maximum ?? undefined} maxLength={field.maxLength} value={String(value ?? "")} onChange={event => onChange(event.target.value || null)} />
-}
-
 export function useCustomFields(resource: string, id?: string, sourceEnquiryId?: string) {
+  const term = useTerminology()
   const [fields, setFields] = React.useState<FieldView[]>([]), [patch, setPatch] = React.useState<Record<string, FieldValue>>({})
   const teamRequest = React.useRef(0)
   const [loading, setLoading] = React.useState(true), [error, setError] = React.useState("")
@@ -59,7 +54,7 @@ export function useCustomFields(resource: string, id?: string, sourceEnquiryId?:
     if (loading) return <p className="text-sm text-muted-foreground">Loading custom fields...</p>
     if (error) return <p role="alert" className="text-destructive">{error}</p>
     if (!fields.length && !sourceEnquiryId) return null
-    return <CrmSection title="Additional information" description={sourceEnquiryId ? "Shared enquiry fields are copied when you convert. Enquiry-only fields remain on the original enquiry." : "Additional fields configured for this business."}>
+    return <Section title="Additional information" description={sourceEnquiryId ? term("crm.enquiry.singular", "Shared enquiry fields are copied when you convert. Enquiry-only fields remain on the original enquiry.", "Shared {label} fields are copied when you convert. {label}-only fields remain on the original {label}.") : "Additional fields configured for this business."}>
       <div className="grid gap-4 sm:grid-cols-2">{fields.map(field => {
         const value = Object.hasOwn(patch, field.id) ? patch[field.id] : field.value
         const locked = disabled || !field.editable
@@ -69,15 +64,15 @@ export function useCustomFields(resource: string, id?: string, sourceEnquiryId?:
           {!locked && !field.required && value !== null && <Button type="button" variant="link" size="sm" onClick={() => setPatch(previous => ({ ...previous, [field.id]: null }))}>Clear {field.name}</Button>}
         </FormField>
       })}</div>
-    </CrmSection>
+    </Section>
   }
   function readOnlySection(actions?: React.ReactNode) {
     if (loading || error) return section(true)
     if (!fields.length) return null
-    return <CrmSection title="Additional information" actions={actions}><CrmReadOnlyFields fields={fields.map(field => ({
+    return <Section title="Additional information" actions={actions}><ReadOnlyFields fields={fields.map(field => ({
       label: `${field.savedName || field.name}${field.archived ? " (archived)" : ""}`,
       value: field.value === null ? null : field.type === "BOOLEAN" ? field.value ? "Yes" : "No" : field.type === "SELECT" ? field.optionName || field.options.find(option => option.id === field.value)?.name || "Saved option" : String(field.value),
-    }))} /></CrmSection>
+    }))} /></Section>
   }
   return { readOnlySection, load, changeTeam, payload: { customFields: patch }, section, blocked: loading || !!error }
 }
@@ -95,7 +90,7 @@ export function CustomFieldFilter({ resource, value, onChange }: { resource: str
   }, [value.customFieldId])
   return <div className="space-y-3 sm:col-span-2"><FormField id={`custom-filter-${resource}`} label="Custom field"><RecordSelect id={`custom-filter-${resource}`} endpoint={`/api/crm/custom-fields?resource=${resource}&filterable=true`} value={value.customFieldId} selected={field ? { value: field.id, label: field.name } : undefined} onChange={customFieldId => onChange({ ...emptyCustomFilter, customFieldId })} placeholder="Choose a field" /></FormField>
     {error && <p role="alert" className="text-destructive">{error}</p>}{field && <>
-      {["NUMBER", "DATE"].includes(field.type) && <CrmSelect aria-label="Custom field comparison" value={value.customFieldOperator} onValueChange={customFieldOperator => onChange({ ...value, customFieldOperator: customFieldOperator as CustomFilter["customFieldOperator"] })}><option value="eq">Equals</option><option value="gte">At least</option><option value="lte">At most</option></CrmSelect>}
+      {["NUMBER", "DATE"].includes(field.type) && <Select aria-label="Custom field comparison" value={value.customFieldOperator} onValueChange={customFieldOperator => onChange({ ...value, customFieldOperator: customFieldOperator as CustomFilter["customFieldOperator"] })}><option value="eq">Equals</option><option value="gte">At least</option><option value="lte">At most</option></Select>}
       <FormField id={`custom-filter-value-${resource}`} label={field.name}><FieldControl field={{ ...field, minimum: null, maximum: null, options: field.options.map(option => ({ ...option, archived: false })) }} id={`custom-filter-value-${resource}`} value={field.type === "BOOLEAN" ? value.customFieldValue === "" ? null : value.customFieldValue === "true" : value.customFieldValue} onChange={next => onChange({ ...value, customFieldValue: next === null ? "" : String(next) })} /></FormField>
     </>}{value.customFieldId && <Button variant="link" size="sm" type="button" onClick={() => onChange(emptyCustomFilter)}>Clear custom field filter</Button>}</div>
   }

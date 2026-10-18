@@ -1,14 +1,16 @@
 "use client"
-import { CrmSection } from "./crm-section"
-import { CrmPageHeader, CrmFormActions, CrmActionBar, crmPageClass } from "./crm-page"
-import { CrmSelect } from "./crm-controls"
+import { useTerminology } from "@/platform/terminology/provider"
+import { Section } from "@/components/erp/section"
+import { AccessPageHeader, AccessFormActions } from "@/platform/access/record-page"
+import { ActionBar, pageClass } from "@/components/erp/page"
+import { Select } from "@/components/erp/controls"
 import * as React from "react"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { FormField } from "@/components/form-field"
-import { RecordSelect } from "./record-select"
+import { RecordSelect } from "@/components/erp/record-select"
 import { selectClass } from "./record-list"
 import { wallTime } from "../work-time"
 import { useDateFormatter } from "@/hooks/use-date-formatter"
@@ -17,6 +19,7 @@ import type { WorkCreateInput } from "../work-validation"
 
 type Initial = { planId?: string; contactId?: string; enquiryId?: string; opportunityId?: string }
 export function ActivityPlanApply({ initial }: { initial: Initial }) {
+  const term = useTerminology()
   const router = useRouter(), { formatDate } = useDateFormatter()
   const [planId, setPlanId] = React.useState(initial.planId || ""), [plan, setPlan] = React.useState<ActivityPlanRow | null>(null)
   const [kind, setKind] = React.useState(initial.opportunityId ? "opportunity" : initial.enquiryId ? "enquiry" : "contact")
@@ -65,21 +68,21 @@ export function ActivityPlanApply({ initial }: { initial: Initial }) {
     try {
       const response = await fetch(`/api/crm/activity-plans/${planId}/${apply ? "apply" : "preview"}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...input, requestKey }) })
       const data = await response.json(); if (!response.ok) throw new Error(data.error || "Unable to apply plan.")
-      if (apply) { toast.success(`${data.count} activities scheduled.`); router.push(`/crm/activities?scope=visible&state=all&planLaunchId=${encodeURIComponent(data.id)}`) }
+      if (apply) { toast.success(`${data.count} ${term("crm.activity.plural", "activities")} scheduled.`); router.push(`/crm/activities?scope=visible&state=all&planLaunchId=${encodeURIComponent(data.id)}`) }
       else setPreview({ signature, requestKey, steps: data.steps, timeZone: data.timeZone })
     } catch (error) { setError((error as Error).message) } finally { setBusy(false) }
   }
-  if (loading) return <p>Loading activity plans…</p>
-  return <section className={crmPageClass}><CrmPageHeader title="Apply activity plan" backHref="/crm/activity-plans" actions={<CrmFormActions form="apply-form" cancelHref="/crm/activity-plans" saving={busy} disabled={!ready} saveLabel="Preview schedule" loadingText="Preparing preview…"><Button type="button" variant="outline" disabled={busy} onClick={() => { setPreview(null); setRevision(value => value + 1); setError("") }}>Reload template</Button></CrmFormActions>} /><p className="text-sm text-muted-foreground">Review the dates before scheduling. All steps are assigned together, including steps due later. Existing activities remain in place.</p>{error && <p role="alert" className="text-destructive">{error}</p>}
-    <form id="apply-form" onSubmit={event => { event.preventDefault(); void submit(false) }} className="space-y-4"><CrmSection title="Plan and assignment"><fieldset disabled={busy} className="grid gap-4 sm:grid-cols-2">
-      <FormField id="apply-plan" label="Activity plan"><RecordSelect id="apply-plan" endpoint="/api/crm/activity-plans" value={planId} selected={plan?.id === planId ? { value: plan.id, label: plan.name } : undefined} onChange={setPlanId} /></FormField>
-      <FormField id="apply-kind" label="Related to"><CrmSelect id="apply-kind" className={`${selectClass} w-full`} value={kind} onValueChange={event => { setKind(event); setParentId(""); setParent(null) }}><option value="contact">Customer</option><option value="enquiry">Enquiry</option><option value="opportunity">Opportunity</option></CrmSelect></FormField>
+  if (loading) return <p>{term("crm.activity.singular", "Loading activity plans…", "Loading {label} plans…")}</p>
+  return <section className={pageClass}><AccessPageHeader title={term("crm.activity.singular", "Apply activity plan", "Apply {label} plan")} backHref="/crm/activity-plans" actions={<AccessFormActions form="apply-form" cancelHref="/crm/activity-plans" saving={busy} disabled={!ready} saveLabel="Preview schedule" loadingText="Preparing preview…"><Button type="button" variant="outline" disabled={busy} onClick={() => { setPreview(null); setRevision(value => value + 1); setError("") }}>Reload template</Button></AccessFormActions>} /><p className="text-sm text-muted-foreground">{term("crm.activity.plural", "Review the dates before scheduling. All steps are assigned together, including steps due later. Existing activities remain in place.", "Review the dates before scheduling. All steps are assigned together, including steps due later. Existing {label} remain in place.")}</p>{error && <p role="alert" className="text-destructive">{error}</p>}
+    <form id="apply-form" onSubmit={event => { event.preventDefault(); void submit(false) }} className="space-y-4"><Section title="Plan and assignment"><fieldset disabled={busy} className="grid gap-4 sm:grid-cols-2">
+      <FormField id="apply-plan" label={term("crm.activity.singular", "Activity plan", "{label} plan")}><RecordSelect id="apply-plan" endpoint="/api/crm/activity-plans" value={planId} selected={plan?.id === planId ? { value: plan.id, label: plan.name } : undefined} onChange={setPlanId} /></FormField>
+      <FormField id="apply-kind" label="Related to"><Select id="apply-kind" className={`${selectClass} w-full`} value={kind} onValueChange={event => { setKind(event); setParentId(""); setParent(null) }}><option value="contact">{term("crm.contact.singular", "Customer")}</option><option value="enquiry">{term("crm.enquiry.singular", "Enquiry")}</option><option value="opportunity">{term("crm.opportunity.singular", "Opportunity")}</option></Select></FormField>
       {kind !== "contact" && <FormField id="apply-parent" label="Related record"><RecordSelect id="apply-parent" endpoint={`/api/crm/${kind === "opportunity" ? "opportunities" : "enquiries"}`} labelField="title" value={parentId} selected={parent?.id === parentId ? { value: parent.id, label: parent.title } : undefined} onChange={setParentId} /></FormField>}
-      <FormField id="apply-contact" label="Customer"><RecordSelect id="apply-contact" endpoint="/api/crm/contacts" value={contactId} selected={contact?.id === contactId ? { value: contact.id, label: contact.name } : undefined} onChange={setContactId} disabled={kind !== "contact"} /></FormField>
+      <FormField id="apply-contact" label={term("crm.contact.singular", "Customer")}><RecordSelect id="apply-contact" endpoint="/api/crm/contacts" value={contactId} selected={contact?.id === contactId ? { value: contact.id, label: contact.name } : undefined} onChange={setContactId} disabled={kind !== "contact"} /></FormField>
       <FormField id="apply-owner" label="Assigned staff"><RecordSelect id="apply-owner" endpoint="/api/crm/assignees" value={assignedUserId} selected={me ? { value: me.id, label: me.name } : undefined} onChange={setAssignedUserId} disabled={!canAssign} /></FormField>
       <FormField id="apply-start" label={`Start date (${timeZone})`}><Input id="apply-start" type="date" required value={startOn} onChange={event => setStartOn(event.target.value)} /></FormField>
-    </fieldset></CrmSection></form>
+    </fieldset></Section></form>
     {plan?.archived && <p>This plan is archived. Choose an active plan.</p>}
-    {reviewed && preview && <CrmSection title={<>{plan?.name}: {preview.steps.length}activities</>}> <p className="text-sm">All-day deadlines and reminders use {preview.timeZone}. Emails are tasks to carry out, not automatic messages.</p><ol className="space-y-3">{preview.steps.map((step, index) => <li key={index} className="rounded border p-3"><p className="font-medium">{index + 1}. {step.title}</p><p className="text-sm">{step.activityTypeName || step.type} · {formatDate(step.dueOn)}{step.reminderAt ? ` · Reminder ${wallTime(step.reminderAt, preview.timeZone).replace("T", " ")}` : ""}</p>{step.description && <p className="mt-2 whitespace-pre-wrap text-sm text-muted-foreground">{step.description}</p>}</li>)}</ol><CrmActionBar><Button disabled={!ready || busy} loading={busy} onClick={() => void submit(true)}>Schedule these activities</Button></CrmActionBar></CrmSection>}
+    {reviewed && preview && <Section title={<>{plan?.name}: {preview.steps.length} {term("crm.activity.plural", "activities")}</>}> <p className="text-sm">All-day deadlines and reminders use {preview.timeZone}. Emails are tasks to carry out, not automatic messages.</p><ol className="space-y-3">{preview.steps.map((step, index) => <li key={index} className="rounded border p-3"><p className="font-medium">{index + 1}. {step.title}</p><p className="text-sm">{step.activityTypeName || step.type} · {formatDate(step.dueOn)}{step.reminderAt ? ` · Reminder ${wallTime(step.reminderAt, preview.timeZone).replace("T", " ")}` : ""}</p>{step.description && <p className="mt-2 whitespace-pre-wrap text-sm text-muted-foreground">{step.description}</p>}</li>)}</ol><ActionBar><Button disabled={!ready || busy} loading={busy} onClick={() => void submit(true)}>{term("crm.activity.plural", "Schedule these activities", "Schedule these {label}")}</Button></ActionBar></Section>}
   </section>
 }

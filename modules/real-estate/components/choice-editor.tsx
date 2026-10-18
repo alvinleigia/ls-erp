@@ -1,20 +1,21 @@
 "use client"
-import { withCrmRecordView, useCrmRecordView, CrmRecordForm, CrmSummarySection } from "@/modules/crm/components/crm-record-view"
+import { withRecordView, useRecordView, AccessRecordForm, AccessSummarySection } from "@/platform/access/record-view"
 import * as React from "react"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { FormField } from "@/components/form-field"
-import { CrmCheckbox, CrmSelect } from "@/modules/crm/components/crm-controls"
-import { CrmPageHeader, CrmFormActions, crmPageClass } from "@/modules/crm/components/crm-page"
-import { CrmSection } from "@/modules/crm/components/crm-section"
+import { Checkbox, Select } from "@/components/erp/controls"
+import { AccessPageHeader, AccessFormActions } from "@/platform/access/record-page"
+import { pageClass } from "@/components/erp/page"
+import { Section } from "@/components/erp/section"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
 import { choiceTitles, type ChoiceKind, type PropertyChoice } from "../choices"
 
-export const PropertyChoiceEditor = withCrmRecordView(PropertyChoiceEditorBody)
+export const PropertyChoiceEditor = withRecordView(PropertyChoiceEditorBody)
 function PropertyChoiceEditorBody({ kind, id }: { kind: ChoiceKind; id?: string }) {
-  const view = useCrmRecordView()!
+  const view = useRecordView()!
   const router = useRouter(), backHref = `/crm/configuration/real-estate/${kind}`
   const [value, setValue] = React.useState<PropertyChoice>({ id: "", name: "", position: 0, isDefault: false, archived: false, version: 1 })
   const [canManage, setCanManage] = React.useState(false), [loading, setLoading] = React.useState(true), [saving, setSaving] = React.useState(false)
@@ -40,15 +41,15 @@ function PropertyChoiceEditorBody({ kind, id }: { kind: ChoiceKind; id?: string 
       view.done(); toast.success("Choice saved."); router.push(backHref)
     } catch (error) { setError((error as Error).message); setConfirm(false) } finally { setSaving(false) }
   }
-  return <div className={crmPageClass}><CrmPageHeader title={id ? value.name || "Choice" : "New choice"} description={choiceTitles[kind]} backHref={backHref} actions={<CrmFormActions form="choice-form" cancelHref={backHref} canSave={canManage && !loading} saving={saving} saveLabel="Save choice"><Button variant="outline" disabled={saving} onClick={() => setRevision(value => value + 1)}>Refresh</Button></CrmFormActions>} />
-    {loading ? <p>Loading choice…</p> : <CrmRecordForm id="choice-form" saving={saving} error={error} disabled={!canManage} fingerprint={value} initialSection="Choice details"
-      overview={<CrmSummarySection title="Choice details" canEdit={canManage} fields={[{ label: "Name", value: value.name }, { label: "Display order", value: value.position }, { label: "Default", value: value.isDefault ? "Yes" : "No" }, { label: "Status", value: value.archived ? "Archived" : "Active" }]} />} onSubmit={event => { event.preventDefault(); if (id && value.archived !== originalArchived) setConfirm(true); else void save() }}>
-      <CrmSection title="Choice details" description="Defaults apply to new records. Renaming a choice preserves labels already saved on records."><fieldset disabled={!canManage || saving} className="grid gap-4 sm:grid-cols-2">
+  return <div className={pageClass}><AccessPageHeader title={id ? value.name || "Choice" : "New choice"} description={choiceTitles[kind]} backHref={backHref} actions={<AccessFormActions form="choice-form" cancelHref={backHref} canSave={canManage && !loading} saving={saving} saveLabel="Save choice"><Button variant="outline" disabled={saving} onClick={() => setRevision(value => value + 1)}>Refresh</Button></AccessFormActions>} />
+    {loading ? <p>Loading choice…</p> : <AccessRecordForm id="choice-form" saving={saving} error={error} disabled={!canManage} fingerprint={value} initialSection="Choice details"
+      overview={<AccessSummarySection title="Choice details" canEdit={canManage} fields={[{ label: "Name", value: value.name }, { label: "Display order", value: value.position }, { label: "Default", value: value.isDefault ? "Yes" : "No" }, { label: "Status", value: value.archived ? "Archived" : "Active" }]} />} onSubmit={event => { event.preventDefault(); if (id && value.archived !== originalArchived) setConfirm(true); else void save() }}>
+      <Section title="Choice details" description="Defaults apply to new records. Renaming a choice preserves labels already saved on records."><fieldset disabled={!canManage || saving} className="grid gap-4 sm:grid-cols-2">
         <FormField id="choice-name" label="Name"><Input id="choice-name" required maxLength={100} value={value.name} onChange={event => setValue({ ...value, name: event.target.value })} /></FormField>
         <FormField id="choice-order" label="Display order"><Input id="choice-order" type="number" required min={0} max={1000000} value={value.position} onChange={event => setValue({ ...value, position: Number(event.target.value) })} /><p className="text-xs text-muted-foreground">Lower numbers appear first.</p></FormField>
-        <FormField id="choice-status" label="Status"><CrmSelect id="choice-status" className="w-full" value={value.archived ? "archived" : "active"} onValueChange={status => setValue({ ...value, archived: status === "archived", ...(status === "archived" ? { isDefault: false } : {}) })}><option value="active">Active</option><option value="archived">Archived</option></CrmSelect></FormField>
-        <div className="space-y-2"><label className="flex items-center gap-2 text-sm"><CrmCheckbox checked={value.isDefault} disabled={value.archived} onChange={event => setValue({ ...value, isDefault: event.target.checked })} />Use as default</label><p className="text-xs text-muted-foreground">Replaces the current default for this list. Existing records stay unchanged.</p></div>
-      </fieldset></CrmSection></CrmRecordForm>}
+        <FormField id="choice-status" label="Status"><Select id="choice-status" className="w-full" value={value.archived ? "archived" : "active"} onValueChange={status => setValue({ ...value, archived: status === "archived", ...(status === "archived" ? { isDefault: false } : {}) })}><option value="active">Active</option><option value="archived">Archived</option></Select></FormField>
+        <div className="space-y-2"><label className="flex items-center gap-2 text-sm"><Checkbox checked={value.isDefault} disabled={value.archived} onChange={event => setValue({ ...value, isDefault: event.target.checked })} />Use as default</label><p className="text-xs text-muted-foreground">Replaces the current default for this list. Existing records stay unchanged.</p></div>
+      </fieldset></Section></AccessRecordForm>}
     <Dialog open={confirm} onOpenChange={open => { if (!saving) setConfirm(open) }}><DialogContent><DialogHeader><DialogTitle>{value.archived ? "Archive choice?" : "Restore choice?"}</DialogTitle><DialogDescription>{value.archived ? "Existing records keep this choice. It will no longer be available for new selections or as a default." : "This choice will be available for new selections again."}</DialogDescription></DialogHeader><DialogFooter><Button variant="outline" disabled={saving} onClick={() => setConfirm(false)}>Cancel</Button><Button loading={saving} onClick={() => void save()}>Confirm and save</Button></DialogFooter></DialogContent></Dialog>
   </div>
 }

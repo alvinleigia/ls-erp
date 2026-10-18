@@ -1,3 +1,766 @@
+## Industry-neutral R5: recovery permissions verified (2026-10-18)
+
+Selective recovery now preserves managed schemas/default ACLs and restores all
+application object owners/grants. Non-superuser migration and rollback rehearsed:
+ownership/ACLs match source metadata; all data/schema/history fingerprints match,
+zero FK orphans. Six source event-trigger functions exercised without modification.
+See docs/INDUSTRY_NEUTRAL_CUTOVER.md for the reviewed exclusions and execution gates.
+Next: agreed maintenance window, final target check and fresh verified backup,
+then the two migrations and matching deployment. No production changes or push.
+
+## Industry-neutral R5: freeze and rollback rehearsed (2026-10-18)
+
+Seven isolated freeze/drain/reopen tests passed using the source operator privilege
+shape. Reapplied both release migrations on the protected client copy, then restored
+the backup over it: all source data/history/schema/RLS fingerprints match, zero
+foreign-key orphans. Local ownership/ACL differences remain explicit: production
+recovery-permission review is next, before the agreed maintenance window and fresh
+backup. Concrete procedure: docs/INDUSTRY_NEUTRAL_CUTOVER.md. No hosted writes,
+role changes, session termination, commit, push, relink or deployment.
+
+## Industry-neutral R5: populated queries and grant compatibility passed (2026-10-18)
+
+Forty-one sales/document/dashboard/custom-field tests passed, including an indexed
+10,000-value filter and paginated 1,007-row quotation list without revision loads.
+Read-only runtime-role inventory confirmed no RLS bypass or table ownership.
+Source default grants reproduced before migration correctly grant both new tables;
+nine terminology tests pass. ICU provider/locale and 15 ordering/case samples match,
+while ICU versions differ. Existing Vercel settings retained; no secrets guessed.
+Next: controlled write-freeze/cutover preparation, then an agreed maintenance window
+and fresh backup. No production writes, commit, push, relink or deployment.
+See docs/INDUSTRY_NEUTRAL_R5.md for evidence and remaining recovery limitations.
+
+## Industry-neutral R5: historical fixtures and local recovery verified (2026-10-18)
+
+All 99 migrations replayed with pre-upgrade synthetic data; 98 integration tests
+passed with no skips, closing all four deferred historical checks. User chose
+project-local backup storage: encrypted artifacts retained under ignored backups/,
+restricted ACLs applied, copied checksums and in-memory decryption verified.
+Recovery remains tied to this Windows account/PC. Six production settings are
+missing locally; no values changed. Broader performance/environment equivalence,
+configuration recovery and cutover remain. No live writes, commit, push or deploy.
+See docs/INDUSTRY_NEUTRAL_R5.md for evidence and storage limitations.
+
+## Industry-neutral R5: runtime and workflow checks passed (2026-10-18)
+
+Baseline/current services match in 84 existing-account read comparisons on the
+protected client restore, including response hashes and query counts/plans.
+Ninety module/access assertions pass with full data fingerprints unchanged.
+Fresh production build/TypeScript and all 58 local browser workflows pass; five
+representative screenshots inspected. No application code change was needed.
+Historical fixtures, broader performance/source-environment equivalence and
+independent recovery/cutover work remain. No live writes, commit, push or deploy.
+See docs/INDUSTRY_NEUTRAL_R5.md for evidence and limitations.
+
+## Industry-neutral R5: deployment identity verified (2026-10-18)
+
+Fresh user-authorized CLI login accesses leiwissen/ls-erp. Vercel confirms
+erp.ewissen.in points to READY production deployment dpl_FjvreJBMLNBi4gNJtywYeNcngpzd
+at baseline commit 5f13238. The stale local .vercel link remains unchanged;
+release must explicitly select the verified project. Runtime, performance and
+recovery gates remain. No live writes, push or deployment. See
+docs/INDUSTRY_NEUTRAL_R5.md for the sanitized verification receipt.
+
+## Industry-neutral R5: restored-client upgrade verified (2026-10-18)
+
+Twelve checksum differences traced to original LF files with final CRLF: exact
+bytes match the preserved October 4 copies and database history; normalized SQL
+matches baseline Git. Pinned and validated that encoding without editing SQL or
+history. All 97 baseline migrations reconcile. Prisma deployed both pending
+migrations on a protected client restore (97 to 99); complete existing data,
+financial and schema/security comparison passed. Repeat deployment was a no-op.
+Thirty non-bypass database isolation assertions passed, with probes rolled back
+and full post-test capture unchanged. Six checker tests, lint and source checks
+passed. Temporary databases removed; backup/evidence retained. Vercel CLI auth
+returns 403; renewed sign-in requested. Application/runtime, performance and full
+recovery/deployment gates remain; no live writes, commit, push or deployment.
+See docs/INDUSTRY_NEUTRAL_R5.md for evidence and remaining work.
+
+## Industry-neutral R5: protected application restore verified (2026-10-18)
+
+Confirmed Ewissen's Supabase target; encrypted public/app backup and two isolated
+PostgreSQL 17 restores verified all 104 table fingerprints and financial totals,
+with zero FK orphans. Exact CHECK-expression regroupings were reviewed; source
+locale and grants remain runtime/recovery gates. All 97 baseline migrations
+replayed, but 12 hosted historical checksums remain unexplained and still block
+release. No history override or release migration applied. Snapshot format 2
+supports non-null unique identities and stable C ordering; five tests, targeted
+lint and source verification passed. Temporary databases removed; protected
+backup retained, with Windows-account-bound key and retention review documented.
+See docs/INDUSTRY_NEUTRAL_R5.md for limits and remaining gates. No client writes,
+commit, push or deployment. Next: history reconciliation and recovery/deployment
+identity before migration/runtime cutover checks.
+
+## Industry-neutral R4 complete locally: release preparation (2026-10-18)
+
+Release manifest pins 99 migrations (97 unchanged from 5f13238, two pending),
+Prisma schema and allowed table/index changes. Local-only reconciliation streams
+per-tenant identity/content fingerprints, checks FK/schema/RLS/history integrity
+and stored financial totals. Pending terminology migration is transactional, with
+failure rollback verified. Five checker/fixture tests passed, no skips; source
+verification and targeted lint/whitespace passed. No runtime/UI change this batch.
+Representative fixture evidence is not a client-data restore or complete upgrade
+test. See docs/INDUSTRY_NEUTRAL_RELEASE.md and docs/INDUSTRY_NEUTRAL_R4.md.
+No hosted query, client-data change, commit, push or deployment. Local fixture
+databases removed and container stopped. Next: R5 target inventory, protected
+client backup/restore rehearsal, full release gates and controlled cutover.
+
+## Industry-neutral R4, batch 4 provider audit (2026-10-18)
+
+Audited preset/report/dashboard/import/document boundaries. Import project choices
+now skip project queries without projects.read; new/changed project links enforce
+that permission on the server. Revoked import mappings reject rows without orphan
+contacts. Existing linked context, conversion preservation and document snapshots
+retain their established semantics. Preset definitions moved into owning modules;
+application composition preserves IDs, versions and item keys.
+80 unit/database checks and four distinct browser flows passed; dashboard recheck
+passed after waiting for its completed summary. Build/TypeScript (135 pages,
+exit 0), targeted lint and whitespace passed. Corrected dashboard and mobile import
+screenshots inspected. No schema change, hosted query, client-data change, commit,
+push or deployment; disposable DB stopped. See R4 notes for evidence.
+Next: R4 migration manifest/reconciliation package. Client restore/cutover is R5.
+
+## Industry-neutral R4, batch 3 configuration/export composition (2026-10-18)
+
+Custom-field scope labels and team-context capabilities now come from registered
+resources. Shared configuration contains no Real Estate scope branch. The generic
+CSV button requires explicit owning-screen permissions, including report/record
+intersection. Existing field identities, values, validation and exports remain.
+40 unit/database checks and 11 browser flows passed; production compilation,
+TypeScript and 135 pages completed. Targeted lint/whitespace passed, and desktop
+field/mobile configuration screenshots were reviewed. See R4 notes for the
+PowerShell informational-stderr wrapper status and detailed evidence.
+No schema change, hosted query, client-data change, commit, push or deployment.
+Disposable DB stopped. Next: remaining provider audit and migration/reconciliation
+package; protected production restore/cutover evidence stays in R5.
+
+## Industry-neutral R4, batch 2 sales view composition (2026-10-18)
+
+Enquiry/opportunity filters and exports share the installed extension's query
+mapping. Application creation pages delegate URL defaults to Real Estate; shared
+editors receive neutral references. Existing links and stored associations remain
+unchanged. Inactive extensions hide fields/captions and omit live filter/payload
+data. Module refreshes retain authorized drafts; failed/revoked access still hides
+the view. Stable extension loaders prevent unrelated panel changes reloading forms.
+53 unit/database checks and 24 distinct browser flows passed across final runs;
+two historical migration checks remain for R5. An initial tenant-switch failure
+passed in isolation and in a full access-suite recheck, with no auth code changes.
+Build/TypeScript (135 pages), lint and whitespace passed; filter screenshots reviewed.
+No schema migration, hosted query, client-data change, commit, push or deployment.
+Disposable local DB stopped. Next: configuration/export presentation boundaries,
+remaining provider audit and the R4 migration/reconciliation package.
+See docs/INDUSTRY_NEUTRAL_R4.md for evidence and remaining scope.
+
+## Industry-neutral R4, batch 1 view isolation (2026-10-18)
+
+Real Estate now owns project activity query construction and site-visit guidance;
+shared WorkList accepts neutral composition inputs and retains its common controls.
+Quotation editing uses neutral linked-record and business/registration wording.
+No schema, saved field, API URL or snapshot format changed. Historical documents
+retain their context when the addon is disabled; new context remains module-gated.
+54 unit/database checks and six distinct browser flows passed; two older-schema
+migration checks remain for R5. Build/TypeScript (135 pages), lint and whitespace
+passed. Mobile/desktop screenshots inspected; corrected existing WorkList display
+punctuation and reran the affected build/browser checks. Local database stopped.
+No hosted query, client-data change, commit, push or deployment.
+R4 remains open: next is enquiry/opportunity view state and route composition,
+then configuration/export boundaries and the migration/reconciliation package.
+See docs/INDUSTRY_NEUTRAL_R4.md for evidence and remaining scope.
+
+## Industry-neutral R3(b), batch 9 validation presentation (2026-10-18)
+
+Scoped R3 configuration work is complete locally: explicit record-name error
+metadata, tenant-scoped response presentation, stable async fallbacks and current
+work-history/follow-up captions. Canonical errors, permissions, stored content,
+CSV identities and saved quotation labels are preserved. Successful requests add
+no terminology query; annotated failures use one bounded snapshot after rollback.
+161 unit/database checks and 24 distinct browser flows passed. Four historical
+migration checks remain for R5. Build/TypeScript (135 pages), lint and whitespace
+passed; mobile draft/conflict controls inspected. No hosted query, client-data
+change, commit, push or deployment. Disposable local database stopped.
+Next: R4 Real Estate view composition and migration package; R5 protected release.
+See docs/INDUSTRY_NEUTRAL_R3.md for scope boundaries and verification evidence.
+
+## Industry-neutral R3(b), batch 8 contextual copy and audit (2026-10-18)
+
+Expanded configurable names in archive confirmations, access/help text, activity
+controls and Real Estate guidance. Custom import scope captions change without
+altering user field names, CSV codes or mappings. Shared provider; no new query.
+43 checks passed: 34 unit/integration and nine distinct local browser flows.
+Build/TypeScript (135 pages), lint and whitespace checks passed. Desktop/mobile
+import screens and mobile archive confirmation inspected. Corrected an older
+quotation test locator to respect batch 7's immutable saved summary headings.
+No hosted query, client-data change, commit, push or deployment. Local DB stopped.
+R3 remains open: next is explicit validation/error presentation plus remaining
+loading/link/work-history copy. R4 composition and R5 protected release follow.
+See docs/INDUSTRY_NEUTRAL_R3.md for coverage boundaries and evidence.
+
+## Industry-neutral R3(b), batch 7 quotation document labels (2026-10-18)
+
+New quotation defaults and revisions capture configured document labels. Saved
+summaries/PDFs use immutable snapshot labels; existing snapshots retain original
+wording. Real Estate owns context labels. No historical rewrite or new migration.
+50 checks passed (43 unit/architecture/calculation/integration, seven browser flows),
+production build/TypeScript, lint and desktop/mobile review passed. Three PDFs/six
+pages rendered and inspected, including a 60-character wrapped section heading.
+No hosted query, client-data change, commit, push or deployment.
+Next: R3(b) completion/remaining-copy audit, then R4 view composition and R5 release.
+See docs/INDUSTRY_NEUTRAL_R3.md for evidence and scope.
+
+## Industry-neutral R3(b), batch 6 CSV terminology (2026-10-18)
+
+Implemented locally: CSV template/mapping UI and enquiry/opportunity/report/project
+export labels resolve tenant terminology. Renamed template headings retain stable
+field keys across resets. Original correction headers/cells, mappings, duplicate
+handling, validation, permissions and saved record values remain intact. Two scoped
+presentation reads per template/upload/export; no per-row label queries.
+53 checks passed (51 unit/architecture/integration, two browser flows); production
+build/TypeScript, targeted lint and desktop/mobile screenshot review passed.
+No migration, hosted query, client-data change, commit, push or deployment.
+Next: R3(b) batch 7 generated document labels and remaining contextual copy;
+R4 view composition and R5 protected migration/release remain pending.
+See docs/INDUSTRY_NEUTRAL_R3.md for details and evidence.
+
+## Industry-neutral R3(b), batch 5 report/dashboard terminology (2026-10-18)
+
+Implemented locally: sales report controls, grouping/column metadata and dashboard
+cards/charts/tables reuse shared terminology. Real Estate supplies its own display
+keys; core CRM remains industry-neutral. Labels do not change SQL, counts, selected
+filters/pages, stored names, quotation snapshots, routes or module/access checks.
+No extra label query or migration. Configured labels refresh without data refetch.
+52 checks passed: 43 unit/architecture/integration and nine local browser flows.
+Build/TypeScript (135 pages), lint and whitespace checks passed. Desktop/mobile
+report and dashboard screenshots inspected. Initial pagination test wait corrected.
+No hosted query, client-data change, commit, push or deployment. Local DB stopped.
+Next: CSV template/mapping/export and newly generated document terminology.
+R3(b) remains in progress; R4-R5 pending. See INDUSTRY_NEUTRAL_R3.md for evidence.
+
+## Industry-neutral R3(b), batch 4 configuration terminology (2026-10-18)
+
+Implemented locally: configuration cards, activity types/plans/rules, custom-field
+scopes, sales-team workflows, source/pipeline/reason copy and related account and
+interaction controls reuse the shared terminology provider. Stable section keys,
+field/workflow codes, selected IDs and reviewed plan requests preserve drafts and
+stored data during label changes. No additional query or migration.
+42 checks passed: 33 unit/architecture/integration and nine local browser flows.
+Build/TypeScript (135 pages), targeted lint and whitespace checks passed. Desktop
+configuration and mobile type-editor screenshots inspected. Two test selectors
+were narrowed to detail values to avoid matching navigation/hidden options.
+No hosted query, client data change, commit, push or deployment. Local DB stopped.
+Next: reports/dashboard terminology, remaining contextual copy, imports/exports
+and newly generated documents. R3(b) remains in progress; R4-R5 remain pending.
+See INDUSTRY_NEUTRAL_R3.md for explicit coverage and evidence.
+
+## Industry-neutral R3(b), batch 3 module terminology controls (2026-10-18)
+
+Implemented locally using the existing shared provider: primary activity controls,
+project/subproject details and property selectors, quotation and payment-plan
+controls. Stable section keys preserve drafts during terminology changes. Stored
+titles, IDs, payloads, histories, quotation snapshots and PDFs remain unchanged.
+56 checks passed: 43 unit/architecture/integration and 13 distinct browser checks.
+Build/TypeScript (135 pages), targeted lint and whitespace passed. Desktop/mobile
+payment drawers reviewed with animations disabled. A test assertion was corrected
+to reflect the existing disabled Edit button when Payment Plans is off.
+No migration, hosted query, client data change, commit, push or deployment.
+Next: remaining related/configuration controls and copy, reporting/import/export
+and newly generated document terminology. R3(b) remains in progress; R4-R5 pending.
+See INDUSTRY_NEUTRAL_R3.md for explicit coverage and verification evidence.
+
+## Industry-neutral R3(b), batch 2 shared terminology consumers (2026-10-17)
+
+Implemented locally: tenant/user-scoped label loading, contextual resolution and
+initial CRM/navigation consumers. Shared contact/account/enquiry lists, main CRM
+editors, opportunity list/board and project/subproject lists use configured record
+names. Stable section keys preserve open forms and drafts during label refresh.
+Routes, permission keys, stored values and saved document snapshots stay intact.
+48 checks passed: 35 unit/architecture/integration and 13 distinct browser checks.
+Build/TypeScript (135 pages), targeted lint and whitespace passed. Desktop/mobile
+consumer screenshots reviewed. Initial test selector corrected before final passes.
+No migration, hosted query, client data change, commit, push or deployment.
+Next: remaining activity/project-detail/document consumers and messages, then
+reports/import/export/new-document terminology. R3(b) is still in progress; R4-R5
+remain pending. See INDUSTRY_NEUTRAL_R3.md for exact coverage and evidence.
+
+## Industry-neutral R3(b), batch 1 terminology foundation (2026-10-17)
+
+Implemented locally: module-owned allowlisted terminology catalogs (18 singular/
+plural record labels), application composition, shared resolver, tenant/key storage,
+revision control and Settings > Terminology. Only active tenant administrators
+may edit. Module dependencies, normalized collisions and fixed control labels are
+checked; reset restores defaults without losing history. Saves recheck access after
+the shared tenant lock and commit strict audit/revision/label changes atomically.
+44 checks passed: 41 unit/architecture/integration and three local browser workflows.
+Production build/TypeScript (135 pages), targeted lint and whitespace passed.
+Desktop/mobile settings screenshots reviewed. Migration 20261017120000 adds two
+forced-RLS configuration tables; applied only to the disposable local database.
+No existing data rewrite, hosted query, production migration, push or deployment.
+R3(b) remains in progress: next apply labels consistently to consumer screens,
+reports, imports/exports and new documents, retaining contextual defaults and
+historical snapshots. R4-R5 remain pending. See INDUSTRY_NEUTRAL_R3.md.
+
+## Industry-neutral R3(a) custom-field ownership (2026-10-17)
+
+R3(a) is implemented and verified locally. Application composition registers the
+existing field resources; modules own team/project context validation and explicit
+batched export context queries. Platform checks module dependencies and rejects
+mismatched resource/scope requests. Shared typed inputs now live in components/erp.
+Existing IDs, types, scopes, required cohorts, stored values, permission rules,
+import mappings and historical quotation snapshots remain intact. No schema change.
+69 checks passed: 63 architecture/integration and six local browser sales workflows.
+Production build/TypeScript (134 pages), targeted lint and whitespace passed.
+No hosted query, client data change, migration, push or deployment. No new visual
+acceptance claim. Next: R3(b), terminology catalog/store/resolver and administrator
+configuration, followed by consumer coverage. R4-R5 release work remains pending.
+See INDUSTRY_NEUTRAL_R3.md and INDUSTRY_NEUTRAL_REFACTOR.md.
+
+## Industry-neutral R2 completion review (2026-10-17)
+
+R2(a-d) is complete locally. CRM contracts, dashboard composition, shared UI,
+Sales Documents contracts and operational service boundaries were reviewed against
+R1 scope. The remaining coupon wait-time access gap now uses the shared booking
+transaction with distinct coupon permissions. Core/import test fixtures use the
+runtime tenant adapter. HTTP adapter boundaries have regression coverage.
+445 distinct local checks passed: 69 unit, 191 operational/access/migration,
+159 sales-domain integration and 26 browser workflows. Build/TypeScript (134 pages),
+targeted lint and whitespace passed. Four older-schema migration fixtures remain
+explicitly skipped/pending R5; they are not counted as passes. The tenant-default
+schedule index fixture passed. The concurrent-plan case passed the full aligned
+suite and three extra isolated runs after an initial failed/stalled fixture run.
+Selected mobile import/dashboard and mobile/module-off report screenshots reviewed.
+No hosted query, client data change, production migration, push or deployment.
+Next: R3(a), resource-owned custom-field registration and contextual validation;
+then terminology configuration and consumers. R4 view isolation and R5 protected
+release rehearsal remain pending. Existing catalog audit delivery and client-form
+version limits are documented rather than claimed as newly strengthened.
+See INDUSTRY_NEUTRAL_R2.md and INDUSTRY_NEUTRAL_REFACTOR.md.
+
+## Industry-neutral R2(d), batch 24 checkpoint (2026-10-17)
+
+Single and bulk appointment changes now synchronize linked order-line staff/times
+and saved duration atomically. The header uses the earliest retained service-line
+start and tenant-local date. Siblings and financial snapshots stay unchanged.
+Linked customer/service changes go through the order editor; started/completed
+schedules and unconfirmed-parent activation are protected. Ambiguous/foreign
+links fail closed. Individual cancellation/completion does not infer order status,
+coupon usage or stock changes. Those remain explicit order actions. Parent revision
+and linked before/after audits commit with appointment changes, or all roll back.
+All appointment/order writers now share fresh under-lock access checks; standalone
+creation also uses a strict atomic audit. Batch reads are tenant/line scoped.
+214 distinct local checks passed, including 8 browser workflows, plus production
+build/TypeScript (134 pages), targeted lint and whitespace. No visual review claimed.
+No schema migration, hosted query, client data change, push or deployment. Next:
+R2(d) completion review before R3 common configuration. R3-R5 remain pending.
+See INDUSTRY_NEUTRAL_R2.md.
+
+## Industry-neutral R2(d), batch 23 checkpoint (2026-10-17)
+
+Existing Flexible weekly/active recurring plan changes now capture missing past
+history before mutation, including the full old range of displaced patterns.
+Saved snapshots remain unchanged; tenant/mode scoping, tenant-yesterday cutoffs,
+merged ranges and 366-date source batches bound capture. Draft/dormant plans do
+not snapshot unrelated history. New backdated records may populate missing history.
+Explicit corrections stay in existing daily-date/leave workflows with precedence,
+booking guards and strict atomic audits. Capture or audit failure rolls back all writes.
+Past roster display uses saved bounds and paid minutes rather than current template
+hours/breaks; exact historical break layouts are not available in existing snapshots.
+206 distinct local checks passed, including 8 browser workflows, plus production
+build/TypeScript (134 pages), targeted lint and whitespace. No visual review claimed.
+No migration, hosted query, client data change, push or deployment. Next: reverse
+appointment/order synchronization. R2(d) in progress; R3-R5 pending.
+See INDUSTRY_NEUTRAL_R2.md.
+
+## Industry-neutral R2(d), batch 22 checkpoint (2026-10-17)
+
+Daily override and Flexible slot saves/deletions now share effective-availability
+booking safeguards. Conflicts roll back the whole change; compatible fallback and
+higher-priority weekly/recurring/override/leave coverage remain valid. Daily checks
+use affected staff, padded UTC query bounds and exact tenant dates. Candidate reads
+are paged and sources batched. The existing conflict-resolution response is retained:
+only after rollback, current Appointments access determines whether details may be
+loaded. Restricted users receive counts without booking/customer details.
+Fresh module/role/permissions and slot mode are checked after waiting. Roster writes,
+corrected history and strict before/after audits commit together. Empty deletions and
+fully skipped ranges emit no audit; historical daily corrections still affect only
+selected dates. 201 distinct local checks passed, including 8 browser workflows,
+plus production build/TypeScript (134 pages), targeted lint and whitespace.
+No migration, hosted query, client data change, push or deployment. Next: explicit
+historical plan-correction policy and reverse appointment/order synchronization.
+R2(d) remains in progress; R3-R5 pending. See INDUSTRY_NEUTRAL_R2.md.
+
+## Industry-neutral R2(d), batch 21 checkpoint (2026-10-17)
+
+Standard schedule changes, assignment endings and shared template edits now protect
+valid active/future bookings under the common scheduling lock. Default changes
+cover unassigned Standard staff; shared templates also protect Flexible overrides.
+Compatible fallback is allowed; existing invalid bookings do not block repairs.
+Shared plan helpers retain paged/scoped booking reads and batched source resolution.
+Fresh role/module/permissions are checked after waiting. Main writes, child records
+and strict audits (including displaced defaults) commit or roll back together.
+History captures preserve saved snapshots; templates referenced by history cannot
+be deleted. Repeated assignment endings are no-ops. 194 distinct local checks,
+production build/TypeScript (134 pages), targeted lint/whitespace passed, including
+8 local browser workflows. No migration, hosted query, client data change, push or
+deployment. Next: daily override/slot mutation safeguards, explicit historical
+corrections and reverse appointment/order policy. R2(d) remains in progress;
+R3-R5 pending. See INDUSTRY_NEUTRAL_R2.md.
+
+## Industry-neutral R2(d), batch 20 checkpoint (2026-10-17)
+
+Flexible weekly/recurring plan changes now reject newly invalid active/future
+bookings under the shared scheduling lock, including overdue in-progress work,
+far-future bookings and dates outside displaced patterns' replacement ranges.
+Candidate reads are paged, source reads batched, and errors omit customer details.
+Compatible changes retain existing precedence and do not rewrite saved history.
+Writer role/module/permissions are rechecked after waiting. Plan changes, strict
+before/after audits and displacement audits commit together; failed audits roll
+back everything. Duplicate wrapper audits removed; repeat deletion/deactivation
+is a no-op. 188 distinct local checks and production build/TypeScript (134 pages)
+passed, including 8 browser workflows; targeted lint/whitespace passed. Local test
+database stopped. No migration, hosted query, client data change, push or deployment.
+Next: Standard schedules/templates/assignments, explicit historical plan corrections
+and reverse appointment/order policy. R2(d) remains in progress; R3-R5 pending.
+See INDUSTRY_NEUTRAL_R2.md.
+
+## Industry-neutral R2(d), batch 19 checkpoint (2026-10-17)
+
+Standard live availability, roster history and roster display share schedule-start
+rotation and week-off rules. Assignment dates bound applicability without restarting
+the cycle; default schedules fill unassigned dates, never assigned off days. Scoped
+range loads and cached schedule maps avoid per-date queries/repeated calculations.
+Standard/Flexible/override break segments are shared; existing history snapshots
+remain unchanged during normal capture. No retrospective repair or migration.
+181 distinct local checks passed, including 8 browser workflows. Production build/
+TypeScript passed (134 pages); targeted lint/whitespace passed. Local test database
+stopped. No hosted query, client data change, push or deployment. Next: plan-change
+booking effects/transactional audits and reverse appointment/order policy. R2(d)
+remains in progress; R3-R5 pending. See INDUSTRY_NEUTRAL_R2.md.
+
+## Industry-neutral R2(d), batch 18 checkpoint (2026-10-17)
+
+Flexible roster history and live availability now use one range loader/resolver
+for weekly plans, recurring cycles and daily slots, including breaks, explicit off
+days and sparse-day fallback. Leave and daily overrides retain higher precedence.
+History loads selected Flexible staff in batches; resolving further dates adds no
+queries. Normal missing-history capture preserves existing snapshots; explicit
+corrections remain limited to their affected dates. No retrospective repair.
+176 distinct local checks passed, including 8 browser workflows. Production build/
+TypeScript passed (134 pages); targeted lint/whitespace passed. Local test database
+stopped. No migration, hosted query, client data change, push or deployment.
+Next: Standard schedule history parity, plan-change effects/transactional auditing
+and reverse appointment/order policy. R2(d) remains in progress; R3-R5 pending.
+See INDUSTRY_NEUTRAL_R2.md.
+
+## Industry-neutral R2(d), batch 17 checkpoint (2026-10-17)
+
+Staff scheduling-mode changes now use a Workforce service and the shared scheduling
+transaction before user-security row locks. Checks reread current role/module access,
+use tenant calendar cutoffs, and block changes until active/future bookings are
+resolved explicitly (including overdue in-progress appointments). No plan deletion
+or history rewrite. Mode, profile/user changes and strict audit commit together;
+responses return saved details and unexpected errors use a safe server message.
+180 distinct local checks passed, including 8 local browser workflows. Production
+build/TypeScript passed (134 pages); targeted lint and whitespace passed. Local test
+database stopped. No migration, hosted query, client data change, push or deployment.
+Next: unify weekly/recurring plan history precedence with live availability, then
+plan-change effects/auditing and reverse appointment/order policy. R2(d) remains
+in progress; R3-R5 are pending. See INDUSTRY_NEUTRAL_R2.md.
+
+## Industry-neutral R2(d), batch 16 checkpoint (2026-10-17)
+
+Resolved the nested-plan RLS failure: interactive timeouts could leave a late query
+running after rollback. The adapter now blocks queries when completion begins;
+timeout/reuse tests verify rollback and tenant isolation. Flexible plan saves and
+clones use parent-first bulk inserts per level without changing RLS policies.
+Leave review/cancel/revoke and bulk review share the scheduling lock, recheck record
+scope and booking conflicts, use tenant midnight, and commit status/history/audit
+atomically. Notifications follow commit; unexpected failures use safe server errors.
+192 distinct local checks passed, including 8 browser workflows. Production build/
+TypeScript passed (134 pages); targeted lint/whitespace passed. Recurring-plan and
+leave-conflict screenshots inspected. No migration, hosted query, client data change,
+push or deployment. Local test database stopped afterward. Next: staff-mode writer
+coordination, plan-change history/booking effects and reverse order policy. R2(d)
+is still in progress; R3-R5 remain pending. See INDUSTRY_NEUTRAL_R2.md.
+
+## Industry-neutral R2(d), batch 15 checkpoint (2026-10-17)
+
+Booking pricing previews now use the saving service for coupon eligibility, usage,
+taxes and line totals. The editor debounces/cancels requests and requires a current
+successful preview before saving; notes retain saved financial snapshots. Summary,
+editor and invoice share net-subtotal display semantics without altering saved
+amounts; invoice rates preserve quoted prices and mark inclusive tax.
+178 distinct local checks passed, including 8 browser workflows; production build/
+TypeScript passed (134 pages). Lint/whitespace passed with the existing tenant-screen
+warning. Invoice and browser totals screenshots inspected. No migration, push,
+deployment or client data change. Initial combined-run Workforce nested-plan RLS
+failures did not reproduce on rerun; investigation remains required, not resolved.
+Next: Workforce coordination/RLS investigation and reverse order policy. R2(d)
+is still in progress; R3-R5 remain pending. See INDUSTRY_NEUTRAL_R2.md.
+
+## Industry-neutral R2(d), batch 14 checkpoint (2026-10-17)
+
+Booking taxes now resolve catalog defaults after loading catalog references, retain
+explicit empty selections/zero prices, reject unavailable IDs and preserve inclusive
+pennies. Scheduling/metadata retains saved tax snapshots; financial edits use current
+active definitions. Real dates, clock values, percentages, array and monetary limits
+are validated. Shared tenant-time validation handles partial edits, UTC-midnight
+boundaries and DST gaps/repeated hours without overwriting unrelated fields.
+172 distinct local checks passed, including 7 browser workflows; production build/
+TypeScript passed (133 pages). Lint/whitespace passed with the existing tenant-screen
+warning. Local database stopped. No migration, push, deployment or client data change.
+Next: unify editor/server pricing and coupon eligibility/subtotal display semantics;
+then remaining Workforce coordination. R3-R5 remain pending. See INDUSTRY_NEUTRAL_R2.md.
+
+## Industry-neutral R2(d), batch 13 checkpoint (2026-10-17)
+
+Coupon and invoice routes now delegate to shared Appointments module services.
+Coupon edits preserve omitted settings and validate merged dates/discounts. Coupon
+mutations share the booking lock and commit audits atomically; used codes cannot
+be renamed and referenced coupons are deactivated. Global/per-customer usage limits
+use bounded database aggregates over non-canceled orders, excluding an edited order.
+Invoices share saved prices and tenant time and now include product lines. Email
+keeps separate edit/export gates and post-delivery audit semantics; tests stub SMTP.
+166 distinct local checks passed, including 7 browser workflows; production build/
+TypeScript passed (133 pages). Lint/whitespace passed with one existing tenant-screen
+warning. Generated invoice PDF was visually inspected. Local database stopped.
+No push, deployment, new migration or client data change. Next: default taxes,
+financial recalculation and full booking date/time validation; then remaining
+Workforce coordination. R3-R5 remain pending. See INDUSTRY_NEUTRAL_R2.md.
+
+## Industry-neutral R2(d), batch 12 checkpoint (2026-10-17)
+
+Order detail/edit now use shared module services and the tenant scheduling lock.
+Edits preserve line and appointment IDs, terminal history and saved prices/durations
+for metadata/status changes. Stock transitions and strict edit audits commit with
+the order. Repeated status commands are idempotent; stale preflight and foreign/
+duplicate line IDs are rejected. Referenced lines cannot be deleted.
+Booking editor/summary now use tenant wall time; a browser save verified unchanged
+Asia/Kolkata scheduling from Los Angeles. 158 distinct local checks passed,
+including 7 browser workflows; production build/TypeScript passed (133 pages).
+Lint/whitespace passed with one pre-existing tenant-screen hook warning.
+No push, deployment, new migration or client data changes. Next: coupon/invoice
+extraction and financial/date-time validation. Reverse synchronization from
+individual appointments to orders and remaining Workforce coordination still need
+an explicit policy and implementation; see INDUSTRY_NEUTRAL_R2.md.
+
+## Industry-neutral R2(d), batch 11 checkpoint (2026-10-16)
+
+Booking order listing and creation now use shared module services. Confirmed
+creation rechecks availability, catalog data and coupon usage inside the tenant
+scheduling transaction; order, linked appointments, stock and audit commit together.
+Shared inventory deductions now guard against concurrent overselling. Draft creation
+avoids unnecessary preflight reads. Existing response contracts and gates remain.
+149 distinct local checks passed, including 6 browser workflows. Production build
+and TypeScript passed (133 pages); lint has no errors and one existing warning.
+No push, deployment, new migration or client data changes. Next: order detail/edit
+and linked appointment history/status coordination, then coupon/invoice extraction.
+Order PATCH and remaining nonparticipating writers are not covered by the create
+lock guarantees; see INDUSTRY_NEUTRAL_R2.md for the remaining limits.
+
+## Industry-neutral R2(d), batch 10 checkpoint (2026-10-16)
+
+Appointment detail/edit/cancel and bulk resolution now use shared module services.
+Mutations reuse the scheduling lock and commit their audit events in the same
+transaction. Fixed status-only reactivation, missing bulk working-hour/customer
+checks and within-batch conflicts. Saved durations and bulk offsets are preserved;
+missing selections fail as a whole and repeated cancellations are idempotent.
+125 distinct local checks passed, including 6 browser workflows; production build
+and TypeScript passed. Changed-file lint: no errors, one existing warning.
+No push, deployment, new migration or client data changes. Next: order/coupon/
+invoice workflows and linked appointment coordination; remaining Workforce
+history and nonparticipating writers are still tracked in INDUSTRY_NEUTRAL_R2.md.
+
+## Industry-neutral R2(d), batch 9 checkpoint (2026-10-16)
+
+Appointment list/create and availability routes now use shared module services.
+List dates use tenant-local boundaries; paging has stable ordering. Shared
+projections/serialization serve list/create/detail. Availability validates
+excluded appointment ownership. Standalone creation uses the shared schedule
+transaction and reads availability on that same connection, preventing overlapping
+concurrent standalone creates and rechecking hours after schedule changes.
+118 distinct local checks passed, including 6 browser workflows; production build
+and TypeScript passed. Changed-file lint: no errors, one existing warning.
+Nothing pushed, deployed or applied to production. Next: appointment edit/bulk,
+order/coupon/invoice extraction and remaining booking/workforce coordination.
+Other booking writers and weekly/recurring history alignment remain pending.
+See INDUSTRY_NEUTRAL_R2.md for evidence and limits.
+
+## Industry-neutral R2(d), batch 8 checkpoint (2026-10-16)
+
+Weekly plans and recurring pattern list/detail/save/clone/deactivate/preview
+routes now use shared Workforce services. Common nested records replace repeated
+writers; the transitional workforceSession adapter is removed. Weekly/recurring
+writes share the scheduling lock. Fixed clone-source overlap, actual-state
+activation permission checks and clone destination audit IDs. Preview uses real
+business dates, save validation and an inclusive 90-day horizon. Existing weekly
+and recurring availability precedence is verified.
+96 distinct local checks passed, including 6 browser workflows; production build
+and TypeScript passed. Changed-file lint has no errors and one existing warning.
+Nothing pushed, deployed or applied to production. Next: remaining appointment
+extraction and booking/workforce coordination, including weekly/recurring history.
+See INDUSTRY_NEUTRAL_R2.md for detailed evidence and remaining limitations.
+
+## Industry-neutral R2(d), batch 7 checkpoint (2026-10-16)
+
+Daily roster overrides, flexible slots and history now use shared Workforce
+services. Fixed unmatched staff filters, foreign-template validation and business
+calendar-date conflict checks. Daily mutations/history commit together using the
+shared schedule lock; skipped dates and existing read-time snapshots are retained.
+History helpers moved into Workforce with mandatory tenant scope and UTC DATE
+arithmetic. Weekly/recurring plans and broader booking coordination remain next.
+89 local checks passed, including 5 browser workflows; production build and
+TypeScript passed. Changed-file lint: no errors, one existing tenant-screen warning.
+No push, deployment or production data/schema changes. Batch-6 default-schedule
+index migration remains pending for R5. See INDUSTRY_NEUTRAL_R2.md for evidence,
+remaining concurrency/fallback limits and historical-date reconciliation notes.
+
+## 2026-10-16: Industry-neutral R2(d), sixth operational batch (local)
+
+Leave options/approved queries and standard schedule/assignment services now live
+in Workforce; six more routes are HTTP adapters. Shared validation/projections
+preserve access and response contracts. Unmatched staff filters no longer expand
+to all assignments; mixed foreign selections fail without partial saves. Standard
+schedule writes serialize per tenant, retain overlap checks and atomically save
+history/default/block/assignment changes. Default-change permission checks and
+displaced-ID audit records are based on the locked state.
+Prepared and locally applied migration `20261016170000_tenant_default_shift_schedule`:
+replace the old global default index with tenant-specific uniqueness, with no row
+rewrites. Production application remains deferred to R5, including protected-copy
+reconciliation and restore rehearsal. No production changes, push or deployment.
+Verification: 45 CRM/unit/architecture, 4 Workforce unit, 24 Workforce RLS integration,
+2 migration and 5 local browser checks passed (80 total; no skips). Build/TypeScript,
+whitespace and local migration status passed; lint has no errors and one existing
+tenant-screen hook warning. Leave-reschedule screenshot inspected; local DB stopped.
+Next R2(d): roster/override/flexible-plan services and roster date handling, then
+remaining booking coordination. See [R2 delivery notes](INDUSTRY_NEUTRAL_R2.md).
+
+## 2026-10-16: Industry-neutral R2(d), fifth operational batch (local)
+
+Leave request list/detail/submission and review/cancel/revoke/bulk orchestration
+now belongs to `modules/workforce/leave-request-service.ts`. Six routes retain
+HTTP validation/response contracts and existing module/action authorization.
+Direct-report, personal access and conflict-detail privacy checks are preserved.
+Conditional status writes reject competing stale actions; bulk counts, audits and
+notifications use only IDs actually changed. Past roster refreshes commit with
+the status change and roll back together on failure. Existing post-commit audit
+and notification delivery behavior is retained. No schema or production changes.
+Verification: 45 CRM/unit/architecture, 4 Workforce unit, 19 Workforce RLS
+integration and 5 local browser tests passed, no skips. Build/TypeScript passed;
+changed-file lint has no errors and one pre-existing tenant-screen hook warning.
+Leave-reschedule screenshot inspected. See [R2 delivery notes](INDUSTRY_NEUTRAL_R2.md)
+for limits, including remaining booking coordination and roster timezone review.
+Next R2(d): leave options/approved lists and remaining shift scheduling/roster
+services. R3-R5 remain pending. Nothing pushed/deployed; local test DB stopped.
+
+## 2026-10-16: Industry-neutral R2(d), fourth operational batch (local)
+
+Leave definition/group services, request rule/timeline helpers and notifications
+now live in Workforce; their four former API helper files were removed. Definitions,
+groups and shift templates use thin routes with existing module/action/audit gates.
+Shared leave helpers require tenant scope, including relationship and notification
+queries. Shift table paging is validated and existing selector/sort behavior remains.
+Fixed an existing partial-edit default bug that could reset leave configuration or
+change selective group assignment to all staff. Omitted fields now stay unchanged;
+explicit clears/false/zero remain supported. No stored data repair or schema change.
+Local verification: 45 CRM/unit/architecture, 4 Workforce unit, 13 Workforce RLS
+integration and 5 browser tests passed; no skips. Build/TypeScript/whitespace passed;
+lint has no errors and the same existing tenant-screen hook warning. Integration
+and build/browser checks were repeated after preserving template-table sort fallback.
+Leave-reschedule screenshot inspected. See [R2 delivery notes](INDUSTRY_NEUTRAL_R2.md).
+Next R2(d) work: leave-request workflow orchestration and remaining shift schedule/
+assignment/roster/flexible-plan routes. R3-R5 remain pending. Nothing pushed or
+deployed; production is untouched. The disposable database was stopped after checks.
+
+## 2026-10-16: Industry-neutral R2(d), third operational batch (local)
+
+Inventory categories/suppliers and Services catalog/categories now own reusable
+list/create/edit/archive services. Typed projections are shared per resource;
+service creation/editing reuse tenant-scoped category/package/tax validation.
+Eight routes retain HTTP contracts and existing activation/permission/audit gates.
+Referenced records keep their existing inactive/archive behavior. No schema or
+stored data changes, forwarding layers or generic CRUD framework were introduced.
+Local verification: 45 unit/architecture, 28 integration and 5 browser tests passed;
+no skips. Build/TypeScript/whitespace passed. Lint has no errors and the same existing
+tenant-screen hook warning. Leave-reschedule screenshot inspected.
+See [R2 delivery notes](INDUSTRY_NEUTRAL_R2.md). Workforce Leaves/Shifts rules are
+next in R2(d); R3-R5 remain pending. Nothing pushed or deployed; production is
+untouched. The disposable local database was stopped after verification.
+
+## 2026-10-16: Industry-neutral R2(d), second operational batch (local)
+
+Product and purchase rules moved to Inventory services with shared projections,
+serializers and relationship validation. Purchase receipt updates lock the scoped
+purchase row and retain cumulative quantities; repeated/concurrent receipts no
+longer add stock twice. Movement inserts are batched. Purchase responses now show
+current received quantities and notes. No stored data or schema is rewritten.
+Operational dashboard queries belong to their modules, with activation/read gates;
+application composition and date policy are in application/dashboard. The dashboard
+route reuses core authorization rather than reloading the access user.
+Local verification: 45 unit/architecture, 49 integration and 6 browser tests passed;
+no skips. Final Inventory retest passed (15 tests). Build/TypeScript/whitespace
+passed; lint has no errors and the same existing tenant-screen hook warning.
+Desktop and mobile dashboard screenshots inspected. See
+[R2 delivery notes](INDUSTRY_NEUTRAL_R2.md) for receipt checks and remaining R2(d)
+category/supplier, service and workforce route work. R3-R5 remain pending.
+Nothing pushed or deployed; production data/configuration is untouched.
+
+## 2026-10-16: Industry-neutral R2(d), first operational batch (local)
+
+Appointments owns its order pricing/resolution/scheduling helpers; Workforce owns
+staff availability; Inventory owns transaction-bound stock changes. Services
+catalog-use access is exposed from its policy. Former helper paths are removed,
+without forwarding files. Availability requires explicit tenant scope. Tenant and
+organization descriptions now say business tenant. No stored names/schema changes.
+Local checks: 43 unit/architecture, 40 database integration and 5 browser tests
+passed; build/TypeScript and whitespace passed. Lint has no errors and one existing
+tenant-screen hook warning. Leave/reschedule screenshots inspected. See
+[R2 delivery notes](INDUSTRY_NEUTRAL_R2.md). Purchase/catalog, operational dashboard
+and remaining route services are still R2(d) work. R3-R5 remain pending.
+No production operations, migrations, push or deployment.
+
+## 2026-10-16: Industry-neutral refactor R2(c), local checkpoint
+
+Sales Documents now receives a narrow transaction/audit/opportunity-scope/context
+contract; Real Estate document context is separate from the CRM extension API.
+Nine CRM UI wrapper files were removed. Neutral ERP components are imported directly;
+permission-aware record controls live in platform/access and retain existing gates.
+No schema or saved-document changes. See [R2 delivery notes](INDUSTRY_NEUTRAL_R2.md).
+Local verification: 41 CRM/unit, 6 calculation, 17 database integration and 23 browser
+tests passed, no skips; focused mobile import selector rerun passed. Build, TypeScript,
+changed-file lint and screenshot review passed. R2(d) and R3-R5 remain pending.
+Nothing pushed or deployed; Ewissen data and production are untouched.
+
+## 2026-10-16: Industry-neutral refactor R2(b), local checkpoint
+
+Dashboard queries/types/widgets now belong to CRM, Real Estate and Sales Documents;
+`application/dashboard` composes them and shared presentation stays module-neutral.
+Application route metadata is injected into platform access controls. Generic
+constraint/retry helpers moved to platform, removing reverse CRM dependencies.
+KPI definitions, response shape, access rules and persistence remain unchanged.
+See [R2 delivery notes](INDUSTRY_NEUTRAL_R2.md). Local verification: 40 unit,
+13 database integration and 11 browser tests passed, with no skips. Build,
+TypeScript, targeted lint and desktop/mobile screenshot review passed.
+R2(c-d) and R3-R5 remain pending. No push, deployment or hosted data changes.
+
+## 2026-10-16: Industry-neutral refactor R2(a), local checkpoint
+
+CRM query, report, export and import boundaries now obtain industry-specific
+behaviour from extension contracts. Real Estate owns its project validation,
+report columns/grouping and dependent import choices. No schema or client-data
+migration is needed for this batch. See [R2 delivery notes](INDUSTRY_NEUTRAL_R2.md).
+Local checks: 36 unit, 13 import integration, 104 broader integration and 7 browser
+tests passed; 4 historical migration-fixture cases were skipped. Production build,
+TypeScript and targeted lint passed; desktop/mobile screenshots were inspected.
+R2(b-d) and R3-R5 remain pending. Nothing pushed or deployed; no hosted data touched.
+
+## 2026-10-16: Industry-neutral refactor R1 audit
+
+R1 repository audit and migration design are complete. See the active
+[R1-R5 refactor plan](INDUSTRY_NEUTRAL_REFACTOR.md) for the file-level
+scope, data-preservation invariants, verification gates and cutover plan.
+R2-R5 are not implemented. Local CRM baseline: 33 tests passed. No
+production access, application changes, migrations, push or deployment
+were performed. Production stays on the current release until R5.
+
 ## 2026-10-06: Enquiry spreadsheet import
 
 CSV/XLSX upload, column mapping, read-only row validation, resumable import and

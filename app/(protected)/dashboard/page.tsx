@@ -32,8 +32,8 @@ import { useDateFormatter } from "@/hooks/use-date-formatter"
 import { formatCurrencyFromCents } from "@/lib/formatting"
 import type { AppSettingsPayload } from "@/types/scheduling"
 import { useBusinessModules } from "@/platform/module-provider"
-import { SalesWidgets } from "@/components/dashboard/sales-widgets"
-import type { SalesDashboard } from "@/types/dashboard"
+import { SalesWidgets } from "@/application/dashboard/sales-widgets"
+import type { SalesDashboard } from "@/application/dashboard/types"
 
 type DashboardSummary = {
   sales: SalesDashboard

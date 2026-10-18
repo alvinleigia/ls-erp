@@ -34,6 +34,22 @@ export class TenantPgAdapter extends PrismaPg {
     }
     adapter.startTransaction = async isolationLevel => {
       const tx = await startTransaction(isolationLevel)
+      // A Prisma nested write can continue its query chain after an interactive
+      // timeout queues ROLLBACK. Never let that chain use a released connection
+      // or execute outside the transaction-local tenant scope.
+      let ended = false
+      const queryRaw = tx.queryRaw.bind(tx), executeRaw = tx.executeRaw.bind(tx)
+      const guard = <T>(run: (query: Parameters<Transaction["queryRaw"]>[0]) => Promise<T>) =>
+        (query: Parameters<Transaction["queryRaw"]>[0]) => {
+          if (ended) return Promise.reject(new Error("Database transaction has ended. Retry the operation."))
+          if (/^\s*(COMMIT|ROLLBACK)\s*;?\s*$/i.test(query.sql)) ended = true
+          return run(query)
+        }
+      tx.queryRaw = guard(queryRaw)
+      tx.executeRaw = guard(executeRaw)
+      const commit = tx.commit.bind(tx), rollback = tx.rollback.bind(tx)
+      tx.commit = async () => { ended = true; return commit() }
+      tx.rollback = async () => { ended = true; return rollback() }
       try {
         await tx.queryRaw({ sql: this.scopeSql, args: [], argTypes: [] })
         return tx

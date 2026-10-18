@@ -1,3 +1,4 @@
+import { termText } from "@/platform/terminology/message"
 import { parse } from "csv-parse/sync"
 import ExcelJS from "exceljs"
 import { Unzip, UnzipInflate } from "fflate"
@@ -35,11 +36,11 @@ export async function parseImportFile(fileName: string, bytes: Uint8Array): Prom
       // Bound the expanded ZIP before ExcelJS parses XML/images/shared strings.
       let expanded = 0, entries = 0
       const zip = new Unzip(entry => {
-        if (++entries > 500) throw new CrmError(400, "This workbook has too many parts. Export the enquiry sheet as CSV.")
+        if (++entries > 500) throw new CrmError(400, termText("crm.enquiry.singular", "This workbook has too many parts. Export the enquiry sheet as CSV.", "This workbook has too many parts. Export the {label} sheet as CSV."))
         entry.ondata = (error, chunk) => {
           if (error) throw error
           expanded += chunk.length
-          if (expanded > 20 * 1024 * 1024) throw new CrmError(400, "This workbook is too large. Export the enquiry sheet as CSV.")
+          if (expanded > 20 * 1024 * 1024) throw new CrmError(400, termText("crm.enquiry.singular", "This workbook is too large. Export the enquiry sheet as CSV.", "This workbook is too large. Export the {label} sheet as CSV."))
         }
         entry.start()
       })

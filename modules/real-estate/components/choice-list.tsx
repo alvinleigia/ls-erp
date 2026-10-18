@@ -5,9 +5,10 @@ import { getCoreRowModel, useReactTable, type ColumnDef } from "@tanstack/react-
 import { DataTable } from "@/components/data-table"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { CrmSelect } from "@/modules/crm/components/crm-controls"
-import { CrmPageHeader, CrmSurface, crmPageClass } from "@/modules/crm/components/crm-page"
-import { CrmTablePagination } from "@/modules/crm/components/crm-pagination"
+import { Select } from "@/components/erp/controls"
+import { AccessPageHeader } from "@/platform/access/record-page"
+import { Surface, pageClass } from "@/components/erp/page"
+import { TablePagination } from "@/components/erp/pagination"
 import { choiceTitles, type ChoiceKind, type PropertyChoice } from "../choices"
 
 export function PropertyChoiceList({ kind }: { kind: ChoiceKind }) {
@@ -42,8 +43,8 @@ export function PropertyChoiceList({ kind }: { kind: ChoiceKind }) {
     }, 150)
     return () => { clearTimeout(timer); controller.abort() }
   }, [query, kind, revision])
-  return <div className={crmPageClass}><CrmPageHeader title={choiceTitles[kind]} description="Manage names, display order and defaults. Archive choices to stop new selections while preserving saved records." backHref="/crm/configuration/real-estate" actions={data.canManage && <Button asChild><Link href={`${href}/new`}>New choice</Link></Button>} />
-    <CrmSurface><div className="flex flex-wrap gap-3"><Input className="min-w-0 flex-1 basis-48" aria-label="Search choices" placeholder="Search choices…" value={query.q} onChange={event => setQuery({ ...query, q: event.target.value, page: 1 })} /><CrmSelect aria-label="Choice status" value={query.archived} onValueChange={archived => setQuery({ ...query, archived, page: 1 })}><option value="false">Active</option><option value="true">Archived</option></CrmSelect><Button variant="outline" onClick={() => setRevision(value => value + 1)}>Refresh</Button></div>
-      {error && <p role="alert" className="text-destructive">{error}</p>}<DataTable table={table} loading={loading} emptyMessage="No choices found." /><CrmTablePagination table={table} totalRows={data.total} loading={loading} />
-    </CrmSurface></div>
+  return <div className={pageClass}><AccessPageHeader title={choiceTitles[kind]} description="Manage names, display order and defaults. Archive choices to stop new selections while preserving saved records." backHref="/crm/configuration/real-estate" actions={data.canManage && <Button asChild><Link href={`${href}/new`}>New choice</Link></Button>} />
+    <Surface><div className="flex flex-wrap gap-3"><Input className="min-w-0 flex-1 basis-48" aria-label="Search choices" placeholder="Search choices…" value={query.q} onChange={event => setQuery({ ...query, q: event.target.value, page: 1 })} /><Select aria-label="Choice status" value={query.archived} onValueChange={archived => setQuery({ ...query, archived, page: 1 })}><option value="false">Active</option><option value="true">Archived</option></Select><Button variant="outline" onClick={() => setRevision(value => value + 1)}>Refresh</Button></div>
+      {error && <p role="alert" className="text-destructive">{error}</p>}<DataTable table={table} loading={loading} emptyMessage="No choices found." /><TablePagination table={table} totalRows={data.total} loading={loading} />
+    </Surface></div>
 }

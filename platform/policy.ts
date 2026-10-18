@@ -1,5 +1,10 @@
+import { resolveTermText, type TermText } from "./terminology/message"
 export type BusinessActor = { tenantId: string; userId: string; role: string; requestId?: string; crmRecordScope?: import("./access/record-scope").CrmRecordScope; managedTeamIds?: string[]; permissions?: import("./access/catalog").Permission[] }
 export class BusinessError extends Error {
-  constructor(public status: number, message: string) { super(message) }
+  readonly presentation?: Exclude<TermText, string>
+  constructor(public status: number, message: TermText) {
+    super(resolveTermText(message))
+    if (typeof message !== "string") this.presentation = message
+  }
 }
 export const hasBusinessAccess = (role?: string | null) => role === "ADMIN" || role === "MANAGER" || role === "STAFF"

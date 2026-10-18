@@ -48,6 +48,23 @@ before(async () => {
 })
 after(async () => { await Promise.all(clients.map(client => client.$disconnect())); await Promise.all(pools.map(pool => pool.end())) })
 
+test("scope presentation follows module activation without reading industry tables", async () => {
+  queries = []
+  const available = await config.list({})
+  assert.equal(available.scopeOptions.length, 4)
+  assert.equal(available.scopeOptions.find(option => option.scope === "PROJECT").teamScoped, false)
+  assert.equal(queries.some(query => /FROM "public"\."RealEstate/.test(query)), false)
+  await root.tenantModule.update({ where: { tenantId_key: { tenantId: tenant, key: "realEstate" } }, data: { enabled: false } })
+  try {
+    queries = []
+    assert.equal((await config.list({})).scopeOptions.some(option => option.scope === "PROJECT"), false)
+    assert.equal(queries.some(query => /FROM "public"\."RealEstate/.test(query)), false)
+    await assert.rejects(config.save(definition("disabled_project", { scope: "PROJECT" })), status(403))
+  } finally {
+    await root.tenantModule.update({ where: { tenantId_key: { tenantId: tenant, key: "realEstate" } }, data: { enabled: true } })
+  }
+})
+
 test("configuration is manager-only, tenant scoped, versioned and audited", async () => {
   await assert.rejects(staffConfig.save(definition("denied")), status(403))
   const field = await config.save(definition("config"))
@@ -59,6 +76,39 @@ test("configuration is manager-only, tenant scoped, versioned and audited", asyn
   assert.equal(await root.auditLog.count({ where: { tenantId: tenant, entityId: field.id } }), 2)
   assert.equal((await unscoped.customFieldDefinition.findMany()).length, 0)
   assert.equal((await db.customFieldDefinition.findMany({ where: { tenantId: otherTenant } })).length, 0)
+})
+
+test("resource policies validate team context, scope and module dependencies before querying fields", async () => {
+  const team = await root.crmSalesTeam.create({ data: { tenantId: tenant, name: "Context", nameKey: "context" } })
+  const foreign = await root.crmSalesTeam.create({ data: { tenantId: otherTenant, name: "Foreign", nameKey: "foreign" } })
+  const noMembership = () => staffConfig.form("enquiry", team.id)
+  await assert.rejects(noMembership(), status(404))
+  await assert.rejects(config.form("enquiry", foreign.id), status(404))
+  await assert.rejects(config.save(definition("foreign_context", { salesTeamId: foreign.id })), status(400))
+  await assert.rejects(config.form("project", team.id), status(400))
+  await assert.rejects(config.save(definition("project_team", { scope: "PROJECT", salesTeamId: team.id })), status(400))
+  await assert.rejects(config.list({ resource: "project", scope: "SALES" }), status(403))
+  await assert.rejects(config.form("unknown"), status(403))
+  const field = await config.save(definition("context_policy", { salesTeamId: team.id }))
+  assert.ok((await config.form("enquiry", team.id)).some(item => item.id === field.id))
+  await root.crmSalesTeamMember.create({ data: { tenantId: tenant, teamId: team.id, userId: staff.id } })
+  assert.ok((await staffConfig.form("opportunity", team.id)).some(item => item.id === field.id))
+  await root.crmSalesTeam.update({ where: { tenantId_id: { tenantId: tenant, id: team.id } }, data: { archived: true } })
+  await assert.rejects(config.save(definition("archived_context", { salesTeamId: team.id })), status(400))
+  const updated = await config.save(edit(field, { salesTeamId: team.id, name: "Retained archived team field" }), field.id)
+  assert.equal(updated.name, "Retained archived team field")
+  for (const data of [{ enabled: false }, { allowed: false, enabled: false }]) {
+    await root.tenantModule.update({ where: { tenantId_key: { tenantId: tenant, key: "crm" } }, data })
+    try {
+      queries = []
+      await assert.rejects(config.form("project"), status(403))
+      await assert.rejects(config.save(definition("inactive_parent", { scope: "PROJECT" })), status(403))
+      assert.equal(queries.some(query => query.includes('"CustomFieldDefinition"')), false)
+    } finally {
+      await root.tenantModule.update({ where: { tenantId_key: { tenantId: tenant, key: "crm" } }, data: { enabled: true, allowed: true } })
+    }
+  }
+  assert.equal((await config.get(field.id)).salesTeamId, team.id)
 })
 
 test("all typed fields validate, filter and export with no per-record field queries", async () => {

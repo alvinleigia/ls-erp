@@ -47,3 +47,6 @@ next-env.d.ts
 
 # Local development scratch files and verification logs
 /tmp/
+
+# Private encrypted recovery archives and restore evidence
+/backups/

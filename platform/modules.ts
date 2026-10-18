@@ -1,5 +1,5 @@
-// Only independently enforceable modules belong here. Legacy salon modules
-// remain available until their server boundaries have been extracted and tested.
+// Only independently enforceable modules belong here. Allowance, activation and
+// dependencies are enforced at each module's server boundary.
 type ModuleDefinition = { name: string; description: string; defaultEnabled: boolean; href: string; requires: readonly string[]; parent?: string }
 export const businessModules = {
   leaves: { name: "Leaves", description: "Leave rules, groups, personal requests and approvals.", defaultEnabled: false, href: "/leaves/requests", requires: [] },

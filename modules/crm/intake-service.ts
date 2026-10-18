@@ -1,3 +1,4 @@
+import { termText } from "@/platform/terminology/message"
 import { requireWriteFields, permits } from "@/platform/access/policy"
 import type { PermissionRun } from "@/platform/access/server"
 import type { Prisma, CrmEnquiry } from "@prisma/client"
@@ -59,13 +60,13 @@ export async function enquiryContext(tx: Tx, actor: CrmActor, contactId: string,
   const accountId = data.accountId === undefined ? before?.accountId ?? null : data.accountId || null
   if (accountId && accountId !== before?.accountId) {
     const account = await tx.crmAccount.findFirst({ where: { ...accountScope(actor), id: accountId, archived: false, contacts: { some: { tenantId: actor.tenantId, contactId } } } })
-    if (!account) throw new CrmError(400, "Choose an active business account linked to this contact.")
+    if (!account) throw new CrmError(400, ["Choose an active ", termText("crm.account.singular", "business account"), " linked to this ", termText("crm.contact.singular", "contact"), "."])
   }
   const referralContactId = data.referralContactId === undefined ? before?.referralContactId ?? null : data.referralContactId || null
   const referralAccountId = data.referralAccountId === undefined ? before?.referralAccountId ?? null : data.referralAccountId || null
   if (referralContactId && referralAccountId) throw new CrmError(400, "Choose a referring person or company, not both.")
-  if (referralContactId && referralContactId !== before?.referralContactId && !await tx.crmContact.findFirst({ where: { ...contactScope(actor), id: referralContactId, archived: false }, select: { id: true } })) throw new CrmError(404, "Referring contact not found.")
-  if (referralAccountId && referralAccountId !== before?.referralAccountId && !await tx.crmAccount.findFirst({ where: { ...accountScope(actor), id: referralAccountId, archived: false }, select: { id: true } })) throw new CrmError(404, "Referring account not found.")
+  if (referralContactId && referralContactId !== before?.referralContactId && !await tx.crmContact.findFirst({ where: { ...contactScope(actor), id: referralContactId, archived: false }, select: { id: true } })) throw new CrmError(404, termText("crm.contact.singular", "Referring contact not found.", "Referring {label} not found."))
+  if (referralAccountId && referralAccountId !== before?.referralAccountId && !await tx.crmAccount.findFirst({ where: { ...accountScope(actor), id: referralAccountId, archived: false }, select: { id: true } })) throw new CrmError(404, termText("crm.account.singular", "Referring account not found.", "Referring {label} not found."))
   return { sourceId, source, accountId, referralContactId, referralAccountId,
     targetCloseOn: data.targetCloseOn === undefined ? before?.targetCloseOn ?? null : data.targetCloseOn ? new Date(`${data.targetCloseOn}T00:00:00Z`) : null }
 }

@@ -47,7 +47,7 @@ type AppointmentOrderFormFieldsProps = {
   }>
   formatCurrencyCentsValue?: (valueInCents: number) => string
   allowMultipleLines?: boolean
-  lineTaxCentsById?: Record<string, number>
+  linePricingById?: Record<string, { taxCents: number; totalCents: number }>
   lineScheduleMeta?: Record<
     string,
     {
@@ -56,6 +56,7 @@ type AppointmentOrderFormFieldsProps = {
       waitMinutes: number
     }
   >
+  timeZone?: string
   timeFormat?: TimeFormat
 }
 
@@ -73,26 +74,12 @@ export function AppointmentOrderFormFields({
   couponHints = [],
   formatCurrencyCentsValue = formatCurrencyCents,
   allowMultipleLines = true,
-  lineTaxCentsById = {},
+  linePricingById = {},
   lineScheduleMeta = {},
+  timeZone = "UTC",
   timeFormat = "H24",
 }: AppointmentOrderFormFieldsProps) {
   const [priceInputs, setPriceInputs] = React.useState<Record<string, string>>({})
-
-  const getLineTotalCents = (
-    quantity: number,
-    unitPriceCents: number,
-    discountType: DiscountType,
-    discountValue: number
-  ) => {
-    const subtotal = Math.max(0, quantity) * Math.max(0, unitPriceCents)
-    if (discountType === "NONE" || discountValue <= 0) return subtotal
-    if (discountType === "AMOUNT") {
-      return Math.max(0, subtotal - Math.round(discountValue * 100))
-    }
-    const percentDiscount = Math.round((subtotal * discountValue) / 100)
-    return Math.max(0, subtotal - percentDiscount)
-  }
 
   const update = <K extends keyof AppointmentOrderFormValues>(
     key: K,
@@ -135,7 +122,7 @@ export function AppointmentOrderFormFields({
                 onChange={(event) => update("appointmentDate", event.target.value)}
               />
             </FormField>
-            <FormField id="order-start" label="Start time">
+            <FormField id="order-start" label={`Start time (${timeZone})`}>
               <TimePicker
                 id="order-start"
                 value={values.appointmentStartTime}
@@ -460,21 +447,10 @@ export function AppointmentOrderFormFields({
                 </FormField>
                 <div className="justify-self-end text-right">
                   {(() => {
-                    const baseLineTotalCents = getLineTotalCents(
-                      line.quantity,
-                      line.unitPriceCents,
-                      line.discountType,
-                      line.discountValue
-                    )
-                    const taxCents = lineTaxCentsById[line.id] ?? line.lineTaxCents ?? 0
-                    const netCents =
-                      line.taxMode === "INCLUSIVE"
-                        ? Math.max(0, baseLineTotalCents - taxCents)
-                        : baseLineTotalCents
-                    const totalCents =
-                      line.taxMode === "INCLUSIVE"
-                        ? baseLineTotalCents
-                        : baseLineTotalCents + taxCents
+                    const pricing = linePricingById[line.id]
+                    if (!pricing) return <span className="text-xs text-muted-foreground">Pricing pending</span>
+                    const { taxCents, totalCents } = pricing
+                    const netCents = totalCents - taxCents
 
                     return (
                       <div className="grid gap-1 text-right text-xs text-muted-foreground">
@@ -704,14 +680,7 @@ export function AppointmentOrderFormFields({
                     <div className="flex items-center justify-end gap-3">
                       <span>Total</span>
                       <span className="min-w-[80px] text-sm font-semibold text-foreground">
-                        {formatCurrencyCentsValue(
-                          getLineTotalCents(
-                            line.quantity,
-                            line.unitPriceCents,
-                            line.discountType,
-                            line.discountValue
-                          )
-                        )}
+                        {linePricingById[line.id] ? formatCurrencyCentsValue(linePricingById[line.id].totalCents) : "Pricing pending"}
                       </span>
                     </div>
                   </div>

@@ -1,4 +1,5 @@
 import { requireWriteFields, permits } from "@/platform/access/policy"
+import { termText, resolveTermText, type TermText } from "@/platform/terminology/message"
 import type { PermissionRun } from "@/platform/access/server"
 import { resolveActivityTypes } from "./activity-type-service"
 import type { Prisma, CrmTask } from "@prisma/client"
@@ -15,24 +16,25 @@ type Context = {
   audit: (tx: Tx, actor: CrmActor, event: string, id: string, before?: Prisma.InputJsonValue, after?: Prisma.InputJsonValue) => Promise<void>
 }
 const snapshot = (value: unknown): Prisma.InputJsonValue => JSON.parse(JSON.stringify(value))
+const previewReason = (text: TermText) => ({ blockedReason: resolveTermText(text), ...(typeof text === "string" ? {} : { blockedReasonText: text }) })
 
 // Called only after the activity's read/write scope has been established.
 export async function prepareRuleFollowUp(tx: Tx, actor: CrmActor, record: CrmTask, outcome: string) {
-  if (record.planLaunchId) return { rule: null, schedule: null, blockedReason: "Activity plans already schedule their steps. Use a manual follow-up if needed." }
+  if (record.planLaunchId) return { rule: null, schedule: null, ...previewReason(termText("crm.activity.singular", "Activity plans already schedule their steps. Use a manual follow-up if needed.", "{label} plans already schedule their steps. Use a manual follow-up if needed.")) }
   const rule = await tx.crmFollowUpRule.findFirst({ where: { tenantId: actor.tenantId, sourceType: record.type, outcome, archived: false } })
   if (!rule) return { rule: null, schedule: null, blockedReason: null }
   const timeZone = (await tx.appSetting.findUnique({ where: { tenantId: actor.tenantId }, select: { timeZone: true } }))?.timeZone || "UTC"
   const info = { id: rule.id, name: rule.name, version: rule.version, maxDepth: rule.maxDepth }
-  const blocked = (reason: string) => ({ rule: info, schedule: null, blockedReason: reason, timeZone })
-  if (record.automationDepth >= rule.maxDepth) return blocked(`The follow-up chain has reached this rule's limit of ${rule.maxDepth} generated activities.`)
-  if (!await tx.crmContact.findFirst({ where: { tenantId: actor.tenantId, id: record.contactId, archived: false } })) return blocked("The customer is archived.")
-  if (record.enquiryId && !await tx.crmEnquiry.findFirst({ where: { tenantId: actor.tenantId, id: record.enquiryId, status: { not: "CLOSED" } } })) return blocked("The related enquiry is closed.")
-  if (record.opportunityId && !await tx.crmOpportunity.findFirst({ where: { tenantId: actor.tenantId, id: record.opportunityId, stage: { kind: "OPEN", archived: false }, pipeline: { archived: false } } })) return blocked("The related opportunity is closed or archived.")
-  if (!await tx.user.findFirst({ where: { tenantId: actor.tenantId, id: record.assignedUserId, status: "ACTIVE", role: { in: ["ADMIN", "MANAGER", "STAFF"] } } })) return blocked("The assigned staff member is no longer active. Reassign the activity or use a manual follow-up.")
+  const blocked = (reason: TermText) => ({ rule: info, schedule: null, ...previewReason(reason), timeZone })
+  if (record.automationDepth >= rule.maxDepth) return blocked([`The follow-up chain has reached this rule's limit of ${rule.maxDepth} generated `, termText("crm.activity.plural", "activities.", "{label}.")])
+  if (!await tx.crmContact.findFirst({ where: { tenantId: actor.tenantId, id: record.contactId, archived: false } })) return blocked(termText("crm.contact.singular", "The customer is archived.", "The {label} is archived."))
+  if (record.enquiryId && !await tx.crmEnquiry.findFirst({ where: { tenantId: actor.tenantId, id: record.enquiryId, status: { not: "CLOSED" } } })) return blocked(termText("crm.enquiry.singular", "The related enquiry is closed.", "The related {label} is closed."))
+  if (record.opportunityId && !await tx.crmOpportunity.findFirst({ where: { tenantId: actor.tenantId, id: record.opportunityId, stage: { kind: "OPEN", archived: false }, pipeline: { archived: false } } })) return blocked(termText("crm.opportunity.singular", "The related opportunity is closed or archived.", "The related {label} is closed or archived."))
+  if (!await tx.user.findFirst({ where: { tenantId: actor.tenantId, id: record.assignedUserId, status: "ACTIVE", role: { in: ["ADMIN", "MANAGER", "STAFF"] } } })) return blocked(termText("crm.activity.singular", "The assigned staff member is no longer active. Reassign the activity or use a manual follow-up.", "The assigned staff member is no longer active. Reassign the {label} or use a manual follow-up."))
   const step = planStepSchema.parse(rule.nextStep)
   let selected
   try { selected = (await resolveActivityTypes(tx, actor, [step]))[0] }
-  catch (error) { if (error instanceof CrmError) return blocked(error.message); throw error }
+  catch (error) { if (error instanceof CrmError) return blocked(error.presentation ?? error.message); throw error }
   const today = businessDate(new Date(), timeZone)
   const dueOn = new Date(Date.parse(`${today}T00:00:00Z`) + step.dayOffset * 86400000).toISOString().slice(0, 10)
   let reminderAt: string | null = null

@@ -1,3 +1,4 @@
+import { termText } from "@/platform/terminology/message"
 import { z } from "zod"
 const optionalId = z.string().trim().max(100).default("")
 const money = z.string().trim().regex(/^(?:\d{1,14}(?:\.\d{1,4})?)?$/, "Enter a non-negative budget with up to four decimal places.").default("")
@@ -7,5 +8,5 @@ export const propertyContextSchema = z.object({
   propertyCategory: z.string().trim().max(100).optional(),
   bedrooms: z.number().int().min(0).max(50).nullable().default(null),
   buyingTimeframe: z.string().trim().max(100).optional(),
-}).strict().refine(data => !data.subprojectId || !!data.projectId, { path: ["projectId"], message: "Select a project for this subproject." })
+}).strict().refine(data => !data.subprojectId || !!data.projectId, { path: ["projectId"], message: "Select a project for this subproject.", params: { terminology: [termText("realEstate.project.singular", "Select a project", "Select a {label}"), " for this ", termText("realEstate.subproject.singular", "subproject.", "{label}.")] } })
 export type PropertyContextInput = z.infer<typeof propertyContextSchema>

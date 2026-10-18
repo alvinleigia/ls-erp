@@ -1,5 +1,4 @@
 import { requireWriteFields } from "@/platform/access/policy"
-import { workspaceRead } from "@/platform/access/catalog"
 import type { Requirement } from "@/platform/access/catalog"
 import { findAccessUser, assignedPermissions } from "@/platform/access/server"
 import { requirePermission } from "@/platform/access/policy"
@@ -7,20 +6,23 @@ import { randomUUID } from "node:crypto"
 import { Prisma, type PrismaClient } from "@prisma/client"
 import { BusinessError, hasBusinessAccess, type BusinessActor } from "@/platform/policy"
 import { recordDomainAuditEvent } from "@/lib/domain-audit"
-import type { FieldResource } from "./resources"
+import { fieldScopeOptions, registerFieldResources, type FieldResource } from "./resources"
+import { moduleEnabled } from "@/platform/modules"
 import { fieldListSchema, fieldSchema } from "./validation"
 import { definitions, editableField, fieldView, managesFields, numberValue, validateFieldValue, visibleField } from "./values"
 
 export function createCustomFieldService(db: PrismaClient, identity: Pick<BusinessActor, "tenantId" | "userId" | "requestId">, resources: readonly FieldResource[]) {
+  registerFieldResources(resources)
   async function run<T>(requirement: Requirement, operation: (tx: Prisma.TransactionClient, actor: BusinessActor, available: FieldResource[]) => Promise<T>): Promise<T> {
     for (let attempt = 0; ; attempt++) {
       try { return await db.$transaction(async tx => {
         const user = await findAccessUser(tx, identity.tenantId, identity.userId)
         if (!user || !hasBusinessAccess(user.role) || user.tenant?.status !== "ACTIVE" || user.tenant.slug === (process.env.PLATFORM_ADMIN_TENANT_SLUG?.trim().toLowerCase() || "platform")) throw new BusinessError(403, "Business workspace access is not permitted.")
-        const modules = await tx.tenantModule.findMany({ where: { tenantId: identity.tenantId, enabled: true, allowed: true }, select: { key: true } })
-        if (!modules.some(module => module.key === "crm")) throw new BusinessError(403, "CRM must be enabled.")
+        const modules = await tx.tenantModule.findMany({ where: { tenantId: identity.tenantId }, select: { key: true, enabled: true, allowed: true } })
+        const available = resources.filter(resource => moduleEnabled(modules, resource.module))
+        if (!available.length) throw new BusinessError(403, "No custom-field record types are available.")
         const actor = { ...identity, role: user.role, permissions: assignedPermissions(user), crmRecordScope: user.crmRecordScope, managedTeamIds: user.managedTeamIds }; requirePermission(actor, requirement)
-        return operation(tx, actor, resources.filter(resource => modules.some(module => module.key === resource.module)))
+        return operation(tx, actor, available)
       }, { isolationLevel: "Serializable", maxWait: 20000, timeout: 20000 }) } catch (error) {
         const code = (error as { code?: string }).code
         if (code === "P2034" && attempt < 2) continue
@@ -37,18 +39,19 @@ export function createCustomFieldService(db: PrismaClient, identity: Pick<Busine
       return run("customFields.read", async (tx, actor, available) => {
         const resource = query.resource ? available.find(resource => resource.key === query.resource) : undefined
         if (query.resource && !resource) throw new BusinessError(403, "This record type is unavailable.")
-        if (query.scope && !scopes(available).includes(query.scope)) throw new BusinessError(403, "This record type is unavailable.")
+        if (query.scope && !(resource ? resource.scopes : scopes(available)).includes(query.scope)) throw new BusinessError(403, "This record type is unavailable.")
         const where = { tenantId: actor.tenantId, ...(query.salesTeamId ? { salesTeamId: query.salesTeamId } : {}), scope: { in: query.scope ? [query.scope] : resource ? [...resource.scopes] : scopes(available) }, archived: query.archived === "true", ...(!managesFields(actor) ? { visibility: "ALL" } : {}), ...(query.filterable ? { filterable: query.filterable === "true" } : {}), name: { contains: query.q, mode: "insensitive" as const } }
         const [items, total] = await Promise.all([tx.customFieldDefinition.findMany({ where, orderBy: [{ position: "asc" }, { id: "asc" }], skip: (query.page - 1) * query.pageSize, take: query.pageSize }), tx.customFieldDefinition.count({ where })])
-        return { items, total, page: query.page, pageSize: query.pageSize, totalPages: Math.max(1, Math.ceil(total / query.pageSize)), canManage: managesFields(actor), scopes: scopes(available) }
+        return { items, total, page: query.page, pageSize: query.pageSize, totalPages: Math.max(1, Math.ceil(total / query.pageSize)), canManage: managesFields(actor), scopes: scopes(available), scopeOptions: fieldScopeOptions(available) }
       })
     },
     form(resourceKey: string, salesTeamId: string | null = null) {
-      return run(workspaceRead, async (tx, actor, available) => {
+      const registered = resources.find(resource => resource.key === resourceKey)
+      if (!registered) return Promise.reject(new BusinessError(403, "This record type is unavailable."))
+      return run(`${registered.permissionResource}.read`, async (tx, actor, available) => {
         const resource = available.find(resource => resource.key === resourceKey)
         if (!resource) throw new BusinessError(403, "This record type is unavailable.")
-        requirePermission(actor, `${resource.permissionResource}.read`)
-        if (salesTeamId && !await tx.crmSalesTeam.findFirst({ where: { tenantId: actor.tenantId, id: salesTeamId, ...(!managesFields(actor) ? { members: { some: { tenantId: actor.tenantId, userId: actor.userId } } } : {}) } })) throw new BusinessError(404, "Sales team not found.")
+        await resource.context.validate(tx, actor, salesTeamId, "form")
         const fields = await definitions(tx, actor, resource, false, salesTeamId)
         return fields.filter(field => !field.archived).map(field => ({ ...fieldView(actor, field), value: field.defaultValue }))
       })
@@ -64,7 +67,8 @@ export function createCustomFieldService(db: PrismaClient, identity: Pick<Busine
       const data = fieldSchema.parse(input)
       return run(id ? "customFields.edit" : "customFields.create", async (tx, actor, available) => {
         if (!managesFields(actor)) throw new BusinessError(403, "Only managers can configure custom fields.")
-        if (!scopes(available).includes(data.scope)) throw new BusinessError(403, "This record type is unavailable.")
+        const resource = available.find(resource => resource.scopes.includes(data.scope))
+        if (!resource) throw new BusinessError(403, "This record type is unavailable.")
         const before = id ? await tx.customFieldDefinition.findUnique({ where: { tenantId_id: { tenantId: actor.tenantId, id } }, include: { options: true } }) : null
         requireWriteFields(actor, "customFields", before ?? undefined, data)
         if (id && !before) throw new BusinessError(404, "Custom field not found.")
@@ -73,11 +77,7 @@ export function createCustomFieldService(db: PrismaClient, identity: Pick<Busine
         if (!before) for (const resource of available.filter(resource => resource.scopes.includes(data.scope))) {
           if (await tx.customFieldDefinition.count({ where: { tenantId: actor.tenantId, scope: { in: [...resource.scopes] } } }) >= 50) throw new BusinessError(409, "This record type has reached its limit of 50 custom fields, including archived fields.")
         }
-        if (data.salesTeamId) {
-          if (data.scope === "PROJECT") throw new BusinessError(400, "Project fields apply to the whole business, not a sales team.")
-          const team = await tx.crmSalesTeam.findFirst({ where: { tenantId: actor.tenantId, id: data.salesTeamId } })
-          if (!team || (!before && team.archived)) throw new BusinessError(400, "Choose an active sales team.")
-        }
+        await resource.context.validate(tx, actor, data.salesTeamId, before ? "edit" : "create")
         const fieldId = id || randomUUID()
         if (data.type !== "SELECT" && data.options.length) throw new BusinessError(400, "Only single-select fields have options.")
         if (data.type === "SELECT" && !data.archived && !data.options.some(option => !option.archived)) throw new BusinessError(400, "Add at least one active option.")

@@ -20,7 +20,7 @@ const routes=Object.fromEntries(['services','service-categories'].map(name=>[nam
 const bookings=require('../app/api/appointments/route.ts'), booking=require('../app/api/appointments/[id]/route.ts'), availability=require('../app/api/appointments/availability/route.ts')
 const orders=require('../app/api/appointments/orders/route.ts')
 const orderDetail=require('../app/api/appointments/orders/[id]/route.ts'), invoice=require('../app/api/appointments/orders/[id]/invoice/route.ts')
-const {resolveOrderData}=require('../app/api/appointments/orders/_resolve.ts')
+const {resolveOrderData}=require('../modules/appointments/order-resolution.ts')
 const users=require('../app/api/users/route.ts'), userDetail=require('../app/api/users/[id]/route.ts')
 const seeds=require('../app/api/seeds/route.ts'), dashboard=require('../app/api/dashboard/summary/route.ts')
 const {servicesNavigation}=require('../application/navigation.ts')
@@ -121,13 +121,15 @@ test('saved bookings survive disabled services; rescheduling and reactivation ar
  assert.equal((await root.query('SELECT status FROM "Service" WHERE id=$1',[service.id])).rows[0].status,'INACTIVE')
  await ok(await invoke('services','PATCH',{status:'ACTIVE'},service.id))
 })
-test('authorized draft orders use service lines; disabled services blocks create and edit without altering saved totals',async()=>{
+test('authorized draft orders use service lines; disabled services blocks service changes while metadata preserves saved totals',async()=>{
  const payload={customerId: a+'_customer',appointmentDate:'2030-10-08',appointmentStartTime:'10:00',appointmentStartAt:'2030-10-08T10:00:00Z',status:'DRAFT',coupons:[],productLines:[],lines:[{serviceId:service.id,staffId:a+'_staff',quantity:1,durationMinutes:60,unitPriceCents:12000,discountType:'NONE',discountValue:0,taxIds:[],taxMode:'EXCLUSIVE'}]}
  const created=await ok(await call(orders,'POST',payload),201);assert.equal(created.order.totalCents,12000)
  await flag(false)
  assert.equal((await call(orders,'POST',payload)).status,403)
- assert.equal((await call(orderDetail,'PATCH',{customerNote:'Should not persist'},created.order.id)).status,403)
- const saved=await ok(await call(orderDetail,'GET',undefined,created.order.id));assert.equal(saved.order.totalCents,12000);assert.notEqual(saved.order.customerNote,'Should not persist')
+ await ok(await call(orderDetail,'PATCH',{customerNote:'Metadata only'},created.order.id))
+ assert.equal((await call(orderDetail,'PATCH',{appointmentStartAt:'2030-10-08T12:00:00Z'},created.order.id)).status,403)
+ assert.equal((await call(orderDetail,'PATCH',{status:'CONFIRMED'},created.order.id)).status,403)
+ const saved=await ok(await call(orderDetail,'GET',undefined,created.order.id));assert.equal(saved.order.totalCents,12000);assert.equal(saved.order.customerNote,'Metadata only')
  await flag(true)
 })
 test('eligibility checks activation and tenant IDs, while unrelated profile edits remain possible',async()=>{
@@ -156,4 +158,55 @@ test('stale sessions, category-only navigation and CRM separation',async()=>{
  assert.equal(servicesNavigation(flags,['serviceCategories.read'])[0].href,'/services/categories')
  assert.deepEqual(servicesNavigation(flags,[]),[]);assert.deepEqual(servicesNavigation([{key:'services',allowed:false,enabled:true}]),[])
  assert.equal(satisfies({permissions:['services.read']},workspaceRead),false)
+})
+
+
+test('category conflicts, partial edits and referenced deletion preserve tenant data', async () => {
+ const first=(await ok(await invoke('service-categories','POST',{name:'Batch three category',description:'Original',sortOrder:4}))).item
+ const second=(await ok(await invoke('service-categories','POST',{name:'Batch three other'}))).item
+ await ok(await invoke('service-categories','POST',{name:first.name}),409)
+ await ok(await invoke('service-categories','PATCH',{name:first.name},second.id),409)
+ await ok(await invoke('service-categories','PATCH',{name:first.name},first.id))
+ const changed=(await ok(await invoke('service-categories','PATCH',{description:'',sortOrder:0},first.id))).item
+ assert.equal(changed.description,null);assert.equal(changed.sortOrder,0);assert.equal(changed.name,first.name)
+ const page=await ok(await invoke('service-categories','GET',undefined,undefined,a,'ADMIN','?q=batch%20three&pageSize=1&sort=name'))
+ assert.equal(page.total,2);assert.equal(page.items.length,1);assert.equal(page.totalPages,2)
+ await ok(await invoke('service-categories','GET',undefined,undefined,a,'ADMIN','?pageSize=101'),400)
+ await ok(await invoke('service-categories','PATCH',{name:'Forbidden change'},first.id,b),404)
+ const linked=(await ok(await invoke('services','POST',{name:'Linked service',categoryId:first.id,durationMinutes:20,priceCents:2000}))).item
+ await ok(await invoke('service-categories','DELETE',undefined,first.id))
+ assert.equal((await root.query('SELECT status FROM "ServiceCategory" WHERE id=$1',[first.id])).rows[0].status,'INACTIVE')
+ assert.equal((await root.query('SELECT "categoryId" FROM "Service" WHERE id=$1',[linked.id])).rows[0].categoryId,first.id)
+ await ok(await invoke('service-categories','DELETE',undefined,second.id))
+ assert.equal((await root.query('SELECT id FROM "ServiceCategory" WHERE id=$1',[second.id])).rowCount,0)
+ await ok(await invoke('services','DELETE',undefined,linked.id))
+ assert.equal((await root.query('SELECT id FROM "Service" WHERE id=$1',[linked.id])).rowCount,0)
+})
+
+test('service relation validation rejects foreign and inactive references before partial writes', async () => {
+ const cat=(await ok(await invoke('service-categories','POST',{name:'Package validation'}))).item
+ const base={name:'Base service',categoryId:cat.id,durationMinutes:30,priceCents:5000}
+ const one=(await ok(await invoke('services','POST',base))).item
+ const two=(await ok(await invoke('services','POST',{...base,name:'Second service'}))).item
+ const validTax=`valid_tax_${suffix}`,inactiveTax=`inactive_tax_${suffix}`,foreignTax=`foreign_tax_${suffix}`
+ for(const [id,tenant,active] of [[validTax,a,true],[inactiveTax,a,false],[foreignTax,b,true]])
+  await root.query('INSERT INTO "Tax" (id,"tenantId",name,percent,"isActive","updatedAt") VALUES ($1,$2,$1,5,$3,now())',[id,tenant,active])
+ const bundle=(await ok(await invoke('services','POST',{...base,name:'Validation bundle',type:'PACKAGE',packageItemIds:[one.id],taxIds:[validTax,validTax]}))).item
+ assert.deepEqual(bundle.taxIds,[validTax]);assert.equal(bundle.packageItems[0].itemService.id,one.id)
+ for(const invalid of [{taxIds:[inactiveTax]},{taxIds:[foreignTax]},{packageItemIds:[foreign.id]},{packageItemIds:[one.id,one.id]}]) {
+  await ok(await invoke('services','POST',{...base,...invalid}),400)
+  await ok(await invoke('services','PATCH',{name:'Must not persist',...invalid},bundle.id),400)
+ }
+ await ok(await invoke('services','POST',{...base,categoryId:foreign.category.id}),404)
+ await ok(await invoke('services','PATCH',{name:'Must not persist',categoryId:foreign.category.id},bundle.id),404)
+ await ok(await invoke('services','POST',{...base,type:'PACKAGE',packageItemIds:[]}),400)
+ await ok(await invoke('services','PATCH',{type:'PACKAGE',packageItemIds:[]},bundle.id),400)
+ const unchanged=(await ok(await invoke('services','GET',undefined,undefined,a,'ADMIN',`?q=Validation%20bundle`))).items[0]
+ assert.equal(unchanged.name,'Validation bundle');assert.deepEqual(unchanged.taxIds,[validTax]);assert.equal(unchanged.packageItems[0].itemService.id,one.id)
+ const changed=(await ok(await invoke('services','PATCH',{packageItemIds:[two.id],taxIds:[],description:'',priceCents:0},bundle.id))).item
+ assert.equal(changed.packageItems.length,1);assert.equal(changed.packageItems[0].itemService.id,two.id)
+ assert.deepEqual(changed.taxIds,[]);assert.equal(changed.priceCents,0);assert.equal(changed.description,null)
+ await ok(await invoke('services','DELETE',undefined,two.id))
+ assert.equal((await root.query('SELECT status FROM "Service" WHERE id=$1',[two.id])).rows[0].status,'INACTIVE')
+ await ok(await invoke('services','GET',undefined,undefined,a,'ADMIN','?pageSize=101'),400)
 })

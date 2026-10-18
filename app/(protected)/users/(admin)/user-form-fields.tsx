@@ -1,6 +1,6 @@
 "use client"
 
-import { RecordSelect } from "@/modules/crm/components/record-select"
+import { RecordSelect } from "@/components/erp/record-select"
 import * as React from "react"
 
 import { FormField } from "@/components/form-field"

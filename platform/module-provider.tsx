@@ -13,7 +13,9 @@ export function BusinessModuleProvider({ children, active = true }: { children: 
     const load = (event?: Event) => {
       controller?.abort(); controller = new AbortController()
       const signal = controller.signal
-      if (event?.type !== "focus") setState({ flags: [], loading: true, permissions: [] })
+      // Refresh in place so an unrelated module change does not discard forms.
+      // The response replaces permissions atomically; failures still deny access.
+      if (!event) setState({ flags: [], loading: true, permissions: [] })
       fetch("/api/modules", { cache: "no-store", signal }).then(async response => response.ok ? response.json() : null)
         .then(data => { if (!signal.aborted) setState({ flags: data?.modules || [], loading: false, permissions: data?.permissions === null ? undefined : data?.permissions || [] }) })
         .catch(() => { if (!signal.aborted) setState({ flags: [], loading: false, permissions: [] }) })

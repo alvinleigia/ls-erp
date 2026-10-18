@@ -56,6 +56,29 @@ test("purchase receiving updates stock once and confirmed booking consumes it", 
   expect(unavailable.available).toBe(false)
 })
 
+test("booking editor preserves saved IDs and tenant time when a Los Angeles user saves notes", async ({}, testInfo) => {
+  const before = (await json(admin.context, `/api/appointments/orders/${order.id}`)).order
+  const linked = (await fixture.db.query('SELECT id, "orderLineId", "startAt" FROM "Appointment" WHERE "orderLineId"=$1', [before.lines[0].id])).rows
+  await admin.page.goto(`${fixture.origin}/appointments/${order.id}/edit`)
+  await admin.page.getByRole("button", { name: "Edit booking", exact: true }).click()
+  await expect(admin.page.getByText("Start time (Asia/Kolkata)", { exact: true })).toBeVisible()
+  await expect(admin.page.locator("#order-date")).toHaveValue(date)
+  await admin.page.getByLabel("Internal note", { exact: true }).fill("Booking editor history test")
+  await admin.page.screenshot({ path: testInfo.outputPath("booking-edit.png"), fullPage: true })
+  const saving = admin.page.waitForResponse(response => response.request().method() === "PATCH" && response.url().endsWith(`/api/appointments/orders/${order.id}`))
+  await admin.page.getByRole("button", { name: "Save changes", exact: true }).click()
+  const response = await saving
+  expect(response.status(), await response.text()).toBe(200)
+  const saved = (await response.json()).order
+  expect(saved.internalNote).toBe("Booking editor history test")
+  expect(saved.appointmentStartAt).toBe(before.appointmentStartAt)
+  expect(saved.lines.map((line: { id: string }) => line.id)).toEqual(before.lines.map((line: { id: string }) => line.id))
+  expect(saved.productLines.map((line: { id: string }) => line.id)).toEqual(before.productLines.map((line: { id: string }) => line.id))
+  expect(saved.totalCents).toBe(before.totalCents)
+  expect((await fixture.db.query('SELECT id, "orderLineId", "startAt" FROM "Appointment" WHERE "orderLineId"=$1', [saved.lines[0].id])).rows).toEqual(linked)
+  expect((await json(admin.context, "/api/inventory/products?q=KIT-LOCAL")).items[0].onHandQty).toBe(3)
+})
+
 test("booking cancellation restores stock once and keeps a readable invoice", async () => {
   for (let repeat = 0; repeat < 2; repeat++) {
     const result = (await json(admin.context, `/api/appointments/orders/${order.id}`, 200, "PATCH", { status: "CANCELED" })).order
@@ -130,4 +153,88 @@ test("leave conflict preview and saved appointment use tenant time in a Los Ange
   expect(saved.startAt).toBe("2030-10-10T04:30:00.000Z")
   expect(saved.endAt).toBe("2030-10-10T05:30:00.000Z")
   expect((await json(staff.context, `/api/leaves/requests/${leave.id}`)).item.status).toBe("APPROVED")
+})
+
+
+test("weekly and recurring plans retain readable details and clone audit identity", async () => {
+  const employee = (await json(admin.context, "/api/users", 200, "POST", { name: "Local Flexible Staff", email: `flexible@${fixture.slug}.test`, role: "STAFF", password })).user
+  await json(admin.context, `/api/users/${employee.id}`, 200, "PATCH", { staffProfile: { schedulingMode: "FLEXIBLE" } })
+  const days = ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY"].map((day, index) => ({
+    day, isOff: index >= 5, slots: index >= 5 ? [] : [{ startTime: "09:00", endTime: "17:00", breaks: [{ startTime: "12:00", endTime: "13:00" }] }],
+  }))
+  const body = { staffId: employee.id, name: "Local recurring availability", validFrom: "2038-01-04", validTo: "2038-01-31", cycleLengthWeeks: 1, weeks: [{ weekIndex: 1, days }] }
+  const pattern = (await json(admin.context, "/api/shifts/flexible-patterns", 200, "PUT", body)).item
+  const week = (await json(admin.context, "/api/shifts/flexible-week-plans", 200, "PUT", { staffId: employee.id, weekStartDate: "2038-01-04", days })).item
+  expect(week.days[0].slots[0].breaks[0].startTime).toBe("12:00")
+  await admin.page.goto("/shifts/recurring")
+  await admin.page.getByRole("textbox", { name: "Search pattern or staff", exact: true }).fill(body.name)
+  await admin.page.getByRole("button", { name: body.name, exact: true }).click()
+  await expect(admin.page.getByRole("heading", { name: "Pattern details", exact: true })).toBeVisible()
+  await expect(admin.page.getByText("Saved recurring availability.", { exact: true })).toBeVisible()
+  await expect(admin.page.getByRole("heading", { name: "Week 1", exact: true })).toBeVisible()
+  await expect(admin.page.getByText(/^Breaks: 12:00/).first()).toBeVisible()
+  await admin.page.screenshot({ path: test.info().outputPath("recurring-plan.png"), fullPage: true, animations: "disabled" })
+  const cloned = await json(admin.context, `/api/shifts/flexible-patterns/${pattern.id}/clone`, 200, "POST", { validFrom: body.validFrom, validTo: body.validTo, activate: true })
+  expect((await json(admin.context, `/api/shifts/flexible-patterns/${pattern.id}`)).item.isActive).toBe(false)
+  const audit = (await fixture.db.query('SELECT "entityId", "after" FROM "AuditLog" WHERE "tenantId"=$1 AND "entityId"=$2 AND event=$3', [fixture.slug, cloned.id, "workforce.shiftPlans.create"])).rows[0]
+  expect(audit.entityId).toBe(cloned.id)
+  expect(audit.after.id).toBe(cloned.id)
+})
+
+test("booking pricing waits for current server results, ignores stale responses and retries failures", async ({}, testInfo) => {
+  await admin.page.goto(`${fixture.origin}/appointments/new`)
+  await expect(admin.page.getByText("Select a customer and items with attendants, and enter a valid date and start time to calculate pricing.")).toBeVisible()
+  await expect(admin.page.getByRole("button", { name: "Save draft", exact: true })).toBeDisabled()
+  await json(admin.context, "/api/appointments/coupons", 201, "POST", { code: "PRODUCTPREVIEW", discountType: "PERCENT", discountValue: 10, appliesTo: "PRODUCT_LINES" })
+  const draft = (await json(admin.context, "/api/appointments/orders", 201, "POST", {
+    customerId: customer.id, appointmentDate: date, appointmentStartTime: "10:00", appointmentStartAt: startAt, status: "DRAFT", coupons: ["PRODUCTPREVIEW"],
+    lines: [{ serviceId: service.id, staffId: fixture.users.staff.id, quantity: 1, durationMinutes: 60, unitPriceCents: 12000, discountType: "NONE", discountValue: 0, taxIds: [] }],
+    productLines: [{ productId: product.id, quantity: 1, unitPriceCents: 1500, discountType: "NONE", discountValue: 0, taxIds: [] }],
+  })).order
+  const page = admin.page
+  await page.goto(`${fixture.origin}/appointments/${draft.id}/edit`)
+  await page.getByRole("button", { name: "Edit booking", exact: true }).click()
+  const dialog = page.getByRole("dialog"), save = dialog.getByRole("button", { name: "Save draft", exact: true })
+  await expect(save).toBeEnabled()
+  let releaseOld!: () => void, seenOld!: () => void
+  const held = new Promise<void>(resolve => { releaseOld = resolve }), intercepted = new Promise<void>(resolve => { seenOld = resolve })
+  let failOnce = true
+  await page.route("**/api/appointments/orders/preview", async route => {
+    const price = route.request().postDataJSON().input.lines[0].unitPriceCents
+    if (price === 13000) {
+      const response = await route.fetch()
+      seenOld(); await held
+      await route.fulfill({ response }).catch(() => {}) // The obsolete request may already be aborted.
+    } else if (price === 15000 && failOnce) {
+      failOnce = false
+      await route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: "Pricing temporarily unavailable" }) })
+    } else await route.continue()
+  })
+  try {
+    const price = dialog.locator(`[id="line-price-${draft.lines[0].id}"]`)
+    await price.fill("130")
+    await expect(save).toBeDisabled()
+    await expect(dialog.getByText("Calculating pricing...", { exact: true })).toBeVisible()
+    await intercepted
+    const current = page.waitForResponse(response => response.url().endsWith("/orders/preview") && response.request().postDataJSON().input.lines[0].unitPriceCents === 14000)
+    await price.fill("140")
+    expect((await current).status()).toBe(200)
+    await expect(save).toBeEnabled()
+    releaseOld()
+    await expect(dialog.getByText(/153\.50$/)).toBeVisible()
+    await price.fill("150")
+    await expect(dialog.getByText("Pricing temporarily unavailable", { exact: false })).toBeVisible()
+    await expect(save).toBeDisabled()
+    await expect(dialog.getByText(/153\.50$/)).toHaveCount(0)
+    await dialog.getByRole("button", { name: "Retry pricing" }).click()
+    await expect(save).toBeEnabled()
+    await expect(dialog.getByText(/163\.50$/)).toBeVisible()
+    await dialog.getByText("Grand total", { exact: true }).scrollIntoViewIfNeeded()
+    await page.screenshot({ path: testInfo.outputPath("booking-server-pricing.png"), fullPage: true })
+    const saving = page.waitForResponse(response => response.request().method() === "PATCH" && response.url().endsWith(`/orders/${draft.id}`))
+    await save.click()
+    const saved = (await (await saving).json()).order
+    expect(saved.totalCents).toBe(16350); expect(saved.couponDiscountCents).toBe(150)
+    expect(saved.lines[0].lineTotalCents).toBe(15000); expect(saved.productLines[0].lineTotalCents).toBe(1350)
+  } finally { releaseOld(); await page.unroute("**/api/appointments/orders/preview") }
 })

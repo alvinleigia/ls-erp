@@ -1,4 +1,5 @@
 "use client"
+import { useTerminology } from "@/platform/terminology/provider"
 import { useBusinessModules } from "@/platform/module-provider"
 import * as React from "react"
 import Link from "@/platform/access/link"
@@ -9,6 +10,7 @@ export function WorkReminders() {
   return can("activities.read") ? <AllowedWorkReminders /> : null
 }
 function AllowedWorkReminders() {
+  const term = useTerminology()
   const [data, setData] = React.useState<WorkListResponse | null>(null)
   const [unavailable, setUnavailable] = React.useState(false)
   React.useEffect(() => {
@@ -27,5 +29,5 @@ function AllowedWorkReminders() {
   }, [])
   if (unavailable) return <p className="text-xs text-muted-foreground">Reminders are temporarily unavailable. <Link className="underline" href="/crm/activities?due=reminders">Check My Work</Link></p>
   if (!data?.total) return null
-  return <aside aria-label="Your activity reminders" className="flex flex-wrap items-center gap-3 rounded-lg border bg-muted/40 p-3 text-sm"><Link className="font-semibold underline" href="/crm/activities?due=reminders">{data.total} reminder{data.total === 1 ? "" : "s"} due</Link>{data.items.map(item => <Link className="max-w-60 truncate underline" key={item.id} href={`/crm/activities/${item.id}`}>{item.title}</Link>)}</aside>
+  return <aside aria-label={term("crm.activity.singular", "Your activity reminders", "Your {label} reminders")} className="flex flex-wrap items-center gap-3 rounded-lg border bg-muted/40 p-3 text-sm"><Link className="font-semibold underline" href="/crm/activities?due=reminders">{data.total} reminder{data.total === 1 ? "" : "s"} due</Link>{data.items.map(item => <Link className="max-w-60 truncate underline" key={item.id} href={`/crm/activities/${item.id}`}>{item.title}</Link>)}</aside>
 }

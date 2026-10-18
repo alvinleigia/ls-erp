@@ -3,8 +3,7 @@ import type {
   AppointmentOrderFormValues,
   AppointmentOrderLineForm,
   AppointmentOrderProductLineForm,
-  AppointmentOrderTotals,
-  DiscountType,
+  AppointmentOrderRow,
 } from "@/types/appointments"
 
 const toTimeInput = (value: Date) => {
@@ -57,37 +56,6 @@ export const defaultAppointmentOrderFormValues = (): AppointmentOrderFormValues 
   }
 }
 
-const toDiscountCents = (
-  discountType: DiscountType,
-  discountValue: number,
-  lineSubtotalCents: number
-) => {
-  if (discountType === "NONE" || discountValue <= 0) return 0
-  if (discountType === "AMOUNT") {
-    return Math.min(lineSubtotalCents, Math.round(discountValue * 100))
-  }
-  const percentDiscount = Math.round((lineSubtotalCents * discountValue) / 100)
-  return Math.min(lineSubtotalCents, percentDiscount)
-}
-
-export const calculateOrderTotals = (
-  lines: AppointmentOrderLineForm[],
-  couponDiscountCents = 0,
-  taxCents = 0
-): AppointmentOrderTotals => {
-  const subtotalCents = lines.reduce(
-    (sum, line) => sum + Math.max(0, line.quantity) * Math.max(0, line.unitPriceCents),
-    0
-  )
-  const lineDiscountCents = lines.reduce((sum, line) => {
-    const lineSubtotal = Math.max(0, line.quantity) * Math.max(0, line.unitPriceCents)
-    return sum + toDiscountCents(line.discountType, Math.max(0, line.discountValue), lineSubtotal)
-  }, 0)
-  const discountedSubtotal = Math.max(0, subtotalCents - lineDiscountCents - couponDiscountCents)
-  const totalCents = Math.max(0, discountedSubtotal + taxCents)
-  return { subtotalCents, lineDiscountCents, couponDiscountCents, taxCents, totalCents }
-}
-
 export const addCouponCode = (
   coupons: AppointmentOrderCouponForm[],
   rawCode: string
@@ -99,28 +67,13 @@ export const addCouponCode = (
   return [...coupons, { code }]
 }
 
-export const calculateCouponDiscountFromCodes = (
-  baseAmountCents: number,
-  coupons: AppointmentOrderCouponForm[],
-  rules: Array<{ code: string; discountType: DiscountType; discountValue: number }>
-) => {
-  let runningBase = Math.max(0, baseAmountCents)
-  const ruleMap = new Map(rules.map((rule) => [rule.code.trim().toUpperCase(), rule]))
-  return coupons.reduce((sum, coupon) => {
-    const rule = ruleMap.get(coupon.code)
-    if (!rule) return sum
-    let discountCents = 0
-    if (rule.discountType === "AMOUNT") {
-      discountCents = Math.min(runningBase, Math.round(rule.discountValue * 100))
-    } else {
-      discountCents = Math.min(
-        runningBase,
-        Math.round((runningBase * rule.discountValue) / 100)
-      )
-    }
-    runningBase = Math.max(0, runningBase - discountCents)
-    return sum + discountCents
-  }, 0)
-}
-
 export const formatCurrencyCents = (value: number) => (value / 100).toFixed(2)
+
+// Use one payload for preview and saving, including only persisted line IDs.
+export function orderFormInput(values: AppointmentOrderFormValues, appointmentStartAt: string, saved: AppointmentOrderRow | null) {
+  return { customerId: values.customerId, appointmentDate: values.appointmentDate, appointmentStartTime: values.appointmentStartTime,
+    status: values.status, customerNote: values.customerNote, internalNote: values.internalNote, appointmentStartAt, coupons: values.coupons.map(coupon => coupon.code),
+    lines: values.lines.map(line => ({ ...line, id: saved?.lines.some(item => item.id === line.id) ? line.id : undefined })),
+    productLines: (values.productLines ?? []).map(line => ({ ...line, id: saved?.productLines?.some(item => item.id === line.id) ? line.id : undefined })),
+  }
+}

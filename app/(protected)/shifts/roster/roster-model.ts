@@ -1,5 +1,7 @@
-import { parseISODate, toISODate } from "@/lib/date"
-import type { ShiftSchedule, ShiftTemplateRow } from "@/types/shifts"
+import { buildStandardScheduleMap, isStandardWeekOff } from "@/modules/workforce/standard-schedule"
+import { workingSegments } from "@/modules/workforce/working-segments"
+import { toISODate } from "@/lib/date"
+import type { RosterHistoryDay, ShiftSchedule, ShiftTemplateRow } from "@/types/shifts"
 
 export type TimeRange = {
   startTime: string
@@ -87,81 +89,26 @@ export const buildTemplateColorMap = (
 }
 
 export const buildShiftSegments = (template: ShiftTemplateRow): TimeRange[] => {
-  const shiftStart = template.startTime
-  const shiftEnd = template.endTime
-  const breaks = [...(template.breaks ?? [])].sort(
-    (a, b) => parseMinutes(a.startTime) - parseMinutes(b.startTime)
-  )
-  const segments: TimeRange[] = []
-  let cursor = shiftStart
-  for (const breakPeriod of breaks) {
-    if (parseMinutes(breakPeriod.startTime) > parseMinutes(cursor)) {
-      segments.push({ startTime: cursor, endTime: breakPeriod.startTime })
-    }
-    cursor = breakPeriod.endTime
-  }
-  if (parseMinutes(cursor) < parseMinutes(shiftEnd)) {
-    segments.push({ startTime: cursor, endTime: shiftEnd })
-  }
-  return segments
+  const clock = (minutes: number) => `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`
+  return workingSegments(template).map(segment => ({ startTime: clock(segment.start), endTime: clock(segment.end) }))
 }
 
-const getWeekOfMonth = (value: Date) => Math.floor((value.getDate() - 1) / 7) + 1
+// Browser dates represent local calendar days; convert their keys before using
+// the shared DATE-only rules, never their instant (which may be another UTC day).
+export const isScheduleWeekOff = (value: Date, schedule: ShiftSchedule) =>
+  isStandardWeekOff(new Date(formatDateKey(value)), schedule)
 
-export const isScheduleWeekOff = (value: Date, schedule: ShiftSchedule) => {
-  const weekday = resolveDayKey(value)
-  if (weekday === schedule.weekOffDay1) return true
-  if (schedule.weekOffDay2 && weekday === schedule.weekOffDay2) {
-    const weeks = schedule.weekOff2Weeks ?? []
-    return weeks.includes(getWeekOfMonth(value))
-  }
-  return false
+export const buildScheduleMap = (schedule: ShiftSchedule, dates: Date[]) => {
+  if (!dates.length) return {} as Record<string, string | null>
+  return Object.fromEntries(buildStandardScheduleMap(schedule,
+    new Date(formatDateKey(dates[0])), new Date(formatDateKey(dates[dates.length - 1]))))
 }
 
-export const buildScheduleMap = (
-  schedule: ShiftSchedule,
-  dates: Date[],
-  startDateOverride?: Date,
-  endDateOverride?: Date
-) => {
-  if (!schedule.blocks?.length) {
-    return {} as Record<string, string | null>
-  }
-  const sortedBlocks = [...schedule.blocks].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
-  const startDate = startDateOverride ?? parseISODate(schedule.startDate)
-  if (!startDate) {
-    return {} as Record<string, string | null>
-  }
-  const lastDate = endDateOverride ?? (dates.length ? dates[dates.length - 1] : null)
-  if (!lastDate) {
-    return {} as Record<string, string | null>
-  }
-  const map: Record<string, string | null> = {}
-  let blockIndex = 0
-  let dayInBlock = 0
-  const cursor = new Date(startDate)
-
-  if (cursor > lastDate) {
-    return map
-  }
-
-  while (cursor <= lastDate && blockIndex < sortedBlocks.length) {
-    const dateKey = formatDateKey(cursor)
-    if (isScheduleWeekOff(cursor, schedule)) {
-      map[dateKey] = null
-    } else {
-      map[dateKey] = sortedBlocks[blockIndex]?.templateId ?? null
-      dayInBlock += 1
-      if (dayInBlock >= sortedBlocks[blockIndex].repeatDays) {
-        blockIndex += 1
-        dayInBlock = 0
-        if (blockIndex >= sortedBlocks.length) {
-          blockIndex = 0
-        }
-      }
-    }
-    cursor.setDate(cursor.getDate() + 1)
-  }
-
-  return map
+// Historical rows contain saved bounds and paid minutes, not an exact break layout.
+// Never reinterpret them with a template's current hours or break definitions.
+export function historyPeriods(history: Pick<RosterHistoryDay, "startTime" | "endTime">): TimeRange[] {
+  return history.startTime && history.endTime ? [{ startTime: history.startTime, endTime: history.endTime }] : []
+}
+export function rosterPaidMinutes(history: Pick<RosterHistoryDay, "paidMinutes"> | null, periods: TimeRange[]) {
+  return history ? history.paidMinutes : periods.reduce((sum, period) => sum + Math.max(0, parseMinutes(period.endTime) - parseMinutes(period.startTime)), 0)
 }

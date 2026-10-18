@@ -3,7 +3,8 @@ const { test, before, after } = require("node:test")
 const assert = require("node:assert/strict")
 const { randomUUID } = require("node:crypto")
 const { Pool } = require("pg")
-const { PrismaClient } = require("@prisma/client")
+const { PrismaClient, Prisma } = require("@prisma/client")
+const { parse } = require("csv-parse/sync")
 const { TenantPgAdapter } = require("../lib/tenant-pg-adapter.ts")
 const { createApplicationCrmService: createCrmService } = require("../application/crm/service.ts")
 require("../lib/logger.ts").logger.info = () => {}
@@ -108,6 +109,10 @@ test("staff visibility, conversion privacy and tenant RLS apply to every report 
 })
 
 test("source, project, subproject and salesperson breakdowns reconcile including unclassified leads", async () => {
+  const metadata = await service.salesOverview(period)
+  assert.deepEqual(metadata.extensionColumns.map(c => [c.key, c.terminologyKey]), [["project", "realEstate.project.singular"], ["subproject", "realEstate.subproject.singular"]])
+  assert.deepEqual(metadata.dimensions.find(d => d.key === "project"), { key: "project", label: "Project", emptyLabel: "No project", terminologyKey: "realEstate.project.singular" })
+  assert.equal(metadata.dimensions.find(d => d.key === "source").terminologyKey, undefined)
   for (const dimension of ["source", "project", "salesperson"]) {
     const first = await service.salesLeadBreakdown({ ...period, dimension, pageSize: 1 })
     let total = 0, converted = 0
@@ -161,8 +166,10 @@ test("archived configuration and inactive owners preserve historical counts; cur
 
 test("module-off reporting hides property context while preserving generic CRM and blocks CRM-off access", async () => {
   await root.tenantModule.update({ where: { tenantId_key: { tenantId: a, key: "realEstate" } }, data: { enabled: false } })
-  assert.equal((await service.salesOverview(period)).realEstateEnabled, false)
-  assert.ok((await service.salesReportRecords(period)).items.every(r => r.project === null && r.subproject === null))
+  assert.deepEqual((await service.salesOverview(period)).extensionColumns, [])
+  assert.ok(!(await service.salesOverview(period)).dimensions.some(d => d.key === "project"))
+  assert.ok((await service.salesReportRecords(period)).items.every(r => Object.keys(r.extensionValues).length === 0))
+  assert.ok(!parse(await service.exportEnquiries({}), { bom: true })[0].includes("Project"))
   assert.ok(!(await service.exportSalesReport(period)).includes('"Project"'))
   await assert.rejects(service.salesOverview({ ...period, projectId: project.id }), status(403))
   await assert.rejects(service.salesLeadBreakdown({ ...period, dimension: "project" }), status(403))
@@ -170,6 +177,36 @@ test("module-off reporting hides property context while preserving generic CRM a
   await assert.rejects(service.exportSalesReport(period), status(403))
   await assert.rejects(service.listEnquiries({}, true), status(403))
   await root.tenantModule.updateMany({ where: { tenantId: a }, data: { enabled: true } })
+})
+
+test("the same report and export services support a non-property extension and reject unknown dimensions", async () => {
+  const { createCrmService: createCore } = require("../modules/crm/service.ts")
+  const { noCrmExtensions, emptyReportExtension } = require("../modules/crm/extensions.ts")
+  const regionExtension = {
+    ...noCrmExtensions,
+    async decorate(_tx, _actor, _kind, items, exporting) {
+      return { items, metadata: {}, exportFields: exporting ? { headers: ["Region"], values: Object.fromEntries(items.map(row => [row.id, ["East"]])) } : undefined }
+    },
+    async report() {
+      return { ...emptyReportExtension, values: Prisma.sql`jsonb_build_object('region', 'East')`, columns: [{ key: "region", label: "Region" }],
+        dimensions: [{ key: "region", label: "Region", emptyLabel: "Not specified", value: Prisma.sql`"extensionValues"->>'region'`, display: Prisma.sql`"extensionValues"->>'region'` }] }
+    },
+  }
+  const generic = createCore(db, { tenantId: a, userId: admin.id }, regionExtension)
+  const overview = await generic.salesOverview(period)
+  assert.deepEqual(overview.extensionColumns, [{ key: "region", label: "Region" }])
+  const groups = await generic.salesLeadBreakdown({ ...period, dimension: "region" })
+  assert.equal(groups.items[0].leads, overview.totals.leads)
+  const rows = await generic.salesReportRecords({ ...period, dimension: "region", bucket: "East" })
+  assert.equal(rows.total, overview.totals.leads)
+  assert.ok(rows.items.every(row => row.extensionValues.region === "East"))
+  for (const csv of [await generic.exportSalesReport(period), await generic.exportEnquiries({}), await generic.exportOpportunities({})]) {
+    const parsed = parse(csv, { bom: true }), index = parsed[0].indexOf("Region")
+    assert.ok(index >= 0); assert.ok(!parsed[0].includes("Project"))
+    assert.ok(parsed.slice(1).every(row => row.length === parsed[0].length && row[index] === "East"))
+  }
+  await assert.rejects(generic.salesLeadBreakdown({ ...period, dimension: "region'); DROP TABLE x; --" }), status(403))
+  await assert.rejects(generic.salesReportRecords({ ...period, dimension: "project" }), status(403))
 })
 
 test("list exports reuse filters and ordering, ignore current page, and never widen staff access", async () => {
@@ -181,6 +218,12 @@ test("list exports reuse filters and ordering, ignore current page, and never wi
     assert.equal(exported.items[0].id, list.items[0].id)
     assert.equal((await reader[method]({ assignedUserId: other.id }, true)).items.length, 0)
     assert.equal((await second[method]({ sourceId: source.id }, true)).items.length, 0)
+    const download = method === "listEnquiries" ? "exportEnquiries" : "exportOpportunities"
+    const csv = parse(await reader[download](filters), { bom: true })
+    assert.equal(csv.length - 1, list.total)
+    assert.equal(csv[1][0], list.items[0].id)
+    assert.ok(csv[0].includes("Project"))
+    assert.equal(parse(await second[download]({ sourceId: source.id }), { bom: true }).length, 1)
   }
   assert.equal((await service.listEnquiries({ q: "Start boundary" }, true)).items[0].id, leads[0].id)
   assert.equal((await service.listOpportunities({ kind: "WON", sourceId: source.id }, true)).items.length, 3)

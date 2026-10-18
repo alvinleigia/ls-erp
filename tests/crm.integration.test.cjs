@@ -4,7 +4,7 @@ const assert = require("node:assert/strict")
 const { randomUUID } = require("node:crypto")
 const { Pool } = require("pg")
 const { PrismaClient } = require("@prisma/client")
-const { PrismaPg } = require("@prisma/adapter-pg")
+const { TenantPgAdapter } = require("../lib/tenant-pg-adapter.ts")
 const { createCrmService } = require("../modules/crm/service.ts")
 require("../lib/logger.ts").logger.info = () => {}
 
@@ -20,11 +20,9 @@ const pools = []
 function client(tenantId, admin = false) {
   const connection = new URL(rawUrl)
   if (!admin) { connection.username = "crm_test_runtime"; connection.password = "" }
-  const pool = new Pool({ connectionString: connection.toString(), max: 4,
-    ...(!admin ? { options: `-c app.tenant_id=${tenantId || ""} -c app.rls_bypass=off` } : {}),
-  })
+  const pool = new Pool({ connectionString: connection.toString(), max: 4 })
   pools.push(pool)
-  const db = new PrismaClient({ adapter: new PrismaPg(pool) })
+  const db = new PrismaClient({ adapter: new TenantPgAdapter(pool, { tenantId: tenantId || undefined, bypass: admin }) })
   clients.push(db)
   return db
 }
@@ -513,8 +511,9 @@ test("concurrent moves and stale edits cannot overwrite another salesperson chan
   const contact = await manager.createContact({ name: "Concurrent deal buyer" })
   const deal = await manager.createOpportunity(dealInput(pipeline, contact, staffA))
   const results = await Promise.allSettled([1, 2].map(index => staff.moveOpportunity(deal.id, { pipelineId: pipeline.id, stageId: pipeline.stages[index].id, version: 1 })))
-  assert.equal(results.filter(result => result.status === "fulfilled").length, 1)
-  assert.equal(results.find(result => result.status === "rejected").reason.status, 409)
+  const summary = results.map(result => result.status === "fulfilled" ? { status: result.status, id: result.value.id } : { status: result.status, code: result.reason.code, message: result.reason.message })
+  assert.equal(results.filter(result => result.status === "fulfilled").length, 1, JSON.stringify(summary))
+  assert.equal(results.find(result => result.status === "rejected").reason.status, 409, JSON.stringify(summary))
   await assert.rejects(staff.updateOpportunity(deal.id, { ...dealUpdate(deal), title: "Stale title" }), expectStatus(409))
   assert.equal(await root.crmOpportunityActivity.count({ where: { opportunityId: deal.id } }), 2)
 })
