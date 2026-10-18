@@ -1,5 +1,6 @@
 "use client"
 import { useTerminology } from "@/platform/terminology/provider"
+import { QuotationLineAddon } from "./line-addon"
 import type { QuotationContent } from "../quotation-validation"
 import { quotationContentSchema } from "../quotation-validation"
 import { calculateQuotation } from "../quotation-calculation"
@@ -47,6 +48,7 @@ export function QuotationContentFields({ value: v, onChange, disabled, template 
     </Section>
     <Section title="Price and discount" description="Quantity × rate. Enter the quantity and unit used for pricing.">
       {v.lines.map((item, i) => <div key={i} className="grid gap-3 rounded-lg border p-4 sm:grid-cols-2 lg:grid-cols-4">
+        {!template && <QuotationLineAddon id={`catalog-line-${i}`} line={item} currency={v.currency} disabled={disabled} onChange={line => set("lines", v.lines.map((r, n) => n === i ? line : r))} />}
         {field(`line-description-${i}`, "Description", item.description, description => set("lines", v.lines.map((r, n) => n === i ? { ...r, description } : r)))}
         {field(`line-quantity-${i}`, "Quantity / area", item.quantity, quantity => set("lines", v.lines.map((r, n) => n === i ? { ...r, quantity } : r)))}
         {field(`line-unit-${i}`, "Unit", item.unit, unit => set("lines", v.lines.map((r, n) => n === i ? { ...r, unit } : r)), "text", 40)}

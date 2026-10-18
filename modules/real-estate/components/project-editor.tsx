@@ -26,12 +26,13 @@ import type { Project } from "@/types/real-estate"
 import { ProjectSales, ProjectActivities } from "./project-sales"
 import { EditPanel, ReadOnlyFields, RecordMenu } from "@/components/erp/record-detail"
 import { AccessRecordTabs } from "@/platform/access/record-tabs"
+import { CatalogList } from "@/modules/catalog/components/item-list"
 
 const empty: Project = { id: "", name: "", code: "", parentId: null, developerAccountId: null, location: "", description: "", categories: [], lifecycle: "", priceMin: "", priceMax: "", currency: "", archived: false, version: 1 }
 export function ProjectEditor({ id, parentId = "" }: { id?: string; parentId?: string }) {
   const readTerm = useTerminologyReader()
   const term = useTerminology()
-  const { can } = useBusinessModules()
+  const { can, enabled } = useBusinessModules()
   const router = useRouter()
   const custom = useCustomFields("project", id)
   const loadCustom = custom.load
@@ -144,6 +145,7 @@ export function ProjectEditor({ id, parentId = "" }: { id?: string; parentId?: s
         { value: "overview", label: "Overview", content: overview },
         ...(!record.parentId ? [{ value: "subprojects", permission: "projects.read" as const, label: term("realEstate.subproject.plural", "Subprojects"), content: <ProjectList parentId={id} canManage={canManage} parentArchived={record.archived} /> }] : []),
         { value: "sales", label: "Sales", content: <ProjectSales project={{ ...record, canManage }} /> },
+        ...(enabled("catalog") && can("catalogItems.read") ? [{ value: "units", label: "Units", permission: "catalogItems.read" as const, content: <CatalogList embedded extensionKey="realEstate" contextId={id} newHref={`/catalog/new?projectId=${encodeURIComponent(id)}`} /> }] : []),
         { value: "activities", permission: "activities.read" as const, label: term("crm.activity.plural", "Activities"), content: <ProjectActivities project={record} /> },
         ...(canManage ? [{ value: "team", permission: "projects.assign" as const, label: "Team", content: record.parentId ? <Section title="Staff access"><p className="text-sm text-muted-foreground">{term("realEstate.project.singular", "Staff access is inherited from the parent project.", "Staff access is inherited from the parent {label}.")}</p><Button variant="outline" asChild><Link href={`/crm/projects/${record.parentId}`}>{term("realEstate.project.singular", "Manage parent project", "Manage parent {label}")}</Link></Button></Section> : <ProjectMembers id={id} version={record.version} archived={record.archived} onVersion={version => { change("version", version); setSaved(previous => previous ? { ...previous, version } : previous) }} /> }] : []),
       ]} />

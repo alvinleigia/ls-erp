@@ -1,9 +1,15 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
 const { test } = require('node:test')
 const assert = require('node:assert/strict')
-const { businessNavigation } = require('../application/navigation.ts')
+const { businessNavigation, catalogNavigation } = require('../application/navigation.ts')
 const { moduleEnabled, moduleChangeProblem } = require('../platform/modules.ts')
 const flags = keys => keys.map(key => ({ key, allowed: true, enabled: true }))
+test('catalog navigation is independent of CRM and respects activation and read access', () => {
+ assert.deepEqual(catalogNavigation(flags(['catalog']), ['catalogItems.read']).map(group=>group.key), ['catalog'])
+ assert.deepEqual(catalogNavigation(flags(['catalog']), []), [])
+ assert.deepEqual(catalogNavigation([]), [])
+ assert.deepEqual(catalogNavigation([{key:'catalog',allowed:false,enabled:true}]), [])
+})
 
 test('missing or revoked platform allowance hides modules even when activation is stale', () => {
  assert.equal(moduleEnabled([{key:'crm',enabled:true}], 'crm'), false)

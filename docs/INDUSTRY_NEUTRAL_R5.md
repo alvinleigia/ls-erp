@@ -1,3 +1,28 @@
+## Industry-neutral R5: released and live tenant reads verified (2026-10-18)
+
+Production release 740cfc527a47aae55b397c5572fde080500e42b5 is live on the verified
+leiwissen/ls-erp project. Both planned migrations applied (97 to 99). A fresh
+encrypted backup was restored in isolation and checked before migration; existing
+data, financial totals, identities, permissions and relationships reconciled.
+Runtime access was restored to its original role attributes. Existing Vercel
+environment settings were retained and the local project link was corrected.
+
+The tenant administrator subsequently signed in to the dedicated test browser.
+Live verification passed: dashboard connection; eight CRM desktop/mobile checks;
+13 project/enquiry/conversion-form/settings/list checks; and five disabled-module
+API denials. Screenshots were inspected. No client record/configuration writes were
+performed by these UI checks. Earlier runtime checks covered seven existing user
+contexts with 42 successful reads and six expected platform-scope denials.
+
+R5 is closed. The user chose to proceed without further client write-flow testing.
+The conversion form was opened without saving; quotation/payment-plan create,
+version and PDF behavior retain isolated-test evidence. No client pipeline setup
+or synthetic client record creation is pending as a release requirement.
+
+Private receipts and screenshots remain under ignored tmp/industry-release and
+backups/r5/643fd6867e3b; no customer records or credentials are included here.
+The earlier preparation entries below are historical, not pending release steps.
+
 # R5 — Target inventory and release rehearsal
 
 ## 2026-10-18: application recovery ownership and permissions verified

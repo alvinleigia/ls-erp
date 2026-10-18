@@ -5,6 +5,7 @@ export type PermissionAction = typeof permissionActions[number]
 const editable = ["read", "create", "edit"] as const
 const records = ["read", "create", "edit", "archive"] as const
 export const accessResources = {
+  catalogItems: { name: "Sales catalog items", module: "catalog", actions: records },
   dashboard: { name: "Business dashboard", module: "core", actions: ["read"] },
   auditLogs: { name: "Audit reports", module: "core", actions: ["read"] },
   users: { name: "User directory (administrative)", module: "core", actions: ["read"] },

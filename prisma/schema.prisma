@@ -803,6 +803,8 @@ model Organization {
 }
 
 model Tenant {
+  catalogItems CatalogItem[]
+  propertyUnits RealEstateUnit[]
   terminologyRevision TenantTerminologyRevision?
   terminology TenantTerminology[]
   enquiryImports CrmEnquiryImport[]
@@ -2008,6 +2010,7 @@ model InventoryStockMovement {
   @@index([occurredAt])
 }
 model RealEstateProject {
+  units RealEstateUnit[]
   customFieldValues RealEstateProjectFieldValue[]
   enquiryContexts RealEstateEnquiryContext[] @relation("EnquiryProject")
   subEnquiryContexts RealEstateEnquiryContext[] @relation("EnquirySubproject")
@@ -2124,6 +2127,7 @@ model RealEstateProjectStatus {
 }
 
 model RealEstatePropertyCategory {
+  units RealEstateUnit[]
   tenantId String
   id String @default(cuid())
   name String
@@ -2407,4 +2411,46 @@ model TenantRoleAssignment {
   role TenantAccessRole @relation(fields: [tenantId, roleId], references: [tenantId, id], onDelete: Restrict)
   @@id([tenantId, userId])
   @@index([tenantId, roleId])
+}
+
+model CatalogItem {
+  tenantId String
+  id String @default(cuid())
+  code String
+  name String
+  description String @default("")
+  kind String
+  unit String @default("unit")
+  price Decimal @db.Decimal(18, 4)
+  currency String
+  availability String @default("AVAILABLE")
+  archived Boolean @default(false)
+  version Int @default(1)
+  extensionKey String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  propertyUnit RealEstateUnit?
+  @@id([tenantId, id])
+  @@unique([tenantId, code])
+  @@index([tenantId, archived, availability, name, id])
+  @@index([tenantId, archived, name, id])
+  @@index([tenantId, extensionKey])
+}
+
+model RealEstateUnit {
+  tenantId String
+  itemId String
+  projectId String
+  categoryId String
+  bedrooms Int?
+  area Decimal? @db.Decimal(18, 4)
+  areaUnit String @default("SQ_FT")
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  item CatalogItem @relation(fields: [tenantId, itemId], references: [tenantId, id], onDelete: Restrict)
+  project RealEstateProject @relation(fields: [tenantId, projectId], references: [tenantId, id], onDelete: Restrict)
+  category RealEstatePropertyCategory @relation(fields: [tenantId, categoryId], references: [tenantId, id], onDelete: Restrict)
+  @@id([tenantId, itemId])
+  @@index([tenantId, projectId, itemId])
+  @@index([tenantId, categoryId])
 }

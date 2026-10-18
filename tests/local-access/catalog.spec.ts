@@ -1,0 +1,67 @@
+import { test, expect } from "@playwright/test"
+import { seed, login, json } from "./fixtures"
+
+test("catalog forms, property defaults and quotation selection share the saved unit", async ({ browser }, testInfo) => {
+  const fixture = await seed()
+  const { db, slug } = fixture
+  await db.query('INSERT INTO "TenantModule" ("tenantId",key,allowed,enabled,"updatedAt") VALUES ($1,\'catalog\',true,true,now())', [slug])
+  const projectId = `${slug}-project`, phaseId = `${slug}-phase`
+  await db.query('INSERT INTO "RealEstateProject" (id,"tenantId",name,code,"updatedAt") VALUES ($1,$2,\'Test apartments\',\'AP\',now())', [projectId, slug])
+  await db.query('INSERT INTO "RealEstateProject" (id,"tenantId","parentId",name,code,"updatedAt") VALUES ($1,$2,$3,\'Phase 1\',\'PH1\',now())', [phaseId, slug, projectId])
+  const session = await login(browser, fixture.origin, fixture.users.admin.email)
+  const { page, context } = session
+  try {
+    await page.goto(`/crm/projects/${phaseId}`)
+    await page.getByRole("tab", { name: "Units", exact: true }).click()
+    await page.getByRole("link", { name: "New item", exact: true }).click()
+    await expect(page).toHaveURL(new RegExp(`/catalog/new\\?projectId=${phaseId}`))
+    await page.getByLabel("Unique code", { exact: true }).fill("PH1-101")
+    await page.getByLabel("Name", { exact: true }).fill("Apartment 101")
+    await page.getByLabel("Price", { exact: true }).fill("7500000")
+    await expect(page.getByRole("combobox", { name: "Currency", exact: true })).toContainText("INR")
+    await page.locator("summary").filter({ hasText: "Property unit" }).click()
+    await expect(page.getByRole("combobox", { name: "Project", exact: true })).toContainText("Test apartments")
+    await expect(page.getByRole("combobox", { name: "Subproject (optional)", exact: true })).toContainText("Phase 1")
+    await page.getByRole("combobox", { name: "Property category", exact: true }).click()
+    await page.getByRole("option", { name: "Apartment", exact: true }).click()
+    await page.getByLabel("Bedrooms (0 for studio)").fill("2")
+    await page.getByLabel("Area (optional)").fill("1200")
+    await page.screenshot({ path: testInfo.outputPath("unit-create-desktop.png"), fullPage: true })
+    await page.getByRole("button", { name: "Save item", exact: true }).click()
+    await expect(page).toHaveURL(/\/catalog\/(?!new)[^/]+$/)
+    const itemId = page.url().split("/").pop()!
+    await expect(page.getByRole("heading", { name: "Apartment 101", exact: true })).toBeVisible()
+    await page.getByRole("button", { name: "Edit item details", exact: true }).click()
+    await page.getByLabel("Price", { exact: true }).fill("7600000")
+    await page.getByRole("button", { name: "Save item", exact: true }).click()
+    await expect(page.getByRole("dialog")).toHaveCount(0)
+    const saved = await json(context, `/api/catalog/items/${itemId}`)
+    expect(saved.price).toBe("7600000"); expect(saved.extension.projectId).toBe(phaseId)
+    await page.setViewportSize({ width: 390, height: 844 })
+    await page.screenshot({ path: testInfo.outputPath("unit-overview-mobile.png"), fullPage: true })
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+    await page.setViewportSize({ width: 1280, height: 900 })
+    await page.goto(`/crm/projects/${projectId}`)
+    await page.getByRole("tab", { name: "Units", exact: true }).click()
+    await expect(page.getByRole("link", { name: "PH1-101", exact: true })).toBeVisible()
+    await page.screenshot({ path: testInfo.outputPath("project-units.png"), fullPage: true })
+    const contact = await json(context, "/api/crm/contacts", 201, "POST", { name: "Catalog test buyer" })
+    // Seed only isolated pipeline/owner records to focus this walkthrough on the new feature.
+    const pipeline = `${slug}-pipeline`, stage = `${slug}-stage`
+    await db.query('INSERT INTO "CrmPipeline" (id,"tenantId",name,"updatedAt") VALUES ($1,$2,\'Test sales\',now())',[pipeline,slug])
+    await db.query('INSERT INTO "CrmStage" (id,"tenantId","pipelineId",name,position,probability,color) VALUES ($1,$2,$3,\'Qualified\',0,10,\'#123456\')',[stage,slug,pipeline])
+    const deal = await json(context, "/api/crm/opportunities", 201, "POST", { title: "Catalog test deal", contactId: contact.id, assignedUserId: fixture.users.admin.id, pipelineId: pipeline, stageId: stage, amount: "0", currency: "INR", expectedCloseOn: "2027-12-31" })
+    await page.goto(`/crm/quotations/new?opportunityId=${deal.id}`)
+    await page.locator("summary").filter({ hasText: "Price and discount" }).click()
+    await page.getByRole("combobox", { name: "Catalog item (optional)", exact: true }).click()
+    await page.getByRole("option", { name: /Apartment 101/ }).click()
+    await expect(page.getByLabel("Rate per unit", { exact: true })).toHaveValue("7600000")
+    await expect(page.getByLabel("Quantity / area", { exact: true })).toHaveValue("1")
+    await page.screenshot({ path: testInfo.outputPath("quotation-unit.png"), fullPage: true })
+    await page.getByRole("button", { name: "Save document", exact: true }).click()
+    await expect(page).toHaveURL(/\/crm\/quotations\/(?!new)[^/]+$/)
+    const quotation = await json(context, `/api/crm/quotations/${page.url().split("/").pop()}`)
+    expect(quotation.snapshot.items[0].itemId).toBe(itemId)
+    expect((await json(context, `/api/catalog/items/${itemId}`)).availability).toBe("AVAILABLE")
+  } finally { await context.close(); await db.end() }
+})

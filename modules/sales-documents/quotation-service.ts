@@ -6,7 +6,7 @@ import type { Prisma } from "@prisma/client"
 import { BusinessError, type BusinessActor } from "@/platform/policy"
 import { quotationListSchema, quotationSaveSchema, quotationTemplateSchema, emptyQuotationContent, type QuotationContent } from "./quotation-validation"
 import { calculateQuotation, type QuotationCalculation } from "./quotation-calculation"
-import type { QuotationDependencies } from "./quotation-contracts"
+import type { QuotationDependencies, QuotationItemReference } from "./quotation-contracts"
 import type { AppSettingsPayload } from "@/types/scheduling"
 import { createTermResolver } from "@/platform/terminology/resolver"
 import { quotationDocumentLabels, type QuotationDocumentLabels } from "./quotation-labels"
@@ -14,6 +14,7 @@ import { quotationDocumentLabels, type QuotationDocumentLabels } from "./quotati
 type Tx = Prisma.TransactionClient
 export type QuotationSnapshot = {
   labels?: QuotationDocumentLabels;
+  items?: QuotationItemReference[];
   content: QuotationContent; calculation: QuotationCalculation;
   customer: { name: string; email: string | null; phone: string | null };
   opportunity: string; actor: string; template: { id: string; name: string; version: number } | null;
@@ -24,7 +25,7 @@ const json = (value: unknown): Prisma.InputJsonValue => JSON.parse(JSON.stringif
 const page = <T>(items: T[], total: number, q: { page: number; pageSize: number }) => ({ items, total, page: q.page, pageSize: q.pageSize, totalPages: Math.max(1, Math.ceil(total / q.pageSize)) })
 function calculate(content: QuotationContent) { try { return calculateQuotation(content) } catch (error) { throw new BusinessError(400, (error as Error).message) } }
 const canManageTemplates = (role: string) => role === "ADMIN" || role === "MANAGER"
-export function createQuotationService({ run: checkedRun, audit, opportunityScope, documentContext, readTerms }: QuotationDependencies) {
+export function createQuotationService({ run: checkedRun, audit, opportunityScope, documentContext, readTerms, resolveItems }: QuotationDependencies) {
   function run<T>(requirement: Requirement, operation: (tx: Tx, actor: BusinessActor, paymentPlans: boolean) => Promise<T>) {
     return checkedRun(requirement, async (tx, actor) => {
       const flags = await tx.tenantModule.findMany({ where: { tenantId: actor.tenantId } })
@@ -73,6 +74,7 @@ export function createQuotationService({ run: checkedRun, audit, opportunityScop
     },
     saveQuotationTemplate(input: unknown, id?: string) {
       const data = quotationTemplateSchema.parse(input)
+      if (data.content.lines.some(line => line.catalogItemId)) throw new BusinessError(400, "Select catalog items on individual quotations, not reusable templates.")
       // Templates may have zero prices; evaluate the percentage schedule when used.
       if (data.content.bookingDate || data.content.validUntil) throw new BusinessError(400, termText("salesDocuments.quotation.plural", "Set dates on individual quotations, not on reusable templates.", "Set dates on individual {label}, not on reusable templates."))
       return run(id ? "quotationTemplates.edit" : "quotationTemplates.create", async (tx, actor, paymentPlans) => {
@@ -118,6 +120,8 @@ export function createQuotationService({ run: checkedRun, audit, opportunityScop
         if (before && before.opportunityId !== opportunityId) throw new BusinessError(404, termText("salesDocuments.quotation.singular", "Quotation not found.", "{label} not found."))
         if (before && data.version !== before.version) throw new BusinessError(409, termText("salesDocuments.quotation.singular", "This quotation changed. Refresh before saving.", "This {label} changed. Refresh before saving."))
         const prior = before ? await tx.crmQuotationRevision.findUniqueOrThrow({ where: { tenantId_quotationId_number: { tenantId: actor.tenantId, quotationId: before.id, number: before.version } } }) : null
+        if (!resolveItems && data.content.lines.some(line => line.catalogItemId)) throw new BusinessError(400, "Catalog selection is not available.")
+        const items = await resolveItems?.(tx, actor, data.content, prior ? (prior.snapshot as unknown as QuotationSnapshot).items || [] : []) || []
         assertScheduleWrite(paymentPlans, data.content, prior ? (prior.snapshot as unknown as QuotationSnapshot).content : undefined)
         const template = data.templateId ? await tx.crmQuotationTemplate.findFirst({ where: { tenantId: actor.tenantId, id: data.templateId, archived: false }, select: { id: true, name: true, version: true } }) : null
         if (data.templateId && !template) throw new BusinessError(400, "Choose an active template.")
@@ -126,6 +130,7 @@ export function createQuotationService({ run: checkedRun, audit, opportunityScop
         const term = createTermResolver(await readTerms?.(tx, actor) || {})
         const context = await documentContext?.(tx, actor, row.id, term) || []
         const snapshot: QuotationSnapshot = { labels: quotationDocumentLabels(term), content: data.content, calculation, context, customer: { name: row.contact.name, email: row.contact.email, phone: row.contact.phone }, opportunity: row.title, actor: author.name || "Staff", template, locale: settings?.locale || "en-US", dateFormat: settings?.dateFormat || "yyyy-MM-dd", numberFormat: settings?.numberFormat || "US_UK", currencySymbolPlacement: settings?.currencySymbolPlacement || "BEFORE" }
+        snapshot.items = items
         const values = { title: data.content.title, currency: data.content.currency, consideration: calculation.consideration }
         if (before) await tx.crmQuotation.updateMany({ where: { tenantId: actor.tenantId, id, version: before.version }, data: { ...values, version: { increment: 1 } } })
         else recordId = (await tx.crmQuotation.create({ data: { ...values, tenantId: actor.tenantId, opportunityId } })).id

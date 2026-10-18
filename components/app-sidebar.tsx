@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { workforceNavigation, businessNavigation, inventoryNavigation, appointmentsNavigation, servicesNavigation } from "@/application/navigation"
+import { workforceNavigation, businessNavigation, catalogNavigation, inventoryNavigation, appointmentsNavigation, servicesNavigation } from "@/application/navigation"
 import { useTerminology } from "@/platform/terminology/provider"
 import { useBusinessModules } from "@/platform/module-provider"
 import Link from "next/link"
@@ -150,6 +150,7 @@ export function AppSidebar() {
           ],
         },
         ...inventoryNavigation(flags, permissions),
+        ...catalogNavigation(flags, permissions),
         ...appointmentsNavigation(flags, permissions),
         ...servicesNavigation(flags, permissions),
         {

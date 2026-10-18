@@ -4,8 +4,8 @@ import { SearchableSelect } from "@/components/searchable-select"
 import type { ListResponse } from "@/types/api"
 
 type Option = { value: string; label: string }
-export function RecordSelect({ endpoint, value, selected, onChange, id, disabled = false, labelField = "name", placeholder = "Search and select…", preferSelectedOption = false }: {
-  endpoint: string; value: string; selected?: Option; onChange: (value: string, option?: Option) => void; id: string; disabled?: boolean; labelField?: "name" | "title"; placeholder?: string; preferSelectedOption?: boolean;
+export function RecordSelect({ endpoint, value, selected, onChange, id, disabled = false, labelField = "name", placeholder = "Search and select…", preferSelectedOption = false, showCode = false }: {
+  endpoint: string; value: string; selected?: Option; onChange: (value: string, option?: Option) => void; id: string; disabled?: boolean; labelField?: "name" | "title"; placeholder?: string; preferSelectedOption?: boolean; showCode?: boolean;
 }) {
   const [q, setQ] = React.useState("")
   const [options, setOptions] = React.useState<Option[]>([])
@@ -17,16 +17,16 @@ export function RecordSelect({ endpoint, value, selected, onChange, id, disabled
       try {
         const response = await fetch(`${endpoint}${endpoint.includes("?") ? "&" : "?"}pageSize=20&q=${encodeURIComponent(q)}`, { signal: controller.signal, cache: "no-store" })
         if (!response.ok) throw new Error("Unable to load choices.")
-        const data: ListResponse<{ id: string; name?: string | null; title?: string }> = await response.json()
+        const data: ListResponse<{ id: string; name?: string | null; title?: string; code?: string }> = await response.json()
         if (controller.signal.aborted) return
-        setOptions(data.items.map(row => ({ value: row.id, label: row[labelField] || "Unnamed record" })))
+        setOptions(data.items.map(row => ({ value: row.id, label: `${showCode && row.code ? row.code + " · " : ""}${row[labelField] || "Unnamed record"}` })))
         setMessage(data.total > 20 ? "Refine your search to find more choices." : "No matching records.")
       } catch {
         if (!controller.signal.aborted) { setOptions([]); setMessage("Unable to load choices. Try searching again.") }
       }
     }, 200)
     return () => { clearTimeout(timer); controller.abort() }
-  }, [endpoint, q, labelField])
+  }, [endpoint, q, labelField, showCode])
   const retained = picked?.value === value ? picked : selected
   function search(next: string) {
     if (next === q) return

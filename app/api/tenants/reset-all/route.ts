@@ -83,6 +83,8 @@ const hardDeleteTenantData = async (tenantId: string) => {
     )
 
     await tx.tenantTerminology.deleteMany({ where: { tenantId } })
+    await tx.realEstateUnit.deleteMany({ where: { tenantId } })
+    await tx.catalogItem.deleteMany({ where: { tenantId } })
     await tx.tenantTerminologyRevision.deleteMany({ where: { tenantId } })
     await tx.tenant.delete({ where: { id: tenantId } })
   })

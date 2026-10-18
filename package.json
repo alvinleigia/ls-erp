@@ -46,6 +46,8 @@
     "db:reset": "prisma migrate reset",
     "bootstrap:admin": "node scripts/bootstrap-admin.mjs",
     "test:crm:quotations": "node --require ./tests/register.cjs --test tests/quotation-calculation.test.cjs",
+    "test:catalog": "node scripts/test-catalog.cjs",
+    "test:catalog:browser": "node scripts/test-catalog.cjs --browser",
     "test:crm:quotations:integration": "node --require ./tests/register.cjs --test --test-force-exit tests/quotations.integration.test.cjs",
     "test:access:integration": "node --require ./tests/register.cjs --test --test-force-exit tests/access-roles.integration.test.cjs tests/access-role-migration.test.cjs",
     "test:access:e2e": "playwright test --config playwright.local-access.config.ts access.spec.ts",

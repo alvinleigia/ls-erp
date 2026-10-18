@@ -10,6 +10,12 @@ const matches = (base: string, current: string) => current === base || current.s
 const configMatches = (group: typeof crmConfigurationGroups[number], current: string) => group.items.some(item => matches(item.href, current))
 const entry = (title: string, href: string, icon: typeof UsersIcon, isActive = (current: string) => matches(href, current)) => ({ title, href, icon, isActive })
 
+export function catalogNavigation(flags: ModuleFlag[], permissions?: Permission[]) {
+  if (!moduleEnabled(flags, "catalog") || !satisfies({ permissions }, "catalogItems.read")) return []
+  const items = [entry("Products and units", "/catalog", PackageIcon)]
+  return [{ key: "catalog", title: "Sales Catalog", icon: PackageIcon, href: "/catalog", items, isActive: (current: string) => matches("/catalog", current) }]
+}
+
 export function inventoryNavigation(flags: ModuleFlag[], permissions?: Permission[]) {
   if (!moduleEnabled(flags, "inventory")) return []
   const items = [entry("Products", "/inventory", PackageIcon, current => current === "/inventory"), entry("Categories", "/inventory/categories", TagIcon), entry("Suppliers", "/inventory/suppliers", UsersIcon), entry("Purchases", "/inventory/purchases", CalendarClockIcon)]
