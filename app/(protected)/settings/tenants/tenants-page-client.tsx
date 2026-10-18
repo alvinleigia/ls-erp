@@ -626,14 +626,15 @@ export default function TenantsPageClient({
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
+      <div className="flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
           <h1 className="text-2xl font-semibold">Tenants</h1>
           <p className="text-sm text-muted-foreground">
             Provision tenant accounts and assign an initial admin user.
           </p>
         </div>
         <Button
+          className="shrink-0"
           onClick={() => {
             clearErrors()
             setFormValues(defaultFormValues)

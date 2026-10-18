@@ -472,8 +472,8 @@ export default function OrganizationsPageClient({
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
+      <div className="flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
           <h1 className="text-2xl font-semibold">Organizations</h1>
           <p className="text-sm text-muted-foreground">
             Manage parent companies that will own groups of business tenants.
@@ -481,6 +481,7 @@ export default function OrganizationsPageClient({
         </div>
         {canCreateOrganizations ? (
           <Button
+            className="shrink-0"
             onClick={() => {
               clearErrors()
               setFormValues(defaultFormValues)

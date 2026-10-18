@@ -33,10 +33,10 @@ export default async function ProtectedLayout({
 
   return (
     <BusinessModuleProvider key={`${tenant.id}:${session.user.id}:${currentUser.role}`} active={businessWorkspace}><TerminologyProvider active={businessWorkspace}><ApplicationAccessProvider><SidebarProvider>
-      <div className="flex min-h-screen w-full">
+      <div className="flex min-h-screen w-full min-w-0">
         <AppSidebar />
 
-        <main className="flex-1 p-6">
+        <main className="min-w-0 flex-1 p-6">
           <SidebarTrigger />
           <div className="mt-6">{children}</div>
         </main>
