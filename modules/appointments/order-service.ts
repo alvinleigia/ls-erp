@@ -1,4 +1,5 @@
 import type { Prisma } from "@prisma/client"
+import { readDocumentBranding } from "@/platform/branding/read"
 import { AppointmentStatus } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 import { recordDomainAuditEvent } from "@/lib/domain-audit"
@@ -53,6 +54,7 @@ export async function createOrder(actor: BusinessActor, input: AppointmentOrderC
       const created = await tx.appointmentOrder.create({
         data: {
           tenantId,
+          invoiceBranding: await readDocumentBranding(tx, tenantId) as unknown as Prisma.InputJsonValue,
           customerId: resolved.customerId,
           appointmentDate: resolved.appointmentDate,
           appointmentStartAt: resolved.appointmentStartAt,

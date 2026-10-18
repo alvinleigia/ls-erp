@@ -1,4 +1,6 @@
 import { termText } from "@/platform/terminology/message"
+import { readDocumentBranding } from "@/platform/branding/read"
+import type { DocumentBranding } from "@/platform/branding/types"
 import { requireWriteFields } from "@/platform/access/policy"
 import type { Requirement } from "@/platform/access/catalog"
 import { moduleEnabled } from "@/platform/modules"
@@ -13,6 +15,7 @@ import { quotationDocumentLabels, type QuotationDocumentLabels } from "./quotati
 
 type Tx = Prisma.TransactionClient
 export type QuotationSnapshot = {
+  branding?: DocumentBranding | null;
   labels?: QuotationDocumentLabels;
   items?: QuotationItemReference[];
   content: QuotationContent; calculation: QuotationCalculation;
@@ -51,7 +54,7 @@ export function createQuotationService({ run: checkedRun, audit, opportunityScop
     quotationDefaults(opportunityId: string) {
       return run("quotations.create", async (tx, actor, paymentPlans) => {
         const row = await opportunity(tx, actor, opportunityId)
-        const tenant = await tx.tenant.findUniqueOrThrow({ where: { id: actor.tenantId }, select: { name: true } })
+        const tenant = await readDocumentBranding(tx, actor.tenantId)
         const term = createTermResolver(await readTerms?.(tx, actor) || {})
         const context = await documentContext?.(tx, actor, row.id, term) || []
         return { paymentPlansEnabled: paymentPlans, opportunity: row.title, context, content: { ...emptyQuotationContent, title: term("salesDocuments.quotation.singular", emptyQuotationContent.title), supplierName: tenant.name, currency: row.currency, lines: [{ description: row.title, quantity: "1", unit: "", rate: row.amount.toString() }] } }
@@ -131,6 +134,7 @@ export function createQuotationService({ run: checkedRun, audit, opportunityScop
         const context = await documentContext?.(tx, actor, row.id, term) || []
         const snapshot: QuotationSnapshot = { labels: quotationDocumentLabels(term), content: data.content, calculation, context, customer: { name: row.contact.name, email: row.contact.email, phone: row.contact.phone }, opportunity: row.title, actor: author.name || "Staff", template, locale: settings?.locale || "en-US", dateFormat: settings?.dateFormat || "yyyy-MM-dd", numberFormat: settings?.numberFormat || "US_UK", currencySymbolPlacement: settings?.currencySymbolPlacement || "BEFORE" }
         snapshot.items = items
+        snapshot.branding = prior ? (prior.snapshot as unknown as QuotationSnapshot).branding || null : await readDocumentBranding(tx, actor.tenantId)
         const values = { title: data.content.title, currency: data.content.currency, consideration: calculation.consideration }
         if (before) await tx.crmQuotation.updateMany({ where: { tenantId: actor.tenantId, id, version: before.version }, data: { ...values, version: { increment: 1 } } })
         else recordId = (await tx.crmQuotation.create({ data: { ...values, tenantId: actor.tenantId, opportunityId } })).id

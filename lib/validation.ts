@@ -1,4 +1,9 @@
 import { z } from "zod"
+export const brandingUpdateSchema = z.object({
+  name: z.string().trim().max(200),
+  version: z.coerce.number().int().nonnegative(),
+  removeLogo: z.enum(["true", "false"]).default("false"),
+}).strict()
 import { tenantModuleSelection } from "@/platform/module-validation"
 // Module-owned schemas are re-exported here for the existing validation convention.
 export * from "@/modules/crm/validation"

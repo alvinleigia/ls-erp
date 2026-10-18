@@ -32,7 +32,7 @@ export function QuotationContentFields({ value: v, onChange, disabled, template 
       {!template && <>{field("booking-date", "Booking date (optional)", v.bookingDate, s => set("bookingDate", s), "date")}{field("valid-until", "Valid until (optional)", v.validUntil, s => set("validUntil", s), "date")}</>}
       {field("registration", "Registration reference (optional)", v.registration, s => set("registration", s))}
       {field("registration-url", "Registration link for QR code (optional)", v.registrationUrl, s => set("registrationUrl", s), "url", 1000)}
-      <FormField id="quote-logo" label="Logo (PNG, optional)" error={errors["quote-logo"]}><Input id="quote-logo" type="file" accept="image/png" onChange={async event => {
+      <FormField id="quote-logo" label="Logo override (PNG, optional)" error={errors["quote-logo"]}><p className="text-sm text-muted-foreground">Without an override, new quotations use the business logo from Settings → Branding. Saved quotations retain their original branding.</p><Input id="quote-logo" type="file" accept="image/png" onChange={async event => {
         const file = event.target.files?.[0]; if (!file) return
         if (file.size > 290000) { onError("Use a PNG logo up to 290 KB."); return }
         const reader = new FileReader(); reader.onload = () => { const data = String(reader.result), result = quotationContentSchema.shape.logoDataUrl.safeParse(data); if (!result.success) onError(result.error.issues[0].message); else set("logoDataUrl", data) }; reader.readAsDataURL(file)

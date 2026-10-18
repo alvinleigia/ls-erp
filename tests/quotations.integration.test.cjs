@@ -37,6 +37,17 @@ before(async()=>{
 })
 after(async()=>{await Promise.all(clients.map(c=>c.$disconnect()));await Promise.all(pools.map(p=>p.end()))})
 
+test('tenant logo references are captured once and later branding changes preserve saved quotations',async()=>{
+ const logo={path:`${tenant}/11111111-1111-1111-1111-111111111111/document.png`,width:1200,height:400,bytes:1000}
+ await root.appSetting.upsert({where:{tenantId:tenant},create:{tenantId:tenant,branding:{name:'Original brand',logo:{document:logo,sidebar:{...logo,path:logo.path.replace('document.png','sidebar.webp')}}}},update:{}})
+ assert.equal((await crm.quotationDefaults(deal.id)).content.supplierName,'Original brand')
+ const q=await crm.saveQuotation(deal.id,{content:content()})
+ await root.appSetting.update({where:{tenantId:tenant},data:{branding:{name:'New brand'}}})
+ await crm.saveQuotation(deal.id,{content:content(),version:1},q.id)
+ for(const revision of [1,2]){const saved=await crm.getQuotation(q.id,revision);assert.equal(saved.snapshot.branding.logo.path,logo.path);assert.equal(saved.snapshot.branding.name,'Original brand')}
+ await root.appSetting.update({where:{tenantId:tenant},data:{branding:{}}})
+})
+
 test('document contract supports non-property context without installing a CRM extension',async()=>{
  const { createCrmService: coreService } = require('../modules/crm/service.ts')
  const { createQuotationService } = require('../modules/sales-documents/quotation-service.ts')

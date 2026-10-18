@@ -1,4 +1,6 @@
 import { prisma } from "@/lib/prisma"
+import type { DocumentBranding } from "@/platform/branding/types"
+import { downloadDocumentLogo } from "@/platform/branding/storage"
 import { businessDisplayName } from "@/lib/branding"
 import { recordDomainAuditEventSafe } from "@/lib/domain-audit"
 import { canSendConfiguredEmail, mailer, mailFrom } from "@/lib/mailer"
@@ -18,7 +20,9 @@ async function invoiceSource(tenantId: string, id: string) {
     } }),
     prisma.tenant.findUnique({ where: { id: tenantId }, select: { name: true } }),
   ])
-  return { order: serializeAppointmentOrder(order), businessName: businessDisplayName(tenant?.name), settings: settings ?? undefined }
+  const branding = order.invoiceBranding as DocumentBranding | null
+  return { order: serializeAppointmentOrder(order), businessName: businessDisplayName(branding?.name || tenant?.name),
+    logo: branding?.logo ? await downloadDocumentLogo(branding.logo.path) : undefined, settings: settings ?? undefined }
 }
 
 export async function generateInvoice(tenantId: string, id: string) {

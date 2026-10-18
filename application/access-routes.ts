@@ -27,7 +27,7 @@ const configurationRequirement = (index: number): Requirement => ({ any: crmConf
 
 export const applicationRouteAccess = createRouteAccess({
   resources: routes,
-  exactResources: { "/settings": "businessSettings" },
+  exactResources: { "/settings": "businessSettings", "/settings/branding": "businessSettings" },
   exactRequirements: {
     "/crm/enquiries/import": ["enquiries.create", "contacts.create"],
     "/settings": "businessSettings.read",

@@ -72,7 +72,7 @@ type NavSection = {
 
 const navItems = [{ title: "Dashboard", href: "/", icon: LayoutDashboardIcon }]
 
-export function AppSidebar() {
+export function AppSidebar({ brandingLogo, brandingName }: { brandingLogo?: string; brandingName?: string } = {}) {
   const { data: session } = useSession()
   const { theme, setTheme } = useTheme()
   const pathname = usePathname()
@@ -201,6 +201,7 @@ export function AppSidebar() {
               ]
           : [
               { title: "General", href: "/settings", icon: SettingsIcon, isActive: (current) => current === "/settings" },
+              { title: "Branding", href: "/settings/branding", icon: Building2Icon, isActive: (current) => current === "/settings/branding" },
               { title: "Access roles", href: "/settings/roles", icon: UsersIcon, isActive: (current) => current.startsWith("/settings/roles") },
               { title: "Modules", href: "/settings/modules", icon: PackageIcon, isActive: (current) => current === "/settings/modules" },
               { title: "Terminology", href: "/settings/terminology", icon: TagIcon, isActive: (current) => current === "/settings/terminology" },
@@ -217,6 +218,7 @@ export function AppSidebar() {
         if (item.href === "/reports/audit-logs") return can("auditLogs.read")
         if (item.href === "/users") return can("users.read")
         if (item.href === "/settings") return can("businessSettings.read")
+        if (item.href === "/settings/branding") return role === "ADMIN" && can("businessSettings.read")
         if (item.href === "/settings/taxes") return can("taxRates.read")
         return true
       })
@@ -238,13 +240,13 @@ export function AppSidebar() {
           {!logoLoadFailed ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
-              src="/assets/images/logo.png"
-              alt="Leiweissen ERP"
-              className="h-auto w-[150px] max-w-full object-contain"
+              src={brandingLogo || "/assets/images/logo.png"}
+              alt={brandingLogo ? brandingName || "Business logo" : "Leiweissen ERP"}
+              className="h-auto max-h-24 w-[150px] max-w-full object-contain"
               onError={() => setLogoLoadFailed(true)}
             />
           ) : (
-            <div className="text-sm font-semibold">Leiweissen ERP</div>
+            <div className="text-sm font-semibold">{brandingName || "Leiweissen ERP"}</div>
           )}
         </div>
       </SidebarHeader>

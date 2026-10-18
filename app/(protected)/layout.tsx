@@ -9,6 +9,8 @@ import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { auth } from "@/auth";
 import { resolveTenantFromServerHeaders } from "@/lib/tenancy";
 import { prisma, runWithTenantDbContext } from "@/lib/prisma";
+import { logoUrl, storageReady } from "@/platform/branding/storage";
+import type { TenantBranding } from "@/platform/branding/types";
 
 export default async function ProtectedLayout({
   children,
@@ -30,11 +32,14 @@ export default async function ProtectedLayout({
   }))
   if (!currentUser) redirect("/auth/signin?sessionExpired=1")
   const businessWorkspace = canUseCrm(currentUser.role) && tenant.slug !== (process.env.PLATFORM_ADMIN_TENANT_SLUG?.trim().toLowerCase() || "platform")
+  const settings = businessWorkspace ? await runWithTenantDbContext(tenant.id, () => prisma.appSetting.findUnique({ where: { tenantId: tenant.id }, select: { branding: true } })) : null
+  const branding = (settings?.branding || {}) as TenantBranding
+  const sidebarLogo = branding.logo && storageReady() ? logoUrl(branding.logo.sidebar.path) : undefined
 
   return (
     <BusinessModuleProvider key={`${tenant.id}:${session.user.id}:${currentUser.role}`} active={businessWorkspace}><TerminologyProvider active={businessWorkspace}><ApplicationAccessProvider><SidebarProvider>
       <div className="flex min-h-screen w-full min-w-0">
-        <AppSidebar />
+        <AppSidebar key={sidebarLogo || "default"} brandingLogo={sidebarLogo} brandingName={branding.name || tenant.name} />
 
         <main className="min-w-0 flex-1 p-6">
           <SidebarTrigger />

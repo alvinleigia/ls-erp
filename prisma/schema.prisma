@@ -1151,6 +1151,7 @@ model Appointment {
 
 model AppointmentOrder {
   id                  String                        @id @default(cuid())
+  invoiceBranding     Json?
   tenantId            String?
   customerId          String
   appointmentDate     DateTime                      @db.Date
@@ -1283,6 +1284,8 @@ model TenantTerminology {
 
 model AppSetting {
   id                        String                  @id @default(cuid())
+  branding                  Json                    @default("{}")
+  brandingVersion           Int                     @default(0)
   tenantId                  String
   locale                    String                  @default("en-US")
   currency                  String                  @default("USD")

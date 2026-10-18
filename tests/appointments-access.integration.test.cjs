@@ -88,6 +88,9 @@ test('coupon CRUD, tenant isolation and separate archive permissions are enforce
 test('draft bookings create/edit with saved totals; invoice export is distinct from email permission',async()=>{
  await perms(['appointments.read','appointments.create','services.read'])
  order=(await ok(await call('/orders','POST',bookingPayload(),undefined,'MANAGER'),201)).order
+ const savedBranding=(await root.query('SELECT "invoiceBranding" FROM "AppointmentOrder" WHERE id=$1',[order.id])).rows[0].invoiceBranding
+ assert.equal(savedBranding.name,a);assert.equal(savedBranding.logo,null)
+ await root.query('UPDATE "Tenant" SET name=\'Changed invoice identity\' WHERE id=$1',[a])
  assert.equal(order.totalCents,12000)
  assert.equal((await call('/orders/[id]','PATCH',{customerNote:'Denied'},order.id,'MANAGER')).status,403)
  await perms(['appointments.read','appointments.edit','services.read'])
@@ -96,6 +99,8 @@ test('draft bookings create/edit with saved totals; invoice export is distinct f
  assert.equal((await call('/orders/[id]/invoice','GET',undefined,order.id,'MANAGER')).status,403)
  await perms(['appointments.read','appointments.export'])
  const pdf=await call('/orders/[id]/invoice','GET',undefined,order.id,'MANAGER');assert.equal(pdf.status,200);assert.ok((await pdf.arrayBuffer()).byteLength>500)
+ assert.equal(renderedInvoices.at(-1).businessName,savedBranding.name)
+ await root.query('UPDATE "Tenant" SET name=id WHERE id=$1',[a])
  assert.equal((await call('/orders/[id]/invoice-email','POST',{},order.id,'MANAGER')).status,403)
  assert.equal((await call('/orders/[id]','GET',undefined,order.id,'ADMIN',b)).status,404)
  const audits=(await root.query('SELECT * FROM "AuditLog" WHERE "entityId"=$1 AND event LIKE \'appointments.order.%\' ORDER BY "createdAt"',[order.id])).rows
@@ -767,7 +772,7 @@ test('invoice paths use saved prices and product lines with tenant timezone, eve
   assert.equal(response.status,200);assert.match(response.headers.get('content-disposition'),/^attachment;/);assert.equal(response.headers.get('cache-control'),'no-store')
   const bytes=Buffer.from(await response.arrayBuffer());assert.ok(bytes.length>500)
   const source=renderedInvoices.at(-1);assert.equal(source.order.totalCents,saved.totalCents);assert.equal(source.order.lines[0].unitPriceCents,saved.lines[0].unitPriceCents)
-  assert.equal(source.order.productLines.length,1);assert.equal(source.settings.timeZone,'Asia/Kolkata');assert.equal(source.businessName,'Invoice Test Business')
+  assert.equal(source.order.productLines.length,1);assert.equal(source.settings.timeZone,'Asia/Kolkata');assert.equal(source.businessName,a,'Invoice keeps the business identity saved when the order was created')
   require('node:fs').writeFileSync(path.resolve(__dirname,'../tmp/r2d15-invoice.pdf'),bytes)
   assert.equal((await call('/orders/[id]/invoice','GET',undefined,saved.id,'ADMIN',b)).status,404)
   const sentBefore=sentMail.length

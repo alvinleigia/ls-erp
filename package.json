@@ -48,6 +48,7 @@
     "test:crm:quotations": "node --require ./tests/register.cjs --test tests/quotation-calculation.test.cjs",
     "test:catalog": "node scripts/test-catalog.cjs",
     "test:catalog:browser": "node scripts/test-catalog.cjs --browser",
+    "test:branding": "node scripts/test-branding.cjs",
     "test:crm:quotations:integration": "node --require ./tests/register.cjs --test --test-force-exit tests/quotations.integration.test.cjs",
     "test:access:integration": "node --require ./tests/register.cjs --test --test-force-exit tests/access-roles.integration.test.cjs tests/access-role-migration.test.cjs",
     "test:access:e2e": "playwright test --config playwright.local-access.config.ts access.spec.ts",
@@ -66,6 +67,7 @@
     "@radix-ui/react-separator": "^1.1.8",
     "@radix-ui/react-slot": "^1.2.4",
     "@radix-ui/react-tooltip": "^1.2.8",
+    "@supabase/supabase-js": "^2.118.0",
     "@syncfusion/ej2-react-schedule": "^29.2.0",
     "@tanstack/react-table": "^8.21.3",
     "bcryptjs": "^3.0.3",
@@ -88,6 +90,7 @@
     "react-day-picker": "^10.0.1",
     "react-dom": "19.2.3",
     "recharts": "^3.7.0",
+    "sharp": "^0.34.5",
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.4.0",
     "zod": "^4.3.6"

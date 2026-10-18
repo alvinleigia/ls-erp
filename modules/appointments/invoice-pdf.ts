@@ -15,6 +15,7 @@ import { wallTime } from "@/lib/business-time"
 import { DEFAULT_DATE_FORMAT, formatDateForDisplay } from "@/lib/date"
 
 type InvoiceInput = {
+  logo?: Uint8Array
   businessName?: string | null
   order: AppointmentOrderRow
   settings?: Pick<
@@ -47,6 +48,7 @@ export const buildAppointmentOrderInvoicePdf = async ({
   order,
   settings,
   businessName,
+  logo,
 }: InvoiceInput): Promise<Buffer> => {
   const pdf = await PDFDocument.create()
   pdf.registerFontkit(fontkit)
@@ -92,7 +94,7 @@ export const buildAppointmentOrderInvoicePdf = async ({
   }
 
   const receiptWidth = 226 // ~80mm
-  const baseHeight = 260
+  const baseHeight = 260 + (logo ? 65 : 0)
   const lineHeight = 14
   const extraLines =
     (order.lines.length + (order.productLines?.length ?? 0)) * 3 +
@@ -180,6 +182,10 @@ export const buildAppointmentOrderInvoicePdf = async ({
   }
 
   const headerLines = (businessName?.trim() || process.env.INVOICE_HEADER_LINES || businessDisplayName()).split("|")
+  if (logo) {
+    const image = await pdf.embedPng(logo), scaled = image.scale(Math.min(130 / image.width, 50 / image.height))
+    page.drawImage(image, { x: (receiptWidth - scaled.width) / 2, y: y - scaled.height, ...scaled }); y -= scaled.height + 15
+  }
   headerLines.filter(Boolean).forEach((line, index) => {
     drawCentered(line.trim(), index === 0 ? 12 : 9, index === 0)
   })

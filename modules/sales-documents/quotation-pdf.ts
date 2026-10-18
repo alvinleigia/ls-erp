@@ -1,4 +1,5 @@
 import { quotationDocumentLabels } from "./quotation-labels"
+import { downloadDocumentLogo } from "@/platform/branding/storage"
 import { PDFDocument, rgb } from "pdf-lib"
 import fontkit from "@pdf-lib/fontkit"
 import { readFile } from "node:fs/promises"
@@ -67,8 +68,9 @@ export async function buildQuotationPdf(record: { id: string; revision: number; 
     }
     y -= 9
   }
-  if (c.logoDataUrl) {
-    const logo = await pdf.embedPng(c.logoDataUrl), scaled = logo.scale(Math.min(130 / logo.width, 50 / logo.height))
+  const logoBytes = c.logoDataUrl || (record.snapshot.branding?.logo ? await downloadDocumentLogo(record.snapshot.branding.logo.path) : null)
+  if (logoBytes) {
+    const logo = await pdf.embedPng(logoBytes), scaled = logo.scale(Math.min(130 / logo.width, 50 / logo.height))
     page.drawImage(logo, { x: margin, y: y - scaled.height, width: scaled.width, height: scaled.height }); y -= 65
   }
   paragraph(c.supplierName, 17, accent); paragraph(c.title, 21)

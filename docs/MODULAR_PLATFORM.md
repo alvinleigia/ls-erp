@@ -1,3 +1,9 @@
+## R6 - Tenant branding: implemented locally (2026-10-19)
+
+Tenant-specific logo optimization, preview and storage; sidebar and immutable
+document branding. See [setup and verification](TENANT_BRANDING.md). Local tests
+and staging storage checks passed; hosted deployment awaits Vercel access.
+
 ## R6 - Products and Units: implementation verified (2026-10-18)
 
 Optional Sales Catalog with a shared product/unit model, Real Estate unit details,
