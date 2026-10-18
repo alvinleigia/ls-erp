@@ -619,7 +619,8 @@ test("duplicate identifiers are tenant-scoped and simultaneous creates make one 
   const email = `duplicate-${suffix}@example.test`
   const results = await Promise.allSettled([manager.createContact({ name: "First", email }), manager.createContact({ name: "Second", email: email.toUpperCase() })])
   assert.equal(results.filter(result => result.status === "fulfilled").length, 1)
-  assert.equal(results.find(result => result.status === "rejected").reason.status, 409)
+  const rejected = results.find(result => result.status === "rejected").reason
+  assert.equal(rejected.status, 409, rejected.stack || String(rejected))
   assert.equal(await root.crmContact.count({ where: { tenantId: a, email } }), 1)
   assert.ok((await second.createContact({ name: "Separate business", email })).id)
   await manager.createContact({ name: "Phone", phone: "+91 98765 43210" })

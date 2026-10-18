@@ -37,19 +37,37 @@ export class TenantPgAdapter extends PrismaPg {
       // A Prisma nested write can continue its query chain after an interactive
       // timeout queues ROLLBACK. Never let that chain use a released connection
       // or execute outside the transaction-local tenant scope.
-      let ended = false
+      let ended = false, released = false
       const queryRaw = tx.queryRaw.bind(tx), executeRaw = tx.executeRaw.bind(tx)
+      const commit = tx.commit.bind(tx), rollback = tx.rollback.bind(tx)
+      const release = async (committed: boolean) => {
+        ended = true
+        if (released) return
+        released = true
+        await (committed ? commit() : rollback())
+      }
       const guard = <T>(run: (query: Parameters<Transaction["queryRaw"]>[0]) => Promise<T>) =>
-        (query: Parameters<Transaction["queryRaw"]>[0]) => {
-          if (ended) return Promise.reject(new Error("Database transaction has ended. Retry the operation."))
-          if (/^\s*(COMMIT|ROLLBACK)\s*;?\s*$/i.test(query.sql)) ended = true
-          return run(query)
+        async (query: Parameters<Transaction["queryRaw"]>[0]) => {
+          const commitQuery = /^\s*COMMIT\s*;?\s*$/i.test(query.sql)
+          const rollbackQuery = /^\s*ROLLBACK\s*;?\s*$/i.test(query.sql)
+          if (ended) throw new Error("Database transaction has ended. Retry the operation.")
+          if (commitQuery || rollbackQuery) ended = true
+          try { return await run(query) }
+          catch (error) {
+            // Prisma does not call the adapter's release callback when COMMIT
+            // fails. Clean up here, preserving the original retryable error.
+            if (commitQuery) {
+              try { await executeRaw({ sql: "ROLLBACK", args: [], argTypes: [] }) }
+              catch { /* Preserve the commit failure if rollback also fails. */ }
+              finally { await release(false) }
+            }
+            throw error
+          }
         }
       tx.queryRaw = guard(queryRaw)
       tx.executeRaw = guard(executeRaw)
-      const commit = tx.commit.bind(tx), rollback = tx.rollback.bind(tx)
-      tx.commit = async () => { ended = true; return commit() }
-      tx.rollback = async () => { ended = true; return rollback() }
+      tx.commit = () => release(true)
+      tx.rollback = () => release(false)
       try {
         await tx.queryRaw({ sql: this.scopeSql, args: [], argTypes: [] })
         return tx

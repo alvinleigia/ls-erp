@@ -110,6 +110,32 @@ test("ended adapter transactions reject later queries before they can reuse a po
   }
 })
 
+test("a failed commit releases its connection and preserves the retryable error without reopening queries", async () => {
+  const { TenantPgAdapter } = require('../lib/tenant-pg-adapter.ts')
+  const trigger = 'pool_commit_failure_probe'
+  await root.query(`CREATE FUNCTION ${trigger}() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'Synthetic commit conflict' USING ERRCODE='40001'; END $$;
+    CREATE CONSTRAINT TRIGGER ${trigger} AFTER UPDATE ON "User" DEFERRABLE INITIALLY DEFERRED FOR EACH ROW WHEN (NEW.name='Commit conflict probe') EXECUTE FUNCTION ${trigger}()`)
+  const adapter = await new TenantPgAdapter(global.prismaPool, { tenantId: 'pool_a' }).connect()
+  const tx = await adapter.startTransaction()
+  let released = false
+  try {
+    await tx.executeRaw({ sql: `UPDATE "User" SET name='Commit conflict probe' WHERE id='pool_a'`, args: [], argTypes: [] })
+    await assert.rejects(tx.executeRaw({ sql: 'COMMIT', args: [], argTypes: [] }))
+    await assert.rejects(tx.queryRaw({ sql: 'SELECT 1', args: [], argTypes: [] }), /transaction has ended/)
+    await assert.rejects(tx.executeRaw({ sql: 'ROLLBACK', args: [], argTypes: [] }), /transaction has ended/)
+    await tx.rollback(); released = true
+    await assert.rejects(tx.executeRaw({ sql: 'ROLLBACK', args: [], argTypes: [] }), /transaction has ended/)
+    const { serializationConflict } = require('../platform/database-errors.ts')
+    await assert.rejects(tenant('pool_a', () => prisma.$transaction(tx => tx.user.update({
+      where: { id: 'pool_a' }, data: { name: 'Commit conflict probe' },
+    }))), serializationConflict)
+  } finally {
+    if (!released) await tx.rollback()
+    await root.query(`DROP TRIGGER ${trigger} ON "User"; DROP FUNCTION ${trigger}()`)
+  }
+  assert.equal(await tenant('pool_b', () => prisma.user.count({ where: { id: 'pool_b' } })), 1)
+})
+
 test("timed-out nested writes cannot continue after rollback or leak their tenant scope", async () => {
   const trigger='pool_timeout_probe'
   await root.query('INSERT INTO "StaffProfile" (id,"userId","updatedAt") VALUES ($1,$2,now())',[trigger,'pool_a'])
