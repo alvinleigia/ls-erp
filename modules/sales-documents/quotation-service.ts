@@ -12,6 +12,8 @@ import type { QuotationDependencies, QuotationItemReference } from "./quotation-
 import type { AppSettingsPayload } from "@/types/scheduling"
 import { createTermResolver } from "@/platform/terminology/resolver"
 import { quotationDocumentLabels, type QuotationDocumentLabels } from "./quotation-labels"
+import { buildQuotationPdf } from "./quotation-pdf"
+import { uploadQuotationPdf, removeUnusedPdf, type ArchivedPdf } from "@/platform/storage/documents"
 
 type Tx = Prisma.TransactionClient
 export type QuotationSnapshot = {
@@ -110,8 +112,42 @@ export function createQuotationService({ run: checkedRun, audit, opportunityScop
         const row = await find(tx, actor, id)
         const item = await tx.crmQuotationRevision.findUnique({ where: { tenantId_quotationId_number: { tenantId: actor.tenantId, quotationId: id, number: revision ?? row.version } } })
         if (!item) throw new BusinessError(404, termText("salesDocuments.quotation.singular", "Quotation version not found.", "{label} version not found."))
-        return { ...row, revision: item.number, revisionCreatedAt: item.createdAt, snapshot: item.snapshot as unknown as QuotationSnapshot, paymentPlansEnabled: paymentPlans }
+        return { ...row, revision: item.number, revisionCreatedAt: item.createdAt, snapshot: item.snapshot as unknown as QuotationSnapshot, archivedPdf: item.archivedPdf as ArchivedPdf | null, paymentPlansEnabled: paymentPlans }
       })
+    },
+    async issueQuotation(id: string, revision: number) {
+      const requirement: Requirement = ["quotations.read", "quotations.edit", "quotations.export"]
+      const prepared = await run(requirement, async (tx, actor) => {
+        const row = await find(tx, actor, id)
+        const item = await tx.crmQuotationRevision.findUnique({ where: { tenantId_quotationId_number: { tenantId: actor.tenantId, quotationId: id, number: revision } } })
+        if (!item) throw new BusinessError(404, "Quotation version not found.")
+        return { ...row, revision, revisionCreatedAt: item.createdAt, snapshot: item.snapshot as unknown as QuotationSnapshot, archivedPdf: item.archivedPdf as ArchivedPdf | null }
+      })
+      if (prepared.archivedPdf) return prepared.archivedPdf
+      // Rendering and storage IO stay outside database transactions. A concurrent
+      // issuer may upload a candidate too; only one archive is committed.
+      const candidate = await uploadQuotationPdf(prepared.tenantId, id, revision, await buildQuotationPdf(prepared))
+      let archived: ArchivedPdf
+      try {
+        archived = await run(requirement, async (tx, actor) => {
+          await find(tx, actor, id)
+          await tx.$queryRaw`SELECT number FROM "CrmQuotationRevision" WHERE "tenantId"=${actor.tenantId} AND "quotationId"=${id} AND number=${revision} FOR UPDATE`
+          const where = { tenantId_quotationId_number: { tenantId: actor.tenantId, quotationId: id, number: revision } }
+          const current = await tx.crmQuotationRevision.findUniqueOrThrow({ where })
+          if (current.archivedPdf) return current.archivedPdf as ArchivedPdf
+          const archive: ArchivedPdf = { ...candidate, issuedAt: new Date().toISOString(), issuedBy: actor.userId }
+          await tx.crmQuotationRevision.update({ where, data: { archivedPdf: json(archive) } })
+          await audit(tx, actor, "crm.quotation.issued", id, undefined, { revision, ...archive })
+          return archive
+        })
+      } catch (error) {
+        // Retain the candidate on an ambiguous commit failure; retry reads the
+        // committed archive instead of replacing an issued document.
+        if (error instanceof BusinessError) await removeUnusedPdf(candidate.path).catch(() => {})
+        throw error
+      }
+      if (archived.path !== candidate.path) await removeUnusedPdf(candidate.path).catch(() => {})
+      return archived
     },
     saveQuotation(opportunityId: string, input: unknown, id?: string) {
       const data = quotationSaveSchema.parse(input), calculation = calculate(data.content)

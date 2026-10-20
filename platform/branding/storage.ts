@@ -1,21 +1,9 @@
-import { createClient } from "@supabase/supabase-js"
+import { storageClient as client, storageConfiguration as configuration } from "../storage/client"
 import { BusinessError } from "../policy"
 import { LOGO_STORED_LIMIT } from "./types"
 
 export const BRANDING_BUCKET = "tenant-branding"
-function configuration() {
-  const url = process.env.SUPABASE_URL?.trim()
-  const key = process.env.SUPABASE_SECRET_KEY?.trim() || process.env.SUPABASE_SERVICE_ROLE_KEY?.trim()
-  if (!url || !key) throw new BusinessError(503, "Logo storage is not configured. Ask your platform administrator to configure Supabase Storage.")
-  const parsed = new URL(url)
-  if (parsed.protocol !== "https:" || !/^[a-z0-9]+\.supabase\.co$/.test(parsed.hostname) || parsed.pathname !== "/") throw new Error("Invalid Supabase storage origin")
-  return { url: parsed.origin, key }
-}
 export function storageReady() { try { configuration(); return true } catch { return false } }
-function client() {
-  const { url, key } = configuration()
-  return createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false }, global: { fetch: (url, options) => fetch(url, { ...options, signal: AbortSignal.timeout(20000) }) } })
-}
 function validPath(path: string) {
   if (!/^[a-zA-Z0-9_-]+\/[a-f0-9-]{36}\/(document\.png|sidebar\.webp)$/.test(path)) throw new Error("Invalid branding asset path")
   return path

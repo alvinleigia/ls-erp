@@ -59,5 +59,5 @@ boundary; actual uploads/downloads must also be verified in staging.
   invoice PDFs. The existing receipt's narrow numeric columns remain unchanged.
 - Actual staging Supabase upload/download/public delivery passed; the temporary
   storage probe was removed. The public bucket has no browser write policies.
-- Hosted feature deployment is pending Vercel CLI reauthentication. No production
-  schema or data was changed during implementation.
+- Hosted staging upload/replacement/removal, saved quotation logo retention and
+  desktop/mobile checks passed at b0fa998. Production was unchanged.

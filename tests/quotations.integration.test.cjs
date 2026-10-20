@@ -230,3 +230,52 @@ test('quotation terminology is captured once per new revision, without changing 
  assert.equal((await crm.getQuotation(simple.id)).snapshot.labels.paymentSchedule,'Instalment schedule')
  assert.equal((await crm.getQuotation(saved.id,1)).snapshot.labels.paymentSchedule,'Payment schedule')
 })
+
+test('issued PDFs are committed once per revision under concurrency and preserve previous versions',async()=>{
+ const storage=require('../platform/storage/documents.ts'),renderer=require('../modules/sales-documents/quotation-pdf.ts')
+ const original={upload:storage.uploadQuotationPdf,remove:storage.removeUnusedPdf,render:renderer.buildQuotationPdf}
+ const files=new Map(),removed=[]
+ let renders=0
+ storage.uploadQuotationPdf=async(tenantId,id,revision,bytes)=>{const path=`${tenantId}/quotations/${id}/${revision}/${randomUUID()}.pdf`;files.set(path,bytes);return {path,bytes:bytes.length,sha256:require('node:crypto').createHash('sha256').update(bytes).digest('hex')}}
+ storage.removeUnusedPdf=async path=>{removed.push(path);files.delete(path)}
+ renderer.buildQuotationPdf=async()=>{renders++;return Buffer.from('%PDF-original-'+renders)}
+ try{
+ const q=await crm.saveQuotation(deal.id,{content:content()}),before=(await crm.getQuotation(q.id)).snapshot
+ assert.equal((await crm.getQuotation(q.id)).archivedPdf,null)
+ const [a,b]=await Promise.all([crm.issueQuotation(q.id,1),crm.issueQuotation(q.id,1)])
+ assert.deepEqual(a,b);assert.equal(files.size,1);assert.equal(renders,2);assert.equal(removed.length,1)
+ assert.equal(a.issuedBy,manager.id);assert.ok(a.issuedAt)
+ assert.deepEqual((await crm.getQuotation(q.id,1)).snapshot,before)
+ renderer.buildQuotationPdf=async()=>{throw Error('renderer changed')}
+ assert.deepEqual(await crm.issueQuotation(q.id,1),a)
+ await crm.saveQuotation(deal.id,{content:content({title:'Revised draft'}),version:1},q.id)
+ assert.equal((await crm.getQuotation(q.id,2)).archivedPdf,null)
+ assert.deepEqual((await crm.getQuotation(q.id,1)).archivedPdf,a)
+ const audits=await root.auditLog.findMany({where:{tenantId:tenant,event:'crm.quotation.issued',entityId:q.id}})
+ assert.equal(audits.length,1)
+ const key={tenantId_quotationId_number:{tenantId:tenant,quotationId:q.id,number:1}}
+ await assert.rejects(root.crmQuotationRevision.update({where:key,data:{archivedPdf:{...a,path:'replacement'}}}),/immutable/)
+ await assert.rejects(root.crmQuotationRevision.update({where:key,data:{snapshot:{changed:true}}}),/immutable/)
+ await assert.rejects(root.crmQuotationRevision.delete({where:key}),/immutable/)
+ await assert.rejects(foreign.issueQuotation(q.id,1),status(404))
+ await assert.rejects(otherCrm.issueQuotation(q.id,1),status(404))
+ await assert.rejects(crm.issueQuotation(q.id,999),status(404))
+ }finally{storage.uploadQuotationPdf=original.upload;storage.removeUnusedPdf=original.remove;renderer.buildQuotationPdf=original.render}
+})
+
+test('upload failure leaves a draft unissued and module or permission denial prevents storage work',async()=>{
+ const storage=require('../platform/storage/documents.ts'),original=storage.uploadQuotationPdf
+ let uploads=0
+ storage.uploadQuotationPdf=async()=>{uploads++;throw new (require('../platform/policy.ts').BusinessError)(503,'storage unavailable')}
+ try{
+ const q=await crm.saveQuotation(deal.id,{content:content()})
+ await assert.rejects(crm.issueQuotation(q.id,1),status(503));assert.equal((await crm.getQuotation(q.id)).archivedPdf,null);assert.equal(uploads,1)
+ await root.tenantModule.update({where:{tenantId_key:{tenantId:tenant,key:'salesDocuments'}},data:{enabled:false}})
+ await assert.rejects(crm.issueQuotation(q.id,1),status(403));assert.equal(uploads,1)
+ await root.tenantModule.update({where:{tenantId_key:{tenantId:tenant,key:'salesDocuments'}},data:{enabled:true}})
+ const role=await root.tenantAccessRole.create({data:{tenantId:tenant,name:'Archive reader',nameKey:'archive reader',permissions:['quotations.read','quotations.export']}})
+ await root.tenantRoleAssignment.create({data:{tenantId:tenant,userId:manager.id,roleId:role.id}})
+ await assert.rejects(crm.issueQuotation(q.id,1),status(403));assert.equal(uploads,1)
+ await root.tenantRoleAssignment.deleteMany({where:{tenantId:tenant,userId:manager.id}})
+ }finally{storage.uploadQuotationPdf=original;await root.tenantModule.update({where:{tenantId_key:{tenantId:tenant,key:'salesDocuments'}},data:{enabled:true}})}
+})

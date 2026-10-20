@@ -1,8 +1,18 @@
-## R6 - Tenant branding: implemented locally (2026-10-19)
+## R6 - Quotation PDF archive: implementation (2026-10-20)
+
+Draft previews remain temporary; Issue & Download archives one immutable PDF per
+quotation revision in private Supabase storage. Downloads authorize the tenant and
+record before returning a short-lived link. Concurrent issuance, revision history,
+access controls and storage failures are covered by 101 passing local checks.
+Build, TypeScript and targeted lint passed. See [archive workflow](QUOTATION_ARCHIVE.md).
+Production release remains separate from the staging rollout.
+
+## R6 - Tenant branding: staging verified (2026-10-19)
 
 Tenant-specific logo optimization, preview and storage; sidebar and immutable
-document branding. See [setup and verification](TENANT_BRANDING.md). Local tests
-and staging storage checks passed; hosted deployment awaits Vercel access.
+document branding. See [setup and verification](TENANT_BRANDING.md). Staging upload,
+replacement/removal, saved quotation logo retention, desktop/mobile UI and tenant
+isolation passed at b0fa998. Production remains unchanged.
 
 ## R6 - Products and Units: implementation verified (2026-10-18)
 

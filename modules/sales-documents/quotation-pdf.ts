@@ -10,7 +10,7 @@ import { formatDecimalCurrency } from "@/lib/formatting"
 import type { QuotationSnapshot } from "./quotation-service"
 import { BusinessError } from "@/platform/policy"
 
-export async function buildQuotationPdf(record: { id: string; revision: number; revisionCreatedAt: Date | string; snapshot: QuotationSnapshot }) {
+export async function buildQuotationPdf(record: { id: string; revision: number; revisionCreatedAt: Date | string; snapshot: QuotationSnapshot }, preview = false) {
   const pdf = await PDFDocument.create(); pdf.registerFontkit(fontkit)
   const font = await pdf.embedFont(await readFile(path.join(process.cwd(), "public/assets/fonts/NotoSans-Regular.ttf")), { subset: true })
   const supportedCharacters = new Set(font.getCharacterSet())
@@ -118,6 +118,7 @@ export async function buildQuotationPdf(record: { id: string; revision: number; 
   if (c.website) paragraph(c.website, 9, accent)
   paragraph(labels.notice, 8, muted)
   pages.forEach((p, index) => p.drawText(`Version ${record.revision} · Page ${index + 1} of ${pages.length}`, { x: margin, y: 24, size: 8, font, color: muted }))
+  if (preview) pages.forEach(p => p.drawText("DRAFT PREVIEW - NOT ISSUED", { x: margin, y: 12, size: 8, font, color: muted }))
   pdf.setTitle(c.title); pdf.setAuthor(c.supplierName)
   return pdf.save()
 }

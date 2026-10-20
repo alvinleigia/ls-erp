@@ -1,6 +1,7 @@
 "use client"
 import { useTerminology, useTerminologyReader } from "@/platform/terminology/provider"
 import { withRecordView, useRecordView, AccessRecordForm } from "@/platform/access/record-view"
+import { QuotationPdfActions } from "./quotation-pdf-actions"
 import { QuotationSummary } from "./quotation-summary"
 import * as React from "react"
 import { useBusinessModules } from "@/platform/module-provider"
@@ -62,7 +63,7 @@ export function QuotationList({ opportunityId, all = false }: { opportunityId?: 
   return template ? <div className={pageClass}><AccessPageHeader title={term("salesDocuments.quotation.singular", "Quotation templates", "{label} templates")} backHref="/crm/quotations" actions={data.canManage && <Button asChild><Link href={`${templateBase}/new`}>New template</Link></Button>} /><Surface>{content}</Surface></div> : all ? <div className={pageClass}><AccessPageHeader title={term("salesDocuments.quotation.plural", "Quotations")} description={term("crm.opportunity.plural", "Saved sales documents for the opportunities you can access.", "Saved sales documents for the {label} you can access.")} actions={<Button asChild><Link href="/crm/opportunities">{term("crm.opportunity.plural", "Open opportunities", "Open {label}")}</Link></Button>} /><Surface>{content}</Surface></div> : <Section title="Sales documents" actions={<Button asChild><Link href={`/crm/quotations/new?opportunityId=${opportunityId}`}>{term("salesDocuments.quotation.singular", "New document", "New {label}")}</Link></Button>}>{content}</Section>
 }
 
-type Document = { id: string; opportunityId: string; title: string; version: number; revision: number; snapshot: QuotationSnapshot; paymentPlansEnabled: boolean }
+type Document = { archivedPdf: { issuedAt: string } | null; id: string; opportunityId: string; title: string; version: number; revision: number; snapshot: QuotationSnapshot; paymentPlansEnabled: boolean }
 type Template = { id: string; name: string; content: QuotationContent; version: number; archived: boolean; canManage: boolean; paymentPlansEnabled: boolean }
 export const QuotationEditor = withRecordView(QuotationEditorBody)
 function QuotationEditorBody({ id, opportunityId: initialOpportunityId, template = false, revision }: { id?: string; opportunityId?: string; template?: boolean; revision?: number }) {
@@ -124,8 +125,9 @@ function QuotationEditorBody({ id, opportunityId: initialOpportunityId, template
   const editable = !failed && !unavailable && !scheduleLocked && !oldVersion && (!template || canManage)
   if (loading) return <p>Loading document…</p>
   return <div className={pageClass}>
-    <AccessPageHeader title={template ? id ? name || term("salesDocuments.quotation.singular", "Quotation template", "{label} template") : term("salesDocuments.quotation.singular", "New quotation template", "New {label} template") : id ? `${document?.title || term("salesDocuments.quotation.singular", "Quotation")} · version ${document?.revision}` : term("salesDocuments.quotation.singular", "New quotation", "New {label}")} backHref={back} actions={<AccessFormActions form="quotation-form" cancelHref={back} saving={saving} disabled={failed || unavailable || scheduleLocked || oldVersion} canSave={!template || canManage} saveLabel={template ? "Save template" : id ? "Save new version" : term("salesDocuments.quotation.singular", "Save document", "Save {label}")}>{document && modules.can("quotations.export") && <Button asChild variant="outline"><a href={`/api/crm/quotations/${document.id}/pdf?revision=${document.revision}`} target="_blank" rel="noreferrer">Download saved PDF</a></Button>}</AccessFormActions>} />
+    <AccessPageHeader title={template ? id ? name || term("salesDocuments.quotation.singular", "Quotation template", "{label} template") : term("salesDocuments.quotation.singular", "New quotation template", "New {label} template") : id ? `${document?.title || term("salesDocuments.quotation.singular", "Quotation")} · version ${document?.revision}` : term("salesDocuments.quotation.singular", "New quotation", "New {label}")} backHref={back} actions={<AccessFormActions form="quotation-form" cancelHref={back} saving={saving} disabled={failed || unavailable || scheduleLocked || oldVersion} canSave={!template || canManage} saveLabel={template ? "Save template" : id ? "Save new version" : term("salesDocuments.quotation.singular", "Save document", "Save {label}")}>{document && modules.can("quotations.export") && <QuotationPdfActions key={`${document.id}-${document.revision}`} id={document.id} revision={document.revision} issued={!!document.archivedPdf} canIssue={modules.can("quotations.edit")} disabled={view.editing || saving || unavailable} onIssued={async () => setDocument(await request<Document>(`/api/crm/quotations/${document.id}?revision=${document.revision}`))} />}</AccessFormActions>} />
 
+    {document && <p className="text-sm text-muted-foreground">{document.archivedPdf ? "Issued version: downloads use the archived PDF. Edits create a new draft version." : "Draft version: preview it or issue it to preserve the exact PDF."}</p>}
     {scheduleLocked && <p className="rounded-lg border p-4 text-sm">Payment Plans is disabled. This saved schedule is read-only. Enable Payment Plans to make changes.</p>}
     {unavailable && !modules.loading && <p role="alert">Sales Documents is not enabled.</p>}
     {oldVersion && <p className="text-sm">This saved version is read-only. <Link className="underline" href={`/crm/quotations/${id}`}>Edit the latest version</Link>.</p>}
