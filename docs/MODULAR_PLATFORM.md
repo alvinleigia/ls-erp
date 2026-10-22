@@ -1,3 +1,13 @@
+## R7.5 - Collection follow-ups verified on staging (2026-10-23)
+
+Receivables now link to existing Activities for owners, dates, calls, outcomes,
+notes and chained follow-ups. Pending work appears beside the balance. Financial
+access remains separate from activity assignment; settlement stops new collection
+work without deleting history. Migration 106 preserved 22 checked tables. Staging
+ed30240 passed 59 integration, 41 architecture/access and three hosted workflows;
+desktop/mobile screens and runtime RLS/audits were verified. Production is unchanged.
+See [collection rules and verification](COLLECTION_FOLLOW_UPS_R7.md).
+
 ## R7.4 - Receivables overview verified on staging (2026-10-23)
 
 Sales Orders now includes a permission-gated Receivables overview with search,

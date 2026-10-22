@@ -45,11 +45,23 @@ and follow-up chains that drop/change the association.
 59 isolated sales/receivable integration tests and 41 architecture/access tests
 pass, including assignment, linked next steps, notes, scope/role/module denials,
 settled/cancelled rejection, forced RLS, immutable links and audit rollback.
-TypeScript and targeted lint pass. Hosted staging verification is recorded after
-deployment. The allowlisted QA workflow lives in
+Build, TypeScript and targeted lint pass. The allowlisted QA workflow lives in
 `tests/staging-orders/collection-follow-ups.spec.ts`.
 
 Staging migration 105 to 106 compared 22 existing tables before/after (excluding
 only the new nullable column). All existing data matched; runtime RLS checks
 passed. Private receipts are in `tmp/staging-setup/r75-*`.
 Production is outside this release scope.
+
+Verified on staging at `ed30240` (2026-10-23), deployment
+`dpl_4Q5hk1n316HGHA6hfsueo99KKAhL`, on the main staging and both QA aliases.
+All three hosted workflows passed: collection follow-ups, receivable overview,
+and payments/reversals. The collection test schedules through the UI, completes
+a call with a linked next step, adds a note, verifies assignee isolation and
+settlement/module gates. Desktop and mobile form/panel screenshots were inspected;
+there were no browser errors or page overflow.
+
+Restricted staging runtime queries verified three linked activities, five events
+and five matching audits for the QA tenant; missing/foreign tenant contexts saw
+zero of each. The completed activity and pending next steps remain available in
+the synthetic QA tenant for review. Production/main remain unchanged.
