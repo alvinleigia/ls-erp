@@ -1,3 +1,13 @@
+## R7.4 - Receivables overview verified on staging (2026-10-23)
+
+Sales Orders now includes a permission-gated Receivables overview with search,
+balance/currency filters, database pagination and separate currency ageing totals.
+Current ownership/team scope applies to rows, counts and summaries. No migration
+or existing balance changes were required. Staging f727d8c passed 55 integration
+and 41 architecture/access checks plus hosted overview/payment workflows; desktop
+and mobile screenshots were inspected. Production remains unchanged. See
+[overview rules and verification](RECEIVABLES_OVERVIEW_R7.md).
+
 ## R7.3 - Order receivables verified on staging (2026-10-23)
 
 Optional receivables now support frozen schedules, partial payments, corrections

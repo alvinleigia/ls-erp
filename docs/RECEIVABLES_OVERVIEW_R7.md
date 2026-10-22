@@ -41,4 +41,15 @@ check both read permissions, activation and exact menu highlighting.
 Hosted coverage is in `tests/staging-orders/overview.spec.ts`, restricted to the
 existing allowlisted synthetic staging tenants. It checks filters, currency
 totals, page totals, order navigation, scope changes, denied module/role access,
-and desktop/mobile screenshots. Hosted verification is pending deployment.
+and desktop/mobile screenshots.
+
+Verified on staging at `f727d8c` (2026-10-23): 55 isolated integration tests,
+41 architecture/access checks, build, TypeScript and targeted lint passed. Both
+hosted overview and payment workflows passed. Desktop/mobile screenshots were
+inspected; no page overflow or browser errors occurred. The application and both
+QA aliases served deployment `dpl_8tLWRaHtS1LKSV3xJ4BZuLGVgAy6`.
+
+The overview leaves synthetic QA balances available for review: an overdue INR
+order, an unscheduled JPY order and a settled INR order. No client records were
+used. Schema history remains at 105 migrations. Private receipts and screenshots
+are under `tmp/staging-setup/r74-*` and `test-results/staging-orders/`.
