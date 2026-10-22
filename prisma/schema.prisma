@@ -814,6 +814,7 @@ model Tenant {
   quotationRevisions CrmQuotationRevision[]
   salesOrders SalesOrder[]
   unitReservations UnitReservation[]
+  orderReceivables OrderReceivable[]
   crmSalesTeams CrmSalesTeam[]
   crmSalesTeamMembers CrmSalesTeamMember[]
   customFieldDefinitions CustomFieldDefinition[]
@@ -2410,10 +2411,96 @@ model SalesOrder {
   source CrmQuotationRevision @relation(fields: [tenantId, quotationId, revision], references: [tenantId, quotationId, number], onDelete: Restrict)
   events SalesOrderEvent[]
   reservations UnitReservation[]
+  receivable OrderReceivable?
   @@id([tenantId, id])
   @@index([tenantId, status, createdAt(sort: Desc), id])
   @@index([tenantId, createdAt(sort: Desc), id])
   @@index([tenantId, quotationId, revision])
+}
+
+model OrderReceivable {
+  tenantId String
+  orderId String
+  currency String
+  total Decimal @db.Decimal(18, 4)
+  version Int @default(1)
+  createdAt DateTime @default(now())
+  createdBy String
+  actorName String
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  order SalesOrder @relation(fields: [tenantId, orderId], references: [tenantId, id], onDelete: Restrict)
+  lines OrderReceivableLine[]
+  payments OrderReceipt[]
+  @@id([tenantId, orderId])
+}
+
+model OrderReceivableLine {
+  tenantId String
+  id String @default(cuid())
+  orderId String
+  position Int
+  label String
+  amount Decimal @db.Decimal(18, 4)
+  dueOn DateTime? @db.Date
+  account OrderReceivable @relation(fields: [tenantId, orderId], references: [tenantId, orderId], onDelete: Restrict)
+  allocations OrderReceiptAllocation[]
+  @@id([tenantId, id])
+  @@unique([tenantId, orderId, id])
+  @@unique([tenantId, orderId, position])
+}
+
+model OrderReceipt {
+  tenantId String
+  id String @default(cuid())
+  orderId String
+  requestKey String
+  amount Decimal @db.Decimal(18, 4)
+  receivedOn DateTime @db.Date
+  method String
+  reference String @default("")
+  referenceKey String @default("")
+  note String @default("")
+  status String @default("POSTED")
+  createdAt DateTime @default(now())
+  createdBy String
+  actorName String
+  account OrderReceivable @relation(fields: [tenantId, orderId], references: [tenantId, orderId], onDelete: Restrict)
+  allocations OrderReceiptAllocation[]
+  reversal OrderReceiptReversal?
+  @@id([tenantId, id])
+  @@unique([tenantId, orderId, id])
+  @@unique([tenantId, requestKey])
+  @@index([tenantId, orderId, createdAt(sort: Desc), id])
+}
+
+model OrderReceiptAllocation {
+  tenantId String
+  orderId String
+  paymentId String
+  lineId String
+  amount Decimal @db.Decimal(18, 4)
+  payment OrderReceipt @relation(fields: [tenantId, orderId, paymentId], references: [tenantId, orderId, id], onDelete: Restrict)
+  line OrderReceivableLine @relation(fields: [tenantId, orderId, lineId], references: [tenantId, orderId, id], onDelete: Restrict)
+  @@id([tenantId, paymentId, lineId])
+  @@index([tenantId, orderId, lineId])
+}
+
+model OrderReceiptReversal {
+  tenantId String
+  paymentId String
+  orderId String
+  requestKey String
+  kind String
+  reason String
+  effectiveOn DateTime @db.Date
+  reference String @default("")
+  createdAt DateTime @default(now())
+  createdBy String
+  actorName String
+  payment OrderReceipt @relation(fields: [tenantId, orderId, paymentId], references: [tenantId, orderId, id], onDelete: Restrict)
+  @@id([tenantId, paymentId])
+  @@unique([tenantId, orderId, paymentId])
+  @@unique([tenantId, requestKey])
 }
 
 model SalesOrderEvent {

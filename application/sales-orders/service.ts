@@ -5,8 +5,12 @@ import { createSalesOrderService } from "@/modules/sales-orders/service"
 import type { SalesOrderSource } from "@/modules/sales-orders/contracts"
 import type { QuotationSnapshot } from "@/modules/sales-documents/quotation-service"
 import { releaseOrderReservations } from "@/modules/catalog/reservation-events"
+import { requireResolvedPayments } from "@/modules/receivables/cancellation"
 const source: SalesOrderSource = {
-  onCancel: releaseOrderReservations,
+  async onCancel(tx, actor, id, reason) {
+    await requireResolvedPayments(tx, actor, id)
+    await releaseOrderReservations(tx, actor, id, reason)
+  },
   scope: actor => ({ source: { quotation: { opportunity: enquiryScope(actor) } } }),
   async read(tx, actor, quotationId, revision) {
     const row = await tx.crmQuotationRevision.findFirst({ where: { tenantId: actor.tenantId, quotationId, number: revision, quotation: { opportunity: enquiryScope(actor) } }, include: { quotation: { select: { opportunity: { select: { contact: { select: { archived: true } } } } } } } })

@@ -1574,6 +1574,17 @@ export const salesOrderListSchema = z.object({
 export const unitReservationCreateSchema = z.object({
   itemId: z.string().min(1).max(100), expiresAt: z.string().datetime({ offset: true }),
 }).strict()
+export const receivableOpenSchema = z.object({ dueDates: z.array(z.iso.date().nullable()).min(1).max(60) }).strict()
+export const orderPaymentSchema = z.object({
+  requestKey: z.uuid(), version: z.number().int().positive(),
+  amount: z.string().regex(/^\d{1,12}(\.\d{1,4})?$/, "Enter an amount with up to four decimal places."),
+  receivedOn: z.iso.date(), method: z.enum(["BANK_TRANSFER", "UPI", "CARD", "CASH", "CHEQUE", "OTHER"]),
+  reference: z.string().trim().max(120).default(""), note: z.string().trim().max(2000).default(""),
+}).strict().refine(data => data.method === "CASH" || !!data.reference, { path: ["reference"], message: "Enter the payment reference." })
+export const orderPaymentReversalSchema = z.object({
+  requestKey: z.uuid(), version: z.number().int().positive(), kind: z.enum(["CORRECTION", "REFUND"]),
+  reason: z.string().trim().min(1).max(2000), effectiveOn: z.iso.date(), reference: z.string().trim().max(120).default(""),
+}).strict().refine(data => data.kind === "CORRECTION" || !!data.reference, { path: ["reference"], message: "Enter the refund reference." })
 export const unitReservationTransitionSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("allocate"), version: z.number().int().positive() }).strict(),
   z.object({ action: z.literal("release"), version: z.number().int().positive(), reason: z.string().trim().min(1).max(2000) }).strict(),

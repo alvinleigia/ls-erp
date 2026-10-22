@@ -1,7 +1,7 @@
 import type { Prisma } from "@prisma/client"
 import type { BusinessActor } from "../policy"
 import { moduleEnabled } from "../modules"
-import { permits } from "../access/policy"
+import { permits, satisfies } from "../access/policy"
 
 export const securityEvents: Prisma.AuditLogWhereInput = { OR: ["access.", "module.", "tenant.", "core.invitations.", "crm.team.manager."].map(prefix => ({ event: { startsWith: prefix } })) }
 
@@ -14,6 +14,7 @@ export async function auditScope(tx: Prisma.TransactionClient, actor: BusinessAc
     return {
       // Apply access before pagination/counting; the same predicate guards detail reads.
       AND: [
+        ...(!(actor.role === "ADMIN" && moduleEnabled(flags, "receivables") && satisfies(actor, ["salesOrders.read", "receivables.read", "orderPayments.read"])) ? [{ NOT: { event: { startsWith: "receivable." } } }] : []),
         ...(!moduleEnabled(flags, "salesOrders") || !permits(actor, "salesOrders.read") ? [{ NOT: { event: { startsWith: "salesOrder." } } }] : []),
         ...(!(actor.role === "ADMIN" && moduleEnabled(flags, "catalog") && moduleEnabled(flags, "salesOrders") && permits(actor, "unitReservations.read") && permits(actor, "salesOrders.read")) ? [{ NOT: { event: { startsWith: "catalog.reservation." } } }] : []),
         ...(!moduleEnabled(flags, "catalog") || !permits(actor, "catalogItems.read") ? [{ NOT: { event: { startsWith: "catalog." } } }] : []),

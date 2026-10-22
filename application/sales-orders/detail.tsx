@@ -4,9 +4,13 @@ import { QuotationSummary } from "@/modules/sales-documents/components/quotation
 import type { QuotationSnapshot } from "@/modules/sales-documents/quotation-service"
 import { useBusinessModules } from "@/platform/module-provider"
 import { OrderReservations } from "@/modules/catalog/components/order-reservations"
+import { OrderReceivables } from "@/modules/receivables/components/order-receivables"
 export function SalesOrderDetail({ id }: { id: string }) {
   const modules = useBusinessModules()
-  return <OrderDetail id={id} renderRelated={version => modules.enabled("catalog") && modules.can("catalogItems.read") && modules.can("unitReservations.read") ? <OrderReservations key={version} orderId={id} /> : null} renderSnapshot={value => {
+  return <OrderDetail id={id} renderRelated={version => <div key={version} className="space-y-6">
+    {modules.enabled("catalog") && modules.can("catalogItems.read") && modules.can("unitReservations.read") && <OrderReservations orderId={id} />}
+    {modules.enabled("receivables") && modules.can("receivables.read") && <OrderReceivables orderId={id} />}
+  </div>} renderSnapshot={value => {
     const snapshot = value as QuotationSnapshot
     return <>{(["overview", "pricing", ...(snapshot.content.instalments.length ? ["payments" as const] : []), "terms"] as const).map(section => <QuotationSummary key={section} value={snapshot.content} snapshot={snapshot} section={section} canEdit={false} />)}</>
   }} />

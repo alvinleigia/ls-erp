@@ -49,7 +49,7 @@ async function main() {
     console.log("Replaying migrations with pre-upgrade fixtures in an isolated database.")
     console.log((await docker([...args, "tests/helpers/historical-upgrade.cjs"], env)).trim())
     console.log((await docker([...args, "tests/helpers/catalog-migration.cjs"], env)).trim())
-    for (const helper of ["branding-migration", "quotation-archive-migration", "sales-orders-migration", "unit-reservations-migration"]) console.log((await docker([...args, `tests/helpers/${helper}.cjs`], env)).trim())
+    for (const helper of ["branding-migration", "quotation-archive-migration", "sales-orders-migration", "unit-reservations-migration", "order-receivables-migration"]) console.log((await docker([...args, `tests/helpers/${helper}.cjs`], env)).trim())
     console.log("Running catalog, quotation and module permission checks.")
     const files = ["tests/catalog.integration.test.cjs", "tests/quotations.integration.test.cjs", "tests/module-access.integration.test.cjs"]
     const output = await docker([...args, "--require", "./tests/register.cjs", "--test", "--test-reporter=tap", "--test-concurrency=1", "--test-force-exit", ...files], env)
