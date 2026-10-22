@@ -392,6 +392,8 @@ model CrmEnquiry {
 model CrmTask {
   id          String @id @default(cuid())
   tenantId    String
+  collectionOrderId String?
+  collectionReceivable OrderReceivable? @relation(fields: [tenantId, collectionOrderId], references: [tenantId, orderId], onDelete: Restrict, onUpdate: Restrict, map: "CrmTask_collection_receivable_fkey")
   enquiryId   String?
   opportunityId String?
   contactId   String
@@ -447,6 +449,7 @@ model CrmTask {
   @@unique([tenantId, followUpOfId])
   @@unique([tenantId, planLaunchId, planPosition])
   @@index([tenantId, enquiryId])
+  @@index([tenantId, collectionOrderId, status, dueOn])
   @@index([tenantId, completedAt, dueOn])
   @@index([tenantId, opportunityId, status, dueOn])
   @@index([tenantId, assignedUserId, status, dueOn])
@@ -2431,6 +2434,7 @@ model OrderReceivable {
   order SalesOrder @relation(fields: [tenantId, orderId], references: [tenantId, id], onDelete: Restrict)
   lines OrderReceivableLine[]
   payments OrderReceipt[]
+  followUps CrmTask[]
   @@id([tenantId, orderId])
 }
 

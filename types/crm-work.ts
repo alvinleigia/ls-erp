@@ -3,6 +3,7 @@ import type { ListResponse } from "./api"
 export type WorkType = typeof workTypes[number]
 export type WorkStatus = typeof workStatuses[number]
 export type CrmWorkRow = {
+  collectionOrderId?: string | null;
   id: string; contactId: string; enquiryId: string | null; opportunityId: string | null; assignedUserId: string;
   activityTypeId?: string | null; activityTypeName?: string | null; title: string; type: WorkType; status: WorkStatus; priority: number; version: number; description: string | null;
   dueOn: string; startsAt: string | null; endsAt: string | null; reminderAt: string | null; snoozedUntil: string | null; reminderDismissedAt: string | null;

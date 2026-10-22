@@ -31,6 +31,60 @@ async function opened(extra={},dates){const id=await fresh(extra),plan=(await sv
 const pay=(extra={})=>({requestKey:randomUUID(),version:1,amount:'50.12',receivedOn:'2026-01-01',method:'BANK_TRANSFER',reference:randomUUID(),note:'',...extra})
 const reverse=(extra={})=>({requestKey:randomUUID(),version:2,kind:'CORRECTION',reason:'Mistaken entry',effectiveOn:'2026-01-02',reference:'',...extra})
 
+const collection=(id,extra={})=>({collectionOrderId:id,contactId:contact.id,opportunityId:deal.id,title:'Collection call',type:'CALL',callDirection:'OUTBOUND',assignedUserId:staff.id,dueOn:'2026-01-02',...extra})
+test('collection work reuses activity assignment, notes, outcomes and inherited follow-ups without changing balances',async()=>{
+ const id=await opened(),before=await svc().get(id),task=await crm.createWork(collection(id))
+ assert.equal(task.collectionOrderId,id);assert.equal(task.assignedUserId,staff.id)
+ assert.equal((await crm.listWork({collectionOrderId:id,scope:'visible'})).total,1)
+ const own=createApplicationCrmService(db,identity(staff));await own.addWorkNote(task.id,{message:'Customer requested a call tomorrow.'})
+ const followUp={title:'Next collection call',type:'CALL',callDirection:'OUTBOUND',assignedUserId:staff.id,dueOn:'2026-01-03'}
+ await own.completeWork(task.id,{version:1,outcome:'CONNECTED',summary:'Customer confirmed the next step.',occurredAt:'2026-01-02T10:00:00Z',followUp})
+ const pending=await crm.listWork({collectionOrderId:id,scope:'visible'});assert.equal(pending.total,1);assert.equal(pending.items[0].collectionOrderId,id);assert.equal(pending.items[0].followUpOfId,task.id)
+ assert.equal((await crm.listWork({collectionOrderId:id,scope:'visible',state:'all',pageSize:1})).total,2)
+ assert((await own.listWorkHistory(task.id,{})).items.some(e=>e.event==='crm.work.note.added'))
+ const after=await svc().get(id);assert.equal(String(after.outstanding),String(before.outstanding));assert.equal(after.account.version,before.account.version)
+ await assert.rejects(own.completeWork(task.id,{version:1,outcome:'CONNECTED',summary:'Again',occurredAt:'2026-01-02T10:00:00Z'}),status(409))
+})
+test('collection creation rejects unopened, foreign, out-of-scope, mismatched, settled and cancelled receivables',async()=>{
+ const unopened=await fresh();await assert.rejects(crm.createWork(collection(unopened)),status(404))
+ const id=await opened();await assert.rejects(createApplicationCrmService(dbB,identity(foreign)).createWork(collection(id,{assignedUserId:foreign.id})),status(404))
+ await assert.rejects(createApplicationCrmService(db,identity(other)).createWork(collection(id,{assignedUserId:other.id})),status(404))
+ await assert.rejects(crm.createWork(collection(id,{opportunityId:''})),status(400))
+ await assert.rejects(crm.createWork(collection(id,{assignedUserId:foreign.id})),status(400))
+ await svc().record(id,pay({amount:'300.38'}));assert.equal((await crm.getCollectionContext(id)).canCreate,false);await assert.rejects(crm.createWork(collection(id)),status(409))
+ const cancelled=await opened();await orders.transition(cancelled,{action:'cancel',version:2,reason:'Cancelled QA'});await assert.rejects(crm.createWork(collection(cancelled)),status(409))
+})
+test('collection access is fresh; activity assignees do not gain financial access; revoked links do not prevent closing work',async()=>{
+ const id=await opened(),task=await crm.createWork(collection(id,{assignedUserId:other.id})),assigned=createApplicationCrmService(db,identity(other))
+ assert.equal((await assigned.getWork(task.id)).id,task.id);await assert.rejects(applicationReceivables(db,identity(other)).get(id),status(404))
+ await assert.rejects(assigned.listWork({collectionOrderId:id,scope:'visible'}),status(404))
+ const role=await root.tenantAccessRole.create({data:{tenantId:tenant,name:'Follow-up test',nameKey:randomUUID(),permissions:['activities.read','activities.create','activities.edit','salesOrders.read','receivables.read']}})
+ await root.tenantRoleAssignment.create({data:{tenantId:tenant,userId:manager.id,roleId:role.id}})
+ try{
+  await assert.rejects(crm.createWork(collection(id)),status(403)) // assignment needs assign permission
+  await crm.createWork(collection(id,{assignedUserId:manager.id}))
+  await root.tenantAccessRole.update({where:{tenantId_id:{tenantId:tenant,id:role.id}},data:{permissions:['activities.read','activities.create','activities.edit']}})
+  await assert.rejects(crm.getCollectionContext(id),status(403));await assert.rejects(crm.createWork(collection(id,{assignedUserId:manager.id})),status(403))
+ }finally{await root.tenantRoleAssignment.deleteMany({where:{tenantId:tenant,userId:manager.id}})}
+ await root.tenantModule.update({where:{tenantId_key:{tenantId:tenant,key:'receivables'}},data:{enabled:false}})
+ try{
+  await assert.rejects(crm.getCollectionContext(id),status(403));await assert.rejects(crm.createWork(collection(id)),status(403))
+  await assigned.completeWork(task.id,{version:1,outcome:'NO_ANSWER',summary:'No answer; manager will review.',occurredAt:'2026-01-02T10:00:00Z'})
+ }finally{await root.tenantModule.update({where:{tenantId_key:{tenantId:tenant,key:'receivables'}},data:{enabled:true}})}
+ assert.equal((await crm.getWork(task.id)).status,'COMPLETED')
+})
+test('collection links are tenant-safe and immutable; audit failure rolls back the activity and its events',async()=>{
+ const id=await opened(),task=await crm.createWork(collection(id)),otherId=await opened()
+ for(const collectionOrderId of [otherId,null])await assert.rejects(root.crmTask.update({where:{tenantId_id:{tenantId:tenant,id:task.id}},data:{collectionOrderId}}))
+ assert.equal((await dbB.crmTask.findMany({where:{tenantId:tenant,collectionOrderId:id}})).length,0)
+ assert.equal((await unscoped.crmTask.findMany({where:{collectionOrderId:id}})).length,0)
+ const broken=new Proxy(db,{get(target,key){if(key==='$transaction')return (fn,options)=>target.$transaction(tx=>fn(new Proxy(tx,{get(t,k){if(k==='auditLog')return new Proxy(t.auditLog,{get(a,m){return m==='create'?async()=>{throw Error('Audit unavailable')}:a[m]}});return t[k]}})),options);return target[key]}})
+ const before=await root.crmTask.count({where:{tenantId:tenant,collectionOrderId:otherId}})
+ await assert.rejects(createApplicationCrmService(broken,identity(manager)).createWork(collection(otherId)),/Audit unavailable/)
+ assert.equal(await root.crmTask.count({where:{tenantId:tenant,collectionOrderId:otherId}}),before)
+ const event=await root.auditLog.findFirst({where:{tenantId:tenant,entityId:task.id,event:'crm.work.created'}});assert.equal(event.after.collectionOrderId,id)
+})
+
 test('frozen instalments and extra charges reconcile; partial payments allocate due dates before unscheduled',async()=>{
  const id=await opened({instalments:[{label:'First',percent:'50',days:0,note:''},{label:'Final',percent:'50',days:10,note:''}],charges:[{label:'Delivery',kind:'FIXED',value:'20',basis:'BASE',included:false,due:'',group:''}]},[null,'2025-01-01','2025-02-01'])
  let state=await svc().get(id);assert.equal(String(state.account.total),'320.38');assert.equal(String(state.overdue),'170.19')

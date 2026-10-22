@@ -16,7 +16,7 @@ async function main(){
  const env={CRM_TEST_DATABASE_URL:url,DATABASE_URL:url,DIRECT_URL:url,NODE_ENV:'test',R5_HISTORICAL_CONTAINER:'1',SUPABASE_URL:'',SUPABASE_SECRET_KEY:'',SUPABASE_SERVICE_ROLE_KEY:'',SMTP_HOST:'',MAIL_FROM:''}
  const nodeImage=(await docker(['image','inspect','node:24-alpine','--format','{{.Id}}'])).trim()
  const mounts=['node_modules','prisma','tests','docs','scripts'].flatMap(src=>['--mount',`type=bind,source=${path.join(root,src)},target=/work/${src},readonly`])
- for(const helper of ['historical-upgrade','catalog-migration','branding-migration','quotation-archive-migration','sales-orders-migration','unit-reservations-migration','order-receivables-migration'])console.log((await docker(['run','--rm','--network',`container:${name}`,'--workdir','/work','--env','R5_HISTORICAL_CONTAINER=1','--env','CRM_TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:5432/ls_salon_crm_test',...mounts,nodeImage,'node',`tests/helpers/${helper}.cjs`])).trim())
+ for(const helper of ['historical-upgrade','catalog-migration','branding-migration','quotation-archive-migration','sales-orders-migration','unit-reservations-migration','order-receivables-migration','collection-follow-ups-migration'])console.log((await docker(['run','--rm','--network',`container:${name}`,'--workdir','/work','--env','R5_HISTORICAL_CONTAINER=1','--env','CRM_TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:5432/ls_salon_crm_test',...mounts,nodeImage,'node',`tests/helpers/${helper}.cjs`])).trim())
  const files=['order-receivables.integration','unit-reservations.integration','sales-orders.integration','catalog.integration','quotations.integration']
  if(!process.argv.includes('--browser-only')){
  console.log('Running sales order and quotation checks.')

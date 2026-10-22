@@ -39,7 +39,11 @@ function dto(record: Loaded, actor: CrmActor) {
     parent: canViewParent ? { id: source.id, title: source.title, kind: enquiry ? "enquiry" : "opportunity" } : null,
     canEdit: permits(actor, "activities.edit") && (canManageCrm(actor.role) || record.assignedUserId === actor.userId) }
 }
-export function createWorkService({ run, audit, checkAssignee }: Context, extensions: Pick<CrmExtensions, "filters" | "splitQuery">) {
+export function createWorkService({ run, audit, checkAssignee }: Context, extensions: Pick<CrmExtensions, "filters" | "splitQuery" | "collectionContext">) {
+  async function collectionContext(tx: Tx, actor: CrmActor, orderId: string, creating = false) {
+    if (!extensions.collectionContext) throw new CrmError(403, "Collection follow-ups are unavailable.")
+    return extensions.collectionContext(tx, actor, orderId, creating)
+  }
   async function zone(tx: Tx, actor: CrmActor) {
     return (await tx.appSetting.findUnique({ where: { tenantId: actor.tenantId }, select: { timeZone: true } }))?.timeZone || "UTC"
   }
@@ -65,7 +69,12 @@ export function createWorkService({ run, audit, checkAssignee }: Context, extens
   }
   async function create(tx: Tx, actor: CrmActor, data: WorkCreateInput, previous?: Loaded, origin?: { planLaunchId: string; planPosition: number } | { followUpRuleId: string; followUpRuleName: string; followUpRuleVersion: number; automationDepth: number }) {
     requirePermission(actor, "activities.create")
-    const { contactId, enquiryId, opportunityId, completion, ...fields } = data
+    const { contactId, enquiryId, opportunityId, completion, collectionOrderId: requestedOrderId, ...fields } = data
+    const collectionOrderId = previous?.collectionOrderId ?? requestedOrderId ?? null
+    if (collectionOrderId) {
+      const context = await collectionContext(tx, actor, collectionOrderId, true)
+      if (context.contactId !== contactId || context.opportunityId !== opportunityId || enquiryId) throw new CrmError(400, "The activity must use the order's customer and opportunity.")
+    }
     const contact = await tx.crmContact.findFirst({ where: { ...contactScope(actor), id: contactId, archived: false } })
     if (!contact) throw new CrmError(404, termText("crm.contact.singular", "Active contact not found.", "Active {label} not found."))
     if (!previous) {
@@ -73,7 +82,7 @@ export function createWorkService({ run, audit, checkAssignee }: Context, extens
       if (opportunityId && !await tx.crmOpportunity.findFirst({ where: { ...enquiryScope(actor), id: opportunityId, contactId } })) throw new CrmError(404, termText("crm.opportunity.singular", "Matching opportunity not found.", "Matching {label} not found."))
     }
     const prepared = await schedule(tx, actor, fields)
-    const record = await tx.crmTask.create({ data: { ...prepared, ...origin, tenantId: actor.tenantId, contactId, enquiryId: enquiryId || null, opportunityId: opportunityId || null, createdByUserId: actor.userId, followUpOfId: previous?.id }, include })
+    const record = await tx.crmTask.create({ data: { ...prepared, ...origin, collectionOrderId, tenantId: actor.tenantId, contactId, enquiryId: enquiryId || null, opportunityId: opportunityId || null, createdByUserId: actor.userId, followUpOfId: previous?.id }, include })
     await log(tx, actor, record.id, "crm.work.created", previous ? "Next follow-up scheduled." : "Activity scheduled.", undefined, record)
     if (completion) return complete(tx, actor, record, { ...completion, version: record.version }, false)
     return record
@@ -113,6 +122,10 @@ export function createWorkService({ run, audit, checkAssignee }: Context, extens
     return after
   }
   return {
+    getCollectionContext(orderId: string) {
+      return run("activities.read", async (tx, actor) => ({ ...await collectionContext(tx, actor, orderId), timeZone: await zone(tx, actor), currentUserId: actor.userId,
+        canAssign: canManageCrm(actor.role) && permits(actor, "activities.assign") }))
+    },
     ...createPlanService({ run, audit, checkAssignee, createWork: (tx, actor, data, origin) => create(tx, actor, data, undefined, origin) }),
     previewWorkFollowUp(id: string, input: unknown) {
       const query = workRulePreviewSchema.parse(input)
@@ -130,7 +143,9 @@ export function createWorkService({ run, audit, checkAssignee }: Context, extens
       const query = workListSchema.strict().parse(split.core)
       return run("activities.read", async (tx, actor) => {
         const timeZone = await zone(tx, actor), now = new Date(), today = businessDate(now, timeZone)
+        if (query.collectionOrderId) await collectionContext(tx, actor, query.collectionOrderId)
         const filter: Prisma.CrmTaskWhereInput = {
+          collectionOrderId: query.collectionOrderId,
           contactId: query.contactId, enquiryId: query.enquiryId, opportunityId: query.opportunityId, type: query.type, activityTypeId: query.activityTypeId, planLaunchId: query.planLaunchId,
           title: { contains: query.q, mode: "insensitive" },
           ...(query.state === "open" ? { status: { in: [...openStatuses] } } : query.state === "completed" ? { status: "COMPLETED" } : query.state === "cancelled" ? { status: "CANCELLED" } : {}),

@@ -32,6 +32,7 @@ export const emptyReportExtension: CrmReportExtension = {
 // Application composition injects an implementation. Core CRM never selects an
 // industry. All hooks receive the existing transaction and freshly checked actor.
 export interface CrmExtensions<Fields extends object = object, Metadata extends object = object> {
+  collectionContext?(tx: Tx, actor: CrmActor, orderId: string, creating: boolean): Promise<{ contactId: string; opportunityId: string; title: string; canCreate: boolean }>
   splitQuery(input: unknown): { core: unknown; extension: CrmExtensionQuery }
   importFields?(tx: Tx, actor: CrmActor): Promise<ImportField[]>
   importInput?(values: Record<string, unknown>): object

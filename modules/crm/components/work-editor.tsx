@@ -45,7 +45,7 @@ export const WorkEditor = withRecordView(WorkEditorBody)
 function WorkEditorBody({ id, initial = {} }: { id?: string; initial?: Initial }) {
   const readTerm = useTerminologyReader()
   const term = useTerminology()
-  const { can } = useBusinessModules()
+  const { can, enabled } = useBusinessModules()
   const view = useRecordView()!
   const router = useRouter()
   const { data: session } = useSession()
@@ -157,6 +157,7 @@ function WorkEditorBody({ id, initial = {} }: { id?: string; initial?: Initial }
       { label: "Call direction", value: record?.callDirection }, { label: "Staff instructions / preparation", value: record?.description },
     ]} />    {record?.summary && <Section title={<>Recorded outcome: {record.outcome?.replaceAll("_", " ")}</>}> <p className="whitespace-pre-wrap break-words">{record.summary}</p></Section>}
     {record?.cancellationReason && <p>Cancellation reason: {record.cancellationReason}</p>}
+    {record?.collectionOrderId && enabled("receivables") && can(["salesOrders.read", "receivables.read"]) && <p className="text-sm"><Link className="underline" href={`/sales-orders/${record.collectionOrderId}`}>View collection receivable</Link>. Access follows your current order permissions.</p>}
     {record?.followUpRuleName && <p className="text-sm">Created by {record.followUpRuleName}, version {record.followUpRuleVersion}. Follow-up {record.automationDepth} in this chain.</p>}
     {record?.planLaunch && <p className="text-sm">From {record.planLaunch.planName}, version {record.planLaunch.planVersion}, step {(record.planPosition ?? 0) + 1}. <Link className="underline" href={`/crm/activities?scope=visible&state=all&planLaunchId=${record.planLaunchId}`}>{term("crm.activity.plural", "View plan activities", "View plan {label}")}</Link></p>}
 </>} tabs={record ? [
