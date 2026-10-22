@@ -1,6 +1,6 @@
 # R7.1 - Shared Sales Orders: implementation scope
 
-Status: R7.1 implemented locally on staging; hosted rollout remains pending.
+Status: R7.1 deployed and verified on hosted staging (2026-10-23, Asia/Kolkata).
 R6 production branding/PDF release is complete.
 The R6 recovery companion is implemented locally; see STORAGE_RECOVERY.md.
 
@@ -123,4 +123,52 @@ regression), 15 module/access/terminology checks, one end-to-end browser workflo
 TypeScript production build and targeted ESLint passed. Desktop/detail and mobile
 list/cancellation screenshots were inspected. The successful integration receipt is
 `tmp/industry-release/ls-erp-sales-orders-b397eea56e85.log`; the matching-build
-browser receipt is `tmp/industry-release/ls-erp-sales-orders-8ce955a5d570.log`. No hosted schema change, Git push or deployment has been performed.
+browser receipt is `tmp/industry-release/ls-erp-sales-orders-8ce955a5d570.log`. At that local checkpoint, no hosted schema change, Git push or deployment had been performed.
+
+
+## Hosted staging verification - 2026-10-23
+
+Application commit `6a8424e75f8eb4e58143ee7b927c7379107addfc` is READY on
+`leiwissen/ls-erp-staging`, deployment `dpl_7VvPTc4K4q9cvwtqSqR8dyUQvgX7`.
+The main staging URL and both existing synthetic QA tenant aliases point to this
+same deployment. The staging Supabase project is `oyhsrcmjhwxhvepdbcdc`.
+
+Migration 103 applied with all historical migration checksums verified. Aggregate
+fingerprints matched for 11 existing data/configuration tables. Runtime role
+`prisma_app` remains NOSUPERUSER/NOBYPASSRLS; explicit grants cover the two new
+tables. After creating synthetic orders, direct runtime reads proved that missing
+and foreign tenant contexts see neither their order nor history; the owning
+context sees the expected record. All three lifecycle events have mandatory audit
+entries matching the order history.
+
+The hosted Playwright workflow passed against QA Staging A/B:
+
+- Platform allowance and tenant enablement; dependency-protected disablement.
+- UI draft creation, confirmation and required cancellation reason/history.
+- Exact saved quotation identity/terms; later revision changes preserve the order.
+- Concurrent duplicate requests reuse one order; conflicting revisions are denied;
+  cancellation permits a replacement from revision 2.
+- Cross-tenant read/list/create denial, staff confirmation denial, cross-origin
+  write denial, stale version rejection and terminal cancelled state.
+- Fresh custom-manager permissions independently gate create, confirm and cancel.
+- Disabled module blocks API/UI and hides the quotation action; re-enable restores
+  access. Desktop and 390px mobile screenshots were inspected; no browser errors.
+
+Only synthetic QA records/users/roles were created. Sales Orders remains enabled
+on those two QA tenants for review. No local seed/reset helper ran against hosted
+storage or the database. Production alias `erp.ewissen.in` still points to
+`dpl_BVmvJ2iay6VneUXS1vjYerXuA3RC`, and GitHub main remains `c0905b4`.
+
+Repeatable opt-in command (requires existing private QA state and staging env file):
+
+```powershell
+$env:RUN_STAGING_ORDER_WRITES = '1'
+node node_modules/@playwright/test/cli.js test --config playwright.staging-orders.config.ts
+```
+
+The hosted suite accepts only the three fixed staging origins and checks tenant
+identities after login. Authentication is ephemeral, traces are off, and secrets
+remain in ignored local files. Screenshots: `test-results/staging-orders/`.
+Private aggregate receipts: `tmp/staging-setup/r7-migration-receipt.json`,
+`r7-deployment-receipt.json`, `r7-hosted-verification.json`, `r7-final-receipt.json`.
+Production rollout remains a separate release.

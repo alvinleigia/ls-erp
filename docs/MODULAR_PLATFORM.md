@@ -1,3 +1,13 @@
+## R7.1 - Hosted staging verified (2026-10-23)
+
+Sales Orders commit 6a8424e is deployed on ls-erp-staging. Migration 103 preserves
+existing data/configuration. Hosted QA tenant tests passed for create/confirm/
+cancel, immutable revisions, duplicate prevention, separate manager permissions,
+module activation, tenant isolation and desktop/mobile screens. Runtime RLS and
+mandatory audit records were checked directly with the restricted staging role.
+Production remains at c0905b4 / dpl_BVmvJ2iay6VneUXS1vjYerXuA3RC.
+See [R7.1 evidence and repeatable hosted checks](SALES_ORDERS_R7.md).
+
 ## R7.1 - Shared Sales Orders (2026-10-22)
 
 Implemented locally: draft creation from saved quotation revisions, immutable
