@@ -74,6 +74,30 @@ test('invalid selection, expired/overlong expiry, non-unit, unavailable and arch
  }
  await orders.transition(f.order.id,{action:'cancel',version:1,reason:'Not needed'});await assert.rejects(hold(f),status(409))
 })
+test('allocated units remain unavailable beyond their original hold expiry',async()=>{
+ const f=await fixture(),held=await hold(f,future(1500))
+ await orders.transition(f.order.id,{action:'confirm',version:1})
+ await reservations.transition(f.order.id,held.id,{action:'allocate',version:1})
+ await new Promise(resolve=>setTimeout(resolve,1600))
+ assert.equal((await reservations.history(f.order.id)).items[0].status,'ALLOCATED')
+ assert.equal((await catalog.get(f.item.id)).reservationState,'ALLOCATED')
+ assert.equal((await catalog.list({q:f.item.code,availability:'AVAILABLE'})).total,0)
+ await reservations.transition(f.order.id,held.id,{action:'release',version:2,reason:'Release allocation after original expiry'})
+ assert.equal((await catalog.get(f.item.id)).reservationState,null)
+})
+test('order cancellation and catalog changes serialize safely against new holds',async()=>{
+ const f=await fixture()
+ const cancelled=await Promise.allSettled([hold(f),orders.transition(f.order.id,{action:'cancel',version:1,reason:'Concurrent cancellation'})])
+ assert.equal(cancelled[1].status,'fulfilled')
+ assert.equal((await orders.get(f.order.id)).status,'CANCELLED')
+ assert.equal(await root.unitReservation.count({where:{tenantId:tenant,orderId:f.order.id,status:{in:['HELD','ALLOCATED']}}}),0)
+ const g=await fixture()
+ const changed=await Promise.allSettled([hold(g),catalog.save(itemInput({code:g.item.code,version:1,availability:'UNAVAILABLE'}),g.item.id)])
+ assert.equal(changed.filter(r=>r.status==='fulfilled').length,1)
+ assert.equal(changed.find(r=>r.status==='rejected').reason.status,409)
+ const row=await catalog.get(g.item.id)
+ assert(row.reservationState==='RESERVED' ? row.availability==='AVAILABLE' : row.availability==='UNAVAILABLE')
+})
 test('tenant RLS, composite FKs, immutable snapshots/history and catalog write guards',async()=>{
  const f=await fixture(),held=await hold(f),where={tenantId_id:{tenantId:tenant,id:held.id}}
  assert.equal((await unscoped.unitReservation.findMany()).length,0);assert.equal((await unscoped.unitReservationEvent.findMany()).length,0)

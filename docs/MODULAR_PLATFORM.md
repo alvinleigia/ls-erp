@@ -1,9 +1,11 @@
-## R7.2 - Unit reservations (2026-10-23)
+## R7.2 - Unit reservations verified on staging (2026-10-23)
 
-Staging-only implementation: expiring unique-unit holds, explicit allocation on
+Staging commit 1b1f195 is deployed and verified: expiring unique-unit holds, allocation on
 confirmed orders, reasoned release and atomic order-cancellation cleanup.
 Catalog availability and editing respect reservations; existing records and
-activation remain unchanged. See [scope and verification](UNIT_RESERVATIONS_R7.md).
+activation remain unchanged. Migration 104 preserves 13 existing tables; 42 integration,
+40 architecture/access checks and both hosted browser workflows passed. Production
+was not changed. See [scope and verification](UNIT_RESERVATIONS_R7.md).
 
 ## R7.1 - Hosted staging verified (2026-10-23)
 

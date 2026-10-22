@@ -1,5 +1,6 @@
 # R7.2 - Unique-unit reservations
 
+Status: deployed and verified on staging, 2026-10-23 (Asia/Kolkata).
 Scope: staging only. This increment extends Sales Catalog and Sales Orders; it
 does not add property fields to the shared order or require Real Estate.
 
@@ -58,7 +59,7 @@ Existing records, module flags and saved role assignments are unchanged.
 
 `npm.cmd run test:sales-orders` replays all 104 migrations in a disposable local
 database and runs reservation, order, catalog and quotation integration checks.
-The current checkpoint passed 40 checks, plus 40 module/access/architecture/
+The current checkpoint passed 42 checks, plus 40 module/access/architecture/
 terminology checks. TypeScript, targeted lint and the production build passed.
 The production build is a local check, not a production deployment.
 
@@ -74,4 +75,38 @@ The hosted test creates synthetic equipment units and saved quotations, exercise
 hold/allocation/release/cancellation/expiry, checks tenant/staff/origin/module
 restrictions and captures desktop/mobile screenshots. It uses application APIs;
 no hosted database fixture, reset, seed or client-data write is involved.
-Deployment and hosted verification evidence will be recorded after rollout.
+
+## Hosted staging evidence
+
+Application commit `1b1f195ff40ee7eb82fd75610d94fe3cc1b0ea60` is READY in
+`leiwissen/ls-erp-staging`, deployment `dpl_GsfDC7jT3YVa7z8wpGbfQFFL8fF7`.
+The staging root and QA A/B aliases all point to that deployment. No production
+database, environment configuration, deployment or main branch was changed.
+
+Migration 104 applied to the verified staging database. All 103 previous
+migration checksums were validated, and before/after row counts and content
+fingerprints matched for 13 existing tables, including orders, order history,
+catalog, quotations, module flags and role assignments. Runtime `prisma_app`
+remains NOSUPERUSER/NOBYPASSRLS with explicit new-table grants.
+
+Both hosted Playwright workflows passed: the existing Sales Orders regression
+and the new reservations workflow. The latter checked UI hold/allocation/release,
+duplicate retries, competing orders, catalog edit denial, cross-tenant access,
+staff mutation denial, cross-origin denial, module hiding, cancellation while
+Catalog is disabled, expiry/reuse, and mobile overflow. Desktop/mobile reservation,
+release dialog, expiry history and catalog screenshots were visually inspected.
+No browser page errors were reported. Only synthetic QA data was written.
+
+Direct reads using the restricted staging runtime role returned zero reservation,
+history and audit rows with missing/foreign tenant contexts. The owning context
+returned the expected reservation and exactly three matching lifecycle events and
+mandatory audit rows. Held, Allocated and Released were all verified.
+
+Evidence (ignored local files): `tmp/staging-setup/r72-migration-receipt.json`,
+`r72-deployment-receipt.json`, `r72-hosted-verification.json`,
+`r72-final-receipt.json`; screenshots in `test-results/staging-orders/`.
+The final 42-check integration log is
+`tmp/industry-release/ls-erp-sales-orders-3ac2271e0708.log`.
+
+Receivables/payment recording remains the next increment; no production release
+is part of this staging phase.
