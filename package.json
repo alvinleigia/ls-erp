@@ -49,6 +49,7 @@
     "test:catalog": "node scripts/test-catalog.cjs",
     "test:catalog:browser": "node scripts/test-catalog.cjs --browser",
     "test:branding": "node scripts/test-branding.cjs",
+    "test:storage-recovery": "node --test tests/storage-recovery.test.cjs",
     "test:crm:quotations:integration": "node --require ./tests/register.cjs --test --test-force-exit tests/quotations.integration.test.cjs",
     "test:access:integration": "node --require ./tests/register.cjs --test --test-force-exit tests/access-roles.integration.test.cjs tests/access-role-migration.test.cjs",
     "test:access:e2e": "playwright test --config playwright.local-access.config.ts access.spec.ts",

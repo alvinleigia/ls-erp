@@ -38,6 +38,8 @@ The additive migration permits only the initial archive attachment on a revision
 Database triggers continue to prohibit snapshot changes, archive replacement and
 revision deletion. Issued documents are retained; no automatic expiry is added.
 Include storage objects in recovery backups alongside the database.
+Use the [storage recovery companion](STORAGE_RECOVERY.md) to capture and verify
+the two application buckets with the matching database backup.
 
 Scope: quotation issuance and archived downloads. Appointment invoices retain
 their existing runtime rendering and saved branding; invoice issuance is separate.

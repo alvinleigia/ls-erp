@@ -27,6 +27,8 @@ assets are retained because historical documents may refer to them. Removal from
 branding changes the current selection only. Known rolled-back uploads are
 removed; files from ambiguous database failures are retained for later review.
 Database recovery must include this storage bucket, not just PostgreSQL backups.
+See [storage recovery](STORAGE_RECOVERY.md) for encrypted capture, verification
+and protected local reconstruction alongside the database backup.
 
 ## Documents and rollout
 

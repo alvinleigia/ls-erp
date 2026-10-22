@@ -1,3 +1,20 @@
+## R6 - Production release and recovery close-out (2026-10-22)
+
+Branding, quotation PDF archiving, admin UI fixes and database adapter fixes were
+merged to main at c0905b4 and released on 2026-10-21 (Asia/Calcutta). Production
+erp.ewissen.in served the verified deployment; both migrations applied (102 total)
+with existing records preserved. Nine live read-only checks passed and desktop/
+mobile branding screenshots were inspected. Earlier staging-only entries below
+are historical checkpoints, not the current production release status.
+
+The storage recovery companion is now implemented locally. Twelve tests pass;
+a fresh database restore matched 108 tables and financial totals, and both current
+logo files recovered with matching checksums. Matching restored database references
+were verified. Production had no archived PDFs at capture time. See
+[recovery scope and evidence](STORAGE_RECOVERY.md). No hosted writes or deployment
+were performed during this close-out. R7.1 Sales Orders remains planned: see
+[scope and delivery sequence](SALES_ORDERS_R7.md).
+
 ## R6 - Quotation PDF archive: implementation (2026-10-20)
 
 Draft previews remain temporary; Issue & Download archives one immutable PDF per
