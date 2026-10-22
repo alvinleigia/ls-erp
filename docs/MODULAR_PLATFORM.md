@@ -1,3 +1,13 @@
+## R7.3 - Order receivables verified on staging (2026-10-23)
+
+Optional receivables now support frozen schedules, partial payments, corrections
+and full-refund records on confirmed Sales Orders. Known extra charges are
+included; pending charges block opening. Paid orders cannot be cancelled until
+payments are resolved. Migration 105 preserved 15 existing tables. The isolated
+suite passed 52 integration and 40 architecture/access checks; all three hosted
+QA workflows passed. Runtime RLS, audits and desktop/mobile views were verified.
+Production is unchanged. See [scope and verification](RECEIVABLES_R7.md).
+
 ## R7.2 - Unit reservations verified on staging (2026-10-23)
 
 Staging commit 1b1f195 is deployed and verified: expiring unique-unit holds, allocation on

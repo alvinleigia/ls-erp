@@ -20,7 +20,7 @@ test('hosted Sales Orders: frozen revisions, transitions, access, module control
   const contexts: BrowserContext[] = [], checks: string[] = [], ids: Record<string, string> = {}
   const open = async (origin: string, email: string, password: string, tenantId?: string) => { const c = await login(browser, origin, email, password, tenantId); contexts.push(c); return c }
   let admin: BrowserContext | undefined
-  let modulesActivated = false
+  let modulesActivated = false, restoreReceivables = false
   try {
     const platform = await open('https://ls-erp-staging.vercel.app', env.PLATFORM_ADMIN_EMAIL, env.PLATFORM_ADMIN_PASSWORD)
     admin = await open(a.origin, a.admin.email, state.password, a.tenant.id)
@@ -113,6 +113,11 @@ test('hosted Sales Orders: frozen revisions, transitions, access, module control
     await json(manager, `/api/sales-orders/${replacement.id}`, 403, 'PATCH', { action: 'cancel', version: 2, reason: 'No cancel permission' })
     checks.push('Custom manager role requires distinct create/confirm/cancel permissions and refreshes immediately')
     await json(admin, '/api/modules', 409, 'PATCH', { key: 'salesDocuments', enabled: false })
+    restoreReceivables = (await json(admin, '/api/modules')).modules.some((m: { key: string; enabled: boolean }) => m.key === 'receivables' && m.enabled)
+    if (restoreReceivables) {
+      await json(admin, '/api/modules', 409, 'PATCH', { key: 'salesOrders', enabled: false })
+      await json(admin, '/api/modules', 200, 'PATCH', { key: 'receivables', enabled: false })
+    }
     await json(admin, '/api/modules', 200, 'PATCH', { key: 'salesOrders', enabled: false })
     await json(admin, `/api/sales-orders/${id}`, 403)
     await page.goto(`/crm/quotations/${quote.id}`)
@@ -134,6 +139,7 @@ test('hosted Sales Orders: frozen revisions, transitions, access, module control
     fs.writeFileSync('tmp/staging-setup/r7-hosted-verification.json', JSON.stringify({ at: new Date().toISOString(), origins: [a.origin, b.origin], checks, ids, browserErrors }, null, 2))
   } finally {
     if (modulesActivated && admin) await json(admin, '/api/modules', 200, 'PATCH', { key: 'salesOrders', enabled: true })
+    if (restoreReceivables && admin) await json(admin, '/api/modules', 200, 'PATCH', { key: 'receivables', enabled: true })
     await Promise.all(contexts.map(c => c.close()))
   }
 })

@@ -97,3 +97,19 @@ test('audit failure rolls back opening, payment and reversal with all balances i
  await svc().open(id,{dueDates:[null]});await assert.rejects(service.record(id,pay()),/Audit unavailable/);assert.equal(String((await svc().get(id)).paid),'0')
  const p=await svc().record(id,pay());await assert.rejects(service.reverse(id,p.id,reverse()),/Audit unavailable/);const view=await svc().get(id);assert.equal(view.items[0].status,'POSTED');assert.equal(view.account.version,2)
 })
+test('currency precision follows zero and three decimal currencies; zero-rounded instalments are omitted',async()=>{
+ const jpy=await opened({currency:'JPY',lines:[{description:'Service',quantity:'1',unit:'contract',rate:'1'}],instalments:[{label:'Small',percent:'1',days:0,note:''},{label:'Remainder',percent:'99',days:1,note:''}]})
+ assert.equal((await svc().get(jpy)).lines.length,1);await assert.rejects(svc().record(jpy,pay({amount:'0.1'})),status(400))
+ await svc().record(jpy,pay({amount:'1'}));assert.equal(String((await svc().get(jpy)).outstanding),'0')
+ const kwd=await opened({currency:'KWD'});await svc().record(kwd,pay({amount:'0.001'}));assert.equal(String((await svc().get(kwd)).outstanding),'300.374')
+ await assert.rejects(svc().record(kwd,pay({version:2,amount:'0.0001'})),status(400))
+})
+test('overdue excludes today and undated balances using the tenant business date',async()=>{
+ const settings=await root.appSetting.create({data:{tenantId:tenant,timeZone:'Pacific/Kiritimati'}})
+ try{
+  const id=await fresh(),view=await svc().get(id),parts=new Intl.DateTimeFormat('en-US',{timeZone:'Pacific/Kiritimati',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date()),value=k=>parts.find(p=>p.type===k).value
+  assert.equal(view.today,`${value('year')}-${value('month')}-${value('day')}`)
+  await svc().open(id,{dueDates:[view.today]});assert.equal(String((await svc().get(id)).overdue),'0')
+  const undated=await opened();assert.equal(String((await svc().get(undated)).overdue),'0')
+ }finally{await root.appSetting.delete({where:{id:settings.id}})}
+})

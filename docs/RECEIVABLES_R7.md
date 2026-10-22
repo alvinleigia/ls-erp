@@ -54,13 +54,21 @@ receivables or change existing orders, role assignments or module flags.
 
 ## Verification
 
-- `npm.cmd run test:sales-orders`: 50 isolated integration tests passed, including
+- `npm.cmd run test:sales-orders`: 52 isolated integration tests passed, including
   financial totals, partial allocation, duplicate/reference rejection, rounding,
   pending charges, immutable records, cancellation races, RLS, custom permissions
   and mandatory-audit rollback.
 - 40 architecture/access/navigation checks passed; application build passed.
 - Hosted workflow: `tests/staging-orders/receivables.spec.ts`, restricted to
-  allowlisted staging QA tenants. Hosted verification is pending deployment.
+  allowlisted staging QA tenants. All three hosted workflows passed: orders,
+  reservations and receivables. Desktop/mobile screenshots were inspected.
+- Restricted staging database role verified all five financial tables and audit
+  records: no access without tenant context or from another tenant; the owning
+  tenant sees one account, two schedule lines, two reversed payments, three
+  allocations, two reversal records and five matching audit events.
+- Staging app commit `caf0a82` passed the full hosted suite. The following wording
+  cleanup distinguishes the optional correction reference from a refund reference.
+  No production branch or deployment was changed.
 
 Do not apply this migration or merge this increment to main until separately
 authorized for production.
