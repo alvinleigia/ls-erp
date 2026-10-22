@@ -71,5 +71,6 @@ test("module dependency gates hide property and document labels without mutating
   assert.equal(activeTerms(terminologyCatalog, flags).length, 18)
   assert.equal(activeTerms(terminologyCatalog, flags.map(flag => flag.key === "crm" ? { ...flag, enabled: false } : flag)).length, 0)
   assert.equal(activeTerms(terminologyCatalog, flags.filter(flag => flag.key !== "realEstate")).length, 14)
-  assert.equal(terminologyCatalog.length, 18)
+  assert.equal(terminologyCatalog.length, 20)
+  assert.equal(activeTerms(terminologyCatalog, [...flags, { key: "salesOrders", allowed: true, enabled: true }]).length, 20)
 })

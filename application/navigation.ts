@@ -55,6 +55,7 @@ export function businessNavigation(flags: ModuleFlag[], permissions?: Permission
   ]
   if (moduleEnabled(flags, "salesDocuments")) groups.push({ key: "salesDocuments", title: businessModules.salesDocuments.name, icon: FileTextIcon, items: [entry(term("salesDocuments.quotation.plural", "Quotations"), businessModules.salesDocuments.href, FileTextIcon), entry("Templates", "/crm/configuration/quotation-templates", SettingsIcon)] })
   if (moduleEnabled(flags, "realEstate")) groups.push({ key: "realEstate", title: businessModules.realEstate.name, icon: Building2Icon, items: [entry(term("realEstate.project.plural", "Projects"), businessModules.realEstate.href, Building2Icon), entry("Configuration", "/crm/configuration/real-estate", SettingsIcon)] })
+  if (moduleEnabled(flags, "salesOrders")) groups.push({ key: "salesOrders", title: term("salesOrders.order.plural", "Sales Orders"), icon: FileTextIcon, items: [entry(term("salesOrders.order.plural", "Sales Orders"), "/sales-orders", FileTextIcon)] })
   return groups.map(group => ({ ...group, items: group.items.filter(item => { const requirement = routeRequirement(item.href); return !!requirement && satisfies({ permissions }, requirement) }) })).filter(group => group.items.length).map(group => ({ ...group, href: group.items[0].href, isActive: (current: string) => group.items.some(item => item.isActive(current)) }))
 }
 

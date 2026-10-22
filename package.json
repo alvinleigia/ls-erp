@@ -48,6 +48,7 @@
     "test:crm:quotations": "node --require ./tests/register.cjs --test tests/quotation-calculation.test.cjs",
     "test:catalog": "node scripts/test-catalog.cjs",
     "test:catalog:browser": "node scripts/test-catalog.cjs --browser",
+    "test:sales-orders": "node scripts/test-sales-orders.cjs",
     "test:branding": "node scripts/test-branding.cjs",
     "test:storage-recovery": "node --test tests/storage-recovery.test.cjs",
     "test:crm:quotations:integration": "node --require ./tests/register.cjs --test --test-force-exit tests/quotations.integration.test.cjs",

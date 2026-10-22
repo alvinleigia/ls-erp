@@ -812,6 +812,7 @@ model Tenant {
   quotationTemplates CrmQuotationTemplate[]
   quotations CrmQuotation[]
   quotationRevisions CrmQuotationRevision[]
+  salesOrders SalesOrder[]
   crmSalesTeams CrmSalesTeam[]
   crmSalesTeamMembers CrmSalesTeamMember[]
   customFieldDefinitions CustomFieldDefinition[]
@@ -2385,7 +2386,45 @@ model CrmQuotationRevision {
   createdAt DateTime @default(now())
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   quotation CrmQuotation @relation(fields: [tenantId, quotationId], references: [tenantId, id], onDelete: Restrict)
+  salesOrders SalesOrder[]
   @@id([tenantId, quotationId, number])
+}
+
+model SalesOrder {
+  tenantId String
+  id String @default(cuid())
+  quotationId String
+  revision Int
+  title String
+  customerName String
+  currency String
+  consideration Decimal @db.Decimal(18, 4)
+  snapshot Json
+  status String @default("DRAFT")
+  version Int @default(1)
+  createdAt DateTime @default(now())
+  createdBy String
+  updatedAt DateTime @updatedAt
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  source CrmQuotationRevision @relation(fields: [tenantId, quotationId, revision], references: [tenantId, quotationId, number], onDelete: Restrict)
+  events SalesOrderEvent[]
+  @@id([tenantId, id])
+  @@index([tenantId, status, createdAt(sort: Desc), id])
+  @@index([tenantId, createdAt(sort: Desc), id])
+  @@index([tenantId, quotationId, revision])
+}
+
+model SalesOrderEvent {
+  tenantId String
+  orderId String
+  version Int
+  status String
+  actorId String
+  actorName String
+  reason String @default("")
+  createdAt DateTime @default(now())
+  order SalesOrder @relation(fields: [tenantId, orderId], references: [tenantId, id], onDelete: Restrict)
+  @@id([tenantId, orderId, version])
 }
 
 model TenantAccessRole {

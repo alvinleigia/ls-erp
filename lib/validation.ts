@@ -1560,3 +1560,14 @@ export const directoryQuerySchema = z.object({
 })
 
 export const taxLookupQuerySchema = z.object({ page: z.coerce.number().int().min(1).default(1), pageSize: z.coerce.number().int().min(1).max(100).default(20), q: z.string().trim().max(120).optional() })
+
+export const salesOrderCreateSchema = z.object({ quotationId: z.string().min(1).max(100), revision: z.number().int().positive() }).strict()
+export const salesOrderTransitionSchema = z.discriminatedUnion("action", [
+  z.object({ action: z.literal("confirm"), version: z.number().int().positive() }).strict(),
+  z.object({ action: z.literal("cancel"), version: z.number().int().positive(), reason: z.string().trim().min(1).max(2000) }).strict(),
+])
+export const salesOrderListSchema = z.object({
+  page: z.coerce.number().int().min(1).default(1), pageSize: z.coerce.number().int().min(1).max(100).default(20),
+  q: z.string().trim().max(120).default(""), status: z.enum(["DRAFT", "CONFIRMED", "CANCELLED"]).optional(),
+  sort: z.enum(["createdAt", "title"]).default("createdAt"), order: z.enum(["asc", "desc"]).default("desc"),
+})

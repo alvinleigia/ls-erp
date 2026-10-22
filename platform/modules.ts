@@ -2,6 +2,7 @@
 // dependencies are enforced at each module's server boundary.
 type ModuleDefinition = { name: string; description: string; defaultEnabled: boolean; href: string; requires: readonly string[]; parent?: string }
 export const businessModules = {
+  salesOrders: { name: "Sales Orders", description: "Confirmed commercial agreements from saved quotations. Does not reserve stock or collect payments.", defaultEnabled: false, href: "/sales-orders", requires: ["salesDocuments"] },
   catalog: { name: "Sales Catalog", description: "Priced products and individually identified units for sales quotations.", defaultEnabled: false, href: "/catalog", requires: [] },
   leaves: { name: "Leaves", description: "Leave rules, groups, personal requests and approvals.", defaultEnabled: false, href: "/leaves/requests", requires: [] },
   shifts: { name: "Shifts", description: "Shift templates, schedules, recurring plans and staff roster.", defaultEnabled: false, href: "/shifts/roster", requires: [] },

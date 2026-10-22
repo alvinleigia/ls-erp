@@ -1,3 +1,17 @@
+## R7.1 - Shared Sales Orders (2026-10-22)
+
+Implemented locally: draft creation from saved quotation revisions, immutable
+commercial snapshots, explicit confirmation/cancellation, required cancellation
+reasons and transactional history/audit. Sales Orders is an optional module with
+Sales Documents/CRM dependencies and separate read/create/confirm/cancel access.
+Current opportunity record scope applies; no existing tenant is auto-activated.
+No stock reservation, payment collection or automatic opportunity closure occurs.
+
+The additive migration and workflow are verified in a disposable local database;
+local browser checks cover desktop/mobile and access restrictions. Hosted staging
+rollout is the next checkpoint. Production remains at the R6 release below.
+See [Sales Orders behavior, tests and rollout](SALES_ORDERS_R7.md).
+
 ## R6 - Production release and recovery close-out (2026-10-22)
 
 Branding, quotation PDF archiving, admin UI fixes and database adapter fixes were

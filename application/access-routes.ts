@@ -3,6 +3,7 @@ import { createRouteAccess } from "@/platform/access/routes"
 import { crmConfigurationGroups } from "@/modules/crm/configuration"
 
 const routes: [string, Resource][] = [
+  ["/sales-orders", "salesOrders"],
   ["/catalog", "catalogItems"],
   ["/dashboard", "dashboard"], ["/reports/audit-logs", "auditLogs"],
   ["/users", "users"], ["/settings/taxes", "taxRates"],
@@ -37,6 +38,6 @@ export const applicationRouteAccess = createRouteAccess({
     "/crm/activity-configuration": configurationRequirement(1),
   },
   prefixRequirements: [["/crm/sales", ["reports.read", "enquiries.read", "opportunities.read", "activities.read"]]],
-  protectedLinkPrefixes: ["/crm"],
+  protectedLinkPrefixes: ["/crm", "/sales-orders"],
 })
 export const { routeRequirement, routeResource } = applicationRouteAccess

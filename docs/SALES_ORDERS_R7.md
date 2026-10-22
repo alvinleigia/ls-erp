@@ -1,6 +1,7 @@
 # R7.1 - Shared Sales Orders: implementation scope
 
-Status: planned, not implemented. R6 production branding/PDF release is complete.
+Status: R7.1 implemented locally on staging; hosted rollout remains pending.
+R6 production branding/PDF release is complete.
 The R6 recovery companion is implemented locally; see STORAGE_RECOVERY.md.
 
 ## First increment
@@ -17,7 +18,7 @@ reuse AppointmentOrder or add property fields to the shared order model. A futur
 Real Estate reservation extension can associate a property unit with the order.
 Tenant terminology may display Sales Order as Booking without changing its rules.
 
-## Proposed rules to implement and test
+## Implemented rules
 
 - Separate optional `salesOrders` activation, dependent on Sales Documents and its
   existing CRM dependency. Platform allowance and tenant enablement both apply;
@@ -45,7 +46,7 @@ Tenant terminology may display Sales Order as Booking without changing its rules
   values to JavaScript floating-point calculations or reuse appointment cents as
   a general financial model.
 
-## Delivery sequence
+## Delivery sequence and verification
 
 1. Additive schema/migration, module and permission registration; tests for existing
    data preservation, no automatic activation, RLS and tenant foreign keys.
@@ -61,3 +62,65 @@ Tenant terminology may display Sales Order as Booking without changing its rules
 Reservations/expiry/unique-unit allocation belong to R7.2. Receivables, payment
 allocations, reversals, accounting and payment gateways belong to later work.
 Do not silently extend this first increment into fulfilment or accounting.
+
+## Access and operational decisions
+
+- Tenant administrators and managers with `salesOrders.confirm` / `salesOrders.cancel`
+  can perform those transitions. Staff can read/create assigned orders but cannot
+  confirm/cancel, even if a custom role includes those permissions. The Salesperson
+  template includes order read/create; existing saved roles are not expanded.
+- Create also requires `quotations.read`. Order reads and transitions require their
+  own permissions and the current source opportunity record scope. Manager scope
+  can be own records, managed teams or all tenant records; ordinary team membership
+  does not expand staff access. Reassignment affects visibility, not saved terms.
+- Customer name/email/phone are preserved from the selected revision. There is no
+  inferred customer foreign key: historical quotation snapshots did not freeze a
+  contact ID, and the current opportunity contact may have changed.
+- History is visible on each authorized order. Global audit reports retain the
+  existing admin-only policy for these events and hide them while the module is
+  unavailable. Order changes fail atomically if the mandatory audit cannot save.
+- Saved terms, histories and cancelled orders cannot be updated/deleted directly.
+  A partial unique index allows one active order per quotation across revisions;
+  this SQL index is intentional and is not represented as a Prisma unique field.
+- No order PDF or new Storage objects are created. The source quotation link opens
+  the exact saved revision. Source quotations remain governed by their existing
+  preview/issuance workflow.
+
+## Local verification and rollout
+
+The additive migration `20261022000100_sales_orders` creates two tables, forced
+RLS, composite tenant foreign keys, immutable-record triggers and the active-order
+index. It does not update client records or activate existing tenants. The isolated
+runner replays all 103 migrations and compares existing quotations, revisions,
+contacts, opportunities and module flags before/after the final migration.
+
+Commands:
+
+```powershell
+npm.cmd run test:sales-orders
+npm.cmd run build
+npm.cmd run test:sales-orders -- --browser-only
+node --require ./tests/register.cjs --test tests/module-navigation.test.cjs tests/access-policy.test.cjs tests/terminology.test.cjs
+```
+
+The runner uses a disposable loopback-only Postgres container, a restricted RLS
+runtime role, and synthetic tenants. It never loads hosted environment files.
+Browser checks cover the saved-quotation action, draft/confirmed/cancelled history,
+required cancellation reason, cross-origin write denial, staff restrictions,
+disabled-module UI/API access and desktop/mobile layouts. Screenshots are under
+`test-results/local-access/sales-orders-generic-order-bdc53-trols-on-desktop-and-mobile/`.
+
+Before staging rollout, apply this migration to the verified staging database and
+check that the actual application runtime role has SELECT/INSERT/UPDATE on
+`SalesOrder` and SELECT/INSERT on `SalesOrderEvent` (no grants to PUBLIC). The
+isolated test helper explicitly grants its disposable runtime role table access.
+Deploy matching code and enable Sales Orders only for synthetic staging tenants.
+Repeat the workflow against the hosted deployment before any production release.
+Production migration, backup, deployment and client activation remain separate.
+
+Verified locally on 2026-10-22: 25 integration checks (orders plus quotation
+regression), 15 module/access/terminology checks, one end-to-end browser workflow,
+TypeScript production build and targeted ESLint passed. Desktop/detail and mobile
+list/cancellation screenshots were inspected. The successful integration receipt is
+`tmp/industry-release/ls-erp-sales-orders-b397eea56e85.log`; the matching-build
+browser receipt is `tmp/industry-release/ls-erp-sales-orders-8ce955a5d570.log`. No hosted schema change, Git push or deployment has been performed.

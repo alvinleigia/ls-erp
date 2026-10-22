@@ -1,10 +1,11 @@
 import type { BusinessModuleKey } from "../modules"
 
-export const permissionActions = ["read", "create", "edit", "archive", "export", "assign", "approve"] as const
+export const permissionActions = ["read", "create", "edit", "archive", "export", "assign", "approve", "confirm", "cancel"] as const
 export type PermissionAction = typeof permissionActions[number]
 const editable = ["read", "create", "edit"] as const
 const records = ["read", "create", "edit", "archive"] as const
 export const accessResources = {
+  salesOrders: { name: "Sales orders", module: "salesOrders", actions: ["read", "create", "confirm", "cancel"] },
   catalogItems: { name: "Sales catalog items", module: "catalog", actions: records },
   dashboard: { name: "Business dashboard", module: "core", actions: ["read"] },
   auditLogs: { name: "Audit reports", module: "core", actions: ["read"] },
@@ -54,6 +55,6 @@ export const allPermissions = resourceKeys.flatMap(resource => accessResources[r
 export const workspaceRead: Requirement = { any: resourceKeys.filter(resource => (["crm", "realEstate", "salesDocuments", "paymentPlans"] as readonly string[]).includes(accessResources[resource].module)).map(resource => `${resource}.read` as Permission) }
 export const roleTemplates = [
   { key: "manager", name: "Manager", permissions: allPermissions },
-  { key: "salesperson", name: "Salesperson", permissions: allPermissions.filter(p => p.endsWith(".read") || ["contacts", "accounts", "enquiries", "opportunities", "activities", "quotations"].some(r => p.startsWith(`${r}.`) && !p.endsWith(".assign"))) },
+  { key: "salesperson", name: "Salesperson", permissions: allPermissions.filter(p => p.endsWith(".read") || p === "salesOrders.create" || ["contacts", "accounts", "enquiries", "opportunities", "activities", "quotations"].some(r => p.startsWith(`${r}.`) && !p.endsWith(".assign"))) },
   { key: "readonly", name: "Read-only", permissions: allPermissions.filter(p => p.endsWith(".read")) },
 ] as const

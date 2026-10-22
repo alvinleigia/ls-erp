@@ -1,0 +1,69 @@
+import { test, expect } from '@playwright/test'
+import { seed, login, json } from './fixtures'
+import { emptyQuotationContent } from '../../modules/sales-documents/quotation-validation'
+
+test('generic order creation, confirmation, cancellation and access controls on desktop and mobile', async ({ browser }) => {
+  const f = await seed(), admin = await login(browser, f.origin, f.users.admin.email)
+  try {
+    const { page, context } = admin
+    await f.db.query('INSERT INTO "TenantModule" ("tenantId",key,allowed,enabled,"updatedAt") VALUES ($1,\'salesOrders\',true,true,now())', [f.slug])
+    await f.db.query('UPDATE "TenantModule" SET enabled=false WHERE "tenantId"=$1 AND key=\'realEstate\'', [f.slug])
+    const contact = await json(context, '/api/crm/contacts', 201, 'POST', { name: 'QA Services Customer' })
+    const pipeline = `${f.slug}-pipeline`, stage = `${f.slug}-stage`
+    await f.db.query('INSERT INTO "CrmPipeline" (id,"tenantId",name,"updatedAt") VALUES ($1,$2,\'Service sales\',now())', [pipeline, f.slug])
+    await f.db.query('INSERT INTO "CrmStage" (id,"tenantId","pipelineId",name,position,probability,color) VALUES ($1,$2,$3,\'Qualified\',0,10,\'#123456\')', [stage, f.slug, pipeline])
+    const deal = await json(context, '/api/crm/opportunities', 201, 'POST', { title: 'Service agreement', contactId: contact.id, assignedUserId: f.users.staff.id, pipelineId: pipeline, stageId: stage, amount: '300.375', currency: 'INR', expectedCloseOn: '2027-12-31' })
+    const quote = await json(context, `/api/crm/opportunities/${deal.id}/quotations`, 201, 'POST', { content: { ...emptyQuotationContent, title: 'Annual support agreement', supplierName: 'QA Shared Industries', currency: 'INR', terms: 'Support provided during business hours.', lines: [{ description: 'Support hours', quantity: '3', unit: 'hour', rate: '100.125' }] } })
+    await page.goto(`/crm/quotations/${quote.id}`)
+    await page.getByRole('button', { name: 'Create sales order', exact: true }).click()
+    await expect(page).toHaveURL(/\/sales-orders\/[^/]+$/)
+    const id = page.url().split('/').pop()!
+    await expect(page.getByRole('heading', { name: 'Annual support agreement', exact: true })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'History', exact: true })).toBeVisible()
+    await page.screenshot({ path: test.info().outputPath('order-draft-desktop.png'), fullPage: true })
+    await page.getByRole('button', { name: 'Confirm sales order', exact: true }).click()
+    await expect(page.getByRole('dialog')).toContainText('does not reserve stock or property')
+    await page.getByRole('button', { name: 'Confirm agreement', exact: true }).click()
+    await expect(page.getByRole('dialog')).toHaveCount(0)
+    await expect(page.getByRole('button', { name: 'Confirm sales order', exact: true })).toHaveCount(0)
+    expect((await json(context, `/api/sales-orders/${id}`)).status).toBe('CONFIRMED')
+    await page.setViewportSize({ width: 390, height: 844 })
+    await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390)
+    await page.screenshot({ path: test.info().outputPath('order-confirmed-mobile.png'), fullPage: true })
+    await page.getByRole('button', { name: 'Cancel sales order', exact: true }).click()
+    await expect(page.getByRole('button', { name: 'Cancel order', exact: true })).toBeDisabled()
+    await page.getByLabel('Cancellation reason', { exact: true }).fill('Customer requested revised terms')
+    await page.screenshot({ path: test.info().outputPath('order-cancel-mobile.png'), fullPage: true })
+    await page.getByRole('button', { name: 'Cancel order', exact: true }).click()
+    await expect(page.getByRole('dialog')).toHaveCount(0)
+    await expect(page.getByText('Customer requested revised terms', { exact: true })).toBeVisible()
+    const saved = await json(context, `/api/sales-orders/${id}`)
+    expect(saved.status).toBe('CANCELLED'); expect(saved.history).toHaveLength(3)
+    const rejected = await context.request.post('/api/sales-orders', { headers: { Origin: 'https://other.example.test' }, data: { quotationId: quote.id, revision: 1 } })
+    expect(rejected.status()).toBe(403)
+    await page.setViewportSize({ width: 1280, height: 900 })
+    await page.goto('/sales-orders')
+    await expect(page.getByRole('link', { name: 'Annual support agreement', exact: true })).toBeVisible()
+    await page.screenshot({ path: test.info().outputPath('order-list-desktop.png'), fullPage: true })
+    await page.setViewportSize({ width: 390, height: 844 })
+    await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390)
+    await page.screenshot({ path: test.info().outputPath('order-list-mobile.png'), fullPage: true })
+    const staff = await login(browser, f.origin, f.users.staff.email)
+    try {
+      await staff.page.goto(`/crm/quotations/${quote.id}`)
+      await staff.page.getByRole('button', { name: 'Create sales order', exact: true }).click()
+      await expect(staff.page).toHaveURL(/\/sales-orders\/[^/]+$/)
+      await expect(staff.page.getByRole('heading', { name: 'Annual support agreement', exact: true })).toBeVisible()
+      await expect(staff.page.getByRole('button', { name: 'Confirm sales order', exact: true })).toHaveCount(0)
+      const staffOrder = staff.page.url().split('/').pop()!
+      await json(staff.context, `/api/sales-orders/${staffOrder}`, 403, 'PATCH', { action: 'confirm', version: 1 })
+    } finally { await staff.context.close() }
+    await f.db.query('UPDATE "TenantModule" SET enabled=false WHERE "tenantId"=$1 AND key=\'salesOrders\'', [f.slug])
+    await page.goto(`/crm/quotations/${quote.id}`)
+    await expect(page.getByRole('heading', { name: /Annual support agreement/ })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Create sales order', exact: true })).toHaveCount(0)
+    await page.goto('/sales-orders')
+    await expect(page.getByRole('heading', { name: 'Module unavailable', exact: true })).toBeVisible()
+    await json(context, `/api/sales-orders/${id}`, 403)
+  } finally { await admin.context.close(); await f.db.end() }
+})

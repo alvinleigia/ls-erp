@@ -4,6 +4,16 @@ const assert = require('node:assert/strict')
 const { businessNavigation, catalogNavigation } = require('../application/navigation.ts')
 const { moduleEnabled, moduleChangeProblem } = require('../platform/modules.ts')
 const flags = keys => keys.map(key => ({ key, allowed: true, enabled: true }))
+
+test('Sales Orders navigation requires activation, dependencies and read access', () => {
+ const active = flags(['crm', 'salesDocuments', 'salesOrders'])
+ assert.deepEqual(businessNavigation(active, ['salesOrders.read']).map(group => group.key), ['salesOrders'])
+ assert.deepEqual(businessNavigation(active, ['quotations.read']).filter(group => group.key === 'salesOrders'), [])
+ assert.equal(moduleEnabled(active.filter(flag => flag.key !== 'salesDocuments'), 'salesOrders'), false)
+ assert.match(moduleChangeProblem(active, 'salesDocuments', false), /Sales Orders/)
+ const { applicationRouteAccess } = require('../application/access-routes.ts')
+ assert.equal(applicationRouteAccess.linkRequirement('/sales-orders/example'), 'salesOrders.read')
+})
 test('catalog navigation is independent of CRM and respects activation and read access', () => {
  assert.deepEqual(catalogNavigation(flags(['catalog']), ['catalogItems.read']).map(group=>group.key), ['catalog'])
  assert.deepEqual(catalogNavigation(flags(['catalog']), []), [])
