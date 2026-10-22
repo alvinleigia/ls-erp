@@ -3,6 +3,7 @@ import { createRouteAccess } from "@/platform/access/routes"
 import { crmConfigurationGroups } from "@/modules/crm/configuration"
 
 const routes: [string, Resource][] = [
+  ["/sales-orders/receivables", "receivables"],
   ["/sales-orders", "salesOrders"],
   ["/catalog", "catalogItems"],
   ["/dashboard", "dashboard"], ["/reports/audit-logs", "auditLogs"],
@@ -30,6 +31,7 @@ export const applicationRouteAccess = createRouteAccess({
   resources: routes,
   exactResources: { "/settings": "businessSettings", "/settings/branding": "businessSettings" },
   exactRequirements: {
+    "/sales-orders/receivables": ["salesOrders.read", "receivables.read"],
     "/crm/enquiries/import": ["enquiries.create", "contacts.create"],
     "/settings": "businessSettings.read",
     "/reports/coupon-usage": ["appointmentCoupons.read", "appointments.read"],

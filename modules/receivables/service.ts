@@ -6,8 +6,9 @@ import { BusinessError, hasBusinessAccess, type BusinessActor } from "@/platform
 import { moduleEnabled } from "@/platform/modules"
 import { serializationConflict } from "@/platform/database-errors"
 import { recordDomainAuditEvent } from "@/lib/domain-audit"
-import { receivableOpenSchema, orderPaymentSchema, orderPaymentReversalSchema } from "@/lib/validation"
+import { receivableOpenSchema, receivableListSchema, orderPaymentSchema, orderPaymentReversalSchema } from "@/lib/validation"
 import type { ReceivableSource } from "./contracts"
+import { readReceivableOverview } from "./overview"
 type Tx = Prisma.TransactionClient
 const D = Prisma.Decimal
 const manager = (a: BusinessActor) => ["ADMIN", "MANAGER"].includes(a.role)
@@ -69,6 +70,10 @@ export function createReceivableService(db: PrismaClient, identity: Pick<Busines
     await tx.orderReceivable.update({ where: { tenantId_orderId: { tenantId, orderId } }, data: { version: { increment: 1 } } })
   }
   return {
+    list(input: unknown) {
+      const query = receivableListSchema.parse(input)
+      return run("receivables.read", false, async (tx, actor) => readReceivableOverview(tx, actor.tenantId, source.visibleOrderIds(actor), await today(tx, actor.tenantId), query))
+    },
     get(id: string, requestedPage = 1) {
       return run("receivables.read", false, async (tx, actor) => {
         const order = await find(tx, actor, id), tenantId = actor.tenantId, plan = source.plan(order.snapshot), currentDay = await today(tx, tenantId)

@@ -20,6 +20,17 @@ test('catalog navigation is independent of CRM and respects activation and read 
  assert.deepEqual(catalogNavigation([]), [])
  assert.deepEqual(catalogNavigation([{key:'catalog',allowed:false,enabled:true}]), [])
 })
+test('receivables overview requires both reads and activation and activates only its own menu item',()=>{
+ const active=flags(['crm','salesDocuments','salesOrders','receivables']),permissions=['salesOrders.read','receivables.read']
+ const group=businessNavigation(active,permissions).find(g=>g.key==='salesOrders')
+ assert.equal(group.items.length,2);assert.equal(group.items[0].isActive('/sales-orders/receivables'),false);assert.equal(group.items[1].isActive('/sales-orders/receivables'),true)
+ assert.equal(businessNavigation(active,['salesOrders.read']).find(g=>g.key==='salesOrders').items.length,1)
+ assert.equal(businessNavigation(active,['receivables.read']).length,0)
+ assert.equal(businessNavigation(active.filter(f=>f.key!=='receivables'),permissions).find(g=>g.key==='salesOrders').items.length,1)
+ const {applicationRouteAccess}=require('../application/access-routes.ts')
+ assert.equal(applicationRouteAccess.routeResource('/sales-orders/receivables'),'receivables')
+ assert.deepEqual(applicationRouteAccess.linkRequirement('/sales-orders/receivables'),permissions)
+})
 
 test('missing or revoked platform allowance hides modules even when activation is stale', () => {
  assert.equal(moduleEnabled([{key:'crm',enabled:true}], 'crm'), false)
