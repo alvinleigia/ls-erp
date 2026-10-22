@@ -7,6 +7,7 @@ import { recordDomainAuditEvent } from "@/lib/domain-audit"
 import { catalogItemSchema, catalogListSchema } from "./validation"
 import type { CatalogExtension } from "./contracts"
 import { serializationConflict } from "@/platform/database-errors"
+import { activeReservation, reservationClock, reservedUnits } from "./reservation-availability"
 type Tx = Prisma.TransactionClient
 const manager = (actor: BusinessActor) => ["ADMIN", "MANAGER"].includes(actor.role)
 const json = (value: unknown): Prisma.InputJsonValue => JSON.parse(JSON.stringify(value))
@@ -49,22 +50,31 @@ export function createCatalogService(db: PrismaClient, identity: Pick<BusinessAc
     list(input: unknown) {
       const q = catalogListSchema.parse(input)
       return run("catalogItems.read", async (tx, actor) => {
-        const where: Prisma.CatalogItemWhereInput = { AND: [await catalogScope(tx, actor, extensions, q), { archived: q.archived === "true", ...(q.currency ? {currency:q.currency} : {}), ...(q.availability ? { availability: q.availability } : {}), ...(q.q ? { OR: [{ code: { contains: q.q, mode: "insensitive" } }, { name: { contains: q.q, mode: "insensitive" } }] } : {}) }] }
+        const now = await reservationClock(tx), active = activeReservation(now)
+        const availability: Prisma.CatalogItemWhereInput = q.availability === "RESERVED" ? { reservations: { some: { status: "HELD", expiresAt: { gt: now } } } } : q.availability === "ALLOCATED" ? { reservations: { some: { status: "ALLOCATED" } } } : q.availability ? { availability: q.availability, reservations: { none: active } } : {}
+        const where: Prisma.CatalogItemWhereInput = { AND: [await catalogScope(tx, actor, extensions, q), availability, { archived: q.archived === "true", ...(q.currency ? {currency:q.currency} : {}), ...(q.q ? { OR: [{ code: { contains: q.q, mode: "insensitive" } }, { name: { contains: q.q, mode: "insensitive" } }] } : {}) }] }
         const [items, total] = await Promise.all([tx.catalogItem.findMany({ where, select: { id: true, code: true, name: true, kind: true, unit: true, price: true, currency: true, availability: true, archived: true, version: true, extensionKey: true }, orderBy: [{ name: "asc" }, { id: "asc" }], skip: (q.page - 1) * q.pageSize, take: q.pageSize }), tx.catalogItem.count({ where })])
-        return { items, total, page: q.page, pageSize: q.pageSize, totalPages: Math.max(1, Math.ceil(total / q.pageSize)), canCreate: manager(actor) && permits(actor, "catalogItems.create") }
+        const occupied = await reservedUnits(tx, actor.tenantId, items.map(i => i.id), now)
+        return { items: items.map(row => ({ ...row, reservationState: occupied.get(row.id) || null })), total, page: q.page, pageSize: q.pageSize, totalPages: Math.max(1, Math.ceil(total / q.pageSize)), canCreate: manager(actor) && permits(actor, "catalogItems.create") }
       })
     },
     get(id: string) {
       return run("catalogItems.read", async (tx, actor) => {
         const row = await find(tx, actor, id)
         const extension = extensions.find(e => e.key === row.extensionKey)
-        return { ...row, extension: extension ? await extension.read(tx, actor, id) : null, canManage: manager(actor) && permits(actor, "catalogItems.edit") }
+        const reservationState = (await reservedUnits(tx, actor.tenantId, [id], await reservationClock(tx))).get(id) || null
+        return { ...row, reservationState, extension: extension ? await extension.read(tx, actor, id) : null, canManage: !reservationState && manager(actor) && permits(actor, "catalogItems.edit") }
       })
     },
     save(input: unknown, id?: string) {
       const data = catalogItemSchema.parse(input)
       return run(id ? "catalogItems.edit" : "catalogItems.create", async (tx, actor) => {
         if (!manager(actor)) throw new BusinessError(403, "Only managers can change catalog items.")
+        if (id) {
+          await find(tx, actor, id)
+          await tx.$queryRaw`SELECT id FROM "CatalogItem" WHERE "tenantId"=${actor.tenantId} AND id=${id} FOR UPDATE`
+          if ((await reservedUnits(tx, actor.tenantId, [id], await reservationClock(tx))).has(id)) throw new BusinessError(409, "Release the unit reservation before changing this catalog item.")
+        }
         const before = id ? await find(tx, actor, id) : null
         requireWriteFields(actor, "catalogItems", before ?? undefined, data)
         if (before && (data.version !== before.version || data.kind !== before.kind || data.extensionKey !== before.extensionKey)) throw new BusinessError(409, "Refresh this item. Its kind and extension cannot be changed after creation.")

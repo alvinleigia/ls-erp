@@ -59,7 +59,7 @@ Tenant terminology may display Sales Order as Booking without changing its rules
    hosted evidence separately. No production migration or deployment as part of
    local implementation; review and release after staging verification.
 
-Reservations/expiry/unique-unit allocation belong to R7.2. Receivables, payment
+Reservations/expiry/unique-unit allocation are tracked in [R7.2](UNIT_RESERVATIONS_R7.md). Receivables, payment
 allocations, reversals, accounting and payment gateways belong to later work.
 Do not silently extend this first increment into fulfilment or accounting.
 

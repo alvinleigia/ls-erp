@@ -18,6 +18,6 @@ export const catalogListSchema = z.object({
   currency: z.string().regex(/^[A-Z]{3}$/).optional(),
   extensionKey: z.string().min(1).max(50).optional(), contextId: z.string().min(1).max(100).optional(),
   q: text(150).default(""), archived: z.enum(["false", "true"]).default("false"),
-  availability: z.enum(["", "AVAILABLE", "UNAVAILABLE", "SOLD"]).default(""),
+  availability: z.enum(["", "AVAILABLE", "UNAVAILABLE", "SOLD", "RESERVED", "ALLOCATED"]).default(""),
 }).refine(q => !q.contextId || !!q.extensionKey, "Choose an extension for this context.")
 export type CatalogInput = z.infer<typeof catalogItemSchema>

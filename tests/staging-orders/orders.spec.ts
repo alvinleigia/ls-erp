@@ -3,25 +3,10 @@
 import fs from 'node:fs'
 import { randomUUID } from 'node:crypto'
 import { parse } from 'dotenv'
-import { test, expect, type BrowserContext, type Browser } from '@playwright/test'
+import { test, expect, type BrowserContext } from '@playwright/test'
 import { emptyQuotationContent } from '../../modules/sales-documents/quotation-validation'
 
-type QaTenant = { origin: string; tenant: { id: string; name: string }; admin: { email: string } }
-async function json(c: BrowserContext, path: string, status = 200, method = 'GET', data?: unknown) {
-  const r = await c.request.fetch(path, { method, ...(data === undefined ? {} : { data }) })
-  expect(r.status(), `${method} ${path}: ${await r.text()}`).toBe(status)
-  return r.json()
-}
-async function login(browser: Browser, origin: string, email: string, password: string, tenantId?: string) {
-  expect(['https://ls-erp-staging.vercel.app', 'https://ls-erp-staging-qa-a.vercel.app', 'https://ls-erp-staging-qa-b.vercel.app']).toContain(origin)
-  const c = await browser.newContext({ baseURL: origin })
-  const csrf = await json(c, '/api/auth/csrf')
-  await c.request.post('/api/auth/callback/credentials', { form: { csrfToken: csrf.csrfToken, email, password, callbackUrl: origin + '/dashboard' } })
-  const session = await json(c, '/api/auth/session')
-  expect(session.user?.email).toBe(email)
-  if (tenantId) expect(session.user.tenantId).toBe(tenantId)
-  return c
-}
+import { json, login, type QaTenant } from './helpers'
 
 test('hosted Sales Orders: frozen revisions, transitions, access, module controls and responsive UI', async ({ browser }) => {
   expect(process.env.RUN_STAGING_ORDER_WRITES).toBe('1')

@@ -19,7 +19,7 @@ export function CatalogQuotationPicker({ line, onChange, currency, disabled, id 
       const response = await fetch(`/api/catalog/items/${encodeURIComponent(itemId)}`, { cache: "no-store" })
       const row = await response.json(); if (!response.ok) throw Error(row.error || "Unable to load item.")
       if (row.currency !== currency) throw Error("Choose an item in the quotation currency.")
-      if (row.archived || row.availability !== "AVAILABLE") throw Error("This item is no longer available.")
+      if (row.archived || row.availability !== "AVAILABLE" || row.reservationState) throw Error("This item is no longer available.")
       if (request === sequence.current) onChange({ description: `${row.code} · ${row.name}`, quantity: "1", unit: row.unit, rate: String(row.price), catalogItemId: row.id, catalogItemVersion: row.version })
     } catch (e) { if (request === sequence.current) setError((e as Error).message) }
     finally { if (request === sequence.current) setLoading(false) }

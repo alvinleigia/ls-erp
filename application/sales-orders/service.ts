@@ -4,7 +4,9 @@ import { enquiryScope } from "@/modules/crm/policy"
 import { createSalesOrderService } from "@/modules/sales-orders/service"
 import type { SalesOrderSource } from "@/modules/sales-orders/contracts"
 import type { QuotationSnapshot } from "@/modules/sales-documents/quotation-service"
+import { releaseOrderReservations } from "@/modules/catalog/reservation-events"
 const source: SalesOrderSource = {
+  onCancel: releaseOrderReservations,
   scope: actor => ({ source: { quotation: { opportunity: enquiryScope(actor) } } }),
   async read(tx, actor, quotationId, revision) {
     const row = await tx.crmQuotationRevision.findFirst({ where: { tenantId: actor.tenantId, quotationId, number: revision, quotation: { opportunity: enquiryScope(actor) } }, include: { quotation: { select: { opportunity: { select: { contact: { select: { archived: true } } } } } } } })

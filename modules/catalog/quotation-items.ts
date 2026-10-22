@@ -3,6 +3,7 @@ import { BusinessError } from "@/platform/policy"
 import { requirePermission } from "@/platform/access/policy"
 import { catalogScope } from "./service"
 import type { CatalogExtension } from "./contracts"
+import { activeReservation, reservationClock } from "./reservation-availability"
 
 // References are generated on the server and stored in each immutable revision.
 // Retained references remain usable when an optional module is switched off.
@@ -14,7 +15,7 @@ export function catalogQuotationItems(extensions: readonly CatalogExtension[]): 
     if (missing.length) {
       requirePermission(actor, "catalogItems.read")
       if (!await tx.tenantModule.count({ where: { tenantId: actor.tenantId, key: "catalog", allowed: true, enabled: true } })) throw new BusinessError(403, "Enable Sales Catalog before selecting items.")
-      const rows = await tx.catalogItem.findMany({ where: { AND: [await catalogScope(tx, actor, extensions), { id: { in: missing.map(line => line.catalogItemId!) }, archived: false, availability: "AVAILABLE" }] } })
+      const rows = await tx.catalogItem.findMany({ where: { AND: [await catalogScope(tx, actor, extensions), { id: { in: missing.map(line => line.catalogItemId!) }, archived: false, availability: "AVAILABLE", reservations: { none: activeReservation(await reservationClock(tx)) } }] } })
       fresh = missing.map(line => {
         const row = rows.find(row => row.id === line.catalogItemId && row.version === line.catalogItemVersion)
         if (!row) throw new BusinessError(409, "A selected item changed or is no longer available. Select it again or remove its link.")

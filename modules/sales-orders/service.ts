@@ -84,6 +84,7 @@ export function createSalesOrderService(db: PrismaClient, identity: Pick<Busines
         const before = await find(tx, actor, id)
         if (before.version !== data.version) throw new BusinessError(409, "This order changed. Refresh before continuing.")
         if (before.status === "CANCELLED" || (data.action === "confirm" && before.status !== "DRAFT")) throw new BusinessError(409, "This order cannot make that transition.")
+        if (data.action === "cancel") await source.onCancel?.(tx, actor, id, data.reason)
         const row = await tx.salesOrder.update({ where: { tenantId_id: { tenantId: actor.tenantId, id } }, data: { status: data.action === "confirm" ? "CONFIRMED" : "CANCELLED", version: { increment: 1 } }, select: listSelect })
         await event(tx, actor, row, before.status, data.action === "cancel" ? data.reason : "")
         return row

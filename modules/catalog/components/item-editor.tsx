@@ -20,6 +20,7 @@ const initial: CatalogInput = { name: "", code: "", description: "", kind: "PROD
 export const CatalogEditor = withRecordView(function CatalogEditor({ id, extension, defaults }: { id?: string; extension?: CatalogEditorExtension; defaults?: Pick<CatalogInput, "extensionKey" | "extension"> }) {
   const [value, setValue] = React.useState({ ...initial, ...(defaults ? { ...defaults, kind: "UNIT" as const } : {}) }), [loading, setLoading] = React.useState(true), [error, setError] = React.useState(""), [failed, setFailed] = React.useState(false), [saving, setSaving] = React.useState(false), [canManage, setCanManage] = React.useState(false)
   const router = useRouter(), view = useRecordView()!, modules = useBusinessModules()
+  const [reservationState, setReservationState] = React.useState<string | null>(null)
   const [display, setDisplay] = React.useState<AppSettingsPayload>()
   const set = <K extends keyof CatalogInput>(key: K, next: CatalogInput[K]) => setValue(v => ({ ...v, [key]: next }))
   React.useEffect(() => {
@@ -28,7 +29,7 @@ export const CatalogEditor = withRecordView(function CatalogEditor({ id, extensi
       const response = await fetch(id ? `/api/catalog/items/${id}` : "/api/catalog/items?pageSize=1", { signal: controller.signal, cache: "no-store" })
       const row = await response.json(); if (!response.ok) throw Error(row.error || "Unable to load item.")
       if (controller.signal.aborted) return
-      if (id) setValue({ ...initial, ...row, price: String(row.price) })
+      if (id) { setValue({ ...initial, ...row, price: String(row.price) }); setReservationState(row.reservationState) }
       const displayResponse = await fetch("/api/settings/display", { signal: controller.signal, cache: "no-store" })
       if (displayResponse.ok) {
         const settings = await displayResponse.json()
@@ -66,7 +67,7 @@ export const CatalogEditor = withRecordView(function CatalogEditor({ id, extensi
   }
   if (loading) return <p>Loading item...</p>
   return <div className={pageClass}><AccessPageHeader title={id ? value.name : "New catalog item"} backHref="/catalog" actions={<AccessFormActions form="catalog-form" cancelHref="/catalog" saving={saving} disabled={!editable} canSave={canManage} saveLabel="Save item" />} />
-    <AccessRecordForm id="catalog-form" onSubmit={save} initialSection="Item details" saving={saving} disabled={!editable} error={error} fingerprint={value} saveLabel="Save item" overview={<><AccessSummarySection title="Item details" canEdit={editable} fields={[{ label: "Code", value: value.code }, { label: "Name", value: value.name }, { label: "Kind", value: catalogKindLabels[value.kind] }, { label: "Price", value: value.currency ? formatDecimalCurrency(value.price, value.currency, display) : value.price }, { label: "Unit", value: value.unit }, { label: "Availability", value: catalogAvailabilityLabels[value.availability] }, { label: "Status", value: value.archived ? "Archived" : "Active" }, { label: "Description", value: value.description }]} />{value.extensionKey && extension && <AccessSummarySection title={extension.label} canEdit={editable} fields={[]}><extension.Fields value={value.extension} onChange={() => {}} disabled /></AccessSummarySection>}</>}>
+    <AccessRecordForm id="catalog-form" onSubmit={save} initialSection="Item details" saving={saving} disabled={!editable} error={error} fingerprint={value} saveLabel="Save item" overview={<><AccessSummarySection title="Item details" canEdit={editable} fields={[{ label: "Code", value: value.code }, { label: "Name", value: value.name }, { label: "Kind", value: catalogKindLabels[value.kind] }, { label: "Price", value: value.currency ? formatDecimalCurrency(value.price, value.currency, display) : value.price }, { label: "Unit", value: value.unit }, { label: "Availability", value: catalogAvailabilityLabels[reservationState || value.availability] }, { label: "Status", value: value.archived ? "Archived" : "Active" }, { label: "Description", value: value.description }]} />{value.extensionKey && extension && <AccessSummarySection title={extension.label} canEdit={editable} fields={[]}><extension.Fields value={value.extension} onChange={() => {}} disabled /></AccessSummarySection>}</>}>
       <Section title="Item details"><fieldset disabled={!editable || saving} className="grid gap-5 sm:grid-cols-2">
         <FormField id="item-code" label="Unique code"><Input id="item-code" value={value.code} required maxLength={60} onChange={e => set("code", e.target.value)} /></FormField>
         <FormField id="item-name" label="Name"><Input id="item-name" value={value.name} required maxLength={200} onChange={e => set("name", e.target.value)} /></FormField>

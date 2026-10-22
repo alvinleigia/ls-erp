@@ -1571,3 +1571,10 @@ export const salesOrderListSchema = z.object({
   q: z.string().trim().max(120).default(""), status: z.enum(["DRAFT", "CONFIRMED", "CANCELLED"]).optional(),
   sort: z.enum(["createdAt", "title"]).default("createdAt"), order: z.enum(["asc", "desc"]).default("desc"),
 })
+export const unitReservationCreateSchema = z.object({
+  itemId: z.string().min(1).max(100), expiresAt: z.string().datetime({ offset: true }),
+}).strict()
+export const unitReservationTransitionSchema = z.discriminatedUnion("action", [
+  z.object({ action: z.literal("allocate"), version: z.number().int().positive() }).strict(),
+  z.object({ action: z.literal("release"), version: z.number().int().positive(), reason: z.string().trim().min(1).max(2000) }).strict(),
+])

@@ -1,3 +1,10 @@
+## R7.2 - Unit reservations (2026-10-23)
+
+Staging-only implementation: expiring unique-unit holds, explicit allocation on
+confirmed orders, reasoned release and atomic order-cancellation cleanup.
+Catalog availability and editing respect reservations; existing records and
+activation remain unchanged. See [scope and verification](UNIT_RESERVATIONS_R7.md).
+
 ## R7.1 - Hosted staging verified (2026-10-23)
 
 Sales Orders commit 6a8424e is deployed on ls-erp-staging. Migration 103 preserves

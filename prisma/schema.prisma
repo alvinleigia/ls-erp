@@ -813,6 +813,7 @@ model Tenant {
   quotations CrmQuotation[]
   quotationRevisions CrmQuotationRevision[]
   salesOrders SalesOrder[]
+  unitReservations UnitReservation[]
   crmSalesTeams CrmSalesTeam[]
   crmSalesTeamMembers CrmSalesTeamMember[]
   customFieldDefinitions CustomFieldDefinition[]
@@ -2408,6 +2409,7 @@ model SalesOrder {
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   source CrmQuotationRevision @relation(fields: [tenantId, quotationId, revision], references: [tenantId, quotationId, number], onDelete: Restrict)
   events SalesOrderEvent[]
+  reservations UnitReservation[]
   @@id([tenantId, id])
   @@index([tenantId, status, createdAt(sort: Desc), id])
   @@index([tenantId, createdAt(sort: Desc), id])
@@ -2474,11 +2476,46 @@ model CatalogItem {
   updatedAt DateTime @updatedAt
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   propertyUnit RealEstateUnit?
+  reservations UnitReservation[]
   @@id([tenantId, id])
   @@unique([tenantId, code])
   @@index([tenantId, archived, availability, name, id])
   @@index([tenantId, archived, name, id])
   @@index([tenantId, extensionKey])
+}
+
+model UnitReservation {
+  tenantId String
+  id String @default(cuid())
+  orderId String
+  itemId String
+  itemCode String
+  itemName String
+  status String @default("HELD")
+  expiresAt DateTime
+  version Int @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  order SalesOrder @relation(fields: [tenantId, orderId], references: [tenantId, id], onDelete: Restrict)
+  item CatalogItem @relation(fields: [tenantId, itemId], references: [tenantId, id], onDelete: Restrict)
+  events UnitReservationEvent[]
+  @@id([tenantId, id])
+  @@index([tenantId, orderId, createdAt, id])
+  @@index([tenantId, itemId, status, expiresAt])
+}
+
+model UnitReservationEvent {
+  tenantId String
+  reservationId String
+  version Int
+  status String
+  actorId String
+  actorName String
+  reason String @default("")
+  createdAt DateTime @default(now())
+  reservation UnitReservation @relation(fields: [tenantId, reservationId], references: [tenantId, id], onDelete: Restrict)
+  @@id([tenantId, reservationId, version])
 }
 
 model RealEstateUnit {

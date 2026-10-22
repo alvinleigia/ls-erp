@@ -15,6 +15,7 @@ export async function auditScope(tx: Prisma.TransactionClient, actor: BusinessAc
       // Apply access before pagination/counting; the same predicate guards detail reads.
       AND: [
         ...(!moduleEnabled(flags, "salesOrders") || !permits(actor, "salesOrders.read") ? [{ NOT: { event: { startsWith: "salesOrder." } } }] : []),
+        ...(!(actor.role === "ADMIN" && moduleEnabled(flags, "catalog") && moduleEnabled(flags, "salesOrders") && permits(actor, "unitReservations.read") && permits(actor, "salesOrders.read")) ? [{ NOT: { event: { startsWith: "catalog.reservation." } } }] : []),
         ...(!moduleEnabled(flags, "catalog") || !permits(actor, "catalogItems.read") ? [{ NOT: { event: { startsWith: "catalog." } } }] : []),
         ...(!moduleEnabled(flags, "realEstate") || !permits(actor, "projects.read") ? [{ NOT: { AND: [{ event: { startsWith: "catalog." } }, { after: { path: ["extensionKey"], equals: "realEstate" } }] } }] : []),
         ...(!moduleEnabled(flags, "crm") ? [{ NOT: { AND: [{ event: { startsWith: "crm." } }, { NOT: securityEvents }] } }] : []),
