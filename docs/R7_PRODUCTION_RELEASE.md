@@ -53,4 +53,19 @@ outside this release check; existing tenant data is verified read-only.
 
 ## Result
 
-Cutover and production deployment pending final verification.
+Production schema upgraded from 102 to 106 migrations on 23 October 2026.
+All 107 existing business tables matched before and after, including module flags,
+roles and financial records. Runtime access is restored. The nine added tables have
+forced RLS; the actual non-bypass runtime connection sees zero rows without tenant
+context. Supabase's operator cannot SET ROLE to the runtime identity, so this check
+used a separate authenticated runtime connection instead of changing memberships.
+
+The final database archive was restored with all 108 baseline tables matching and
+no foreign-key violations. Its paired storage archive was authenticated successfully.
+Private receipts retain backup identifiers, checksums and restoration evidence.
+
+The deployment commit, production alias confirmation and final read-only smoke
+results are recorded in `tmp/r7-production/deployment.json` and
+`tmp/r7-production/smoke-after.json`. Existing modules are not automatically enabled.
+The client guide is the pre-release edition and explicitly marks R7 as a preview;
+its release labels should be revised when distributing a post-release edition.
