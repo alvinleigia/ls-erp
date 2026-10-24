@@ -58,6 +58,27 @@ five matching team configuration audits.
 
 The synthetic team `QA R8 Flexible team 8b83d6c3` remains in QA Staging A with
 workflow BOTH so it can be reviewed. Existing user-created teams were not changed.
-Production release is separate from this staging increment. The earlier Word/PDF
-client guide describes the previous two-option model; use this page for the new
-team intake controls until that guide receives its next edition.
+The earlier Word/PDF client guide describes the previous two-option model; use
+this page for the new team intake controls until that guide receives its next edition.
+
+## Production release on 24 October 2026
+
+The production backup restored successfully with all 117 tables and financial
+totals matching. The upgrade rehearsal preserved all 116 business tables. Both
+storage objects and their database references were authenticated and verified.
+
+Production migration history advanced from 106 to 107. All 116 business tables
+matched before and after; existing team choices, memberships, permissions and
+records were preserved. The restricted runtime account still sees no team rows
+without tenant context.
+
+A connection interruption occurred after the migration SQL committed but before
+its completion marker was saved. Before recording completion, the actual default
+and validated CHECK definition were independently matched to the restored upgrade
+rehearsal, the migration checksum and applied step were checked, and every business
+table fingerprint matched. Only then was Prisma's completion record repaired with
+`migrate resolve --applied`; the SQL was not executed a second time.
+
+Deployment and read-only production smoke receipts are retained privately under
+`tmp/r8-production`. New team forms default to the flexible choice; administrators
+must explicitly change an existing team's workflow if they want both entry paths.
