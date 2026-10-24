@@ -81,7 +81,7 @@ export function createEnquiryImportService({ run, audit, readTerms }: CrmService
     const [users, sources, teams, custom, extension] = await Promise.all([
       tx.user.findMany({ where: { ...assigneeScope(actor), ...(actor.role === "STAFF" || !permits(actor, "enquiries.assign") ? { id: actor.userId } : {}), status: "ACTIVE", role: { in: ["ADMIN", "MANAGER", "STAFF"] } }, select: { id: true, name: true, email: true }, orderBy: { name: "asc" }, take: 5000 }),
       tx.crmLeadSource.findMany({ where: { tenantId: actor.tenantId, archived: false }, select: { id: true, name: true }, orderBy: { name: "asc" }, take: 5000 }),
-      tx.crmSalesTeam.findMany({ where: { ...teamScope(actor), archived: false, workflow: "ENQUIRY_FIRST", ...(actor.crmRecordScope === "MANAGED_TEAMS" ? { id: { in: actor.managedTeamIds || [] } } : {}) }, select: { id: true, name: true }, orderBy: { name: "asc" }, take: 5000 }),
+      tx.crmSalesTeam.findMany({ where: { ...teamScope(actor), archived: false, workflow: { in: ["BOTH", "ENQUIRY_FIRST"] }, ...(actor.crmRecordScope === "MANAGED_TEAMS" ? { id: { in: actor.managedTeamIds || [] } } : {}) }, select: { id: true, name: true }, orderBy: { name: "asc" }, take: 5000 }),
       definitions(tx, actor, enquiryFields), extensions.importFields?.(tx, actor) || [],
     ])
     return [

@@ -20,7 +20,9 @@ import { RecordSelect } from "@/components/erp/record-select"
 
 type Team = { id: string; name: string; workflow: string; archived: boolean; version: number; canManage?: boolean; canManageTeamAccess?: boolean; _count?: { members: number } }
 const base = "/crm/configuration/sales-teams"
-const workflowName = (value: string, term: TermResolver) => value === "DIRECT" ? term("crm.opportunity.plural", "Direct opportunities", "Direct {label}") : term("crm.enquiry.plural", "Qualify enquiries first", "Qualify {label} first")
+const workflowName = (value: string, term: TermResolver) => value === "BOTH"
+  ? `${term("crm.enquiry.plural", "Enquiries")} and direct ${term("crm.opportunity.plural", "opportunities")}`
+  : value === "DIRECT" ? term("crm.opportunity.plural", "Direct opportunities only", "Direct {label} only") : term("crm.enquiry.plural", "Qualify enquiries first", "Qualify {label} first")
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, { cache: "no-store", ...init }), data = await response.json()
   if (!response.ok) throw new Error(data.error || "Unable to load sales teams.")
@@ -69,7 +71,7 @@ function SalesTeamEditorBody({ id }: { id?: string }) {
   const term = useTerminology()
   const view = useRecordView()!
   const router = useRouter()
-  const [team, setTeam] = React.useState<Team>({ id: "", name: "", workflow: "ENQUIRY_FIRST", archived: false, version: 1 })
+  const [team, setTeam] = React.useState<Team>({ id: "", name: "", workflow: "BOTH", archived: false, version: 1 })
   const [original, setOriginal] = React.useState<Team | null>(null), [canManage, setCanManage] = React.useState(false)
   const [loading, setLoading] = React.useState(true), [saving, setSaving] = React.useState(false), [error, setError] = React.useState(""), [failed, setFailed] = React.useState(false), [confirm, setConfirm] = React.useState(false)
   React.useEffect(() => {
@@ -93,7 +95,7 @@ function SalesTeamEditorBody({ id }: { id?: string }) {
       overview={original && <AccessSummarySection title="Team details" canEdit={canManage} fields={[{ label: "Name", value: original.name }, { label: "Workflow", value: workflowName(original.workflow, term) }, { label: "Status", value: original.archived ? "Archived" : "Active" }]}><p className="text-sm text-muted-foreground">Membership controls assignment. Record visibility follows the assigned access role; membership alone does not grant team-manager authority.</p></AccessSummarySection>}
       tabs={id && canManage && !failed ? [{ value: "members", label: "Members", content: <TeamMembers id={id} team={team} disabled={saving || dirty || team.archived} onChange={row => { setTeam(row); setOriginal(row) }} /> }] : []} onSubmit={event => { event.preventDefault(); if (original && !original.archived && team.archived) setConfirm(true); else void save() }} className="space-y-5"><Section title="Team details"><fieldset disabled={!canManage || saving || failed} className="grid gap-4 sm:grid-cols-2">
       <FormField id="team-name" label="Team name"><Input id="team-name" required maxLength={100} value={team.name} onChange={event => setTeam({ ...team, name: event.target.value })} /></FormField>
-      <FormField id="team-workflow" label="Sales workflow"><Select id="team-workflow" value={team.workflow} onValueChange={workflow => setTeam({ ...team, workflow })}><option value="ENQUIRY_FIRST">{workflowName("ENQUIRY_FIRST", term)}</option><option value="DIRECT">{workflowName("DIRECT", term)}</option></Select><p className="text-sm text-muted-foreground">{team.workflow === "DIRECT" ? `Create ${term("crm.opportunity.plural", "opportunities")} directly. Existing ${term("crm.enquiry.plural", "enquiries")} remain available for conversion.` : `Create ${term("crm.enquiry.singular", "an enquiry")}, mark it Qualified, then convert it to ${term("crm.opportunity.singular", "an opportunity")}.`}</p></FormField>
+      <FormField id="team-workflow" label="Sales workflow"><Select id="team-workflow" className="w-full" value={team.workflow} onValueChange={workflow => setTeam({ ...team, workflow })}><option value="BOTH">{workflowName("BOTH", term)}</option><option value="ENQUIRY_FIRST">{workflowName("ENQUIRY_FIRST", term)}</option><option value="DIRECT">{workflowName("DIRECT", term)}</option></Select><p className="text-sm text-muted-foreground">{team.workflow === "BOTH" ? `Create ${term("crm.enquiry.plural", "enquiries")} for new prospects or ${term("crm.opportunity.plural", "opportunities")} directly for ready deals. Qualification is optional before conversion.` : team.workflow === "DIRECT" ? `Create ${term("crm.opportunity.plural", "opportunities")} directly. New ${term("crm.enquiry.plural", "enquiries")} cannot be assigned to this team; existing ones remain available for conversion.` : `Create ${term("crm.enquiry.singular", "an enquiry")}, mark it Qualified, then convert it to ${term("crm.opportunity.singular", "an opportunity")}. Direct creation is blocked.`}</p></FormField>
       <label className="flex items-center gap-2"><Checkbox checked={team.archived} onChange={event => setTeam({ ...team, archived: event.target.checked })} />Archived</label>
     </fieldset></Section><Section title="Access and assignment"><p className="text-sm text-muted-foreground">Staff retain their assigned-record access. Managers follow the CRM sales record scope in their access role. Only a tenant administrator can designate a team manager; membership alone does not grant access to teammates&apos; records.</p></Section></AccessRecordForm>
 

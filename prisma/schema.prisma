@@ -2324,7 +2324,7 @@ model CrmSalesTeam {
   id String @default(cuid())
   name String
   nameKey String
-  workflow String @default("ENQUIRY_FIRST")
+  workflow String @default("BOTH")
   archived Boolean @default(false)
   version Int @default(1)
   createdAt DateTime @default(now())

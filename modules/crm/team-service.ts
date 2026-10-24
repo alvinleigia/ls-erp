@@ -14,7 +14,7 @@ type Context = {
 }
 export const salesTeamSchema = z.object({
   name: z.string().trim().min(1).max(100).transform(value => value.replace(/\s+/g, " ")),
-  workflow: z.enum(["ENQUIRY_FIRST", "DIRECT"]).default("ENQUIRY_FIRST"),
+  workflow: z.enum(["BOTH", "ENQUIRY_FIRST", "DIRECT"]).optional(),
   archived: z.boolean().default(false), version: z.number().int().positive().optional(),
 }).strict()
 const memberSchema = z.object({ userId: z.string().min(1).max(100), version: z.number().int().positive(), remove: z.boolean().default(false), isManager: z.boolean().optional() }).strict()
@@ -63,10 +63,11 @@ export function createTeamService({ run, audit }: Context) {
       })
     },
     saveSalesTeam(input: unknown, id?: string) {
-      const { version, ...data } = salesTeamSchema.parse(input)
+      const { version, ...parsed } = salesTeamSchema.parse(input)
       return run(id ? "salesTeams.edit" : "salesTeams.create", async (tx, actor) => {
         manage(actor)
         const before = id ? await tx.crmSalesTeam.findUnique({ where: { tenantId_id: { tenantId: actor.tenantId, id } } }) : null
+        const data = { ...parsed, workflow: parsed.workflow ?? before?.workflow ?? "BOTH" }
         requireWriteFields(actor, "salesTeams", before ?? undefined, data)
         if (id && !before) throw new CrmError(404, "Sales team not found.")
         if (before && before.version !== version) throw new CrmError(409, "This team changed. Refresh before saving.")

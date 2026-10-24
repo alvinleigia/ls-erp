@@ -20,6 +20,7 @@
     "test:crm:integration": "node --require ./tests/register.cjs --test tests/crm.integration.test.cjs",
     "test:crm:scopes:integration": "node --require ./tests/register.cjs --test --test-force-exit tests/crm-record-scopes.integration.test.cjs tests/crm-record-scope-migration.test.cjs",
     "test:crm:teams:integration": "node --require ./tests/register.cjs --test tests/crm-teams.integration.test.cjs",
+    "test:crm:team-intake": "node scripts/test-sales-orders.cjs --teams",
     "test:crm:fields:integration": "node --require ./tests/register.cjs --test tests/custom-fields.integration.test.cjs",
     "test:terminology": "node --require ./tests/register.cjs --test tests/terminology.test.cjs",
     "test:terminology:integration": "node --require ./tests/register.cjs --test --test-force-exit tests/terminology.integration.test.cjs",

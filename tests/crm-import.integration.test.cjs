@@ -48,6 +48,37 @@ before(async () => {
 })
 after(async () => { await Promise.all(clients.map(c => c.$disconnect())); await Promise.all(pools.map(p => p.end())) })
 
+async function flexibleTeamImport() {
+  const teams = []
+  for (const workflow of ["BOTH", "ENQUIRY_FIRST", "DIRECT"]) {
+    const row = await service.saveSalesTeam({ name: `Import ${workflow}`, workflow })
+    teams.push(await service.changeSalesTeamMember(row.id, { userId: admin.id, version: row.version }))
+  }
+  try {
+    const job = await upload('Contact name,Email,Sales team\nFlexible import,flexible-intake@example.com,Import BOTH\n')
+    const choices = job.fields.find(f => f.key === "salesTeamId").choices.map(c => c.id)
+    assert.ok(choices.includes(teams[0].id))
+    assert.ok(choices.includes(teams[1].id))
+    assert.ok(!choices.includes(teams[2].id))
+    let checked = await review(job)
+    assert.equal(checked.counts.READY, 1)
+    const changed = await service.saveSalesTeam({ name: teams[0].name, version: teams[0].version, workflow: "DIRECT" }, teams[0].id)
+    teams[0] = changed
+    const before = await root.crmContact.count({ where: { tenantId: a, email: "flexible-intake@example.com" } })
+    checked = await finish(checked)
+    assert.equal(checked.counts.IMPORTED || 0, 0)
+    assert.equal(await root.crmContact.count({ where: { tenantId: a, email: "flexible-intake@example.com" } }), before)
+    teams[0] = await service.saveSalesTeam({ name: changed.name, version: changed.version, workflow: "BOTH" }, changed.id)
+    const retry = await review(await upload('Contact name,Email,Sales team\nFlexible import,flexible-intake@example.com,Import BOTH\n'))
+    const imported = await finish(retry)
+    assert.equal(imported.counts.IMPORTED, 1)
+    const contact = await root.crmContact.findFirst({ where: { tenantId: a, email: "flexible-intake@example.com" } })
+    assert.equal((await root.crmEnquiry.findFirst({ where: { tenantId: a, contactId: contact.id } })).salesTeamId, teams[0].id)
+  } finally {
+    for (const row of teams) await root.crmSalesTeam.update({ where: { tenantId_id: { tenantId: a, id: row.id } }, data: { archived: true } })
+  }
+}
+
 test("CSV supports quoted newlines and original row numbers; rejects malformed/oversized sheets", async () => {
   const sheet = await parseImportFile("test.csv", Buffer.from('Name,Email,Notes\n\nAlice,a@example.com,"hello,\nworld"\n'))
   assert.equal(sheet.rows[0].rowNumber, 3); assert.equal(sheet.rows[0].values[2], "hello,\nworld")
@@ -242,3 +273,5 @@ test("configured template headers and exports preserve mappings, correction rows
   assert.ok(!parse(await service.exportEnquiries({}), { bom: true })[0].includes("Development"))
   await root.tenantTerminology.deleteMany({ where: { tenantId: a } })
 })
+
+test("imports offer flexible and qualification teams, exclude direct-only teams and recheck changed rules", flexibleTeamImport)

@@ -54,6 +54,43 @@ async function team(name, workflow = "ENQUIRY_FIRST", members = [staff]) {
 }
 const teamEdit = (row, extra = {}) => ({ name: row.name, workflow: row.workflow, archived: row.archived, version: row.version, ...extra })
 
+test("new teams default to both intake paths; omitted workflow preserves an existing restriction", async () => {
+  const row = await crm.saveSalesTeam({ name: `Both default ${randomUUID()}` })
+  assert.equal(row.workflow, "BOTH")
+  const strict = await team("Keep qualification")
+  const renamed = await crm.saveSalesTeam({ name: `${strict.name} renamed`, version: strict.version }, strict.id)
+  assert.equal(renamed.workflow, "ENQUIRY_FIRST")
+  assert.throws(() => crm.saveSalesTeam({ name: "Invalid workflow", workflow: "UNKNOWN" }))
+})
+
+test("a flexible team accepts direct opportunities and enquiries without changing staff visibility", async () => {
+  const row = await team("Flexible intake", "BOTH", [staff, other])
+  const direct = await staffCrm.createOpportunity(dealInput({ salesTeamId: row.id }))
+  assert.equal(direct.salesTeamId, row.id)
+  assert.equal(direct.enquiryId, null)
+  const lead = await staffCrm.createEnquiry(leadInput({ salesTeamId: row.id }))
+  assert.equal(lead.status, "NEW")
+  const converted = await staffCrm.createOpportunity(dealInput({ enquiryId: lead.id, enquiryVersion: lead.version }))
+  assert.equal(converted.salesTeamId, row.id)
+  assert.equal(converted.enquiryId, lead.id)
+  assert.equal((await staffCrm.createOpportunity(dealInput({ enquiryId: lead.id }))).id, converted.id)
+  const privateLead = await crm.createEnquiry(leadInput({ salesTeamId: row.id, assignedUserId: other.id }))
+  await assert.rejects(staffCrm.getEnquiry(privateLead.id), status(404))
+  await assert.rejects(staffCrm.createOpportunity(dealInput({ salesTeamId: row.id, assignedUserId: other.id })), status(403))
+})
+
+test("switching workflow applies to new intake while keeping existing enquiries and opportunities", async () => {
+  let row = await team("Intake switch", "BOTH")
+  const lead = await staffCrm.createEnquiry(leadInput({ salesTeamId: row.id }))
+  const deal = await staffCrm.createOpportunity(dealInput({ salesTeamId: row.id }))
+  row = await crm.saveSalesTeam(teamEdit(row, { workflow: "ENQUIRY_FIRST" }), row.id)
+  await assert.rejects(staffCrm.createOpportunity(dealInput({ salesTeamId: row.id })), status(400))
+  await assert.rejects(staffCrm.createOpportunity(dealInput({ enquiryId: lead.id })), status(400))
+  assert.equal((await staffCrm.getOpportunity(deal.id)).salesTeamId, row.id)
+  row = await crm.saveSalesTeam(teamEdit(row, { workflow: "BOTH" }), row.id)
+  assert.equal((await staffCrm.createOpportunity(dealInput({ enquiryId: lead.id }))).salesTeamId, row.id)
+})
+
 test("sales teams are manager-configured, paginated, tenant-safe and versioned", async () => {
   await assert.rejects(staffCrm.saveSalesTeam({ name: "Denied" }), status(403))
   const row = await team("Permissions")

@@ -10,6 +10,8 @@ test("configure team membership, enforce qualification and preserve the team in 
   await page.goto("/crm/configuration/sales-teams")
   await page.getByRole("link", { name: "New sales team", exact: true }).click()
   await page.getByLabel("Team name", { exact: true }).fill(name)
+  await page.getByLabel("Sales workflow", { exact: true }).click()
+  await page.getByRole("menuitemradio", { name: "Qualify enquiries first", exact: true }).click()
   await page.getByRole("button", { name: "Save sales team", exact: true }).click()
   await expect(page.getByRole("heading", { name, exact: true })).toBeVisible()
   const id = page.url().split("/").at(-1)!
