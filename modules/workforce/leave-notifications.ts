@@ -1,3 +1,6 @@
+import { accessContext, findAccessUser } from "@/platform/access/server"
+import { permits } from "@/platform/access/policy"
+import { recordLimits } from "@/platform/access/rules"
 import { BusinessError } from "@/platform/policy"
 import { Prisma, Role, type PrismaClient } from "@prisma/client"
 
@@ -31,37 +34,30 @@ const sendEmail = async (to: string, template: { subject: string; text: string; 
   })
 }
 
+async function reviewerEmails(tx: DbClient, tenantId: string, staffUserId: string, action: "read" | "approve") {
+  const admins = await tx.user.findMany({ where: { tenantId, role: Role.ADMIN, status: "ACTIVE" }, select: { email: true } })
+  const recipients = new Set(admins.map(user => user.email))
+  const employee = await tx.staffProfile.findFirst({ where: { userId: staffUserId, user: { tenantId } }, select: { managerUserId: true, leaveApprovalMode: true } })
+  if (employee?.leaveApprovalMode === "REPORTING_MANAGER" && employee.managerUserId && employee.managerUserId !== staffUserId) {
+    const user = await findAccessUser(tx, tenantId, employee.managerUserId)
+    if (user) {
+      const actor = { tenantId, userId: employee.managerUserId, ...accessContext(user) }
+      if (permits(actor, `leaveApprovals.${action}`) && !recordLimits(actor, "leaveApprovals", action).includes("NONE")) {
+        const manager = await tx.user.findFirst({ where: { tenantId, id: employee.managerUserId, status: "ACTIVE" }, select: { email: true } })
+        if (manager) recipients.add(manager.email)
+      }
+    }
+  }
+  return [...recipients]
+}
+
 export const notifyLeaveSubmitted = async (
   tx: DbClient,
   payload: LeaveRequestNotificationPayload & { staffUserId: string }
 ) => {
   if (!payload.tenantId) throw new BusinessError(403, "Tenant context is required.")
   if (!(await canSendConfiguredEmail(tx, payload.tenantId))) return
-  const staffUser = await tx.user.findUnique({
-    where: { id: payload.staffUserId, tenantId: payload.tenantId },
-    select: {
-      role: true,
-      staffProfile: { select: { managerUserId: true } },
-    },
-  })
-  if (!staffUser) return
-
-  const recipients = new Set<string>()
-  const admins = await tx.user.findMany({
-    where: { tenantId: payload.tenantId, status: "ACTIVE", role: Role.ADMIN },
-    select: { email: true },
-  })
-  admins.forEach((admin) => recipients.add(admin.email))
-
-  if (staffUser.role === Role.STAFF && staffUser.staffProfile?.managerUserId) {
-    const manager = await tx.user.findUnique({
-      where: { id: staffUser.staffProfile.managerUserId, tenantId: payload.tenantId },
-      select: { email: true, status: true, role: true },
-    })
-    if (manager && manager.status === "ACTIVE" && manager.role === Role.MANAGER) {
-      recipients.add(manager.email)
-    }
-  }
+  const recipients = await reviewerEmails(tx, payload.tenantId, payload.staffUserId, "approve")
 
   const template = leaveRequestSubmittedEmail({
     leaveCode: payload.leaveCode,
@@ -70,7 +66,7 @@ export const notifyLeaveSubmitted = async (
     endDate: payload.endDateIso,
     daysCount: payload.daysCount,
   })
-  await Promise.allSettled(Array.from(recipients).map((email) => sendEmail(email, template)))
+  await Promise.allSettled(recipients.map((email) => sendEmail(email, template)))
 }
 
 export const notifyLeaveReviewed = async (
@@ -130,14 +126,7 @@ export const notifyLeaveCanceled = async (
 
   const isSelfCancel = params.staffUserId === params.canceledByUserId
   if (isSelfCancel) {
-    const reviewers = await tx.user.findMany({
-      where: {
-        tenantId: params.tenantId,
-        status: "ACTIVE",
-        role: { in: [Role.ADMIN, Role.MANAGER] },
-      },
-      select: { email: true },
-    })
+    const reviewers = await reviewerEmails(tx, params.tenantId, params.staffUserId, "read")
     const template = leaveRequestCanceledEmail({
       leaveCode: params.leaveCode,
       leaveName: params.leaveName,
@@ -147,7 +136,7 @@ export const notifyLeaveCanceled = async (
       actorName: params.canceledByName,
       comment: params.cancelReason,
     })
-    await Promise.allSettled(reviewers.map((reviewer) => sendEmail(reviewer.email, template)))
+    await Promise.allSettled(reviewers.map(email => sendEmail(email, template)))
     return
   }
 

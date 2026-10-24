@@ -9,7 +9,6 @@ import {
   withRequestId,
 } from "@/lib/api-logging"
 import { prisma } from "@/lib/prisma"
-import { canManageUsers, type Role } from "@/lib/permissions"
 import { withCoreApi, actorSession } from "@/platform/core/api"
 import type { BusinessActor } from "@/platform/policy"
 import { taxUpdateSchema } from "@/lib/validation"
@@ -20,9 +19,7 @@ const ensureAuthorized = async (actor: BusinessActor) => {
   if (tenantSession.error) {
     return { error: tenantSession.error }
   }
-  if (!canManageUsers(tenantSession.context.role as Role)) {
-    return { error: NextResponse.json({ error: "Unauthorized" }, { status: 401 }) }
-  }
+
   return { context: tenantSession.context }
 }
 

@@ -19,7 +19,7 @@ export async function setStaffSchedulingMode(tx: Prisma.TransactionClient,
   identity: Pick<BusinessActor, "tenantId" | "userId" | "requestId">,
   userId: string, requested?: StaffSchedulingMode) {
   const { tenantId } = identity
-  const user = await tx.user.findFirst({ where: { id: userId, tenantId, role: "STAFF" }, select: { id: true } })
+  const user = await tx.user.findFirst({ where: { id: userId, tenantId, role: { in: ["STAFF", "MANAGER"] } }, select: { id: true } })
   if (!user) throw new BusinessError(404, "Staff user not found.")
   const existing = await tx.staffProfile.findUnique({ where: { userId }, select: { id: true, schedulingMode: true } })
   const before = existing?.schedulingMode ?? "STANDARD"

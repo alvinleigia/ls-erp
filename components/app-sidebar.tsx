@@ -51,7 +51,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { canInvite, canManageUsers, canUseCrm, type Role } from "@/lib/permissions"
+import { canInvite, canUseCrm, type Role } from "@/lib/permissions"
 import { cn } from "@/lib/utils"
 
 type SubNavItem = {
@@ -81,7 +81,7 @@ export function AppSidebar({ brandingLogo, brandingName }: { brandingLogo?: stri
   const platformAccessMode = (user as {
     platformAccessMode?: "SUPER_ADMIN" | "ORG_MEMBER" | null
   })?.platformAccessMode
-  const canManage = canManageUsers(role ?? null)
+  const canManage = canUseCrm(role ?? null)
   const sessionTenantSlug = (user as { tenantSlug?: string | null } | undefined)?.tenantSlug
     ?.trim()
     .toLowerCase()
@@ -219,7 +219,7 @@ export function AppSidebar({ brandingLogo, brandingName }: { brandingLogo?: stri
         if (item.href === "/reports/audit-logs") return can("auditLogs.read")
         if (item.href === "/users") return can("users.read")
         if (item.href === "/settings") return can("businessSettings.read")
-        if (item.href === "/settings/branding") return role === "ADMIN" && can("businessSettings.read")
+        if (item.href === "/settings/branding") return can("branding.read")
         if (item.href === "/settings/taxes") return can("taxRates.read")
         return true
       })

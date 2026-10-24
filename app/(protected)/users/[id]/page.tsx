@@ -7,7 +7,7 @@ import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
 import { useDateFormatter } from "@/hooks/use-date-formatter"
-import { canManageUsers, type Role } from "@/lib/permissions"
+import { type Role } from "@/lib/permissions"
 import type { UserProfile } from "@/types/users"
 import { UserProfileSections } from "./user-profile-sections"
 
@@ -16,7 +16,7 @@ export default function UserProfilePage() {
   const router = useRouter()
   const { data: session } = useSession()
   const currentRole = (session?.user as { role?: Role })?.role
-  const canManage = canManageUsers(currentRole as Role)
+  const canManage = currentRole === "ADMIN"
   const params = useParams<{ id: string }>()
   const [user, setUser] = React.useState<UserProfile | null>(null)
   const [loading, setLoading] = React.useState(true)
@@ -53,7 +53,7 @@ export default function UserProfilePage() {
           <p className="text-sm text-muted-foreground">{user.email}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          {canManage && user.role === "STAFF" ? (
+          {canManage && ["STAFF", "MANAGER"].includes(user.role) ? (
             <Button onClick={() => router.push(`/users/${user.id}/staff`)}>
               Staff profile
             </Button>

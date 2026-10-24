@@ -1,3 +1,4 @@
+const {defaultRecordRules}=require('../platform/access/rules.ts')
 /* eslint-disable @typescript-eslint/no-require-imports */
 const {fixtureUser,fixtureRole,assignProfiles}=require("./helpers/access-fixtures.cjs")
 const { test, before, after } = require('node:test')
@@ -81,7 +82,7 @@ test('edit does not imply archive, reassignment or creation of follow-ups',async
  assert.equal((await crm.getWork(task.id)).status,'COMPLETED')
 })
 test('assignment is version-aware; assigned roles cannot be archived; changes take effect without login',async()=>{
- await assert.rejects(roles.assign(manager.id,{roleIds:[],version:0,salesRecordScope:'OWN',projectRecordScope:'OWN'}),status(409))
+ await assert.rejects(roles.assign(manager.id,{roleIds:[],version:0,rules:defaultRecordRules()}),status(409))
  await assert.rejects(roles.save({name:role.name,permissions:role.permissions,archived:true,version:role.version},role.id),status(409))
  await assert.rejects(roles.save({name:role.name,permissions:[],version:role.version-1},role.id),status(409))
  await permissions([])

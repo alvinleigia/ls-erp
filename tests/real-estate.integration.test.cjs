@@ -311,7 +311,7 @@ test("module dependency is atomic, admin-only and preserves CRM and property rec
 test("permissions recheck current user and tenant state", async () => {
   await root.user.update({ where: { id: manager.id }, data: { status: "SUSPENDED" } })
   await assert.rejects(service.listProjects({}), status(403))
-  await root.user.update({ where: { id: manager.id }, data: { status: "ACTIVE", role: "STAFF" } })
+  await root.user.update({ where: { id: manager.id }, data: { status: "ACTIVE", role: "CUSTOMER" } })
   await assert.rejects(service.createProject(input("DEMOTED")), status(403))
   await root.user.update({ where: { id: manager.id }, data: { role: "MANAGER" } })
   await root.tenant.update({ where: { id: a }, data: { status: "SUSPENDED" } })

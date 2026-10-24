@@ -1,3 +1,4 @@
+const {materializeRules}=require('./helpers/resource-policy-data.cjs')
 /* eslint-disable @typescript-eslint/no-require-imports */
 const {fixtureUser,fixtureRole,fixtureProfile,resetFixtureRoles}=require("./helpers/access-fixtures.cjs")
 const {test,before,after}=require('node:test'),assert=require('node:assert/strict'),{randomUUID}=require('node:crypto'),{Pool}=require('pg'),{PrismaClient}=require('@prisma/client')
@@ -136,7 +137,7 @@ test('current custom permissions, staff/order scope, user status and module gate
   await assert.rejects(hold(f),status(403));await assert.rejects(reservations.transition(f.order.id,held.id,{action:'release',version:1,reason:'Denied'}),status(403))
   await root.tenantAccessRole.update({where:{tenantId_id:{tenantId:tenant,id:role.id}},data:{permissions:[...permissions,'unitReservations.cancel']}})
   await reservations.transition(f.order.id,held.id,{action:'release',version:1,reason:'Granted separately'})
-  await root.tenantUserAccess.update({where:{tenantId_userId:{tenantId:tenant,userId:manager.id}},data:{salesRecordScope:'OWN'}});await assert.rejects(reservations.list(f.order.id),status(404))
+  await root.tenantUserAccess.update({where:{tenantId_userId:{tenantId:tenant,userId:manager.id}},data:{rules:materializeRules('MANAGER','OWN')}});await assert.rejects(reservations.list(f.order.id),status(404))
  }finally{await resetFixtureRoles(root,{where:{tenantId:tenant,userId:manager.id}})}
  for(const key of ['salesOrders','catalog','crm','salesDocuments']){
   await root.tenantModule.update({where:{tenantId_key:{tenantId:tenant,key}},data:{enabled:false}})

@@ -1,12 +1,11 @@
 import type { Prisma } from "@prisma/client"
 import { moduleEnabled, type ModuleFlag } from "@/platform/modules"
 import { permits } from "@/platform/access/policy"
-import { canManageUsers, type Role } from "@/lib/permissions"
 import type { BusinessActor } from "@/platform/policy"
 
 export async function inventoryDashboardData(tx: Prisma.TransactionClient, actor: BusinessActor, flags: ModuleFlag[]) {
   const { tenantId } = actor
-  const canReadStock = canManageUsers(actor.role as Role) && moduleEnabled(flags, "inventory") && permits(actor, "inventoryProducts.read")
+  const canReadStock = moduleEnabled(flags, "inventory") && permits(actor, "inventoryProducts.read")
   const lowStockProducts = await (
     canReadStock ? tx.inventoryProduct.findMany({
       where: {

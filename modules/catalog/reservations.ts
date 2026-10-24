@@ -1,9 +1,12 @@
+import { authorizeBusinessOperation } from "@/platform/access/operation"
+import { recordActionAccess } from "@/platform/access/record-actions"
+
 import type { Prisma, PrismaClient } from "@prisma/client"
-import { findAccessUser, accessContext } from "@/platform/access/server"
-import { permits, requirePermission } from "@/platform/access/policy"
+
+import { requirePermission } from "@/platform/access/policy"
 import type { Requirement } from "@/platform/access/catalog"
-import { BusinessError, hasBusinessAccess, type BusinessActor } from "@/platform/policy"
-import { moduleEnabled } from "@/platform/modules"
+import { BusinessError, type BusinessActor } from "@/platform/policy"
+
 import { serializationConflict } from "@/platform/database-errors"
 import { unitReservationCreateSchema, unitReservationTransitionSchema } from "@/lib/validation"
 import { catalogScope } from "./service"
@@ -12,18 +15,13 @@ import type { ReservationOrderSource } from "./reservation-contracts"
 import { reservationClock, reservedUnits } from "./reservation-availability"
 import { reservationEvent } from "./reservation-events"
 type Tx = Prisma.TransactionClient
-const manager = (actor: BusinessActor) => ["ADMIN", "MANAGER"].includes(actor.role)
 
 export function createReservationService(db: PrismaClient, identity: Pick<BusinessActor, "tenantId" | "userId" | "requestId">, source: ReservationOrderSource, extensions: readonly CatalogExtension[]) {
   async function run<T>(requirement: Requirement, operation: (tx: Tx, actor: BusinessActor) => Promise<T>): Promise<T> {
     for (let attempt = 0; ; attempt++) {
       try {
         return await db.$transaction(async tx => {
-          const user = await findAccessUser(tx, identity.tenantId, identity.userId)
-          if (!user || !hasBusinessAccess(user.role) || user.tenant.status !== "ACTIVE" || user.tenant.slug === (process.env.PLATFORM_ADMIN_TENANT_SLUG?.trim().toLowerCase() || "platform")) throw new BusinessError(403, "Business workspace access is not permitted.")
-          const flags = await tx.tenantModule.findMany({ where: { tenantId: identity.tenantId } })
-          if (!moduleEnabled(flags, "catalog") || !moduleEnabled(flags, "salesOrders")) throw new BusinessError(403, "Sales Catalog and Sales Orders must be enabled.")
-          const actor = { ...identity, ...accessContext(user) }
+          const actor = await authorizeBusinessOperation(tx, identity, requirement, ["catalog","salesOrders"])
           requirePermission(actor, ["salesOrders.read", "catalogItems.read", "unitReservations.read", requirement])
           return operation(tx, actor)
         }, { isolationLevel: "Serializable", maxWait: 20000, timeout: 20000 })
@@ -49,14 +47,16 @@ export function createReservationService(db: PrismaClient, identity: Pick<Busine
     list(orderId: string) {
       return run("unitReservations.read", async (tx, actor) => {
         const selected = await order(tx, actor, orderId), refs = source.units(selected)
+        const recordAccess = await recordActionAccess(actor, "unitReservations", action => source.find(tx, { ...actor, operation: { resource: "unitReservations", action } }, orderId))
         const visible = await tx.catalogItem.findMany({ where: { AND: [await catalogScope(tx, actor, extensions), { id: { in: refs.map(ref => ref.itemId) } }] }, select: { id: true, archived: true, availability: true, kind: true } })
         const now = await reservationClock(tx), occupied = await reservedUnits(tx, actor.tenantId, visible.map(v => v.id), now)
         // One order has a bounded quotation; history is paged separately below.
         return {
           units: refs.filter(ref => visible.some(v => v.id === ref.itemId)).map(ref => { const current = visible.find(v => v.id === ref.itemId)!; return { ...ref, available: !current.archived && current.kind === "UNIT" && current.availability === "AVAILABLE" && !occupied.has(ref.itemId) } }),
-          canCreate: manager(actor) && selected.status !== "CANCELLED" && permits(actor, "unitReservations.create"),
-          canAllocate: manager(actor) && selected.status === "CONFIRMED" && permits(actor, "unitReservations.confirm"),
-          canRelease: manager(actor) && selected.status !== "CANCELLED" && permits(actor, "unitReservations.cancel"),
+          recordAccess,
+          canCreate: selected.status !== "CANCELLED" && !!recordAccess.permissions["unitReservations.create"],
+          canAllocate: selected.status === "CONFIRMED" && !!recordAccess.permissions["unitReservations.confirm"],
+          canRelease: selected.status !== "CANCELLED" && !!recordAccess.permissions["unitReservations.cancel"],
         }
       })
     },
@@ -72,7 +72,6 @@ export function createReservationService(db: PrismaClient, identity: Pick<Busine
     create(orderId: string, input: unknown) {
       const data = unitReservationCreateSchema.parse(input)
       return run("unitReservations.create", async (tx, actor) => {
-        if (!manager(actor)) throw new BusinessError(403, "Only administrators and managers can reserve units.")
         const selected = await order(tx, actor, orderId, true)
         if (selected.status === "CANCELLED") throw new BusinessError(409, "This order is cancelled.")
         const ref = source.units(selected).find(ref => ref.itemId === data.itemId)
@@ -99,7 +98,6 @@ export function createReservationService(db: PrismaClient, identity: Pick<Busine
     transition(orderId: string, id: string, input: unknown) {
       const data = unitReservationTransitionSchema.parse(input)
       return run(data.action === "allocate" ? "unitReservations.confirm" : "unitReservations.cancel", async (tx, actor) => {
-        if (!manager(actor)) throw new BusinessError(403, "Only administrators and managers can allocate or release units.")
         const selected = await order(tx, actor, orderId, true)
         const row = await tx.unitReservation.findFirst({ where: { tenantId: actor.tenantId, orderId, id } })
         if (!row) throw new BusinessError(404, "Reservation not found.")

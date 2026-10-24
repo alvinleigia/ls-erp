@@ -11,10 +11,12 @@ import { AccessPageHeader, AccessFormActions } from "@/platform/access/record-pa
 import { pageClass } from "@/components/erp/page"
 import { Select, Textarea } from "@/components/erp/controls"
 import { useCurrentResourceAction } from "@/platform/access/view-guard"
+import { useBusinessModules } from "@/platform/module-provider"
 import * as React from "react"
 import Link from "@/platform/access/link"
 import { useRouter } from "next/navigation"
 import { useSession } from "next-auth/react"
+import { optionalReference, type AssignmentContext } from "@/platform/access/reference"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -34,6 +36,7 @@ export const textareaClass = "min-h-24 w-full rounded-md border bg-background px
 
 export const EnquiryEditor = withRecordView(EnquiryEditorBody)
 function EnquiryEditorBody({ id, initialContactId, initialReferences }: { id?: string; initialContactId?: string; initialReferences?: CrmViewReferences }) {
+  const { can } = useBusinessModules()
   const readTerm = useTerminologyReader()
   const term = useTerminology()
   const allowedAssignment = useCurrentResourceAction("assign")
@@ -43,8 +46,10 @@ function EnquiryEditorBody({ id, initialContactId, initialReferences }: { id?: s
   const loadCustom = custom.load
 
   const view = useRecordView()!
+  const { loadAccess } = view
   const router = useRouter()
   const { data: session } = useSession()
+  const currentUserId = session?.user?.id || "", canReadDirectory = can("assignmentTargets.read")
   const { formatDate } = useDateFormatter()
   const [contactMode, setContactMode] = React.useState("existing")
   const [newContact, setNewContact] = React.useState(emptyContact)
@@ -52,7 +57,6 @@ function EnquiryEditorBody({ id, initialContactId, initialReferences }: { id?: s
   const [enquiry, setEnquiry] = React.useState<CrmEnquiryRow | null>(null)
   const [contact, setContact] = React.useState<CrmContactRow | null>(null)
   const [values, setValues] = React.useState({ salesTeamId: "", contactId: initialContactId || "", title: "", sourceId: "", accountId: "", referralContactId: "", referralAccountId: "", targetCloseOn: "", requirements: "", assignedUserId: "", status: "NEW" as CrmStatus, outcome: "", lostReasonId: "" })
-  const [canAssign, setCanAssign] = React.useState(false)
   const [loading, setLoading] = React.useState(true)
   const [loadFailed, setLoadFailed] = React.useState(false)
   const [saving, setSaving] = React.useState(false)
@@ -70,24 +74,23 @@ function EnquiryEditorBody({ id, initialContactId, initialReferences }: { id?: s
     void (async () => {
       try {
         const [assignees, record, selectedContact] = await Promise.all([
-          get("/api/crm/assignees"), id ? get(`/api/crm/enquiries/${id}`) : null,
+          optionalReference<AssignmentContext>("/api/crm/assignees", canReadDirectory, controller.signal), id ? get(`/api/crm/enquiries/${id}`) : null,
           !id && initialContactId ? get(`/api/crm/contacts/${initialContactId}`) : null,
         ])
         if (record) {
-          setEnquiry(record); setContact(record.contact); loadExtension(record); await loadCustom(record)
+          setEnquiry(record); loadAccess(record.recordAccess); setContact(record.contact); loadExtension(record); await loadCustom(record)
           setValues({ salesTeamId: record.salesTeamId || "", contactId: record.contact.id, title: record.title, sourceId: record.sourceId || "", accountId: record.accountId || "", referralContactId: record.referralContactId || "", referralAccountId: record.referralAccountId || "", targetCloseOn: record.targetCloseOn?.slice(0, 10) || "", requirements: record.requirements || "", assignedUserId: record.assignedUserId, status: record.status, outcome: record.outcome || "", lostReasonId: record.lostReasonId || "" })
           setReferralType(record.referralContactId ? "contact" : record.referralAccountId ? "account" : "none")
         } else {
           setContact(selectedContact)
-          setValues(previous => ({ ...previous, assignedUserId: assignees.currentUserId }))
+          setValues(previous => ({ ...previous, assignedUserId: assignees?.currentUserId || currentUserId }))
         }
-        setCanAssign(assignees.canAssign)
       } catch (error) {
         if (!controller.signal.aborted) { setError((error as Error).message); setLoadFailed(true) }
       } finally { if (!controller.signal.aborted) setLoading(false) }
     })()
     return () => controller.abort()
-  }, [readTerm, id, initialContactId, loadExtension, loadCustom])
+  }, [loadAccess, readTerm, id, initialContactId, loadExtension, loadCustom, currentUserId, canReadDirectory])
   async function save(event: React.FormEvent) {
     event.preventDefault(); setSaving(true); setError(""); clearErrors()
     try {
@@ -133,10 +136,10 @@ function EnquiryEditorBody({ id, initialContactId, initialReferences }: { id?: s
         </>}
       </fieldset></Section>
       <Section sectionKey="Enquiry details" title={term("crm.enquiry.singular", "Enquiry details", "{label} details")} description="Customer requirements, ownership and progress."><fieldset disabled={saving || loadFailed} className="grid min-w-0 gap-5 sm:grid-cols-2">
-        <SalesTeamSelect value={values.salesTeamId} selected={enquiry?.salesTeam} disabled={!!id && !canAssign} onChange={salesTeamId => { setValues({ ...values, salesTeamId }); void custom.changeTeam(salesTeamId) }} />
-      <FormField id="assignedUserId" label="Salesperson" error={errors.assignedUserId}><RecordSelect id="assignedUserId" endpoint={values.salesTeamId ? `/api/crm/assignees?salesTeamId=${values.salesTeamId}` : "/api/crm/assignees"} value={values.assignedUserId} selected={{ value: selectedAssignee.id, label: selectedAssignee.name || "Unnamed user" }} onChange={assignedUserId => setValues({ ...values, assignedUserId })} disabled={!canAssign || !allowedAssignment} /></FormField>
+        <SalesTeamSelect value={values.salesTeamId} selected={enquiry?.salesTeam} disabled={!!id && !allowedAssignment} onChange={salesTeamId => { setValues({ ...values, salesTeamId }); void custom.changeTeam(salesTeamId) }} />
+      <FormField id="assignedUserId" label="Salesperson" error={errors.assignedUserId}><RecordSelect id="assignedUserId" endpoint={values.salesTeamId ? `/api/crm/assignees?salesTeamId=${values.salesTeamId}` : "/api/crm/assignees"} value={values.assignedUserId} selected={{ value: selectedAssignee.id, label: selectedAssignee.name || "Unnamed user" }} onChange={assignedUserId => setValues({ ...values, assignedUserId })} disabled={!allowedAssignment || !canReadDirectory} /></FormField>
         <FormField id="title" label={term("crm.enquiry.singular", "Enquiry title", "{label} title")} error={errors.title} className="sm:col-span-2"><Input id="title" required maxLength={200} value={values.title} onChange={event => setValues({ ...values, title: event.target.value })} /></FormField>
-        <FormField id="sourceId" label="Lead source (optional)" error={errors.sourceId}><RecordSelect id="sourceId" endpoint="/api/crm/lead-sources" value={values.sourceId} selected={enquiry?.sourceId ? { value: enquiry.sourceId, label: `${enquiry.source || enquiry.leadSource?.name || "Source"}${enquiry.leadSource?.archived ? " (archived)" : ""}` } : undefined} onChange={sourceId => setValues({ ...values, sourceId })} />{values.sourceId && <Button type="button" variant="link" size="sm" onClick={() => setValues({ ...values, sourceId: "" })}>Clear source</Button>}{canAssign && <Link className="block text-xs underline" href="/crm/lead-sources" target="_blank" rel="noreferrer">Manage lead sources</Link>}</FormField>
+        <FormField id="sourceId" label="Lead source (optional)" error={errors.sourceId}><RecordSelect id="sourceId" endpoint="/api/crm/lead-sources" value={values.sourceId} selected={enquiry?.sourceId ? { value: enquiry.sourceId, label: `${enquiry.source || enquiry.leadSource?.name || "Source"}${enquiry.leadSource?.archived ? " (archived)" : ""}` } : undefined} onChange={sourceId => setValues({ ...values, sourceId })} />{values.sourceId && <Button type="button" variant="link" size="sm" onClick={() => setValues({ ...values, sourceId: "" })}>Clear source</Button>}{can("leadSources.edit") && <Link className="block text-xs underline" href="/crm/lead-sources" target="_blank" rel="noreferrer">Manage lead sources</Link>}</FormField>
         <FormField id="targetCloseOn" label="Target close date (optional)" error={errors.targetCloseOn}><Input id="targetCloseOn" type="date" value={values.targetCloseOn} onChange={event => setValues({ ...values, targetCloseOn: event.target.value })} /></FormField>
         {id && <FormField id="status" label="Status" error={errors.status}><Select id="status" className={`${selectClass} w-full`} value={values.status} onValueChange={event => setValues({ ...values, status: event as CrmStatus, lostReasonId: event === "CLOSED" ? values.lostReasonId : "" })}>{enquiryStatuses.map(status => <option key={status} value={status}>{status === "CLOSED" ? "Lost" : status}</option>)}</Select></FormField>}
         <FormField id="requirements" label="Requirements" error={errors.requirements} className="sm:col-span-2"><Textarea id="requirements" className={textareaClass} maxLength={5000} value={values.requirements} onChange={event => setValues({ ...values, requirements: event.target.value })} /></FormField>

@@ -1,6 +1,8 @@
 "use client"
 import type { Permission, Requirement } from "./access/catalog"
 import { satisfies } from "./access/policy"
+import { allPermissions } from "./access/catalog"
+import { RecordAccessContext } from "./access/record-context"
 import * as React from "react"
 import { moduleEnabled, type ModuleFlag, type BusinessModuleKey } from "./modules"
 
@@ -27,5 +29,7 @@ export function BusinessModuleProvider({ children, active = true }: { children: 
 }
 export function useBusinessModules() {
   const state = React.useContext(Context)
-  return { ...state, can: (requirement: Requirement) => !state.loading && satisfies(state, requirement), enabled: (key: BusinessModuleKey) => moduleEnabled(state.flags, key) }
+  const record = React.useContext(RecordAccessContext)
+  const permissions = React.useMemo(() => record ? allPermissions.filter(permission => satisfies(state, permission) && record.permissions[permission] !== false) : state.permissions, [record, state])
+  return { ...state, permissions, can: (requirement: Requirement) => !state.loading && satisfies({ permissions }, requirement), enabled: (key: BusinessModuleKey) => moduleEnabled(state.flags, key) }
 }

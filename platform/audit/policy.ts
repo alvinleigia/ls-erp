@@ -2,7 +2,7 @@ import type { Prisma } from "@prisma/client"
 import type { BusinessActor } from "../policy"
 import { moduleEnabled } from "../modules"
 import { permits, satisfies } from "../access/policy"
-import { recordAccess } from "../access/record-scope"
+import { recordLimits, recordScope } from "../access/rules"
 
 export const securityEvents: Prisma.AuditLogWhereInput = { OR: ["access.", "module.", "tenant.", "core.invitations.", "crm.team.", "team."].map(prefix => ({ event: { startsWith: prefix } })) }
 
@@ -15,13 +15,14 @@ export async function auditScope(tx: Prisma.TransactionClient, actor: BusinessAc
     return {
       // Apply access before pagination/counting; the same predicate guards detail reads.
       AND: [
+        ...(!permits(actor, "restrictedFields.read") ? [{ NOT: { event: { startsWith: "crm.customField" } } }] : []),
         // Polymorphic historical snapshots have no record FK. Restricted managers
         // use scoped record timelines; never expose a hidden record via its audit copy.
-        ...(recordAccess(actor, "sales") !== "ALL" ? [{ NOT: { OR: ["crm.", "salesOrder.", "receivable.", "catalog.reservation."].map(prefix => ({ event: { startsWith: prefix } })) } }] : []),
-        ...(recordAccess(actor, "projects") !== "ALL" ? [{ NOT: { OR: [{ entityType: { startsWith: "RealEstate" } }, { event: { startsWith: "catalog." } }] } }] : []),
-        ...(!(actor.role === "ADMIN" && moduleEnabled(flags, "receivables") && satisfies(actor, ["salesOrders.read", "receivables.read", "orderPayments.read"])) ? [{ NOT: { event: { startsWith: "receivable." } } }] : []),
+        ...((["enquiries", "opportunities", "contacts", "accounts", "activities", "quotations", "salesOrders", "receivables", "orderPayments"] as const).some(resource => recordLimits(actor, resource, "read").length > 0) ? [{ NOT: { OR: ["crm.", "salesOrder.", "receivable.", "catalog.reservation."].map(prefix => ({ event: { startsWith: prefix } })) } }] : []),
+        ...(recordLimits(actor, "projects", "read").length > 0 ? [{ NOT: { OR: [{ entityType: { startsWith: "RealEstate" } }, { event: { startsWith: "catalog." } }] } }] : []),
+        ...(!(recordScope(actor, "auditLogs", "read") === "ALL" && moduleEnabled(flags, "receivables") && satisfies(actor, ["salesOrders.read", "receivables.read", "orderPayments.read"])) ? [{ NOT: { event: { startsWith: "receivable." } } }] : []),
         ...(!moduleEnabled(flags, "salesOrders") || !permits(actor, "salesOrders.read") ? [{ NOT: { event: { startsWith: "salesOrder." } } }] : []),
-        ...(!(actor.role === "ADMIN" && moduleEnabled(flags, "catalog") && moduleEnabled(flags, "salesOrders") && permits(actor, "unitReservations.read") && permits(actor, "salesOrders.read")) ? [{ NOT: { event: { startsWith: "catalog.reservation." } } }] : []),
+        ...(!(recordScope(actor, "auditLogs", "read") === "ALL" && moduleEnabled(flags, "catalog") && moduleEnabled(flags, "salesOrders") && permits(actor, "unitReservations.read") && permits(actor, "salesOrders.read")) ? [{ NOT: { event: { startsWith: "catalog.reservation." } } }] : []),
         ...(!moduleEnabled(flags, "catalog") || !permits(actor, "catalogItems.read") ? [{ NOT: { event: { startsWith: "catalog." } } }] : []),
         ...(!moduleEnabled(flags, "realEstate") || !permits(actor, "projects.read") ? [{ NOT: { AND: [{ event: { startsWith: "catalog." } }, { after: { path: ["extensionKey"], equals: "realEstate" } }] } }] : []),
         ...(!moduleEnabled(flags, "crm") ? [{ NOT: { AND: [{ event: { startsWith: "crm." } }, { NOT: securityEvents }] } }] : []),
@@ -29,7 +30,7 @@ export async function auditScope(tx: Prisma.TransactionClient, actor: BusinessAc
         ...(!moduleEnabled(flags, "realEstate") ? [{ NOT: { entityType: { startsWith: "RealEstate" } } }] : []),
         ...(["inventoryProducts", "inventoryCategories", "inventorySuppliers", "inventoryPurchases"] as const).filter(resource => !moduleEnabled(flags, "inventory") || !permits(actor, `${resource}.read`)).map(resource => ({ NOT: { event: { startsWith: `inventory.${resource}.` } } })),
         ...(["services", "serviceCategories"] as const).filter(resource => !moduleEnabled(flags, "services") || !permits(actor, `${resource}.read`)).map(resource => ({ NOT: { event: { startsWith: `services.${resource}.` } } })),
-        ...(!(actor.role === "ADMIN" && moduleEnabled(flags, "services")) ? [{ NOT: { event: { startsWith: "services.eligibility." } } }] : []),
+        ...(!(recordScope(actor, "auditLogs", "read") === "ALL" && moduleEnabled(flags, "services")) ? [{ NOT: { event: { startsWith: "services.eligibility." } } }] : []),
         ...(actor.role !== "ADMIN" ? [{ OR: [
           { id: { in: [] as string[] } }, // Explicit deny when no resource is readable.
           ...(moduleEnabled(flags, "catalog") && permits(actor, "catalogItems.read") ? [{ event: { startsWith: "catalog." } }] : []),
@@ -42,7 +43,7 @@ export async function auditScope(tx: Prisma.TransactionClient, actor: BusinessAc
           ...(canReadCoupons ? [{ event: { startsWith: "appointments.coupon." } }] : []),
         ] }] : []),
         ...(["leaveDefinitions", "leaveGroups", "shiftTemplates", "shiftSchedules", "shiftPlans", "shiftRoster"] as const).filter(resource => !moduleEnabled(flags, resource.startsWith("leave") ? "leaves" : "shifts") || !permits(actor, `${resource}.read`)).map(resource => ({ NOT: { event: { startsWith: `workforce.${resource}.` } } })),
-        ...(!(actor.role === "ADMIN" && moduleEnabled(flags, "leaves") && permits(actor, "leaveApprovals.read")) ? [{ NOT: { event: { startsWith: "leave.request." } } }] : []),
+        ...(!(recordScope(actor, "auditLogs", "read") === "ALL" && moduleEnabled(flags, "leaves") && permits(actor, "leaveApprovals.read")) ? [{ NOT: { event: { startsWith: "leave.request." } } }] : []),
         ...(!canReadBookings ? [{ NOT: { OR: [{ event: { startsWith: "appointment." } }, { event: { startsWith: "appointments.order." } }, { event: { startsWith: "appointments.invoice." } }] } }] : []),
         ...(!canReadCoupons ? [{ NOT: { event: { startsWith: "appointments.coupon." } } }] : []),
       ],

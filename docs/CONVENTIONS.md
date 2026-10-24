@@ -13,12 +13,16 @@ This is the baseline for new modules (API + UI) in this codebase.
   - List endpoints may optionally accept `status` filters when applicable.
 
 ## Permissions
-- Every module uses composable access profiles from the shared access resolver. Active profiles add action permissions; per-user record scopes, account authority, module activation and tenant isolation remain mandatory bounds. Staff/Manager accounts without profiles have no business permissions. See `docs/ACCESS_PROFILES_R9.md` for the contract, migration and module checklist.
+- Every module uses composable access profiles from the shared access resolver. Active profiles add action permissions; per-user resource/action record limits, module activation and tenant isolation remain mandatory bounds. Staff/Manager labels grant no business permissions. Tenant Admin retains security administration. See `docs/ACCESS_STANDARDIZATION_R9.md` for the current contract and migration.
 - Teams are shared business data under `/users/teams`; CRM owns the sales workflow setting. See `docs/ACCESS_MODEL_R9.md` for module record policies and migration rules.
 - Register each permission resource in both `platform/access/catalog.ts` and the exhaustive `platform/access/resource-policy.ts`. Offer record scope choices only where every query path can enforce them.
-- Use `accessContext(findAccessUser(...))` when refreshing an actor inside a transaction; keep permissions, sales/project scopes and current team memberships together. Module/action checks and record predicates remain mandatory for lists, details, writes, selectors, reports and exports.
-- Use helpers from `lib/permissions.ts` in both server and client.
-- Server always checks `auth()` + helper.
+- Use `authorizeBusinessOperation(tx, identity, requirement, modules)` inside business transactions. It refreshes account status, profiles, resource/action rules, activation and team memberships, then binds the operation. A scheduling workflow must refresh after acquiring its shared lock.
+- Register rules in `platform/access/rules.ts`. Missing or invalid entries deny access; adding a new permission never expands existing policies. Offer only scopes supported by the resource adapter. Read bounds every other action through `recordLimits`, including related source lookups and exports.
+- Apply the same adapter to lists, details, writes, selectors, reports, exports and dashboards. Use `requireScopedWriteFields` for secondary archive/assignment changes; an Edit grant cannot stand in for Assign or Archive. Filters only narrow access.
+- Use `recordActionAccess` after a scoped detail lookup. Pass its metadata to the shared record view with `loadAccess`; UI controls use the ordinary permission helpers. Metadata is a display hint; writes still enforce current server predicates.
+- Read-only details must not depend on edit-only lookup access. Gate optional directory/configuration loads by their own Read permission; `optionalReference` can omit a denied optional lookup. Primary records and writes must still fail on authorization errors.
+- Security administration, customer/personal access, financial transitions and configured leave approval relationships remain explicit business rules. Team membership alone grants neither an action nor approval authority. Do not add tenant-specific access overrides, role fallbacks or module-local permission aliases.
+- Server entrypoints establish an authenticated tenant identity; frontend checks never authorize server work.
 - UI should only hide/disable; server is source of truth.
 - Tenant provisioning/lifecycle actions must use `canManageTenants` and remain restricted to platform admin users.
 

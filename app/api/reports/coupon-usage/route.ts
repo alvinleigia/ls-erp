@@ -11,7 +11,6 @@ import {
   logApiRequestSuccess,
   withRequestId,
 } from "@/lib/api-logging"
-import { canManageUsers, type Role } from "@/lib/permissions"
 import { prisma } from "@/lib/prisma"
 import { requireTenantSession } from "@/lib/tenant-auth"
 import type { ListResponse } from "@/types/api"
@@ -36,9 +35,7 @@ const ensureAuthorized = async (request: Request) => {
   if (tenantSession.error) {
     return { error: tenantSession.error }
   }
-  if (!canManageUsers(tenantSession.context.role as Role)) {
-    return { error: NextResponse.json({ error: "Unauthorized" }, { status: 401 }) }
-  }
+
   return { context: tenantSession.context }
 }
 

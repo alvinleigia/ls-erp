@@ -1,3 +1,4 @@
+import { opportunityScope } from "@/modules/crm/policy"
 import { termText } from "@/platform/terminology/message"
 import { projectScope } from "./access"
 import { Prisma } from "@prisma/client"
@@ -22,7 +23,7 @@ export async function projectFilterChoices(tx: Tx, actor: BusinessActor, input: 
   const query = projectListSchema.parse(input)
   const linked = { OR: [
     { enquiryContexts: { some: { enquiry: enquiryScope(actor) } } }, { subEnquiryContexts: { some: { enquiry: enquiryScope(actor) } } },
-    { opportunityContexts: { some: { opportunity: enquiryScope(actor) } } }, { subOpportunityContexts: { some: { opportunity: enquiryScope(actor) } } },
+    { opportunityContexts: { some: { opportunity: opportunityScope(actor, "read") } } }, { subOpportunityContexts: { some: { opportunity: opportunityScope(actor, "read") } } },
   ] }
   const where: Prisma.RealEstateProjectWhereInput = { tenantId: actor.tenantId, parentId: query.parentId || null, name: { contains: query.q, mode: "insensitive" }, OR: [projectScope(actor), linked] }
   const [items, total] = await Promise.all([tx.realEstateProject.findMany({ where, select: brief, orderBy: [{ name: "asc" }, { id: "asc" }], skip: (query.page - 1) * query.pageSize, take: query.pageSize }), tx.realEstateProject.count({ where })])

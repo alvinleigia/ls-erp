@@ -1,15 +1,13 @@
 import type { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { canManageUsers, type Role } from "@/lib/permissions"
 import { withBusinessApi, readJson } from "@/platform/business-api"
 import { requireBusinessModule } from "@/platform/module-server"
 import { requirePermission } from "@/platform/access/policy"
 import type { PermissionAction } from "@/platform/access/catalog"
-import { BusinessError, type BusinessActor } from "@/platform/policy"
+import { type BusinessActor } from "@/platform/policy"
 
 type Resource = "appointments" | "appointmentCoupons"
 export async function requireAppointmentsAccess(actor: BusinessActor, action: PermissionAction = "read", resource: Resource = "appointments") {
-  if (!canManageUsers(actor.role as Role)) throw new BusinessError(403, "Appointments requires administrator or manager access.")
   await requireBusinessModule(prisma, actor.tenantId, "appointments")
   requirePermission(actor, `${resource}.${action}`)
 }

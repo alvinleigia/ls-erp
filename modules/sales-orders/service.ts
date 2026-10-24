@@ -1,15 +1,17 @@
+import { authorizeBusinessOperation } from "@/platform/access/operation"
+import { recordActionAccess } from "@/platform/access/record-actions"
+
 import type { Prisma, PrismaClient } from "@prisma/client"
-import { findAccessUser, accessContext } from "@/platform/access/server"
-import { permits, requirePermission } from "@/platform/access/policy"
+
+
 import type { Requirement } from "@/platform/access/catalog"
-import { BusinessError, hasBusinessAccess, type BusinessActor } from "@/platform/policy"
-import { moduleEnabled } from "@/platform/modules"
+import { BusinessError, type BusinessActor } from "@/platform/policy"
+
 import { serializationConflict } from "@/platform/database-errors"
 import { recordDomainAuditEvent } from "@/lib/domain-audit"
 import { salesOrderCreateSchema, salesOrderListSchema, salesOrderTransitionSchema } from "@/lib/validation"
 import type { SalesOrderSource } from "./contracts"
 type Tx = Prisma.TransactionClient
-const manager = (actor: BusinessActor) => ["ADMIN", "MANAGER"].includes(actor.role)
 const listSelect = { id: true, title: true, customerName: true, currency: true, consideration: true, quotationId: true, revision: true, status: true, version: true, createdAt: true } as const
 
 export function createSalesOrderService(db: PrismaClient, identity: Pick<BusinessActor, "tenantId" | "userId" | "requestId">, source: SalesOrderSource) {
@@ -17,11 +19,7 @@ export function createSalesOrderService(db: PrismaClient, identity: Pick<Busines
     for (let attempt = 0; ; attempt++) {
       try {
         return await db.$transaction(async tx => {
-          const user = await findAccessUser(tx, identity.tenantId, identity.userId)
-          if (!user || !hasBusinessAccess(user.role) || user.tenant.status !== "ACTIVE" || user.tenant.slug === (process.env.PLATFORM_ADMIN_TENANT_SLUG?.trim().toLowerCase() || "platform")) throw new BusinessError(403, "Business workspace access is not permitted.")
-          if (!moduleEnabled(await tx.tenantModule.findMany({ where: { tenantId: identity.tenantId } }), "salesOrders")) throw new BusinessError(403, "Sales Orders is not enabled.")
-          const actor = { ...identity, ...accessContext(user) }
-          requirePermission(actor, requirement)
+          const actor = await authorizeBusinessOperation(tx, identity, requirement, ["salesOrders"])
           return operation(tx, actor)
         }, { isolationLevel: "Serializable", maxWait: 20000, timeout: 20000 })
       } catch (e) {
@@ -54,8 +52,9 @@ export function createSalesOrderService(db: PrismaClient, identity: Pick<Busines
     get(id: string) {
       return run("salesOrders.read", async (tx, actor) => {
         const row = await find(tx, actor, id)
+        const recordAccess = await recordActionAccess(actor, "salesOrders", async action => tx.salesOrder.findFirst({ where: { AND: [scope({ ...actor, operation: { resource: "salesOrders", action } }), { id }] }, select: { id: true } }))
         const history = await tx.salesOrderEvent.findMany({ where: { tenantId: actor.tenantId, orderId: id }, orderBy: { version: "asc" } })
-        return { ...row, history, canConfirm: manager(actor) && row.status === "DRAFT" && permits(actor, "salesOrders.confirm"), canCancel: manager(actor) && row.status !== "CANCELLED" && permits(actor, "salesOrders.cancel") }
+        return { ...row, history, recordAccess, canConfirm: row.status === "DRAFT" && !!recordAccess.permissions["salesOrders.confirm"], canCancel: row.status !== "CANCELLED" && !!recordAccess.permissions["salesOrders.cancel"] }
       })
     },
     create(input: unknown) {
@@ -78,7 +77,6 @@ export function createSalesOrderService(db: PrismaClient, identity: Pick<Busines
     transition(id: string, input: unknown) {
       const data = salesOrderTransitionSchema.parse(input)
       return run(["salesOrders.read", `salesOrders.${data.action}`], async (tx, actor) => {
-        if (!manager(actor)) throw new BusinessError(403, "Only administrators and managers can confirm or cancel sales orders.")
         await find(tx, actor, id)
         await tx.$queryRaw`SELECT id FROM "SalesOrder" WHERE "tenantId"=${actor.tenantId} AND id=${id} FOR UPDATE`
         const before = await find(tx, actor, id)

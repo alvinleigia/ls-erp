@@ -154,7 +154,8 @@ test('nonempty dashboard and audit records are filtered before disclosure; disab
 test('navigation starts at the first allowed view and hides disabled workforce modules',()=>{
  const {workforceNavigation}=require('../application/navigation.ts'),flags=['leaves','shifts'].map(key=>({key,allowed:true,enabled:true}))
  assert.equal(workforceNavigation(flags,['leaveGroups.read'],'MANAGER')[0].href,'/leaves/groups')
- assert.deepEqual(workforceNavigation(flags,['shiftTemplates.read'],'STAFF'),[])
+ assert.equal(workforceNavigation(flags,['shiftTemplates.read'],'STAFF')[0].href,'/shifts')
+ assert.deepEqual(workforceNavigation(flags,[],'STAFF'),[])
  assert.deepEqual(workforceNavigation([],undefined,'ADMIN'),[])
 })
 
@@ -1535,4 +1536,22 @@ test('failed booking guards and history capture roll back historical plan writes
  try{await ok(await call('shifts/flexible-week-plans','DELETE',body),500)}finally{stub.mock.restore()}
  assert.equal(await historyCount(),0);assert.equal(await planAuditCount(),count)
  assert.equal(Number((await root.query('SELECT count(*) FROM "StaffFlexibleWeekPlan" WHERE "staffProfileId"=$1',[profile])).rows[0].count),1)
+})
+
+test('a leave review waiting for the scheduling lock rechecks revoked approval permissions',async()=>{
+ const id=await requestFixture('approval_permission_wait')
+ const original=(await root.query('SELECT permissions FROM "TenantAccessRole" WHERE id=$1',[rid])).rows[0].permissions
+ await root.query('UPDATE "StaffProfile" SET "managerUserId"=$1,"leaveApprovalMode"=\'REPORTING_MANAGER\' WHERE id=$2',[a+'_manager',a+'_profile'])
+ await flag('leaves',true);await perms(['leaveApprovals.read','leaveApprovals.approve'])
+ await root.query('BEGIN');let pending
+ try{
+  await root.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[`workforce-schedules:${a}`])
+  pending=call('leaves/requests/[id]/review','PATCH',{status:'REJECTED',reviewerComment:'Permission revocation check'},id,'MANAGER')
+  let waiting=false;const deadline=Date.now()+5000
+  while(Date.now()<deadline){waiting=(await root.query(`SELECT EXISTS(SELECT 1 FROM pg_locks held JOIN pg_locks waiter ON held.classid=waiter.classid AND held.objid=waiter.objid AND held.objsubid=waiter.objsubid WHERE held.pid=pg_backend_pid() AND held.locktype='advisory' AND NOT waiter.granted) waiting`)).rows[0].waiting;if(waiting)break;await new Promise(resolve=>setTimeout(resolve,20))}
+  assert.equal(waiting,true)
+  await perms(['leaveApprovals.read']);await root.query('COMMIT');await ok(await pending,403)
+ }finally{await root.query('ROLLBACK');if(pending)await pending;await perms(original)}
+ assert.equal((await root.query('SELECT status FROM "LeaveRequest" WHERE id=$1',[id])).rows[0].status,'PENDING')
+ assert.equal(Number((await root.query('SELECT count(*) FROM "AuditLog" WHERE "entityId"=$1',[id])).rows[0].count),0)
 })

@@ -62,7 +62,7 @@ test("operational dashboard providers skip every domain query for disabled or de
       [{ ...actor, role: "ADMIN" }, []],
       [{ ...actor, role: "ADMIN" }, flags.map(flag => ({ ...flag, allowed: false }))],
       [{ ...actor, role: "MANAGER", permissions: ["dashboard.read"] }, flags],
-      [actor, flags],
+      [{ ...actor, permissions: [] }, flags],
     ]) assert.equal((await provider(tx, who, modules, period)).visible, false)
   }
 })

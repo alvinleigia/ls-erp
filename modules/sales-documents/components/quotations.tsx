@@ -63,13 +63,14 @@ export function QuotationList({ opportunityId, all = false }: { opportunityId?: 
   return template ? <div className={pageClass}><AccessPageHeader title={term("salesDocuments.quotation.singular", "Quotation templates", "{label} templates")} backHref="/crm/quotations" actions={data.canManage && <Button asChild><Link href={`${templateBase}/new`}>New template</Link></Button>} /><Surface>{content}</Surface></div> : all ? <div className={pageClass}><AccessPageHeader title={term("salesDocuments.quotation.plural", "Quotations")} description={term("crm.opportunity.plural", "Saved sales documents for the opportunities you can access.", "Saved sales documents for the {label} you can access.")} actions={<Button asChild><Link href="/crm/opportunities">{term("crm.opportunity.plural", "Open opportunities", "Open {label}")}</Link></Button>} /><Surface>{content}</Surface></div> : <Section title="Sales documents" actions={<Button asChild><Link href={`/crm/quotations/new?opportunityId=${opportunityId}`}>{term("salesDocuments.quotation.singular", "New document", "New {label}")}</Link></Button>}>{content}</Section>
 }
 
-type Document = { archivedPdf: { issuedAt: string } | null; id: string; opportunityId: string; title: string; version: number; revision: number; snapshot: QuotationSnapshot; paymentPlansEnabled: boolean }
+type Document = { recordAccess?: import("@/platform/access/record-actions").RecordAccess; archivedPdf: { issuedAt: string } | null; id: string; opportunityId: string; title: string; version: number; revision: number; snapshot: QuotationSnapshot; paymentPlansEnabled: boolean }
 type Template = { id: string; name: string; content: QuotationContent; version: number; archived: boolean; canManage: boolean; paymentPlansEnabled: boolean }
 export const QuotationEditor = withRecordView(QuotationEditorBody)
 function QuotationEditorBody({ id, opportunityId: initialOpportunityId, template = false, revision, documentActions }: { id?: string; opportunityId?: string; template?: boolean; revision?: number; documentActions?: (document: { id: string; revision: number }, disabled: boolean) => React.ReactNode }) {
   const readTerm = useTerminologyReader()
   const term = useTerminology()
   const view = useRecordView()!
+  const { loadAccess } = view
   const settings = useQuotationSettings()
   const modules = useBusinessModules()
   const [paymentPlans, setPaymentPlans] = React.useState(false)
@@ -87,7 +88,7 @@ function QuotationEditorBody({ id, opportunityId: initialOpportunityId, template
         if (id) { const row = await request<Template>(`/api/crm/quotation-templates/${id}`, { signal: controller.signal }); setValue(row.content); setName(row.name); setVersion(row.version); setArchived(row.archived); setCanManage(row.canManage); setPaymentPlans(row.paymentPlansEnabled) }
         else { const row = await request<{ canManage: boolean; paymentPlansEnabled: boolean }>("/api/crm/quotation-templates?pageSize=1", { signal: controller.signal }); setCanManage(row.canManage); setPaymentPlans(row.paymentPlansEnabled); const display = await request<{ settings: AppSettingsPayload }>("/api/settings/display", { signal: controller.signal }); setValue({ ...emptyQuotationContent, currency: display.settings.currency || "USD" }) }
       } else if (id) {
-        const row = await request<Document>(`/api/crm/quotations/${id}${revision ? `?revision=${revision}` : ""}`, { signal: controller.signal }); setPaymentPlans(row.paymentPlansEnabled); setDocument(row); setOpportunityId(row.opportunityId); setValue(row.snapshot.content); setVersion(row.version); setContext(row.snapshot.context)
+        const row = await request<Document>(`/api/crm/quotations/${id}${revision ? `?revision=${revision}` : ""}`, { signal: controller.signal }); setPaymentPlans(row.paymentPlansEnabled); setDocument(row); loadAccess(row.recordAccess); setOpportunityId(row.opportunityId); setValue(row.snapshot.content); setVersion(row.version); setContext(row.snapshot.context)
       } else {
         if (!initialOpportunityId) throw new Error(readTerm("crm.opportunity.singular", "Open an opportunity and choose New document.", "Open an {label} and choose New document."))
         const row = await request<{ content: QuotationContent; context: typeof context; paymentPlansEnabled: boolean }>(`/api/crm/opportunities/${initialOpportunityId}/quotations/defaults`, { signal: controller.signal }); setPaymentPlans(row.paymentPlansEnabled); setValue(row.content); setContext(row.context)
@@ -95,7 +96,7 @@ function QuotationEditorBody({ id, opportunityId: initialOpportunityId, template
     }
     load().catch(error => { if (!controller.signal.aborted) { setError(error.message); setFailed(true) } }).finally(() => { if (!controller.signal.aborted) setLoading(false) })
     return () => controller.abort()
-  }, [readTerm, id, template, initialOpportunityId, revision])
+  }, [loadAccess, readTerm, id, template, initialOpportunityId, revision])
   const plansEnabled = paymentPlans && modules.enabled("paymentPlans")
   const scheduleLocked = !plansEnabled && value.instalments.length > 0
   const unavailable = !modules.enabled("salesDocuments")
@@ -115,7 +116,7 @@ function QuotationEditorBody({ id, opportunityId: initialOpportunityId, template
       const url = template ? `/api/crm/quotation-templates${id ? `/${id}` : ""}` : id ? `/api/crm/quotations/${id}` : `/api/crm/opportunities/${opportunityId}/quotations`
       const row = await request<{ id: string; version: number }>(url, { method: id ? "PUT" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ content: value, version, ...(template ? { name, archived } : templateId ? { templateId } : {}) }) })
       if (!id) router.push(template ? `${templateBase}/${row.id}` : `/crm/quotations/${row.id}`)
-      else { setVersion(row.version); if (!template) { const saved = await request<Document>(`/api/crm/quotations/${id}`); setDocument(saved); setValue(saved.snapshot.content); setContext(saved.snapshot.context) } view.done() }
+      else { setVersion(row.version); if (!template) { const saved = await request<Document>(`/api/crm/quotations/${id}`); setDocument(saved); loadAccess(saved.recordAccess); setValue(saved.snapshot.content); setContext(saved.snapshot.context) } view.done() }
     } catch (error) { setErrorsFromResponse((error as { response?: { details?: { fieldErrors?: Record<string, string[]> } } }).response); setError((error as Error).message) } finally { setSaving(false) }
   }
   async function applyTemplate() {

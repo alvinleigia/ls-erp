@@ -1,3 +1,4 @@
+const {materializeRules}=require('./helpers/resource-policy-data.cjs')
 /* eslint-disable @typescript-eslint/no-require-imports */
 const {fixtureUser,fixtureRole,fixtureProfile,resetFixtureRoles}=require("./helpers/access-fixtures.cjs")
 const {test,before,after}=require('node:test'),assert=require('node:assert/strict'),{randomUUID}=require('node:crypto'),{Pool}=require('pg'),{PrismaClient}=require('@prisma/client')
@@ -111,7 +112,7 @@ test('custom role permissions are independent, refreshed, and do not grant manag
   await root.tenantAccessRole.update({where:{tenantId_id:{tenantId:tenant,id:role.id}},data:{permissions:['salesOrders.read','salesOrders.confirm']}})
   await orders.transition(order.id,{action:'confirm',version:1})
   await assert.rejects(orders.transition(order.id,{action:'cancel',version:2,reason:'Denied'}),status(403))
-  await root.tenantUserAccess.update({where:{tenantId_userId:{tenantId:tenant,userId:manager.id}},data:{salesRecordScope:'OWN'}});await assert.rejects(orders.get(order.id),status(404))
+  await root.tenantUserAccess.update({where:{tenantId_userId:{tenantId:tenant,userId:manager.id}},data:{rules:materializeRules('MANAGER','OWN')}});await assert.rejects(orders.get(order.id),status(404))
  }finally{await resetFixtureRoles(root,{where:{tenantId:tenant,userId:manager.id}})}
 })
 test('team manager scope is rechecked and ordinary membership does not widen staff access',async()=>{

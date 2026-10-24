@@ -17,7 +17,7 @@ const routes: [string, Resource][] = [
   ["/inventory/categories", "inventoryCategories"], ["/inventory/suppliers", "inventorySuppliers"],
   ["/inventory/purchases", "inventoryPurchases"], ["/inventory", "inventoryProducts"],
   ["/crm/configuration/quotation-templates", "quotationTemplates"], ["/crm/configuration/real-estate", "projectSettings"],
-  ["/crm/configuration/custom-fields", "customFields"], ["/crm/configuration/sales-teams", "teams"], ["/crm/configuration/presets", "pipelines"],
+  ["/crm/configuration/custom-fields", "customFields"], ["/crm/configuration/sales-teams", "teams"], ["/crm/configuration/presets", "configurationPresets"],
   ["/crm/contacts", "contacts"], ["/crm/accounts", "accounts"], ["/crm/enquiries", "enquiries"], ["/crm/opportunities", "opportunities"],
   ["/crm/activities", "activities"], ["/crm/tasks", "activities"], ["/crm/calendar", "activities"],
   ["/crm/overview", "reports"], ["/crm/sales", "reports"], ["/crm/pipelines", "pipelines"], ["/crm/lead-sources", "leadSources"],
@@ -30,7 +30,7 @@ const configurationRequirement = (index: number): Requirement => ({ any: crmConf
 
 export const applicationRouteAccess = createRouteAccess({
   resources: routes,
-  exactResources: { "/settings": "businessSettings", "/settings/branding": "businessSettings" },
+  exactResources: { "/settings": "businessSettings", "/settings/branding": "branding" },
   exactRequirements: {
     "/sales-orders/receivables": ["salesOrders.read", "receivables.read"],
     "/crm/enquiries/import": ["enquiries.create", "contacts.create"],

@@ -1,6 +1,5 @@
 import type { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { canManageUsers, type Role } from "@/lib/permissions"
 import { recordDomainAuditEventSafe } from "@/lib/domain-audit"
 import { withBusinessApi, readJson } from "@/platform/business-api"
 import { requireBusinessModule } from "@/platform/module-server"
@@ -20,10 +19,9 @@ const findRecord = (resource: InventoryResource, tenantId: string, id: string) =
   }
 }
 
-// Retain legacy admin/manager authority; assigned roles can only narrow it.
+// Activation and composed action permissions apply to all business accounts.
 export function withInventoryApi(request: Request, resource: InventoryResource, action: PermissionAction, handler: (actor: BusinessActor) => Promise<NextResponse>, id?: string) {
   return withBusinessApi(request, async actor => {
-    if (!canManageUsers(actor.role as Role)) throw new BusinessError(403, "Inventory requires administrator or manager access.")
     await requireBusinessModule(prisma, actor.tenantId, "inventory")
     requirePermission(actor, `${resource}.${action}`)
     const before = id ? await findRecord(resource, actor.tenantId, id) : null

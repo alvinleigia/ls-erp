@@ -70,7 +70,7 @@ function PipelineEditorBody({ id, template }: { id?: string; template?: Pipeline
       overview={record && <AccessSummarySection title="Pipeline configuration" canEdit={canManage} fields={[{ label: "Name", value: record.name }, { label: "Status", value: record.archived ? "Archived" : "Active" }, { label: "Default conversion stage", value: record.stages.find(stage => stage.isConversionDefault)?.name || "Automatic (first active open stage)" }]}><ol className="divide-y">{record.stages.map(stage => <li key={stage.id} className="flex flex-wrap justify-between gap-2 py-3 text-sm"><span>{stage.name}{stage.archived ? " (archived)" : ""}</span><span>{stage.kind} / {stage.probability}%</span></li>)}</ol></AccessSummarySection>} onSubmit={event => { event.preventDefault(); if (record && ((!record.archived && values.archived) || values.stages.some(stage => stage.archived && record.stages.some(old => old.id === stage.id && !old.archived)))) setConfirm(true); else void persist() }}>
 
 
-      {!canManage && <p>Only managers and administrators can configure pipelines.</p>}
+      {!canManage && <p>Your access profile does not include pipeline configuration.</p>}
       <Section title="Pipeline configuration" description="Stages define your board. Keep at least one open, won and lost stage."><fieldset disabled={!canManage || saving} className="space-y-5">
         <FormField id="pipeline-name" label="Pipeline name" error={errors.name}><Input id="pipeline-name" required maxLength={100} value={values.name} onChange={event => setValues({ ...values, name: event.target.value })} /></FormField>
         <FormField id="conversion-stage" label="Default conversion stage" error={errors.stages}>

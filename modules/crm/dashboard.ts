@@ -3,7 +3,7 @@ import { moduleEnabled, type ModuleFlag } from "@/platform/modules"
 import { permits } from "@/platform/access/policy"
 import type { BusinessActor } from "@/platform/policy"
 import type { DashboardPeriod } from "@/types/dashboard"
-import { enquiryScope } from "./policy"
+import { enquiryScope, opportunityScope } from "./policy"
 import { workScope } from "./work-service"
 import type { CrmDashboard } from "./dashboard-types"
 
@@ -15,7 +15,7 @@ const rate = (part: number, total: number) => total ? Math.round(part / total * 
 export function dashboardSalesScopes(actor: BusinessActor, flags: ModuleFlag[], period: DashboardPeriod) {
   const crm = moduleEnabled(flags, "crm") && permits(actor, "reports.read")
   const sales = enquiryScope(actor)
-  const activeDeal: Prisma.CrmOpportunityWhereInput = { AND: [sales], stage: { kind: "OPEN", archived: false }, pipeline: { archived: false }, contact: { archived: false } }
+  const activeDeal: Prisma.CrmOpportunityWhereInput = { AND: [opportunityScope(actor, "read")], stage: { kind: "OPEN", archived: false }, pipeline: { archived: false }, contact: { archived: false } }
   return {
     enquiries: crm && permits(actor, "enquiries.read") ? { AND: [sales], createdAt: { gte: period.start, lt: period.end } } : null,
     opportunities: crm && permits(actor, "opportunities.read") ? activeDeal : null,
@@ -28,7 +28,7 @@ export async function crmDashboard(tx: Prisma.TransactionClient, actor: Business
   const leads = scopes.enquiries !== null, deals = scopes.opportunities !== null
   const work = moduleEnabled(flags, "crm") && permits(actor, "reports.read") && permits(actor, "activities.read")
   const createdAt = { gte: period.start, lt: period.end }
-  const sales = enquiryScope(actor)
+  const sales = opportunityScope(actor, "read")
   const activeDeal = scopes.opportunities!
   const pending: Prisma.CrmTaskWhereInput = { AND: [workScope(actor)], status: { in: ["OPEN", "IN_PROGRESS"] } }
   const completed: Prisma.CrmTaskWhereInput = { AND: [workScope(actor)], status: "COMPLETED", completedAt: createdAt }
@@ -38,7 +38,7 @@ export async function crmDashboard(tx: Prisma.TransactionClient, actor: Business
       const where = scopes.enquiries!
       const [statuses, converted] = await Promise.all([
         tx.crmEnquiry.groupBy({ by: ["status"], where, _count: { _all: true }, orderBy: { status: "asc" } }),
-        deals ? tx.crmEnquiry.count({ where: { ...where, opportunities: { some: sales } } }) : Promise.resolve(null),
+        deals ? tx.crmEnquiry.count({ where: { ...where, opportunities: { some: opportunityScope(actor, "read") } } }) : Promise.resolve(null),
       ])
       const total = statuses.reduce((sum, row) => sum + row._count._all, 0)
       result.enquiries = { total, converted, conversionPercent: converted === null ? null : rate(converted, total), statuses: statuses.map(row => ({ label: row.status === "CLOSED" ? "Lost" : label(row.status), count: row._count._all })) }

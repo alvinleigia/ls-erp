@@ -1448,6 +1448,7 @@ model StaffServiceEligibility {
 }
 
 model StaffProfile {
+  leaveApprovalMode     String                      @default("REPORTING_MANAGER")
   id                    String                      @id @default(cuid())
   userId                String                      @unique
   managerUserId         String?
@@ -2557,8 +2558,7 @@ model TenantRoleAssignment {
 model TenantUserAccess {
   tenantId String
   userId String
-  salesRecordScope String @default("OWN")
-  projectRecordScope String @default("OWN")
+  rules Json @default("{}")
   version Int @default(1)
   updatedAt DateTime @updatedAt
   user User @relation(fields: [tenantId, userId], references: [tenantId, id], onDelete: Cascade)

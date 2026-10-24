@@ -6,6 +6,9 @@ import { ActionBar, pageClass } from "@/components/erp/page"
 import { Select } from "@/components/erp/controls"
 import * as React from "react"
 import { useRouter } from "next/navigation"
+import { useSession } from "next-auth/react"
+import { useBusinessModules } from "@/platform/module-provider"
+import { optionalReference, type AssignmentContext } from "@/platform/access/reference"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -19,6 +22,8 @@ import type { WorkCreateInput } from "../work-validation"
 
 type Initial = { planId?: string; contactId?: string; enquiryId?: string; opportunityId?: string }
 export function ActivityPlanApply({ initial }: { initial: Initial }) {
+  const { can } = useBusinessModules(), { data: session } = useSession()
+  const currentUserId = session?.user?.id || "", canReadDirectory = can("assignmentTargets.read"), canAssignActivities = can("activities.assign")
   const term = useTerminology()
   const router = useRouter(), { formatDate } = useDateFormatter()
   const [planId, setPlanId] = React.useState(initial.planId || ""), [plan, setPlan] = React.useState<ActivityPlanRow | null>(null)
@@ -35,9 +40,9 @@ export function ActivityPlanApply({ initial }: { initial: Initial }) {
   React.useEffect(() => {
     const controller = new AbortController()
     const get = async (url: string) => { const response = await fetch(url, { signal: controller.signal, cache: "no-store" }); const data = await response.json(); if (!response.ok) throw new Error(data.error || "Unable to load options."); return data }
-    void Promise.all([get("/api/crm/assignees"), get("/api/settings/display")]).then(([people, settings]) => { const tz = settings.settings?.timeZone || "UTC"; setTimeZone(tz); setStartOn(wallTime(new Date(), tz).slice(0, 10)); setAssignedUserId(people.currentUserId); setMe({ id: people.currentUserId, name: "Me" }); setCanAssign(people.canAssign) }).catch(error => { if (!controller.signal.aborted) setError(error.message) }).finally(() => { if (!controller.signal.aborted) setLoading(false) })
+    void Promise.all([optionalReference<AssignmentContext>("/api/crm/assignees", canReadDirectory, controller.signal), get("/api/settings/display")]).then(([people, settings]) => { const tz = settings.settings?.timeZone || "UTC", userId = people?.currentUserId || currentUserId; setTimeZone(tz); setStartOn(wallTime(new Date(), tz).slice(0, 10)); setAssignedUserId(userId); setMe({ id: userId, name: "Me" }); setCanAssign(!!people?.canAssign && canAssignActivities) }).catch(error => { if (!controller.signal.aborted) setError(error.message) }).finally(() => { if (!controller.signal.aborted) setLoading(false) })
     return () => controller.abort()
-  }, [])
+  }, [currentUserId, canReadDirectory, canAssignActivities])
   React.useEffect(() => {
     if (!planId) return
     const controller = new AbortController()

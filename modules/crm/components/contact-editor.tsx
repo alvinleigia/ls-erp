@@ -24,6 +24,7 @@ function ContactEditorBody({ id }: { id?: string }) {
   const readTerm = useTerminologyReader()
   const term = useTerminology()
   const view = useRecordView()!
+  const { loadAccess } = view
   const router = useRouter()
   const [contact, setContact] = React.useState<CrmContactRow | null>(null)
   const [values, setValues] = React.useState({ ...emptyContact, archived: false })
@@ -38,10 +39,10 @@ function ContactEditorBody({ id }: { id?: string }) {
     fetch(`/api/crm/contacts/${id}`, { signal: controller.signal, cache: "no-store" }).then(async response => {
       const data = await response.json()
       if (!response.ok) throw new Error(data.error || readTerm("crm.contact.singular", "Unable to load contact.", "Unable to load {label}."))
-      setContact(data); setValues({ ...contactValues(data), archived: data.archived })
+      setContact(data); loadAccess(data.recordAccess); setValues({ ...contactValues(data), archived: data.archived })
     }).catch(error => { if (!controller.signal.aborted) setError(error.message) }).finally(() => { if (!controller.signal.aborted) setLoading(false) })
     return () => controller.abort()
-  }, [readTerm, id])
+  }, [loadAccess, readTerm, id])
   async function save(event: React.FormEvent) {
     event.preventDefault()
     if (contact && !contact.archived && values.archived) { setConfirmArchive(true); return }

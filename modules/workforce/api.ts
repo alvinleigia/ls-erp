@@ -1,6 +1,6 @@
 import type { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { canManageUsers, type Role } from "@/lib/permissions"
+import { permits, authorizeOperation } from "@/platform/access/policy"
 import { recordDomainAuditEventSafe } from "@/lib/domain-audit"
 import { withBusinessApi, readJson } from "@/platform/business-api"
 import { requireBusinessModule } from "@/platform/module-server"
@@ -19,7 +19,6 @@ export function withWorkforceApi(request: Request, module: "leaves" | "shifts", 
   return withBusinessApi(request, async actor => {
     await requireBusinessModule(prisma, actor.tenantId, module)
     const personal = module === "leaves" && (key === "request-options" || key === "requests" || key === "requests/[id]" || key === "requests/[id]/cancel")
-    if (!personal && !canManageUsers(actor.role as Role)) throw new BusinessError(403, "This view requires administrator or manager access.")
     requirePermission(actor, personal ? { any: ["leaveRequests.read", "leaveApprovals.read"] } : `${resource}.read`)
     const input = request.method === "GET" || !request.body ? undefined : await readJson(request.clone()) as Record<string, unknown> | undefined
     if (key === "flexible-patterns" && request.method === "PUT" && !input?.patternId) action = "create"
@@ -31,10 +30,10 @@ export function withWorkforceApi(request: Request, module: "leaves" | "shifts", 
         if (!row) throw new BusinessError(404, "Leave request not found.")
         actualResource = row.staffProfile.userId === actor.userId ? "leaveRequests" : "leaveApprovals"
       } else if (action === "read") {
-        actualResource = actor.role === "STAFF" || new URL(request.url).searchParams.get("mineOnly") === "true" ? "leaveRequests" : "leaveApprovals"
+        actualResource = !permits(actor, "leaveApprovals.read") || new URL(request.url).searchParams.get("mineOnly") === "true" ? "leaveRequests" : "leaveApprovals"
       }
     }
-    requirePermission(actor, `${actualResource}.${action}`)
+    actor = authorizeOperation(actor, `${actualResource}.${action}`)
     const recordId = id ?? (typeof input?.patternId === "string" ? input.patternId : undefined)
     // These services read snapshots and recheck transitions after acquiring the
     // scheduling lock; the wrapper must not duplicate stale reads or their audit.

@@ -1,10 +1,11 @@
 import { createTermResolver } from "@/platform/terminology/resolver"
 import { reportLabel } from "./report-labels"
 import type { TermReader } from "@/platform/terminology/read"
-import { salesRecordAccess } from "@/platform/access/record-scope"
+import { ownedRecordSql } from "@/platform/access/record-scope"
+import { scopeAllowsOthers } from "@/platform/access/rules"
 import type { PermissionRun } from "@/platform/access/server"
 import { Prisma } from "@prisma/client"
-import { CrmError, canManageCrm, type CrmActor } from "./policy"
+import { CrmError, type CrmActor } from "./policy"
 import { salesReportSchema, type SalesReportQuery } from "./sales-report-validation"
 import { businessDate, startOfBusinessDate } from "./work-time"
 import type { CrmExtensions, CrmExtensionQuery, CrmReportDimension } from "./extensions"
@@ -18,8 +19,8 @@ const pageResult = <T>(items: T[], total: number, q: SalesReportQuery) => ({ ite
 
 export function createSalesReportService({ run, readTerms }: Context, extensions: Pick<CrmExtensions, "report" | "splitQuery">) {
   async function context(tx: Tx, actor: CrmActor, q: SalesReportQuery, extensionQuery: CrmExtensionQuery) {
-    const canManage = canManageCrm(actor.role)
-    if (!canManage && (q.scope === "team" || (q.assignedUserId && q.assignedUserId !== actor.userId))) throw new CrmError(403, "Team sales reporting is available to managers only.")
+    const canManage = scopeAllowsOthers(actor, "reports")
+    if (!canManage && (q.scope === "team" || (q.assignedUserId && q.assignedUserId !== actor.userId))) throw new CrmError(403, "Your record limits do not include team reporting.")
     if (q.scope === "mine" && q.assignedUserId && q.assignedUserId !== actor.userId) throw new CrmError(400, "Choose team scope to report on another salesperson.")
     const extension = await extensions.report(tx, actor, extensionQuery)
     const dimensions: CrmReportDimension[] = [
@@ -37,12 +38,8 @@ export function createSalesReportService({ run, readTerms }: Context, extensions
     const owner = q.scope === "mine" ? actor.userId : q.assignedUserId
     // All identifiers are fixed application SQL; every user value is a bound
     // parameter. The same scoped sets power counts, drill-downs and downloads.
-    const salesScopeSql = (alias: "r" | "o") => {
-      const column = (name: string) => Prisma.raw(`${alias}."${name}"`)
-      return salesRecordAccess(actor) === "ALL" ? Prisma.empty : Prisma.sql`AND (${column("assignedUserId")} = ${actor.userId}
-        ${salesRecordAccess(actor) === "MANAGED_TEAMS" && actor.managedTeamIds?.length ? Prisma.sql`OR ${column("salesTeamId")} IN (${Prisma.join(actor.managedTeamIds)})` : Prisma.empty})`
-    }
-    const filter = Prisma.sql`r."tenantId" = ${actor.tenantId} ${salesScopeSql("r")}
+    const salesScopeSql = (alias: "r" | "o", resource: "enquiries" | "opportunities") => Prisma.sql`AND ${ownedRecordSql(actor, resource, alias)}`
+    const filter = (resource: "enquiries" | "opportunities") => Prisma.sql`r."tenantId" = ${actor.tenantId} ${salesScopeSql("r", resource)}
       ${owner ? Prisma.sql`AND r."assignedUserId" = ${owner}` : Prisma.empty}
       ${q.lostReasonId ? Prisma.sql`AND r."lostReasonId" = ${q.lostReasonId}` : Prisma.empty}
       ${q.salesTeamId ? Prisma.sql`AND r."salesTeamId" = ${q.salesTeamId}` : Prisma.empty}
@@ -58,10 +55,10 @@ export function createSalesReportService({ run, readTerms }: Context, extensions
     const cte = Prisma.sql`WITH leads_all AS (
       SELECT ${sharedColumns}, r.status::text AS status,
         EXISTS (SELECT 1 FROM "CrmOpportunity" o WHERE o."tenantId" = r."tenantId" AND o."enquiryId" = r.id
-          ${salesScopeSql("o")}) AS converted
+          ${salesScopeSql("o", "opportunities")}) AS converted
       FROM "CrmEnquiry" r
       ${extension.enquiryJoins}
-      ${joins} WHERE ${filter}
+      ${joins} WHERE ${filter("enquiries")}
     ), leads AS (SELECT * FROM leads_all WHERE "createdAt" >= ${begin} AND "createdAt" < ${end}),
     deals AS (
       SELECT ${sharedColumns}, st.kind::text AS status, st.id AS "stageId", st.name AS stage, pl.name AS pipeline,
@@ -71,7 +68,7 @@ export function createSalesReportService({ run, readTerms }: Context, extensions
       ${joins}
       JOIN "CrmStage" st ON st.id = r."stageId" AND st."tenantId" = r."tenantId"
       JOIN "CrmPipeline" pl ON pl.id = r."pipelineId" AND pl."tenantId" = r."tenantId"
-      WHERE ${filter}
+      WHERE ${filter("opportunities")}
     ), pipeline AS (SELECT * FROM deals WHERE status = 'OPEN' AND active),
     won AS (SELECT * FROM deals WHERE status = 'WON' AND "closedAt" >= ${begin} AND "closedAt" < ${end}),
     lost AS (SELECT * FROM deals WHERE status = 'LOST' AND "closedAt" >= ${begin} AND "closedAt" < ${end}),

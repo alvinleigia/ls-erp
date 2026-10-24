@@ -1,9 +1,12 @@
+import { authorizeBusinessOperation } from "@/platform/access/operation"
+import { recordActionAccess } from "@/platform/access/record-actions"
+
 import { Prisma, type PrismaClient } from "@prisma/client"
-import { findAccessUser, accessContext } from "@/platform/access/server"
-import { permits, requirePermission } from "@/platform/access/policy"
+
+import { requirePermission } from "@/platform/access/policy"
 import type { Requirement } from "@/platform/access/catalog"
-import { BusinessError, hasBusinessAccess, type BusinessActor } from "@/platform/policy"
-import { moduleEnabled } from "@/platform/modules"
+import { BusinessError, type BusinessActor } from "@/platform/policy"
+
 import { serializationConflict } from "@/platform/database-errors"
 import { recordDomainAuditEvent } from "@/lib/domain-audit"
 import { receivableOpenSchema, receivableListSchema, orderPaymentSchema, orderPaymentReversalSchema } from "@/lib/validation"
@@ -11,7 +14,6 @@ import type { ReceivableSource } from "./contracts"
 import { readReceivableOverview } from "./overview"
 type Tx = Prisma.TransactionClient
 const D = Prisma.Decimal
-const manager = (a: BusinessActor) => ["ADMIN", "MANAGER"].includes(a.role)
 const iso = (date: Date | null) => date?.toISOString().slice(0, 10) ?? null
 const date = (value: string) => new Date(`${value}T00:00:00.000Z`)
 export function createReceivableService(db: PrismaClient, identity: Pick<BusinessActor, "tenantId" | "userId" | "requestId">, source: ReceivableSource) {
@@ -19,13 +21,8 @@ export function createReceivableService(db: PrismaClient, identity: Pick<Busines
     for (let attempt = 0; ; attempt++) {
       try {
         return await db.$transaction(async tx => {
-          const user = await findAccessUser(tx, identity.tenantId, identity.userId)
-          if (!user || !hasBusinessAccess(user.role) || user.tenant.status !== "ACTIVE" || user.tenant.slug === (process.env.PLATFORM_ADMIN_TENANT_SLUG?.trim().toLowerCase() || "platform")) throw new BusinessError(403, "Business workspace access is not permitted.")
-          if (!moduleEnabled(await tx.tenantModule.findMany({ where: { tenantId: identity.tenantId } }), "receivables")) throw new BusinessError(403, "Receivables is not enabled.")
-          const actor = { ...identity, ...accessContext(user) }
+          const actor = await authorizeBusinessOperation(tx, identity, requirement, ["receivables"])
           requirePermission(actor, ["salesOrders.read", "receivables.read"])
-          requirePermission(actor, requirement)
-          if (write && !manager(actor)) throw new BusinessError(403, "Only administrators and managers can change receivables.")
           return fn(tx, actor)
         }, { isolationLevel: "Serializable", maxWait: 20000, timeout: 20000 })
       } catch (e) {
@@ -79,17 +76,20 @@ export function createReceivableService(db: PrismaClient, identity: Pick<Busines
         const order = await find(tx, actor, id), tenantId = actor.tenantId, plan = source.plan(order.snapshot), currentDay = await today(tx, tenantId)
         const account = await tx.orderReceivable.findUnique({ where: { tenantId_orderId: { tenantId, orderId: id } } })
         const lines = account ? await balances(tx, tenantId, id) : []
-        const canReadPayments = permits(actor, "orderPayments.read"), active = order.status === "CONFIRMED"
+        const rights = (resource: "receivables" | "orderPayments") => recordActionAccess(actor, resource, async action => tx.salesOrder.findFirst({ where: { AND: [{ tenantId, id }, source.scope({ ...actor, operation: { resource, action } })] }, select: { id: true } }))
+        const [receivableAccess, paymentAccess] = await Promise.all([rights("receivables"), rights("orderPayments")])
+        const recordAccess = { resource: "receivables" as const, permissions: { ...receivableAccess.permissions, ...paymentAccess.permissions } }
+        const canReadPayments = !!paymentAccess.permissions["orderPayments.read"], active = order.status === "CONFIRMED"
         const page = Number.isSafeInteger(requestedPage) && requestedPage > 0 ? Math.min(requestedPage, 1000000) : 1, pageSize = 10
         const where = { tenantId, orderId: id }
         const items = account && canReadPayments ? await tx.orderReceipt.findMany({ where, include: { reversal: true }, orderBy: [{ createdAt: "desc" }, { id: "asc" }], skip: (page - 1) * pageSize, take: pageSize }) : []
         const total = account && canReadPayments ? await tx.orderReceipt.count({ where }) : 0
         const paid = lines.reduce((n, l) => n.plus(l.paid), new D(0)), outstanding = active && account ? account.total.minus(paid) : new D(0)
         const overdue = active ? lines.filter(l => l.dueOn && iso(l.dueOn)! < currentDay).reduce((n, l) => n.plus(l.outstanding), new D(0)) : new D(0)
-        return { account, currency: order.currency, status: order.status, today: currentDay, plan, lines, paid, outstanding, overdue, items, total, page, pageSize, canReadPayments,
-          canOpen: active && !account && !plan.blocked && manager(actor) && permits(actor, "receivables.create"),
-          canRecord: active && !!account && outstanding.gt(0) && manager(actor) && canReadPayments && permits(actor, "orderPayments.create"),
-          canReverse: active && !!account && manager(actor) && canReadPayments && permits(actor, "orderPayments.cancel") }
+        return { account, currency: order.currency, status: order.status, today: currentDay, plan, lines, paid, outstanding, overdue, items, total, page, pageSize, canReadPayments, recordAccess,
+          canOpen: active && !account && !plan.blocked && !!receivableAccess.permissions["receivables.create"],
+          canRecord: active && !!account && outstanding.gt(0) && canReadPayments && !!paymentAccess.permissions["orderPayments.create"],
+          canReverse: active && !!account && canReadPayments && !!paymentAccess.permissions["orderPayments.cancel"] }
       })
     },
     open(id: string, input: unknown) {

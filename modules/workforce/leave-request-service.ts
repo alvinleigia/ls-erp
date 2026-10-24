@@ -1,3 +1,6 @@
+import { leaveApprovalScope } from "./leave-access"
+import { authorizeBusinessOperation } from "@/platform/access/operation"
+import { permits, requirePermission } from "@/platform/access/policy"
 import { Prisma } from "@prisma/client"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
@@ -18,7 +21,7 @@ function leaveActor(actor: BusinessActor) {
     throw new BusinessError(401, "Unauthorized")
   }
   return { tenantId: actor.tenantId, sessionUserId: actor.userId, role: actor.role,
-    isAdmin: actor.role === "ADMIN", isManager: actor.role === "MANAGER", isStaff: actor.role === "STAFF" }
+    isAdmin: actor.role === "ADMIN" }
 }
 
 export class LeaveApprovalConflictError extends BusinessError {
@@ -38,9 +41,15 @@ async function syncLeaveHistory(tx: Prisma.TransactionClient, tenantId: string, 
 // Status, current record scope, booking conflicts, history and audit commit under
 // the same lock as booking creation/moves. Notifications happen only after commit.
 async function transitionLeaveRequest(actor: BusinessActor, id: string, status: LeaveRequestRow["status"], data: Prisma.LeaveRequestUncheckedUpdateManyInput, scope: Prisma.LeaveRequestWhereInput = {}) {
-  const { tenantId, userId, role, requestId } = actor
+  const { tenantId, userId, requestId } = actor
   return scheduleTransaction(tenantId, async tx => {
-    const where = { ...scope, tenantId, id, status }
+    const owner = await tx.leaveRequest.findFirst({ where: { tenantId, id, status }, select: { staffProfile: { select: { userId: true } } } })
+    if (!owner) throw new BusinessError(409, "This leave request changed. Refresh before trying again.")
+    const resource = data.status === "CANCELED" && owner.staffProfile.userId === userId ? "leaveRequests" : "leaveApprovals"
+    const permissionAction = data.status === "CANCELED" || data.status === "REVOKED" ? "archive" : "approve"
+    const currentActor = await authorizeBusinessOperation(tx, actor, `${resource}.${permissionAction}`, ["leaves"])
+    const currentScope = resource === "leaveRequests" ? { staffProfile: { userId } } : leaveApprovalScope(currentActor, permissionAction)
+    const where = { AND: [scope, currentScope], tenantId, id, status }
     const current = await tx.leaveRequest.findFirst({ where, select: { id: true, staffProfileId: true, startDate: true, endDate: true } })
     if (!current) throw new BusinessError(409, "This leave request or its access changed. Refresh before trying again.")
     if (data.status === "APPROVED") {
@@ -56,7 +65,7 @@ async function transitionLeaveRequest(actor: BusinessActor, id: string, status: 
     const after = action === "canceled" ? { status: item.status, canceledAt: item.canceledAt, cancelReason: item.cancelReason }
       : action === "revoked" ? { status: item.status, revokedAt: item.revokedAt, revokeReason: item.revokeReason }
       : { status: item.status, reviewedAt: item.reviewedAt }
-    await recordDomainAuditEvent(tx, { tenantId, actorUserId: userId, actorRole: role, requestId,
+    await recordDomainAuditEvent(tx, { tenantId, actorUserId: userId, actorRole: currentActor.role, requestId,
       event: `leave.request.${action}`, entityType: "LeaveRequest", entityId: id, before: { status }, after,
       ...(action === "reviewed" ? { metadata: { reviewerComment: item.reviewerComment } } : {}) })
     return item
@@ -84,12 +93,12 @@ export const leaveRequestListSchema = z.object({
 
 
 export async function listLeaveRequests(actor: BusinessActor, input: z.infer<typeof leaveRequestListSchema>): Promise<ListResponse<LeaveRequestRow>> {
-  const { tenantId, sessionUserId, isStaff, isManager } = leaveActor(actor)
+  const { tenantId, sessionUserId } = leaveActor(actor)
   let actorStaffProfile = await prisma.staffProfile.findFirst({
     where: { userId: sessionUserId, user: { tenantId } },
     select: { id: true },
   })
-  if ((isStaff || isManager) && !actorStaffProfile) {
+  if (actor.role !== "ADMIN" && !actorStaffProfile) {
     actorStaffProfile = await prisma.staffProfile.create({
       data: { userId: sessionUserId },
       select: { id: true },
@@ -100,7 +109,7 @@ export async function listLeaveRequests(actor: BusinessActor, input: z.infer<typ
     input
 
   let staffProfileFilterId: string | undefined
-  if (isStaff) {
+  if (actor.operation?.resource === "leaveRequests" || !permits(actor, "leaveApprovals.read")) {
     if (!actorStaffProfile) {
       throw new BusinessError(400, "Staff profile not found.")
     }
@@ -123,14 +132,7 @@ export async function listLeaveRequests(actor: BusinessActor, input: z.infer<typ
 
   const where: Prisma.LeaveRequestWhereInput = {
     tenantId,
-    ...(isManager && !mineOnly
-      ? {
-          staffProfile: {
-            managerUserId: sessionUserId,
-            user: { role: "STAFF" },
-          },
-        }
-      : {}),
+    ...(!(actor.operation?.resource === "leaveRequests" || mineOnly || !permits(actor, "leaveApprovals.read")) ? leaveApprovalScope(actor, "read") : {}),
     ...(status ? { status } : {}),
     ...(leaveDefinitionId ? { leaveDefinitionId } : {}),
     ...(staffProfileFilterId ? { staffProfileId: staffProfileFilterId } : {}),
@@ -169,8 +171,8 @@ export async function listLeaveRequests(actor: BusinessActor, input: z.infer<typ
 }
 
 export async function submitLeaveRequest(actor: BusinessActor, input: CreateLeaveRequestInput) {
-  const { tenantId, sessionUserId, role, isManager, isStaff } = leaveActor(actor)
-  if (!isManager && !isStaff) throw new BusinessError(401, "Unauthorized")
+  const { tenantId, sessionUserId, role } = leaveActor(actor)
+  if (!["STAFF", "MANAGER"].includes(actor.role)) throw new BusinessError(401, "Unauthorized")
   const staffProfile = await prisma.staffProfile.findFirst({
     where: { userId: sessionUserId, user: { tenantId } },
     select: { id: true },
@@ -247,17 +249,14 @@ export async function submitLeaveRequest(actor: BusinessActor, input: CreateLeav
 }
 
 export async function getLeaveRequest(actor: BusinessActor, id: string, includeRuleChecks: boolean) {
-  const { tenantId, sessionUserId, isAdmin, isManager } = leaveActor(actor)
+  const { tenantId, sessionUserId, isAdmin } = leaveActor(actor)
   const item = await prisma.leaveRequest.findFirst({
     where: { id, tenantId }, select: leaveRequestSelect,
   })
   if (!item) throw new BusinessError(404, "Leave request not found.")
 
   const isOwner = item.staffProfile.user.id === sessionUserId
-  const isAssignedManager =
-    isManager &&
-    item.staffProfile.user.role === "STAFF" &&
-    item.staffProfile.managerUserId === sessionUserId
+  const isAssignedManager = permits(actor, "leaveApprovals.read") && !!await prisma.leaveRequest.findFirst({ where: { AND: [leaveApprovalScope(actor, "read"), { id }] }, select: { id: true } })
   if (!isAdmin && !isOwner && !isAssignedManager) throw new BusinessError(403, "Unauthorized")
 
   const serializedItem = serializeLeaveRequest(item)
@@ -319,8 +318,8 @@ export async function getLeaveRequest(actor: BusinessActor, id: string, includeR
 }
 
 export async function reviewLeaveRequest(actor: BusinessActor, id: string, input: ReviewLeaveRequestInput) {
-  const { tenantId, sessionUserId, role } = leaveActor(actor)
-  if (role !== "ADMIN" && role !== "MANAGER") throw new BusinessError(401, "Unauthorized")
+  const { tenantId, sessionUserId } = leaveActor(actor)
+  requirePermission(actor, `leaveApprovals.${actor.operation?.action ?? "approve"}`)
   const reviewer = await prisma.user.findFirst({ where: { id: sessionUserId, tenantId }, select: { id: true } })
   if (!reviewer) throw new BusinessError(401, "Session user not found. Please sign in again.")
   const current = await prisma.leaveRequest.findFirst({
@@ -344,12 +343,7 @@ export async function reviewLeaveRequest(actor: BusinessActor, id: string, input
   if (!current) {
     throw new BusinessError(404, "Leave request not found.")
   }
-  if (role === "MANAGER" && current.staffProfile.user.role !== "STAFF") {
-    throw new BusinessError(403, "Managers can only review staff leave requests.")
-  }
-  if (role === "MANAGER" && current.staffProfile.managerUserId !== reviewer.id) {
-    throw new BusinessError(403, "You can only review requests for your assigned staff.")
-  }
+  if (!await prisma.leaveRequest.findFirst({ where: { AND: [leaveApprovalScope(actor, "approve"), { id }] }, select: { id: true } })) throw new BusinessError(403, "This request is outside your approval authority.")
 
   assertReviewTransitionAllowed(current.status)
 
@@ -358,7 +352,7 @@ export async function reviewLeaveRequest(actor: BusinessActor, id: string, input
       reviewedByUserId: reviewer.id,
       reviewedAt: new Date(),
       reviewerComment: input.reviewerComment?.trim() || null,
-    }, role === "MANAGER" ? { staffProfile: { managerUserId: sessionUserId, user: { role: "STAFF" } } } : {})
+    }, leaveApprovalScope(actor, "approve"))
   void notifyLeaveReviewed(prisma, {
     tenantId,
     staffUserId: serialized.staff.userId,
@@ -376,7 +370,7 @@ export async function reviewLeaveRequest(actor: BusinessActor, id: string, input
 }
 
 export async function cancelLeaveRequest(actor: BusinessActor, id: string, input: CancelLeaveRequestInput) {
-  const { tenantId, sessionUserId, isAdmin, isManager } = leaveActor(actor)
+  const { tenantId, sessionUserId, isAdmin } = leaveActor(actor)
   const current = await prisma.leaveRequest.findFirst({
     where: { id, tenantId },
     select: {
@@ -401,10 +395,7 @@ export async function cancelLeaveRequest(actor: BusinessActor, id: string, input
 
   const isOwner = current.staffProfile.userId === sessionUserId
   const canAdminCancel = isAdmin
-  const isAssignedManager =
-    isManager &&
-    current.staffProfile.user.role === "STAFF" &&
-    current.staffProfile.managerUserId === sessionUserId
+  const isAssignedManager = permits(actor, "leaveApprovals.archive") && !!await prisma.leaveRequest.findFirst({ where: { AND: [leaveApprovalScope(actor, "archive"), { id }] }, select: { id: true } })
   if (!isOwner && !canAdminCancel && !isAssignedManager) {
     throw new BusinessError(401, "Unauthorized")
   }
@@ -415,7 +406,7 @@ export async function cancelLeaveRequest(actor: BusinessActor, id: string, input
       status: "CANCELED",
       canceledAt: new Date(),
       cancelReason: input.cancelReason?.trim() || null,
-    }, isAdmin ? {} : { staffProfile: isOwner ? { userId: sessionUserId } : { managerUserId: sessionUserId, user: { role: "STAFF" } } })
+    }, isOwner ? { staffProfile: { userId: sessionUserId } } : leaveApprovalScope(actor, "archive"))
   const canceledBy = await prisma.user.findFirst({
     where: { id: sessionUserId, tenantId },
     select: { name: true },
@@ -437,8 +428,8 @@ export async function cancelLeaveRequest(actor: BusinessActor, id: string, input
 }
 
 export async function revokeLeaveRequest(actor: BusinessActor, id: string, input: RevokeLeaveRequestInput) {
-  const { tenantId, sessionUserId, role, isManager } = leaveActor(actor)
-  if (role !== "ADMIN" && role !== "MANAGER") throw new BusinessError(401, "Unauthorized")
+  const { tenantId, sessionUserId } = leaveActor(actor)
+  requirePermission(actor, `leaveApprovals.${actor.operation?.action ?? "approve"}`)
   const current = await prisma.leaveRequest.findFirst({
     where: { id, tenantId },
     select: {
@@ -459,13 +450,7 @@ export async function revokeLeaveRequest(actor: BusinessActor, id: string, input
   if (!current) {
     throw new BusinessError(404, "Leave request not found.")
   }
-  if (
-    isManager &&
-    (current.staffProfile.user.role !== "STAFF" ||
-      current.staffProfile.managerUserId !== sessionUserId)
-  ) {
-    throw new BusinessError(403, "You can only revoke approved requests for your assigned staff.")
-  }
+  if (!await prisma.leaveRequest.findFirst({ where: { AND: [leaveApprovalScope(actor, "archive"), { id }] }, select: { id: true } })) throw new BusinessError(403, "This request is outside your approval authority.")
 
   assertRevokeTransitionAllowed(current.status)
 
@@ -474,7 +459,7 @@ export async function revokeLeaveRequest(actor: BusinessActor, id: string, input
       revokedAt: new Date(),
       revokedByUserId: sessionUserId,
       revokeReason: input.revokeReason.trim(),
-    }, isManager ? { staffProfile: { managerUserId: sessionUserId, user: { role: "STAFF" } } } : {})
+    }, leaveApprovalScope(actor, "archive"))
 
   void notifyLeaveRevoked(prisma, {
     tenantId,
@@ -492,14 +477,14 @@ export async function revokeLeaveRequest(actor: BusinessActor, id: string, input
 }
 
 export async function bulkReviewLeaveRequests(actor: BusinessActor, input: BulkReviewLeaveRequestsInput) {
-  const { tenantId, sessionUserId, role } = leaveActor(actor)
-  if (role !== "ADMIN" && role !== "MANAGER") throw new BusinessError(401, "Unauthorized")
+  const { tenantId, sessionUserId } = leaveActor(actor)
+  requirePermission(actor, `leaveApprovals.${actor.operation?.action ?? "approve"}`)
   const reviewer = await prisma.user.findFirst({ where: { tenantId, id: sessionUserId }, select: { id: true } })
   if (!reviewer) throw new BusinessError(401, "Session user not found. Please sign in again.")
   const { requestIds, status, reviewerComment } = input
   const eligibleWhere: Prisma.LeaveRequestWhereInput = {
     tenantId, id: { in: requestIds }, status: "PENDING",
-    ...(role === "MANAGER" ? { staffProfile: { managerUserId: reviewer.id, user: { role: "STAFF" } } } : {}),
+    ...leaveApprovalScope(actor, "approve"),
   }
   const pending = await prisma.leaveRequest.findMany({
     where: eligibleWhere,
@@ -507,7 +492,9 @@ export async function bulkReviewLeaveRequests(actor: BusinessActor, input: BulkR
   })
   if (!pending.length) return { items: [], updatedCount: 0, skippedCount: requestIds.length, skippedIds: requestIds }
   const items = await scheduleTransaction(tenantId, async tx => {
-    const eligible = await tx.leaveRequest.findMany({ where: { ...eligibleWhere, id: { in: pending.map(item => item.id) } },
+    const currentActor = await authorizeBusinessOperation(tx, actor, "leaveApprovals.approve", ["leaves"])
+    const lockedWhere = { ...eligibleWhere, AND: [leaveApprovalScope(currentActor, "approve")] }
+    const eligible = await tx.leaveRequest.findMany({ where: { ...lockedWhere, id: { in: pending.map(item => item.id) } },
       select: { id: true, staffProfileId: true, startDate: true, endDate: true } })
     if (status === "APPROVED" && eligible.length) {
       const conflicts = await findLeaveApprovalConflicts(tx, eligible, tenantId)
@@ -518,7 +505,7 @@ export async function bulkReviewLeaveRequests(actor: BusinessActor, input: BulkR
     // Return exactly the rows changed by this action, excluding concurrent reviews
     // or cancellations. Do not reread all candidate IDs and report them as updated.
     const changed = await tx.leaveRequest.updateManyAndReturn({
-      where: { ...eligibleWhere, id: { in: eligible.map(item => item.id) } },
+      where: { ...lockedWhere, id: { in: eligible.map(item => item.id) } },
       data: { status, reviewedByUserId: reviewer.id, reviewedAt: new Date(), reviewerComment: reviewerComment?.trim() || null },
       select: { id: true },
     })
@@ -529,7 +516,7 @@ export async function bulkReviewLeaveRequests(actor: BusinessActor, input: BulkR
     for (const item of serialized) await syncLeaveHistory(tx, tenantId, item)
     if (serialized.length) await recordDomainAuditEvent(tx, {
       tenantId, event: "leave.request.bulk_reviewed", entityType: "LeaveRequest",
-      actorUserId: reviewer.id, actorRole: role, requestId: actor.requestId,
+      actorUserId: reviewer.id, actorRole: currentActor.role, requestId: actor.requestId,
       metadata: { status, updatedCount: serialized.length, skippedCount: requestIds.length - serialized.length, requestIds: serialized.map(item => item.id) },
     })
     return serialized

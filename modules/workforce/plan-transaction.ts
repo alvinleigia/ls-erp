@@ -1,9 +1,10 @@
+import { authorizeBusinessOperation } from "@/platform/access/operation"
 import type { Prisma } from "@prisma/client"
 import { recordDomainAuditEvent } from "@/lib/domain-audit"
-import { findAccessUser, accessContext } from "@/platform/access/server"
-import { requirePermission } from "@/platform/access/policy"
-import { requireBusinessModule } from "@/platform/module-server"
-import { BusinessError, type BusinessActor } from "@/platform/policy"
+
+
+
+import { type BusinessActor } from "@/platform/policy"
 import { scheduleTransaction } from "./schedule-transaction"
 
 type Resource = "shiftPlans" | "shiftRoster" | "shiftSchedules" | "shiftTemplates"
@@ -12,14 +13,7 @@ type Action = "create" | "edit" | "archive"
 export function planTransaction<T>(actor: BusinessActor, resource: Resource, action: Action,
   write: (tx: Prisma.TransactionClient, currentActor: BusinessActor) => Promise<T>) {
   return scheduleTransaction(actor.tenantId, async tx => {
-    const user = await findAccessUser(tx, actor.tenantId, actor.userId)
-    if (!user || !["ADMIN", "MANAGER"].includes(user.role) || user.tenant.status !== "ACTIVE") {
-      throw new BusinessError(403, "Plan management access is no longer available.")
-    }
-    await requireBusinessModule(tx, actor.tenantId, "shifts")
-    const current = { ...actor, ...accessContext(user) }
-    requirePermission(current, `${resource}.read`)
-    requirePermission(current, `${resource}.${action}`)
+    const current = await authorizeBusinessOperation(tx, actor, `${resource}.${action}`, ["shifts"])
     return write(tx, current)
   })
 }

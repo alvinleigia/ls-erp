@@ -1,5 +1,5 @@
 import { z } from "zod"
-import { recordScopes } from "./record-scope"
+import { recordRulesSchema } from "./rules"
 import { allPermissions } from "./catalog"
 import { profileModules, validProfilePermissions } from "./profiles"
 
@@ -16,7 +16,7 @@ export const accessRoleSchema = z.object({
 })
 export const roleAssignmentSchema = z.object({
   roleIds: z.array(z.string().min(1).max(100)).max(50), version: z.number().int().min(0),
-  salesRecordScope: z.enum(recordScopes), projectRecordScope: z.enum(recordScopes),
+  rules: recordRulesSchema,
 }).strict().refine(data => new Set(data.roleIds).size === data.roleIds.length, { path: ["roleIds"], message: "Select each profile once." })
 export const accessListSchema = z.object({
   q: z.string().trim().max(120).default(""), page: z.coerce.number().int().min(1).default(1),

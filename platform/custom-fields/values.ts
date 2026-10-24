@@ -1,3 +1,4 @@
+import { permits } from "@/platform/access/policy"
 import { createHash } from "node:crypto"
 import { Prisma, type CustomFieldDefinition, type CustomFieldOption } from "@prisma/client"
 import { BusinessError, type BusinessActor } from "@/platform/policy"
@@ -8,11 +9,11 @@ import type { FieldValue, FieldView } from "./validation"
 type Tx = Prisma.TransactionClient
 export type Definition = CustomFieldDefinition & { options: CustomFieldOption[] }
 type ValueRow = { recordId: string; fieldId: string; scope: string; type: string; textValue: string | null; textKey: string | null; numberValue: Prisma.Decimal | null; dateValue: Date | null; booleanValue: boolean | null; optionId: string | null; fieldName: string; optionName: string | null }
-export const managesFields = (actor: BusinessActor) => actor.role === "ADMIN" || actor.role === "MANAGER"
+export const managesFields = (actor: BusinessActor) => permits(actor, "restrictedFields.read")
 const textKey = (value: string) => createHash("sha256").update(value.toLowerCase()).digest("hex")
 const table = (resource: FieldResource) => Prisma.raw(`"${resource.table}"`)
 export const visibleField = (actor: BusinessActor, field: CustomFieldDefinition) => managesFields(actor) || field.visibility === "ALL"
-export const editableField = (actor: BusinessActor, field: CustomFieldDefinition) => !field.archived && visibleField(actor, field) && (managesFields(actor) || field.editability === "ALL")
+export const editableField = (actor: BusinessActor, field: CustomFieldDefinition) => !field.archived && visibleField(actor, field) && (permits(actor, "restrictedFields.edit") || field.editability === "ALL")
 export async function definitions(tx: Tx, actor: BusinessActor, resource: FieldResource, includeHidden = false, salesTeamId?: string | null) {
   return tx.customFieldDefinition.findMany({ where: { tenantId: actor.tenantId, ...(salesTeamId !== undefined ? { OR: [{ salesTeamId: null }, { salesTeamId }] } : {}), scope: { in: [...resource.scopes] }, ...(!includeHidden && !managesFields(actor) ? { visibility: "ALL" } : {}) }, include: { options: { orderBy: [{ position: "asc" }, { id: "asc" }] } }, orderBy: [{ position: "asc" }, { id: "asc" }], take: 50 })
 }

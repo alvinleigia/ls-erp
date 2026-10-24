@@ -1,3 +1,4 @@
+import { hasBusinessAccess } from "@/platform/policy"
 import { scheduleTransaction } from "@/modules/workforce/schedule-transaction"
 import { setStaffSchedulingMode } from "@/modules/workforce/staff-scheduling-mode"
 import { requireServicesAccess } from "@/modules/services/policy"
@@ -17,7 +18,7 @@ import {
 } from "@/lib/api-logging"
 import { prisma, runWithTenantDbContext } from "@/lib/prisma"
 import { updateUserSchema } from "@/lib/validation"
-import { canManageUsers, type Role } from "@/lib/permissions"
+import { type Role } from "@/lib/permissions"
 import { withCoreApi, actorSession } from "@/platform/core/api"
 import type { BusinessActor } from "@/platform/policy"
 
@@ -36,7 +37,7 @@ async function handlePATCH(request: Request,
 
   return runWithTenantDbContext(tenantId, async () => {
     if (
-      (!canManageUsers(role as Role) && sessionUserId !== id)
+      (!hasBusinessAccess(role as Role) && sessionUserId !== id)
     ) {
       const response = NextResponse.json({ error: "Unauthorized" }, { status: 401 })
       logApiRequestSuccess(logContext, 401, { reason: "unauthorized", targetUserId: id })
@@ -173,7 +174,7 @@ async function handlePATCH(request: Request,
           eligibleServices: { select: { serviceId: true } },
           staffProfile: {
             select: {
-              managerUserId: true,
+              managerUserId: true, leaveApprovalMode: true,
               schedulingMode: true,
               manager: {
                 select: {
@@ -221,7 +222,7 @@ async function handlePATCH(request: Request,
           await tx.staffProfile.deleteMany({ where: { userId: id } })
         }
 
-        if (targetRole === "STAFF" && staffProfileInput) {
+        if (["STAFF", "MANAGER"].includes(targetRole ?? "") && staffProfileInput) {
           const managerUserId = staffProfileInput.managerUserId?.trim() || null
           if (managerUserId) {
             const managerUser = await tx.user.findUnique({
@@ -230,7 +231,7 @@ async function handlePATCH(request: Request,
             })
             if (
               !managerUser ||
-              managerUser.role !== "MANAGER" ||
+              !hasBusinessAccess(managerUser.role) || managerUser.id === id ||
               managerUser.status !== "ACTIVE"
             ) {
               throw new BusinessError(400, "Selected manager is invalid or inactive.")
@@ -245,7 +246,7 @@ async function handlePATCH(request: Request,
           }
 
           const modeProfile = await setStaffSchedulingMode(tx, identity, id, staffProfileInput.schedulingMode)
-          const profile = await tx.staffProfile.update({ where: { id: modeProfile.id }, data: { managerUserId } })
+          const profile = await tx.staffProfile.update({ where: { id: modeProfile.id }, data: { managerUserId, ...(staffProfileInput.leaveApprovalMode ? { leaveApprovalMode: staffProfileInput.leaveApprovalMode } : {}) } })
 
           if (staffProfileInput.documents) {
             await tx.staffDocument.deleteMany({
@@ -328,7 +329,7 @@ async function handleGET(request: Request,
 
   return runWithTenantDbContext(tenantId, async () => {
     if (
-      (!canManageUsers(role as Role) && sessionUserId !== id)
+      (!hasBusinessAccess(role as Role) && sessionUserId !== id)
     ) {
       const response = NextResponse.json(
         { error: "Unauthorized. Please sign in and try again." },
@@ -364,7 +365,7 @@ async function handleGET(request: Request,
         eligibleServices: { select: { serviceId: true } },
         staffProfile: {
           select: {
-            managerUserId: true,
+            managerUserId: true, leaveApprovalMode: true,
             schedulingMode: true,
             manager: {
               select: {

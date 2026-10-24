@@ -3,6 +3,7 @@ import type { StaffProfileForm, StaffUser } from "@/types/users"
 
 export const emptyStaffProfileForm: StaffProfileForm = {
   managerUserId: "",
+  leaveApprovalMode: "REPORTING_MANAGER",
   schedulingMode: "STANDARD",
   certifications: [],
   documents: [],
@@ -25,6 +26,7 @@ export const createEmptyStaffCertification = (): StaffProfileForm["certification
 
 export const toStaffProfileForm = (user: StaffUser | null): StaffProfileForm => ({
   managerUserId: user?.staffProfile?.managerUserId ?? "",
+  leaveApprovalMode: user?.staffProfile?.leaveApprovalMode ?? "REPORTING_MANAGER",
   schedulingMode: user?.staffProfile?.schedulingMode ?? "STANDARD",
   certifications:
     user?.staffProfile?.certifications?.map((cert) => ({

@@ -1073,7 +1073,7 @@ test('appointment writers refresh module, role and permissions after waiting bef
    assert.equal(waiting,true)
    if(scenario==='permissions')await perms(['appointments.read'])
    if(scenario==='module')await flag(false)
-   if(scenario==='role')await root.query('UPDATE "User" SET role=\'STAFF\' WHERE id=$1',[a+'_manager'])
+   if(scenario==='role')await root.query('UPDATE "User" SET role=\'CUSTOMER\' WHERE id=$1',[a+'_manager'])
    await root.query('COMMIT');await ok(await pending,403)
   }finally{await root.query('ROLLBACK');if(pending)await pending;await flag(true);await root.query('UPDATE "User" SET role=\'MANAGER\' WHERE id=$1',[a+'_manager'])}
  }
@@ -1127,7 +1127,7 @@ test('coupon writers refresh action, archive, module and role access after the s
    while(Date.now()<deadline){waiting=(await root.query(`SELECT EXISTS (SELECT 1 FROM pg_locks held JOIN pg_locks waiter ON held.classid=waiter.classid AND held.objid=waiter.objid AND held.objsubid=waiter.objsubid WHERE held.pid=pg_backend_pid() AND held.locktype='advisory' AND NOT waiter.granted) AS waiting`)).rows[0].waiting;if(waiting)break;await new Promise(resolve=>setTimeout(resolve,20))}
    assert.equal(waiting,true)
    if(scenario==='module')await flag(false)
-   else if(scenario==='role')await root.query('UPDATE "User" SET role=\'STAFF\' WHERE id=$1',[a+'_manager'])
+   else if(scenario==='role')await root.query('UPDATE "User" SET role=\'CUSTOMER\' WHERE id=$1',[a+'_manager'])
    else await perms(scenario==='status'?['appointmentCoupons.read','appointmentCoupons.edit']:['appointmentCoupons.read'])
    await root.query('COMMIT');await ok(await pending,403)
   }finally{await root.query('ROLLBACK');if(pending)await pending;await flag(true);await root.query('UPDATE "User" SET role=\'MANAGER\' WHERE id=$1',[a+'_manager'])}

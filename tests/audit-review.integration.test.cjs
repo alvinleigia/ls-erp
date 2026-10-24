@@ -1,3 +1,4 @@
+const {materializeRules}=require('./helpers/resource-policy-data.cjs')
 /* eslint-disable @typescript-eslint/no-require-imports */
 const {grantPgFixtureUsers}=require("./helpers/access-fixtures.cjs")
 const {test,before,after}=require('node:test'),assert=require('node:assert/strict'),path=require('node:path'),{randomUUID}=require('node:crypto')
@@ -53,7 +54,7 @@ test('lists omit payloads and details show recorded field changes with nested cr
 })
 test('manager report permissions never expose security, unrecognized or CRM historical snapshots',async()=>{
  for(const scope of ['ACCOUNT_ROLE','OWN','MANAGED_TEAMS','ALL']){
-  await root.query('UPDATE "TenantUserAccess" SET "salesRecordScope"=$1 WHERE "userId"=$2',[scope,a+'_manager'])
+  await root.query('UPDATE "TenantUserAccess" SET rules=$1 WHERE "userId"=$2',[materializeRules('MANAGER',scope),a+'_manager'])
   const rows=await body(await call('MANAGER','?pageSize=1'));assert.equal(rows.total,1);assert.equal(rows.canReviewSecurity,false);assert.equal(rows.items[0].id,a+'_product')
   for(const key of ['security','module','managerflag','crm','unknown'])await body(await call('MANAGER','',a+'_'+key),404)
  }
@@ -68,7 +69,7 @@ test('module revocation, current role and permission changes immediately guard d
  await permissions(['auditLogs.read']);await body(await call('MANAGER','',a+'_product'),404)
  await permissions([]);await body(await call('MANAGER'),403)
  await permissions(['auditLogs.read','inventoryProducts.read'])
- await root.query(`UPDATE "User" SET role='STAFF' WHERE id=$1`,[a+'_manager']);await body(await call('MANAGER','',a+'_product'),403)
+ await root.query(`UPDATE "User" SET role='CUSTOMER' WHERE id=$1`,[a+'_manager']);await body(await call('MANAGER','',a+'_product'),403)
  await root.query(`UPDATE "User" SET role='MANAGER' WHERE id=$1`,[a+'_manager'])
  await modules('crm',false);await body(await call('ADMIN','',a+'_crm'),404);await body(await call('ADMIN','',a+'_quote'),404)
  await body(await call('ADMIN','',a+'_managerflag'));await body(await call('ADMIN','',a+'_module'))

@@ -1,6 +1,7 @@
 import type { Prisma } from "@prisma/client"
-import { salesRecordAccess } from "@/platform/access/record-scope"
-import { CrmError, canManageCrm, type CrmActor } from "./policy"
+import { recordLimits } from "@/platform/access/rules"
+import { requirePermission } from "@/platform/access/policy"
+import { CrmError, type CrmActor } from "./policy"
 type Tx = Prisma.TransactionClient
 
 // Team membership restricts new assignment; it never grants access to another
@@ -8,9 +9,9 @@ type Tx = Prisma.TransactionClient
 export async function resolveSalesTeam(tx: Tx, actor: CrmActor, requested: string | null | undefined, owner: string, before?: { salesTeamId: string | null; assignedUserId: string }) {
   const id = requested === undefined ? before?.salesTeamId ?? null : requested || null
   const unchanged = !!before && before.salesTeamId === id && before.assignedUserId === owner
-  if (before && before.salesTeamId !== id && !canManageCrm(actor.role)) throw new CrmError(403, "Only a manager can change a record's sales team.")
+  if (before && before.salesTeamId !== id) requirePermission(actor, `${actor.operation?.resource ?? "enquiries"}.assign`)
   if (!id) return null
-  if (!unchanged && salesRecordAccess(actor) === "MANAGED_TEAMS" && !actor.managedTeamIds?.includes(id)) throw new CrmError(403, "Choose a sales team you manage.")
+  if (!unchanged && recordLimits(actor, actor.operation?.resource ?? "enquiries").includes("MANAGED_TEAMS") && !actor.managedTeamIds?.includes(id)) throw new CrmError(403, "Choose a sales team you manage.")
   const team = await tx.businessTeam.findFirst({ where: { tenantId: actor.tenantId, id } })
   if (!team) throw new CrmError(404, "Sales team not found.")
   if (!unchanged) {

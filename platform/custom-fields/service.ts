@@ -1,10 +1,13 @@
+import { authorizeBusinessOperation } from "@/platform/access/operation"
+import { permits } from "@/platform/access/policy"
+
 import { requireWriteFields } from "@/platform/access/policy"
 import type { Requirement } from "@/platform/access/catalog"
-import { findAccessUser, accessContext } from "@/platform/access/server"
-import { requirePermission } from "@/platform/access/policy"
+
+
 import { randomUUID } from "node:crypto"
 import { Prisma, type PrismaClient } from "@prisma/client"
-import { BusinessError, hasBusinessAccess, type BusinessActor } from "@/platform/policy"
+import { BusinessError, type BusinessActor } from "@/platform/policy"
 import { recordDomainAuditEvent } from "@/lib/domain-audit"
 import { fieldScopeOptions, registerFieldResources, type FieldResource } from "./resources"
 import { moduleEnabled } from "@/platform/modules"
@@ -16,12 +19,10 @@ export function createCustomFieldService(db: PrismaClient, identity: Pick<Busine
   async function run<T>(requirement: Requirement, operation: (tx: Prisma.TransactionClient, actor: BusinessActor, available: FieldResource[]) => Promise<T>): Promise<T> {
     for (let attempt = 0; ; attempt++) {
       try { return await db.$transaction(async tx => {
-        const user = await findAccessUser(tx, identity.tenantId, identity.userId)
-        if (!user || !hasBusinessAccess(user.role) || user.tenant?.status !== "ACTIVE" || user.tenant.slug === (process.env.PLATFORM_ADMIN_TENANT_SLUG?.trim().toLowerCase() || "platform")) throw new BusinessError(403, "Business workspace access is not permitted.")
+        const actor = await authorizeBusinessOperation(tx, identity, requirement)
         const modules = await tx.tenantModule.findMany({ where: { tenantId: identity.tenantId }, select: { key: true, enabled: true, allowed: true } })
         const available = resources.filter(resource => moduleEnabled(modules, resource.module))
         if (!available.length) throw new BusinessError(403, "No custom-field record types are available.")
-        const actor = { ...identity, ...accessContext(user) }; requirePermission(actor, requirement)
         return operation(tx, actor, available)
       }, { isolationLevel: "Serializable", maxWait: 20000, timeout: 20000 }) } catch (error) {
         const code = (error as { code?: string }).code
@@ -42,7 +43,7 @@ export function createCustomFieldService(db: PrismaClient, identity: Pick<Busine
         if (query.scope && !(resource ? resource.scopes : scopes(available)).includes(query.scope)) throw new BusinessError(403, "This record type is unavailable.")
         const where = { tenantId: actor.tenantId, ...(query.salesTeamId ? { salesTeamId: query.salesTeamId } : {}), scope: { in: query.scope ? [query.scope] : resource ? [...resource.scopes] : scopes(available) }, archived: query.archived === "true", ...(!managesFields(actor) ? { visibility: "ALL" } : {}), ...(query.filterable ? { filterable: query.filterable === "true" } : {}), name: { contains: query.q, mode: "insensitive" as const } }
         const [items, total] = await Promise.all([tx.customFieldDefinition.findMany({ where, orderBy: [{ position: "asc" }, { id: "asc" }], skip: (query.page - 1) * query.pageSize, take: query.pageSize }), tx.customFieldDefinition.count({ where })])
-        return { items, total, page: query.page, pageSize: query.pageSize, totalPages: Math.max(1, Math.ceil(total / query.pageSize)), canManage: managesFields(actor), scopes: scopes(available), scopeOptions: fieldScopeOptions(available) }
+        return { items, total, page: query.page, pageSize: query.pageSize, totalPages: Math.max(1, Math.ceil(total / query.pageSize)), canManage: permits(actor, "customFields.edit"), scopes: scopes(available), scopeOptions: fieldScopeOptions(available) }
       })
     },
     form(resourceKey: string, salesTeamId: string | null = null) {
@@ -66,7 +67,6 @@ export function createCustomFieldService(db: PrismaClient, identity: Pick<Busine
     save(input: unknown, id?: string) {
       const data = fieldSchema.parse(input)
       return run(id ? "customFields.edit" : "customFields.create", async (tx, actor, available) => {
-        if (!managesFields(actor)) throw new BusinessError(403, "Only managers can configure custom fields.")
         const resource = available.find(resource => resource.scopes.includes(data.scope))
         if (!resource) throw new BusinessError(403, "This record type is unavailable.")
         const before = id ? await tx.customFieldDefinition.findUnique({ where: { tenantId_id: { tenantId: actor.tenantId, id } }, include: { options: true } }) : null

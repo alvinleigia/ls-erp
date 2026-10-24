@@ -26,7 +26,7 @@ export const propertyCatalogExtension: CatalogExtension = {
     requirePermission(actor, "projects.edit")
     const data = unitDetailsSchema.parse(input)
     const previous = await tx.realEstateUnit.findUnique({ where: { tenantId_itemId: { tenantId: actor.tenantId, itemId } } })
-    const project = await tx.realEstateProject.findFirst({ where: { AND: [projectScope(actor), { id: data.projectId }] }, select: { archived: true, parent: { select: { archived: true } } } })
+    const project = await tx.realEstateProject.findFirst({ where: { AND: [projectScope(actor, "edit"), { id: data.projectId }] }, select: { archived: true, parent: { select: { archived: true } } } })
     if (!project || ((project.archived || project.parent?.archived) && previous?.projectId !== data.projectId)) throw new BusinessError(400, "Choose an active, accessible project or subproject.")
     await resolvePropertyChoice(tx, actor.tenantId, "property-categories", data.categoryId, previous?.categoryId)
     const values = { ...data, area: data.area ? new Prisma.Decimal(data.area) : null }

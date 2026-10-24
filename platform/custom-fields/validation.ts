@@ -10,7 +10,7 @@ export const fieldSchema = z.object({
   scope: z.enum(fieldScopes), code: z.string().trim().regex(/^[a-z][a-z0-9_]{0,49}$/),
   name: z.string().trim().min(1).max(100), type: z.enum(fieldTypes), helpText: z.string().trim().max(500).default(""),
   position: z.number().int().min(0).max(1000000).default(0), required: z.boolean().default(false),
-  visibility: z.enum(["ALL", "MANAGERS"]).default("ALL"), editability: z.enum(["ALL", "MANAGERS"]).default("ALL"),
+  visibility: z.enum(["ALL", "PRIVILEGED"]).default("ALL"), editability: z.enum(["ALL", "PRIVILEGED"]).default("ALL"),
   filterable: z.boolean().default(false), maxLength: z.number().int().min(1).max(2000).default(2000),
   minimum: z.string().max(32).nullable().default(null), maximum: z.string().max(32).nullable().default(null),
   defaultValue: primitive.default(null), archived: z.boolean().default(false), version: z.number().int().positive().optional(),

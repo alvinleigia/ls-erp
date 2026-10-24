@@ -38,6 +38,7 @@ export type UserProfile = UserCore & {
   createdAt: string
   updatedAt: string
   staffProfile?: {
+    leaveApprovalMode?: "REPORTING_MANAGER" | "TENANT_ADMIN"
     managerUserId?: string | null
     schedulingMode?: "STANDARD" | "FLEXIBLE"
     manager?: {
@@ -50,8 +51,7 @@ export type UserProfile = UserCore & {
 
 export type UserFormValues = {
   accessRoleIds?: string[]
-  salesRecordScope?: import("@/platform/access/record-scope").RecordScope
-  projectRecordScope?: import("@/platform/access/record-scope").RecordScope
+  recordRules?: import("@/platform/access/rules").RecordRules
   name: string
   email: string
   phone: string
@@ -107,6 +107,7 @@ export type StaffUser = UserCore & {
   role: Role
   eligibleServiceIds?: string[]
   staffProfile?: {
+    leaveApprovalMode?: "REPORTING_MANAGER" | "TENANT_ADMIN"
     managerUserId?: string | null
     schedulingMode?: "STANDARD" | "FLEXIBLE"
     manager?: {
@@ -121,6 +122,7 @@ export type StaffUser = UserCore & {
 
 export type StaffProfileForm = {
   managerUserId: string
+  leaveApprovalMode: "REPORTING_MANAGER" | "TENANT_ADMIN"
   schedulingMode: "STANDARD" | "FLEXIBLE"
   certifications: {
     id?: string

@@ -3,6 +3,7 @@ import type { ListResponse } from "./api"
 export type WorkType = typeof workTypes[number]
 export type WorkStatus = typeof workStatuses[number]
 export type CrmWorkRow = {
+  recordAccess?: import("@/platform/access/record-actions").RecordAccess;
   collectionOrderId?: string | null;
   id: string; contactId: string; enquiryId: string | null; opportunityId: string | null; assignedUserId: string;
   activityTypeId?: string | null; activityTypeName?: string | null; title: string; type: WorkType; status: WorkStatus; priority: number; version: number; description: string | null;

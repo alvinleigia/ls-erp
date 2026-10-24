@@ -18,6 +18,7 @@ before(async()=>{
  await root.appSetting.create({data:{tenantId:id}})
  await fixtureUser(root,{data:{id:id+'_admin',tenantId:id,email:id+'@example.test',name:'Admin',role:'ADMIN'}})
  }
+ for(const role of ['STAFF','MANAGER'])await fixtureUser(root,{data:{id:'branding_a_'+role,tenantId:'branding_a',email:role+'@branding.example.test',role}})
  logo=await sharp({create:{width:1200,height:400,channels:4,background:{r:30,g:80,b:150,alpha:.5}}}).png().toBuffer()
 })
 after(async()=>{await Promise.all(clients.map(c=>c.$disconnect()));await Promise.all(pools.map(p=>p.end()))})
@@ -25,12 +26,12 @@ test('save stores only paths/metadata, audits and isolates tenant branding',asyn
  const saved=await saveBranding(a,actor,{name:'QA Brand',version:0},logo)
  assert.equal(saved.version,1);assert.equal(saved.branding.name,'QA Brand');assert.ok(saved.branding.logo.document.path.startsWith('branding_a/'))
  assert.ok(saved.branding.logo.document.bytes<=512*1024);assert.equal(JSON.stringify(saved).includes('base64'),false)
- assert.equal((await readBranding(b,{...actor,tenantId:'branding_b'})).version,0)
+ assert.equal((await readBranding(b,{...actor,tenantId:'branding_b',userId:'branding_b_admin'})).version,0)
  assert.equal((await unscoped.appSetting.findMany({where:{tenantId:'branding_a'}})).length,0)
  assert.equal(await a.auditLog.count({where:{tenantId:'branding_a',event:'branding.updated'}}),1)
 })
 test('staff, managers and restricted administrators cannot change branding',async()=>{
- for(const denied of [{...actor,role:'STAFF'},{...actor,role:'MANAGER'},{...actor,permissions:['businessSettings.read']}])await assert.rejects(saveBranding(a,denied,{name:'Denied',version:1}),e=>e.status===403)
+ for(const denied of [{...actor,userId:'branding_a_STAFF',role:'STAFF'},{...actor,userId:'branding_a_MANAGER',role:'MANAGER'},{...actor,permissions:['businessSettings.read']}])await assert.rejects(saveBranding(a,denied,{name:'Denied',version:1}),e=>e.status===403)
  assert.equal((await readBranding(a,actor)).branding.name,'QA Brand')
 })
 test('fresh database authorization overrides stale administrator session',async()=>{

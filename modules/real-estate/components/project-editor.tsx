@@ -2,6 +2,7 @@
 import { useTerminology, useTerminologyReader } from "@/platform/terminology/provider"
 import { useCustomFields } from "@/modules/crm/components/custom-fields"
 import { useBusinessModules } from "@/platform/module-provider"
+import { withRecordView, useRecordView } from "@/platform/access/record-view"
 import * as React from "react"
 import Link from "@/platform/access/link"
 import { useRouter } from "next/navigation"
@@ -29,10 +30,12 @@ import { AccessRecordTabs } from "@/platform/access/record-tabs"
 import { CatalogList } from "@/modules/catalog/components/item-list"
 
 const empty: Project = { id: "", name: "", code: "", parentId: null, developerAccountId: null, location: "", description: "", categories: [], lifecycle: "", priceMin: "", priceMax: "", currency: "", archived: false, version: 1 }
-export function ProjectEditor({ id, parentId = "" }: { id?: string; parentId?: string }) {
+export const ProjectEditor = withRecordView(ProjectEditorBody)
+function ProjectEditorBody({ id, parentId = "" }: { id?: string; parentId?: string }) {
   const readTerm = useTerminologyReader()
   const term = useTerminology()
   const { can, enabled } = useBusinessModules()
+  const { loadAccess } = useRecordView()!
   const router = useRouter()
   const custom = useCustomFields("project", id)
   const loadCustom = custom.load
@@ -57,7 +60,7 @@ export function ProjectEditor({ id, parentId = "" }: { id?: string; parentId?: s
         if (!displayResponse.ok) throw new Error("Unable to load business display settings. Refresh to try again.")
         const display = await displayResponse.json()
         setDisplaySettings(display.settings)
-        if (id) { await loadCustom(data); setRecord(data); setSaved(data) }
+        if (id) { loadAccess(data.recordAccess); await loadCustom(data); setRecord(data); setSaved(data) }
         else {
           const defaultsResponse = await fetch("/api/real-estate/choices/defaults", { signal: controller.signal, cache: "no-store" })
           if (!defaultsResponse.ok) throw new Error(readTerm("realEstate.project.singular", "Unable to load project defaults.", "Unable to load {label} defaults."))
@@ -77,7 +80,7 @@ export function ProjectEditor({ id, parentId = "" }: { id?: string; parentId?: s
     }
     void load()
     return () => controller.abort()
-  }, [readTerm, id, parentId, revision, loadCustom])
+  }, [readTerm, id, parentId, revision, loadCustom, loadAccess])
   const recordKey = record.parentId ? "realEstate.subproject" : "realEstate.project"
   const cancelHref = record.parentId ? `/crm/projects/${record.parentId}` : "/crm/projects"
   const change = <K extends keyof Project>(key: K, value: Project[K]) => setRecord(previous => ({ ...previous, [key]: value }))
@@ -94,7 +97,7 @@ export function ProjectEditor({ id, parentId = "" }: { id?: string; parentId?: s
     } catch (error) { setError((error as Error).message); setConfirm(false) } finally { setSaving(false) }
   }
   if (loading || loadError) return <div className={pageClass}><AccessPageHeader title={term(recordKey + ".singular", "Project", "{label}")} backHref="/crm/projects" actions={<Button variant="outline" onClick={() => setRevision(value => value + 1)}>Refresh</Button>} /><p role={loadError ? "alert" : undefined}>{loadError || term(recordKey + ".singular", "Loading project…", "Loading {label}…")}</p></div>
-  if (!id && !canManage) return <p role="alert">{term("realEstate.project.plural", "Only managers can create projects.", "Only managers can create {label}.")}</p>
+  if (!id && !canManage) return <p role="alert">{term("realEstate.project.plural", "Your access profile does not include project creation.", "Your access profile does not include {label} creation.")}</p>
   const field = (key: "name" | "code" | "location" | "priceMin" | "priceMax" | "currency", label: string, required = false) => <FormField id={`project-${key}`} label={label} error={errors[key]}><Input id={`project-${key}`} value={record[key] || ""} required={required} maxLength={key === "currency" ? 3 : key === "code" ? 40 : key === "name" ? 160 : key === "location" ? 300 : 19} onChange={event => change(key, event.target.value)} /></FormField>
   function begin(section: "details" | "pricing" | "custom") {
     setError(""); clearErrors(); setEditing(section)
@@ -149,7 +152,7 @@ export function ProjectEditor({ id, parentId = "" }: { id?: string; parentId?: s
         { value: "sales", label: "Sales", content: <ProjectSales project={{ ...record, canManage }} /> },
         ...(enabled("catalog") && can("catalogItems.read") ? [{ value: "units", label: "Units", permission: "catalogItems.read" as const, content: <CatalogList embedded extensionKey="realEstate" contextId={id} newHref={`/catalog/new?projectId=${encodeURIComponent(id)}`} /> }] : []),
         { value: "activities", permission: "activities.read" as const, label: term("crm.activity.plural", "Activities"), content: <ProjectActivities project={record} /> },
-        ...(canManage ? [{ value: "team", permission: "projects.assign" as const, label: "Team", content: record.parentId ? <Section title="Staff access"><p className="text-sm text-muted-foreground">{term("realEstate.project.singular", "Staff access is inherited from the parent project.", "Staff access is inherited from the parent {label}.")}</p><Button variant="outline" asChild><Link href={`/crm/projects/${record.parentId}`}>{term("realEstate.project.singular", "Manage parent project", "Manage parent {label}")}</Link></Button></Section> : <ProjectMembers id={id} version={record.version} archived={record.archived} onVersion={version => { change("version", version); setSaved(previous => previous ? { ...previous, version } : previous) }} /> }] : []),
+        { value: "team", permission: "projectMembers.read" as const, label: "Team", content: record.parentId ? <Section title="Staff access"><p className="text-sm text-muted-foreground">{term("realEstate.project.singular", "Staff access is inherited from the parent project.", "Staff access is inherited from the parent {label}.")}</p><Button variant="outline" asChild><Link href={`/crm/projects/${record.parentId}`}>{term("realEstate.project.singular", "Manage parent project", "Manage parent {label}")}</Link></Button></Section> : <ProjectMembers id={id} version={record.version} archived={record.archived} onVersion={version => { change("version", version); setSaved(previous => previous ? { ...previous, version } : previous) }} /> },
       ]} />
       <EditPanel open={!!editing} title={editing === "pricing" ? "Edit property and pricing" : editing === "custom" ? "Edit additional information" : term(recordKey + ".singular", "Edit project details", "Edit {label} details")} description={term("realEstate.project.singular", "Changes apply to this project only.", "Changes apply to this {label} only.")} onClose={cancelEdit} onSubmit={() => void save()} saving={saving} disabled={custom.blocked} error={error} dirty={JSON.stringify(record) !== JSON.stringify(saved) || Object.keys(custom.payload.customFields).length > 0}>
         {editing === "details" ? detailsForm : editing === "pricing" ? pricingForm : editing === "custom" ? custom.section(saving) : null}
@@ -161,6 +164,7 @@ export function ProjectEditor({ id, parentId = "" }: { id?: string; parentId?: s
 
 function ProjectMembers({ id, version, archived, onVersion }: { id: string; version: number; archived: boolean; onVersion: (version: number) => void }) {
   const term = useTerminology()
+  const { can } = useBusinessModules()
   const [page, setPage] = React.useState(1), [pageSize, setPageSize] = React.useState(10)
   const [rows, setRows] = React.useState<{ id: string; name: string | null; status: string }[]>([]), [total, setTotal] = React.useState(0)
   const [selected, setSelected] = React.useState(""), [error, setError] = React.useState(""), [saving, setSaving] = React.useState(false), [loading, setLoading] = React.useState(true)
@@ -184,10 +188,10 @@ function ProjectMembers({ id, version, archived, onVersion }: { id: string; vers
       onVersion(data.version); setSelected(""); setRemove(null); setPage(1); toast.success("Staff access updated.")
     } catch (error) { setError((error as Error).message); setRemove(null) } finally { setSaving(false) }
   }
-  return <Section title="Responsible staff and access" description={term("realEstate.project.singular", "Assigned staff can read this project", "Assigned staff can read this {label}") + " " + term("realEstate.subproject.plural", "and its active subprojects.", "and its active {label}.") + " " + term("realEstate.project.singular", "Managers follow their project record scope.", "Managers follow their {label} record scope.") + " " + term("crm.contact.singular", "Customer", "{label}") + " " + term("crm.opportunity.singular", "and opportunity access is unchanged.", "and {label} access is unchanged.")}>
-    {!archived && <div className="flex flex-wrap items-end gap-3"><FormField id="project-member" label="Assign staff" className="min-w-0 flex-1 basis-52"><RecordSelect id="project-member" endpoint="/api/crm/assignees" value={selected} onChange={setSelected} disabled={saving} /></FormField><Button disabled={!selected || saving} loading={saving} onClick={() => void save(selected, false)}>Add staff</Button></div>}
+  return <Section title="Responsible staff and access" description={term("realEstate.project.singular", "Assigned staff can read this project", "Assigned staff can read this {label}") + " " + term("realEstate.subproject.plural", "and its active subprojects.", "and its active {label}.") + " " + term("realEstate.project.singular", "Record access follows the configured project limits.", "Record access follows the configured {label} limits.") + " " + term("crm.contact.singular", "Customer", "{label}") + " " + term("crm.opportunity.singular", "and opportunity access is unchanged.", "and {label} access is unchanged.")}>
+    {!archived && can("projectMembers.assign") && <div className="flex flex-wrap items-end gap-3"><FormField id="project-member" label="Assign staff" className="min-w-0 flex-1 basis-52"><RecordSelect id="project-member" endpoint="/api/crm/assignees" value={selected} onChange={setSelected} disabled={saving} /></FormField><Button disabled={!selected || saving} loading={saving} onClick={() => void save(selected, false)}>Add staff</Button></div>}
     {error && <p role="alert" className="text-destructive">{error}</p>}
-    <ul className="divide-y rounded-lg border">{rows.map(row => <li key={row.id} className="flex items-center justify-between gap-3 p-3 text-sm"><span>{row.name || "Unnamed staff"}{row.status !== "ACTIVE" && <span className="ml-2 text-muted-foreground">({choiceLabel(row.status)})</span>}</span>{!archived && <Button size="sm" variant="outline" disabled={saving} onClick={() => setRemove(row)}>Remove<span className="sr-only"> {row.name}</span></Button>}</li>)}{!rows.length && <li className="p-5 text-sm text-muted-foreground">{loading ? "Loading staff…" : term("realEstate.project.singular", "No staff assigned. Only managers can access this project.", "No staff assigned. Only managers can access this {label}.")}</li>}</ul>
+    <ul className="divide-y rounded-lg border">{rows.map(row => <li key={row.id} className="flex items-center justify-between gap-3 p-3 text-sm"><span>{row.name || "Unnamed staff"}{row.status !== "ACTIVE" && <span className="ml-2 text-muted-foreground">({choiceLabel(row.status)})</span>}</span>{!archived && can("projectMembers.assign") && <Button size="sm" variant="outline" disabled={saving} onClick={() => setRemove(row)}>Remove<span className="sr-only"> {row.name}</span></Button>}</li>)}{!rows.length && <li className="p-5 text-sm text-muted-foreground">{loading ? "Loading staff…" : term("realEstate.project.singular", "No staff assigned. Access follows the configured project limits.", "No staff assigned. Access follows the configured {label} limits.")}</li>}</ul>
     <Pagination page={page} pageSize={pageSize} total={total} loading={loading} onPageChange={setPage} onPageSizeChange={size => { setPageSize(size); setPage(1) }} />
     <Dialog open={!!remove} onOpenChange={open => { if (!open && !saving) setRemove(null) }}><DialogContent><DialogHeader><DialogTitle>Remove staff access?</DialogTitle><DialogDescription>{remove?.name} {term("realEstate.project.singular", "will no longer have this project assignment. Managers retain management access.", "will no longer have this {label} assignment. Managers retain management access.")}</DialogDescription></DialogHeader><DialogFooter><Button variant="outline" disabled={saving} onClick={() => setRemove(null)}>Cancel</Button><Button loading={saving} onClick={() => remove && void save(remove.id, true)}>Remove access</Button></DialogFooter></DialogContent></Dialog>
   </Section>

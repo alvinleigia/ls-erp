@@ -2,8 +2,8 @@ import { termText } from "@/platform/terminology/message"
 import { requireWriteFields, permits } from "@/platform/access/policy"
 import type { PermissionRun } from "@/platform/access/server"
 import type { Prisma, CrmEnquiry } from "@prisma/client"
-import { salesRecordAccess } from "@/platform/access/record-scope"
-import { accountScope, canManageCrm, contactScope, CrmError, type CrmActor } from "./policy"
+import { recordLimits } from "@/platform/access/rules"
+import { accountScope, contactScope, CrmError, type CrmActor } from "./policy"
 import { crmLeadSourceSchema, crmLeadSourceUpdateSchema, crmLeadSourceListSchema } from "./validation"
 import { recordDomainAuditEvent } from "@/lib/domain-audit"
 
@@ -21,7 +21,7 @@ export const referralInclude = {
 // Attribution never grants access to an otherwise private referrer. Batch the
 // checks so enquiry/opportunity lists retain server-side pagination efficiency.
 export async function maskReferrals<T extends { referralContactId: string | null; referralAccountId: string | null }>(tx: Tx, actor: CrmActor, rows: T[]) {
-  if (salesRecordAccess(actor) === "ALL") return rows.map(row => ({ ...row, referralRestricted: false }))
+  if (recordLimits(actor, "contacts", "read").length === 0 && recordLimits(actor, "accounts", "read").length === 0) return rows.map(row => ({ ...row, referralRestricted: false }))
   const contactIds = rows.flatMap(row => row.referralContactId ? [row.referralContactId] : [])
   const accountIds = rows.flatMap(row => row.referralAccountId ? [row.referralAccountId] : [])
   const [contacts, accounts] = await Promise.all([
@@ -45,12 +45,12 @@ export async function enquiryContext(tx: Tx, actor: CrmActor, contactId: string,
       source = choice?.name ?? null
     }
   } else if (data.source !== undefined && data.source !== (before?.source ?? "")) {
-    // Compatibility for older callers: managers may introduce a legacy text
-    // source, while staff may only select an existing managed choice.
+    // Typed source names resolve to managed choices. Creating a missing choice
+    // requires its own Create permission, independently of the sales write.
     const name = data.source.trim().replace(/\s+/g, " ")
     let choice = name ? await tx.crmLeadSource.findUnique({ where: { tenantId_nameKey: { tenantId: actor.tenantId, nameKey: sourceKey(name) } } }) : null
     if (name && !choice) {
-      if (!canManageCrm(actor.role)) throw new CrmError(400, "Choose an existing lead source or ask a manager to add it.")
+      if (!permits(actor, "leadSources.create")) throw new CrmError(400, "Choose an existing lead source or ask someone with lead-source access to add it.")
       choice = await tx.crmLeadSource.create({ data: { tenantId: actor.tenantId, name, nameKey: sourceKey(name) } })
       await recordDomainAuditEvent(tx, { tenantId: actor.tenantId, actorUserId: actor.userId, actorRole: actor.role, event: "crm.source.created", entityType: "CrmLeadSource", entityId: choice.id, after: { name }, requestId: actor.requestId })
     }
@@ -72,7 +72,6 @@ export async function enquiryContext(tx: Tx, actor: CrmActor, contactId: string,
 }
 
 export function createIntakeService({ run, audit }: Context) {
-  const manage = (actor: CrmActor) => { if (!canManageCrm(actor.role)) throw new CrmError(403, "Only a manager can configure lead sources.") }
   return {
     listLeadSources(input: unknown) {
       const query = crmLeadSourceListSchema.parse(input)
@@ -81,13 +80,12 @@ export function createIntakeService({ run, audit }: Context) {
         const [items, total] = await Promise.all([
           tx.crmLeadSource.findMany({ where, orderBy: [{ name: "asc" }, { id: "asc" }], skip: (query.page - 1) * query.pageSize, take: query.pageSize }), tx.crmLeadSource.count({ where }),
         ])
-        return { items, total, page: query.page, pageSize: query.pageSize, totalPages: Math.max(1, Math.ceil(total / query.pageSize)), canManage: canManageCrm(actor.role) && permits(actor, "leadSources.edit") }
+        return { items, total, page: query.page, pageSize: query.pageSize, totalPages: Math.max(1, Math.ceil(total / query.pageSize)), canManage: permits(actor, "leadSources.edit") }
       })
     },
     createLeadSource(input: unknown) {
       const data = crmLeadSourceSchema.parse(input)
       return run("leadSources.create", async (tx, actor) => { requireWriteFields(actor, "leadSources", undefined, data);
-        manage(actor)
         const record = await tx.crmLeadSource.create({ data: { ...data, nameKey: sourceKey(data.name), tenantId: actor.tenantId } })
         await audit(tx, actor, "crm.source.created", record.id, undefined, data)
         return record
@@ -96,7 +94,6 @@ export function createIntakeService({ run, audit }: Context) {
     updateLeadSource(id: string, input: unknown) {
       const { version, ...data } = crmLeadSourceUpdateSchema.parse(input)
       return run("leadSources.edit", async (tx, actor) => {
-        manage(actor)
         const before = await tx.crmLeadSource.findFirst({ where: { tenantId: actor.tenantId, id } })
         requireWriteFields(actor, "leadSources", before ?? undefined, data)
         if (!before) throw new CrmError(404, "Lead source not found.")

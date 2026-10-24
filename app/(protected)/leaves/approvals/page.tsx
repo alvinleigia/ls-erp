@@ -108,7 +108,7 @@ export default function LeaveApprovalsPage() {
 
   const { data: session } = useSession()
   const role = (session?.user as { role?: string })?.role
-  const canManage = role === "ADMIN" || role === "MANAGER"
+  const canManage = can("leaveApprovals.read")
   const router = useRouter()
 
   const [loading, setLoading] = React.useState(true)

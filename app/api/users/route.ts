@@ -1,3 +1,4 @@
+import { hasBusinessAccess } from "@/platform/policy"
 import { requireBusinessModule } from "@/platform/module-server"
 import { recordDomainAuditEvent } from "@/lib/domain-audit"
 import { guardUserWrite, auditUserSecurity, assignInitialProfiles } from "@/platform/access/user-security"
@@ -16,7 +17,7 @@ import {
 import { Prisma } from "@prisma/client"
 import { prisma, runWithTenantDbContext } from "@/lib/prisma"
 import { createUserSchema } from "@/lib/validation"
-import { canInvite, canManageUsers, type Role } from "@/lib/permissions"
+import { canInvite, type Role } from "@/lib/permissions"
 import { withCoreApi, actorSession } from "@/platform/core/api"
 import type { BusinessActor } from "@/platform/policy"
 
@@ -49,7 +50,7 @@ async function handleGET(request: Request, actor: BusinessActor) {
   const { tenantId, role } = tenantSession.context
 
   return runWithTenantDbContext(tenantId, async () => {
-    if (!canManageUsers(role as Role)) {
+    if (!hasBusinessAccess(role as Role)) {
       const response = NextResponse.json({ error: "Unauthorized" }, { status: 401 })
       logApiRequestSuccess(logContext, 401, { reason: "unauthorized" })
       return withRequestId(response, logContext.requestId)
@@ -293,7 +294,7 @@ async function handlePOST(request: Request, actor: BusinessActor) {
         },
       })
 
-      await assignInitialProfiles(tx, identity, created, parsed.data.accessRoleIds, { salesRecordScope: parsed.data.salesRecordScope, projectRecordScope: parsed.data.projectRecordScope })
+      await assignInitialProfiles(tx, identity, created, parsed.data.accessRoleIds, parsed.data.recordRules)
         if (normalizedEligibleServiceIds.length) await recordDomainAuditEvent(tx, { tenantId, actorUserId: sessionUserId, actorRole: "ADMIN", requestId: logContext.requestId, event: "services.eligibility.updated", entityType: "User", entityId: created.id, after: { serviceIds: normalizedEligibleServiceIds } })
         await auditUserSecurity(tx, identity, created.id, null, created)
         return created

@@ -1,3 +1,4 @@
+import { defaultRecordRules } from "@/platform/access/rules"
 import { test, expect } from "@playwright/test"
 
 test("role template permissions and assignment are reviewable on desktop and mobile", async ({ page }) => {
@@ -7,7 +8,7 @@ test("role template permissions and assignment are reviewable on desktop and mob
   const path = new URL(route.request().url()).pathname, method = route.request().method()
   if (method === "POST") { const data = route.request().postDataJSON(); writes.push(data); saved = { ...data, id: "role-1", version: 1 }; return route.fulfill({ json: saved }) }
   if (method === "PATCH") { writes.push(route.request().postDataJSON()); return route.fulfill({ json: { roleIds: ["role-1"], version: 1 } }) }
-  if (path === "/api/access/users/staff") return route.fulfill({ json: { id: "staff", name: "Test Staff", role: "STAFF", accessAssignments: [], accessPolicy: { salesRecordScope: "OWN", projectRecordScope: "OWN", version: 0 } } })
+  if (path === "/api/access/users/staff") return route.fulfill({ json: { id: "staff", name: "Test Staff", role: "STAFF", accessAssignments: [], accessPolicy: { rules: defaultRecordRules(), version: 0 } } })
   if (["/api/users", "/api/directory"].includes(path)) return route.fulfill({ json: { items: [{ id: "staff", name: "Test Staff" }], total: 1 } })
   if (path === "/api/access/roles/role-1") return route.fulfill({ json: saved })
   return route.fulfill({ json: { items: saved ? [{ ...saved, _count: { assignments: 0 } }] : [], total: saved ? 1 : 0 } })

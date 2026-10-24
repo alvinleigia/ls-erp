@@ -7,7 +7,7 @@ import { useSession } from "next-auth/react"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
-import { canManageUsers, type Role } from "@/lib/permissions"
+import { type Role } from "@/lib/permissions"
 import type { ServiceOption } from "@/types/services"
 import type { StaffProfileForm, StaffUser } from "@/types/users"
 import { StaffFormFields } from "./staff-form-fields"
@@ -22,7 +22,7 @@ export default function StaffProfilePage() {
   const editScheduling = enabled("shifts") && can("shiftRoster.edit") && currentRole === "ADMIN"
   const serviceAccess = enabled("services") && can("services.read")
   const editEligibility = serviceAccess && can("services.edit") && currentRole === "ADMIN"
-  const canManage = canManageUsers(currentRole as Role)
+  const canManage = currentRole === "ADMIN"
 
   const [loading, setLoading] = React.useState(true)
   const [saving, setSaving] = React.useState(false)
@@ -43,7 +43,7 @@ export default function StaffProfilePage() {
         serviceAccess ? fetch("/api/services?page=1&pageSize=100&sort=name&order=asc&status=ACTIVE", {
           cache: "no-store",
         }) : Promise.resolve(null),
-        fetch("/api/directory?page=1&pageSize=100&sort=name&order=asc&role=MANAGER&status=ACTIVE", {
+        fetch("/api/users?page=1&pageSize=100&sort=name&order=asc&status=ACTIVE", {
           cache: "no-store",
         }),
       ])
@@ -71,11 +71,11 @@ export default function StaffProfilePage() {
 
       if (managersRes.ok) {
         const data = (await managersRes.json()) as {
-          items?: { id: string; name: string | null; email: string }[]
+          items?: { id: string; name: string | null; email: string; role: string }[]
         }
         setManagerOptions([
           { value: "", label: "No manager assigned" },
-          ...(data.items ?? []).map((manager) => ({
+          ...(data.items ?? []).filter(manager => manager.role !== "CUSTOMER" && manager.id !== params.id).map((manager) => ({
             value: manager.id,
             label: manager.name?.trim() || manager.email,
           })),
@@ -101,6 +101,7 @@ export default function StaffProfilePage() {
         ...(editEligibility ? { eligibleServiceIds: selectedIds } : {}),
         staffProfile: {
           managerUserId: profile.managerUserId,
+          leaveApprovalMode: profile.leaveApprovalMode,
           ...(editScheduling ? { schedulingMode: profile.schedulingMode } : {}),
           documents: profile.documents.map((doc) => ({
             id: doc.id,

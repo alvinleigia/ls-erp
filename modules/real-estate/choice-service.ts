@@ -1,4 +1,4 @@
-import { requireWriteFields } from "@/platform/access/policy"
+import { requireWriteFields, permits } from "@/platform/access/policy"
 import type { PermissionRun } from "@/platform/access/server"
 import { randomUUID } from "node:crypto"
 import { Prisma } from "@prisma/client"
@@ -14,7 +14,6 @@ const tables = {
   "property-categories": Prisma.raw('"RealEstatePropertyCategory"'),
   "buying-timeframes": Prisma.raw('"RealEstateBuyingTimeframe"'),
 } as const
-const manage = (actor: BusinessActor) => actor.role === "ADMIN" || actor.role === "MANAGER"
 export async function resolvePropertyChoice(tx: Tx, tenantId: string, kind: ChoiceKind, id: string, retained?: string | null) {
   if (!id) return
   const [choice] = await tx.$queryRaw<PropertyChoice[]>(Prisma.sql`SELECT * FROM ${tables[kind]} WHERE "tenantId"=${tenantId} AND id=${id}`)
@@ -50,18 +49,17 @@ export function createPropertyChoiceService(run: Run) {
           tx.$queryRaw<PropertyChoice[]>(Prisma.sql`SELECT * FROM ${tables[kind]} WHERE ${where} ORDER BY position,name,id LIMIT ${query.pageSize} OFFSET ${(query.page - 1) * query.pageSize}`),
           tx.$queryRaw<{ total: number }[]>(Prisma.sql`SELECT count(*)::int AS total FROM ${tables[kind]} WHERE ${where}`),
         ])
-        return { items, total: count.total, page: query.page, pageSize: query.pageSize, totalPages: Math.max(1, Math.ceil(count.total / query.pageSize)), canManage: manage(actor) }
+        return { items, total: count.total, page: query.page, pageSize: query.pageSize, totalPages: Math.max(1, Math.ceil(count.total / query.pageSize)), canManage: permits(actor, "projectSettings.edit") }
       })
     },
     getChoice(kindInput: unknown, id: string) {
       const kind = choiceKindSchema.parse(kindInput)
-      return run("projectSettings.read", async (tx, actor) => ({ ...await find(tx, actor, kind, id), canManage: manage(actor) }))
+      return run("projectSettings.read", async (tx, actor) => ({ ...await find(tx, actor, kind, id), canManage: permits(actor, "projectSettings.edit") }))
     },
     saveChoice(kindInput: unknown, input: unknown, id?: string) {
       const kind = choiceKindSchema.parse(kindInput)
       const data = id ? choiceUpdateSchema.parse(input) : { ...choiceSchema.parse(input), version: undefined }
       return run(id ? "projectSettings.edit" : "projectSettings.create", async (tx, actor) => {
-        if (!manage(actor)) throw new BusinessError(403, "Only managers can configure property choices.")
         const before = id ? await find(tx, actor, kind, id) : null
         requireWriteFields(actor, "projectSettings", before ?? undefined, data)
         if (before && before.version !== data.version) throw new BusinessError(409, "This choice changed. Refresh before saving.")

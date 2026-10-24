@@ -1,7 +1,6 @@
 import type { Prisma } from "@prisma/client"
 import { moduleEnabled, type ModuleFlag } from "@/platform/modules"
 import { permits } from "@/platform/access/policy"
-import { canManageUsers, type Role } from "@/lib/permissions"
 import type { BusinessActor } from "@/platform/policy"
 import { AppointmentOrderStatus, AppointmentStatus } from "@prisma/client"
 import type { OperationalDashboardPeriod } from "@/types/dashboard"
@@ -20,8 +19,8 @@ const REVENUE_STATUSES: AppointmentOrderStatus[] = [
 
 export async function appointmentsDashboardData(tx: Prisma.TransactionClient, actor: BusinessActor, flags: ModuleFlag[], period: OperationalDashboardPeriod) {
   const { tenantId } = actor
-  const canReadBookings = canManageUsers(actor.role as Role) && moduleEnabled(flags, "appointments") && permits(actor, "appointments.read")
-  const canReadServices = canManageUsers(actor.role as Role) && moduleEnabled(flags, "services") && permits(actor, "services.read")
+  const canReadBookings = moduleEnabled(flags, "appointments") && permits(actor, "appointments.read")
+  const canReadServices = moduleEnabled(flags, "services") && permits(actor, "services.read")
   const { rangeStart, rangeEndExclusive, todayStart, tomorrowStart, periodStartDateOnly, periodEndDateOnly, todayDateOnly, now } = period
   const [periodOrders, todayOrders, periodAppointments, todayAppointments, distinctCustomers, upcomingAppointments, appointmentStatusRows, topServiceLines, staffRangeAppointments] = await Promise.all([
     canReadBookings ? tx.appointmentOrder.findMany({

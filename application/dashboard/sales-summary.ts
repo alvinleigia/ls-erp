@@ -1,6 +1,6 @@
 import type { Prisma } from "@prisma/client"
 import { crmDashboard, dashboardSalesScopes } from "@/modules/crm/dashboard"
-import { enquiryScope } from "@/modules/crm/policy"
+import { ownedRecordScope } from "@/platform/access/record-scope"
 import { projectDashboard } from "@/modules/real-estate/dashboard"
 import { documentDashboard } from "@/modules/sales-documents/dashboard"
 import type { ModuleFlag } from "@/platform/modules"
@@ -14,7 +14,7 @@ export async function salesDashboard(tx: Prisma.TransactionClient, actor: Busine
   const [crm, projects, documents] = await Promise.all([
     crmDashboard(tx, actor, flags, period),
     projectDashboard(tx, actor, flags, dashboardSalesScopes(actor, flags, period)),
-    documentDashboard(tx, actor, flags, period, enquiryScope(actor)),
+    documentDashboard(tx, actor, flags, period, ownedRecordScope(actor, "quotations", "read")),
   ])
   return { ...crm, projects, ...documents }
 }

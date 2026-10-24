@@ -1,3 +1,14 @@
+## R9 - Resource/action access standardization (local staging)
+
+Existing modules now use composed profile grants and permission-keyed per-user
+record limits. Staff/Manager labels no longer impose business action ceilings;
+Tenant Admin retains security administration. Reads bound each action, with
+shared server and UI adapters for secondary actions and source privacy.
+Migration 110 converts former scopes and authority into ordinary rule data and
+removes the old columns; no runtime fallback or tenant override remains.
+Production is unchanged. See [current contract and verification](ACCESS_STANDARDIZATION_R9.md).
+Earlier R9 entries below describe the preceding milestones, not the final contract.
+
 ## R9 - Composable module profiles verified locally
 
 Users can combine module access profiles. Active profiles add action permissions;

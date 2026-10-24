@@ -1,17 +1,22 @@
+import { Prisma } from "@prisma/client"
 import type { BusinessActor } from "../policy"
-export const recordScopes = ["ACCOUNT_ROLE", "OWN", "MANAGED_TEAMS", "ALL"] as const
-export type RecordScope = typeof recordScopes[number]
-export type RecordDomain = "sales" | "projects"
-export function recordAccess(actor: BusinessActor, domain: RecordDomain): "OWN" | "MANAGED_TEAMS" | "ALL" {
-  if (actor.role === "ADMIN") return "ALL"
-  // Scopes narrow account authority. Staff never gain manager authority.
-  if (actor.role !== "MANAGER") return "OWN"
-  const scope = domain === "sales" ? actor.salesRecordScope : actor.projectRecordScope
-  if (!scope || scope === "ACCOUNT_ROLE") return "ALL"
-  return scope
+import type { PermissionAction, Resource } from "./catalog"
+import { recordLimits } from "./rules"
+
+// Owned sales records share this shape; the permission belongs to the target
+// resource, even when ownership is inherited through an opportunity.
+export function ownedRecordScope(actor: BusinessActor, resource: Resource, action?: PermissionAction) {
+  return { tenantId: actor.tenantId, AND: recordLimits(actor, resource, action).map(scope => scope === "NONE" ? { id: { in: [] as string[] } } : { OR: [
+    { assignedUserId: actor.userId },
+    ...(scope === "MANAGED_TEAMS" ? [{ salesTeamId: { in: actor.managedTeamIds ?? [] } }] : []),
+  ] }) }
 }
-export const salesRecordAccess = (actor: BusinessActor) => recordAccess(actor, "sales")
-export function canReadSalesRecord(actor: BusinessActor, record: { assignedUserId: string; salesTeamId?: string | null }) {
-  const scope = salesRecordAccess(actor)
-  return scope === "ALL" || record.assignedUserId === actor.userId || (scope === "MANAGED_TEAMS" && !!record.salesTeamId && !!actor.managedTeamIds?.includes(record.salesTeamId))
+export function ownedRecordSql(actor: BusinessActor, resource: Resource, alias: string, action?: PermissionAction) {
+  // Identifiers are supplied by application code, never request input.
+  if (!/^[a-z][a-z0-9_]*$/i.test(alias)) throw new Error("Invalid ownership alias")
+  const column = (name: string) => Prisma.raw(`${alias}."${name}"`)
+  return Prisma.join([Prisma.sql`TRUE`, ...recordLimits(actor, resource, action).map(scope => scope === "NONE" ? Prisma.sql`FALSE` : Prisma.sql`(${column("assignedUserId")}=${actor.userId} ${scope === "MANAGED_TEAMS" && actor.managedTeamIds?.length ? Prisma.sql`OR ${column("salesTeamId")} IN (${Prisma.join(actor.managedTeamIds)})` : Prisma.empty})`)], " AND ")
+}
+export function canReadSalesRecord(actor: BusinessActor, record: { assignedUserId: string; salesTeamId?: string | null }, resource: Resource) {
+  return recordLimits(actor, resource, "read").every(scope => scope !== "NONE" && (record.assignedUserId === actor.userId || (scope === "MANAGED_TEAMS" && !!record.salesTeamId && !!actor.managedTeamIds?.includes(record.salesTeamId))))
 }

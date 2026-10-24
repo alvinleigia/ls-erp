@@ -65,11 +65,11 @@ export function workforceNavigation(flags: ModuleFlag[], permissions: Permission
   if (moduleEnabled(flags, "leaves")) {
     const items = [
       ...(role !== "ADMIN" ? [entry("Requests", "/leaves/requests", CalendarClockIcon)] : []),
-      ...(role !== "STAFF" ? [entry("Approvals", "/leaves/approvals", UsersIcon), entry("Definitions", "/leaves", CalendarClockIcon, current => routeResource(current) === "leaveDefinitions"), entry("Groups", "/leaves/groups", UsersIcon)] : []),
+      ...([entry("Approvals", "/leaves/approvals", UsersIcon), entry("Definitions", "/leaves", CalendarClockIcon, current => routeResource(current) === "leaveDefinitions"), entry("Groups", "/leaves/groups", UsersIcon)]),
     ].filter(item => satisfies({ permissions }, routeRequirement(item.href)!))
     if (items.length) groups.push({ key: "leaves", title: "Leaves", icon: CalendarClockIcon, href: items[0].href, items, isActive: (current: string) => matches("/leaves", current) })
   }
-  if (role !== "STAFF" && moduleEnabled(flags, "shifts")) {
+  if (moduleEnabled(flags, "shifts")) {
     const items = [entry("Templates", "/shifts", CalendarClockIcon, current => current === "/shifts"), entry("Schedules", "/shifts/schedules", CalendarClockIcon), entry("Roster", "/shifts/roster", CalendarClockIcon), entry("Recurring plans", "/shifts/recurring", CalendarClockIcon)]
       .filter(item => satisfies({ permissions }, routeRequirement(item.href)!))
     if (items.length) groups.push({ key: "shifts", title: "Shifts", icon: CalendarClockIcon, href: items[0].href, items, isActive: (current: string) => matches("/shifts", current) })

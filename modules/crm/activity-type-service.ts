@@ -2,7 +2,7 @@ import { termText } from "@/platform/terminology/message"
 import { requireWriteFields, permits } from "@/platform/access/policy"
 import type { PermissionRun } from "@/platform/access/server"
 import type { Prisma, CrmWorkType } from "@prisma/client"
-import { CrmError, canManageCrm, type CrmActor } from "./policy"
+import { CrmError, type CrmActor } from "./policy"
 import { activityTypeSchema, activityTypeUpdateSchema, activityTypeListSchema } from "./activity-type-validation"
 type Tx = Prisma.TransactionClient
 type Context = {
@@ -32,7 +32,6 @@ export async function resolveActivityType(tx: Tx, actor: CrmActor, choice: Choic
   return (await resolveActivityTypes(tx, actor, [{ ...choice, activityTypeId: id }]))[0]
 }
 export function createActivityTypeService({ run, audit }: Context) {
-  const manage = (actor: CrmActor) => { if (!canManageCrm(actor.role)) throw new CrmError(403, termText("crm.activity.singular", "Only a manager can configure activity types.", "Only a manager can configure {label} types.")) }
   return {
     getActivityType(id: string) {
       return run("activityTypes.read", async (tx, actor) => {
@@ -48,13 +47,12 @@ export function createActivityTypeService({ run, audit }: Context) {
         const [items, total] = await Promise.all([
           tx.crmActivityType.findMany({ where, orderBy: [{ name: "asc" }, { id: "asc" }], skip: (query.page - 1) * query.pageSize, take: query.pageSize }), tx.crmActivityType.count({ where }),
         ])
-        return { items, total, page: query.page, pageSize: query.pageSize, totalPages: Math.max(1, Math.ceil(total / query.pageSize)), canManage: canManageCrm(actor.role) && permits(actor, "activityTypes.edit") }
+        return { items, total, page: query.page, pageSize: query.pageSize, totalPages: Math.max(1, Math.ceil(total / query.pageSize)), canManage: permits(actor, "activityTypes.edit") }
       })
     },
     createActivityType(input: unknown) {
       const data = activityTypeSchema.parse(input)
       return run("activityTypes.create", async (tx, actor) => { requireWriteFields(actor, "activityTypes", undefined, data);
-        manage(actor)
         const record = await tx.crmActivityType.create({ data: { ...data, nameKey: data.name.toLowerCase(), tenantId: actor.tenantId } })
         await audit(tx, actor, "crm.activityType.created", record.id, undefined, data)
         return record
@@ -63,7 +61,6 @@ export function createActivityTypeService({ run, audit }: Context) {
     updateActivityType(id: string, input: unknown) {
       const { version, ...data } = activityTypeUpdateSchema.parse(input)
       return run("activityTypes.edit", async (tx, actor) => {
-        manage(actor)
         const before = await tx.crmActivityType.findFirst({ where: { tenantId: actor.tenantId, id } })
         requireWriteFields(actor, "activityTypes", before ?? undefined, data)
         if (!before) throw new CrmError(404, termText("crm.activity.singular", "Activity type not found.", "{label} type not found."))

@@ -3,7 +3,7 @@ import { moduleEnabled, type ModuleFlag } from "@/platform/modules"
 import { permits } from "@/platform/access/policy"
 import type { BusinessActor } from "@/platform/policy"
 import type { DashboardPeriod } from "@/types/dashboard"
-import { salesRecordAccess } from "@/platform/access/record-scope"
+import { ownedRecordSql } from "@/platform/access/record-scope"
 import type { DocumentDashboard } from "./dashboard-types"
 
 export async function documentDashboard(tx: Prisma.TransactionClient, actor: BusinessActor, flags: ModuleFlag[], period: DashboardPeriod, sales: Prisma.CrmOpportunityWhereInput): Promise<DocumentDashboard> {
@@ -22,8 +22,7 @@ export async function documentDashboard(tx: Prisma.TransactionClient, actor: Bus
       result.quotations = { total, values: values.map(row => ({ currency: row.currency, count: row._count._all, amount: row._sum.consideration?.toString() || "0" })), recent: recent.map(row => ({ id: row.id, title: row.title, currency: row.currency, amount: row.consideration.toString(), version: row.version, createdAt: row.createdAt.toISOString() })) }
     })() : undefined,
     plans ? (async () => {
-      const scope = salesRecordAccess(actor)
-      const access = scope === "ALL" ? Prisma.empty : Prisma.sql`AND (o."assignedUserId"=${actor.userId} ${scope === "MANAGED_TEAMS" && actor.managedTeamIds?.length ? Prisma.sql`OR o."salesTeamId" IN (${Prisma.join(actor.managedTeamIds)})` : Prisma.empty})`
+      const access = Prisma.sql`AND ${ownedRecordSql(actor, "quotations", "o", "read")}`
       // Current revisions only: editing a quotation must never double-count its plan.
       // No paid/overdue balance is inferred; these are proposed schedules, not receipts.
       const [data] = await tx.$queryRaw<NonNullable<DocumentDashboard["paymentPlans"]>[]>(Prisma.sql`

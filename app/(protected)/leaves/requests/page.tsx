@@ -94,7 +94,7 @@ export default function LeaveRequestsPage() {
   const { data: session } = useSession()
   const router = useRouter()
   const role = (session?.user as { role?: string })?.role
-  const canManage = role === "MANAGER"
+  const canManage = can("leaveApprovals.read")
 
   React.useEffect(() => {
     if (role === "ADMIN") {

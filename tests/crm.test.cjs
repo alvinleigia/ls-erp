@@ -110,10 +110,11 @@ test("follow-up dates and bounded pagination are validated", () => {
   assert.equal(crmListSchema.safeParse({ pageSize: 101 }).success, false)
 })
 test("staff scopes include tenant and ownership, and customers cannot use CRM", () => {
-  const actor = { tenantId: "a", userId: "staff", role: "STAFF" }
+  const actor = { tenantId: "a", userId: "staff", role: "STAFF", recordRules: { "enquiries.read": "OWN", "contacts.read": "RELATED" } }
   assert.deepEqual(enquiryScope(actor), { tenantId: "a", AND: [{ OR: [{ assignedUserId: "staff" }] }] })
   assert.equal(contactScope(actor).AND[0].OR[1].enquiries.some.tenantId, "a")
-  assert.deepEqual(enquiryScope({ ...actor, role: "MANAGER" }), { tenantId: "a" })
+  assert.deepEqual(enquiryScope({ ...actor, role: "MANAGER" }), enquiryScope(actor))
+  assert.deepEqual(enquiryScope({ ...actor, recordRules: { "enquiries.read": "ALL" } }), { tenantId: "a", AND: [] })
   assert.equal(canUseCrm("CUSTOMER"), false)
   assert.throws(() => enquiryScope({ ...actor, role: "CUSTOMER" }), { status: 403 })
 })

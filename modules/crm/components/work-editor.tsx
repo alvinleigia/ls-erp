@@ -11,6 +11,7 @@ import * as React from "react"
 import Link from "@/platform/access/link"
 import { useRouter } from "next/navigation"
 import { useSession } from "next-auth/react"
+import { optionalReference, type AssignmentContext } from "@/platform/access/reference"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -47,8 +48,10 @@ function WorkEditorBody({ id, initial = {} }: { id?: string; initial?: Initial }
   const term = useTerminology()
   const { can, enabled } = useBusinessModules()
   const view = useRecordView()!
+  const { loadAccess } = view
   const router = useRouter()
   const { data: session } = useSession()
+  const currentUserId = session?.user?.id || "", canReadDirectory = can("assignmentTargets.read")
   const [record, setRecord] = React.useState<CrmWorkRow | null>(null)
   const [contactId, setContactId] = React.useState(initial.contactId || "")
   const [contact, setContact] = React.useState<CrmWorkRow["contact"] | null>(null)
@@ -77,18 +80,18 @@ function WorkEditorBody({ id, initial = {} }: { id?: string; initial?: Initial }
     const get = async (url: string) => { const response = await fetch(url, { signal: controller.signal, cache: "no-store" }); const data = await response.json(); if (!response.ok) throw new Error(data.error || readTerm("crm.activity.singular", "Unable to load activity.", "Unable to load {label}.")); return data }
     void (async () => {
       try {
-        const [assignees, settings, existing] = await Promise.all([get("/api/crm/assignees"), get("/api/settings/display"), id ? get(`/api/crm/work/${id}`) : null])
+        const [assignees, settings, existing] = await Promise.all([optionalReference<AssignmentContext>("/api/crm/assignees", canReadDirectory, controller.signal), get("/api/settings/display"), id ? get(`/api/crm/work/${id}`) : null])
         const tz = existing?.timeZone || settings.settings?.timeZone || "UTC", today = wallTime(new Date(), tz).slice(0, 10)
-        setTimeZone(tz); setCanAssign(assignees.canAssign); setCompletion({ ...emptyCompletion, when: wallTime(new Date(), tz) })
+        setTimeZone(tz); setCanAssign(!!assignees?.canAssign); setCompletion({ ...emptyCompletion, when: wallTime(new Date(), tz) })
         setHistoryFormat({ timeZone: tz, locale: settings.settings?.locale || defaultWorkHistoryFormat.locale, dateFormat: settings.settings?.dateFormat || defaultWorkHistoryFormat.dateFormat, timeFormat: settings.settings?.timeFormat === "H12" ? "H12" : "H24" })
-        if (existing) { setRecord(existing); setContactId(existing.contactId); setContact(existing.contact); setValues(workForm(existing, tz)) }
-        else setValues({ ...emptyWork, assignedUserId: assignees.currentUserId, dueOn: initial.dueOn || today, type: initial.log === "true" ? "CALL" : "TASK", callDirection: initial.log === "true" ? "OUTBOUND" : null, startsLocal: initial.startsAt ? wallTime(initial.startsAt, tz) : "", endsLocal: initial.endsAt ? wallTime(initial.endsAt, tz) : "" })
-        setNext({ ...emptyWork, title: "Next follow-up", assignedUserId: existing?.assignedUserId || assignees.currentUserId, dueOn: new Date(Date.parse(`${today}T00:00:00Z`) + 86400000).toISOString().slice(0, 10), type: "CALL", callDirection: "OUTBOUND" })
+        if (existing) { loadAccess(existing.recordAccess); setRecord(existing); setContactId(existing.contactId); setContact(existing.contact); setValues(workForm(existing, tz)) }
+        else setValues({ ...emptyWork, assignedUserId: assignees?.currentUserId || currentUserId, dueOn: initial.dueOn || today, type: initial.log === "true" ? "CALL" : "TASK", callDirection: initial.log === "true" ? "OUTBOUND" : null, startsLocal: initial.startsAt ? wallTime(initial.startsAt, tz) : "", endsLocal: initial.endsAt ? wallTime(initial.endsAt, tz) : "" })
+        setNext({ ...emptyWork, title: "Next follow-up", assignedUserId: existing?.assignedUserId || assignees?.currentUserId || currentUserId, dueOn: new Date(Date.parse(`${today}T00:00:00Z`) + 86400000).toISOString().slice(0, 10), type: "CALL", callDirection: "OUTBOUND" })
       } catch (error) { if (!controller.signal.aborted) { setError((error as Error).message); setFailed(true) } }
       finally { if (!controller.signal.aborted) setLoading(false) }
     })()
     return () => controller.abort()
-  }, [readTerm, id, initial.dueOn, initial.log, initial.startsAt, initial.endsAt])
+  }, [readTerm, id, initial.dueOn, initial.log, initial.startsAt, initial.endsAt, loadAccess, currentUserId, canReadDirectory])
   React.useEffect(() => {
     if (id || relationKind === "contact" || !relationId) return
     const controller = new AbortController()
@@ -111,7 +114,7 @@ function WorkEditorBody({ id, initial = {} }: { id?: string; initial?: Initial }
     if (!id) return
     const response = await fetch(`/api/crm/work/${id}`, { cache: "no-store" }); const data = await response.json()
     if (!response.ok) throw new Error(data.error || readTerm("crm.activity.singular", "Unable to refresh activity.", "Unable to refresh {label}."))
-    setRecord(data); setValues(workForm(data, timeZone)); setRevision(value => value + 1)
+    loadAccess(data.recordAccess); setRecord(data); setValues(workForm(data, timeZone)); setRevision(value => value + 1)
   }
   function completionPayload() { return { summary: completion.summary, outcome: completion.outcome, occurredAt: wallTimeToInstant(completion.when, timeZone), durationMinutes: completion.duration === "" ? null : Number(completion.duration) } }
   async function save(event: React.FormEvent) {

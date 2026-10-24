@@ -100,16 +100,17 @@ test("operational module disabling denies APIs and views while reactivation pres
   await json(staff.context, "/api/modules", 403, "PATCH", { key: "inventory", enabled: false })
 })
 
-test("All scope stays tenant-bound and cannot elevate a staff account or bypass action permissions", async () => {
+test("All scope can be explicitly delegated to Staff without granting writes or tenant administration", async () => {
   await assignProfiles(admin.context, fixture.users.manager.id, [role.id], { salesRecordScope: "ALL" })
   expect((await json(manager.context, "/api/crm/enquiries")).total).toBe(3)
   const readonly = await json(admin.context, "/api/access/roles", 201, "POST", { name: "Staff read-only", permissions: ["contacts.read", "enquiries.read"] })
   await assignProfiles(admin.context, fixture.users.staff.id, [readonly.id], { salesRecordScope: "ALL" })
-  expect((await json(staff.context, "/api/crm/enquiries")).total).toBe(2)
-  await json(staff.context, `/api/crm/enquiries/${own.id}`, 404)
+  expect((await json(staff.context, "/api/crm/enquiries")).total).toBe(3)
+  await json(staff.context, `/api/crm/enquiries/${own.id}`, 200)
   await json(staff.context, "/api/crm/contacts", 403, "POST", { name: "Forbidden creation" })
   await json(staff.context, "/api/access/roles", 403)
   await assignProfiles(admin.context, fixture.users.admin.id, [readonly.id], {}, 409)
+  await json(staff.context, "/api/crm/assignees", 403)
   await staff.page.goto(`/crm/enquiries/${managed.id}`)
   await expect(staff.page.getByRole("heading", { name: "Team lead reviewed", exact: true })).toBeVisible()
   await expect(staff.page.getByRole("button", { name: /Edit enquiry|Save enquiry/ })).toHaveCount(0)

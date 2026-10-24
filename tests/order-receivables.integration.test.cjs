@@ -1,3 +1,4 @@
+const {materializeRules}=require('./helpers/resource-policy-data.cjs')
 /* eslint-disable @typescript-eslint/no-require-imports */
 const {fixtureUser,fixtureRole,fixtureProfile,resetFixtureRoles}=require("./helpers/access-fixtures.cjs")
 const {test,before,after}=require('node:test'),assert=require('node:assert/strict'),{randomUUID}=require('node:crypto'),{Pool}=require('pg'),{PrismaClient}=require('@prisma/client')
@@ -137,8 +138,18 @@ test('fresh role, user, scope, module dependency and forced RLS checks protect f
  for(const model of ['orderReceivable','orderReceivableLine','orderReceipt','orderReceiptAllocation','orderReceiptReversal']){assert.equal((await unscoped[model].findMany()).length,0);assert.equal((await dbB[model].findMany({where:{tenantId:tenant}})).length,0)}
  const role=await fixtureProfile(root,{data:{tenantId:tenant,name:'Balance only',nameKey:randomUUID(),permissions:['salesOrders.read','receivables.read']}})
  await fixtureRole(root,{data:{tenantId:tenant,userId:manager.id,roleId:role.id}})
- try{const view=await svc().get(id);assert.equal(view.canRecord,false);assert.equal(view.items.length,0);await assert.rejects(svc().record(id,pay({version:2})),status(403));await root.tenantUserAccess.update({where:{tenantId_userId:{tenantId:tenant,userId:manager.id}},data:{salesRecordScope:'OWN'}});await assert.rejects(svc().get(id),status(404))}finally{await resetFixtureRoles(root,{where:{tenantId:tenant,userId:manager.id}})}
+ try{const view=await svc().get(id);assert.equal(view.canRecord,false);assert.equal(view.items.length,0);await assert.rejects(svc().record(id,pay({version:2})),status(403));await root.tenantUserAccess.update({where:{tenantId_userId:{tenantId:tenant,userId:manager.id}},data:{rules:materializeRules('MANAGER','OWN')}});await assert.rejects(svc().get(id),status(404))}finally{await resetFixtureRoles(root,{where:{tenantId:tenant,userId:manager.id}})}
  await root.tenantModule.update({where:{tenantId_key:{tenantId:tenant,key:'salesOrders'}},data:{enabled:false}});try{await assert.rejects(svc().get(id),status(403))}finally{await root.tenantModule.update({where:{tenantId_key:{tenantId:tenant,key:'salesOrders'}},data:{enabled:true}})}
+})
+
+test('broad financial permissions cannot bypass a narrower source order read policy',async()=>{
+ const id=await opened()
+ await root.tenantUserAccess.update({where:{tenantId_userId:{tenantId:tenant,userId:manager.id}},data:{rules:{...materializeRules('MANAGER','ALL'),'salesOrders.read':'OWN'}}})
+ try{
+  await assert.rejects(svc().get(id),status(404))
+  await assert.rejects(svc().record(id,pay()),status(404))
+  assert.equal(await root.orderReceipt.count({where:{tenantId:tenant,orderId:id}}),0)
+ }finally{await resetFixtureRoles(root,{where:{tenantId:tenant,userId:manager.id}})}
 })
 test('deferred database checks reject unreconciled receipts and cross-order allocations',async()=>{
  const id=await opened(),data={tenantId:tenant,orderId:id,requestKey:randomUUID(),amount:'10',receivedOn:new Date('2026-01-01'),method:'CASH',createdBy:manager.id,actorName:'Manager'}
@@ -207,7 +218,7 @@ test('overview counts, currency options and summaries enforce own/team scope and
  const team=await root.businessTeam.create({data:{tenantId:tenant,name:'Payments team',nameKey:'payments team'}})
  try{
   assert.equal((await svc().list(search)).total,0)
-  await root.tenantUserAccess.update({where:{tenantId_userId:{tenantId:tenant,userId:manager.id}},data:{salesRecordScope:'MANAGED_TEAMS'}})
+  await root.tenantUserAccess.update({where:{tenantId_userId:{tenantId:tenant,userId:manager.id}},data:{rules:materializeRules('MANAGER','MANAGED_TEAMS')}})
   await root.businessTeamMember.create({data:{tenantId:tenant,teamId:team.id,userId:manager.id,isManager:true}})
   await root.crmOpportunity.update({where:{tenantId_id:{tenantId:tenant,id:deal.id}},data:{salesTeamId:team.id}})
   assert.equal((await svc().list(search)).total,1)

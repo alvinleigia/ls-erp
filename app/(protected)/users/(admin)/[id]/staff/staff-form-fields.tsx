@@ -100,6 +100,7 @@ export function StaffFormFields({
               searchPlaceholder="Search manager..."
           />
         </FormField>
+        <FormField id="leave-approval-mode" label="Leave approval route" className="mt-3"><select id="leave-approval-mode" className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={profile.leaveApprovalMode} onChange={event => setProfile(previous => ({ ...previous, leaveApprovalMode: event.target.value as "REPORTING_MANAGER" | "TENANT_ADMIN" }))}><option value="REPORTING_MANAGER">Reporting manager</option><option value="TENANT_ADMIN">Tenant administrator</option></select></FormField>
         <FormField id="scheduling-mode" label="Scheduling mode" className="mt-3">
           <select
             id="scheduling-mode" disabled={!editScheduling}

@@ -2,7 +2,7 @@ import Link from "next/link"
 import { redirect } from "next/navigation"
 import { auth } from "@/auth"
 import { prisma, runWithTenantDbContext } from "@/lib/prisma"
-import { canManageUsers } from "@/lib/permissions"
+import { hasBusinessAccess } from "@/platform/policy"
 import { resolveTenantFromServerHeaders } from "@/lib/tenancy"
 import { moduleEnabled } from "@/platform/modules"
 import { BusinessViewGuard } from "@/platform/access/view-guard"
@@ -13,7 +13,7 @@ export default async function InventoryLayout({ children }: { children: React.Re
   if (tenant.slug === (process.env.PLATFORM_ADMIN_TENANT_SLUG?.trim().toLowerCase() || "platform")) redirect("/settings/tenants")
   const access = await runWithTenantDbContext(tenant.id, async () => {
     const user = await prisma.user.findFirst({ where: { id: session.user.id, tenantId: tenant.id, status: "ACTIVE" }, select: { role: true } })
-    if (!user || !canManageUsers(user.role)) return null
+    if (!user || !hasBusinessAccess(user.role)) return null
     const flags = await prisma.tenantModule.findMany({ where: { tenantId: tenant.id } })
     return { role: user.role, enabled: moduleEnabled(flags, "inventory") }
   })

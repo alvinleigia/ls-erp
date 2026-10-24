@@ -1,8 +1,10 @@
+import { defaultRecordRules, type RecordRules } from "@/platform/access/rules"
+
 import { randomUUID } from "node:crypto"
 import { Client } from "pg"
 import bcrypt from "bcryptjs"
 import { grantPgFixtureUsers } from "../helpers/access-fixtures.cjs"
-import type { UserRecordScopes } from "@/platform/access/profile-picker"
+
 import { expect, type Browser, type Page, type BrowserContext } from "@playwright/test"
 
 export const password = "IsolatedAccessTest!2026"
@@ -47,7 +49,9 @@ export async function json(context: BrowserContext, path: string, status = 200, 
   expect(result.status(), `${method} ${path}: ${await result.text()}`).toBe(status)
   return result.json()
 }
-export async function assignProfiles(context: BrowserContext, userId: string, roleIds: string[], scopes: Partial<UserRecordScopes> = {}, status = 200) {
+export async function assignProfiles(context: BrowserContext, userId: string, roleIds: string[], scopes: { rules?: RecordRules; salesRecordScope?: string; projectRecordScope?: string } = {}, status = 200) {
   const current = await json(context, `/api/access/users/${userId}`)
-  return json(context, `/api/access/users/${userId}`, status, "PATCH", { roleIds, version: current.accessPolicy.version, salesRecordScope: current.accessPolicy.salesRecordScope, projectRecordScope: current.accessPolicy.projectRecordScope, ...scopes })
+  return json(context, `/api/access/users/${userId}`, status, "PATCH", { roleIds, version: current.accessPolicy.version, rules: scopes.rules ?? scopeFixture(current.accessPolicy.rules, scopes) })
 }
+
+function scopeFixture(base: RecordRules, scopes: {salesRecordScope?: string; projectRecordScope?: string}) { const rules = {...base}; for(const key of Object.keys(defaultRecordRules()) as (keyof RecordRules)[]) {const resource = key.split(".")[0]; const scope = resource === "projects" || resource === "projectMembers" ? scopes.projectRecordScope : ["enquiries","opportunities","activities","contacts","accounts","quotations","salesOrders","receivables","orderPayments","unitReservations","assignmentTargets"].includes(resource) ? scopes.salesRecordScope : undefined; if(scope) rules[key] = (scope === "ACCOUNT_ROLE" ? "ALL" : scope === "OWN" && ["contacts","accounts","activities"].includes(resource) ? "RELATED" : scope) as NonNullable<RecordRules[typeof key]>; } return rules }

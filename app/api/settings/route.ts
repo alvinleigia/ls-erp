@@ -10,7 +10,6 @@ import {
 import { prisma, runWithTenantDbContext } from "@/lib/prisma"
 import { appSettingsSchema } from "@/lib/validation"
 import { toISODate } from "@/lib/date"
-import { canManageUsers, type Role } from "@/lib/permissions"
 import { getEmailDeliveryStatus } from "@/lib/mailer"
 import { withCoreApi, actorSession } from "@/platform/core/api"
 import type { BusinessActor } from "@/platform/policy"
@@ -96,13 +95,9 @@ async function handleGET(request: Request, actor: BusinessActor) {
     logApiRequestSuccess(logContext, tenantSession.error.status, { reason: "tenant_or_auth_failed" })
     return withRequestId(tenantSession.error, logContext.requestId)
   }
-  const { tenantId, role } = tenantSession.context
+  const { tenantId } = tenantSession.context
 
-  if (!canManageUsers(role as Role)) {
-    const response = NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    logApiRequestSuccess(logContext, 401, { reason: "unauthorized" })
-    return withRequestId(response, logContext.requestId)
-  }
+
 
   try {
     return await runWithTenantDbContext(tenantId, async () => {
@@ -130,13 +125,9 @@ async function handlePATCH(request: Request, actor: BusinessActor) {
     logApiRequestSuccess(logContext, tenantSession.error.status, { reason: "tenant_or_auth_failed" })
     return withRequestId(tenantSession.error, logContext.requestId)
   }
-  const { tenantId, role } = tenantSession.context
+  const { tenantId } = tenantSession.context
 
-  if (!canManageUsers(role as Role)) {
-    const response = NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    logApiRequestSuccess(logContext, 401, { reason: "unauthorized" })
-    return withRequestId(response, logContext.requestId)
-  }
+
 
   const body = await request.json().catch(() => null)
   if (!body) {

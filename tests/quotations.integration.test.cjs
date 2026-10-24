@@ -84,6 +84,15 @@ test('templates are managed, tenant-scoped, versioned and archived without modif
  await assert.rejects(staffCrm.getQuotationTemplate(t.id),status(404))
  await assert.rejects(crm.saveQuotationTemplate({name:'Stale',content:content(),version:1},t.id),status(409))
 })
+
+test('an all-template edit policy cannot bypass active-only template reading',async()=>{
+ const {materializeRules}=require('./helpers/resource-policy-data.cjs')
+ const t=await crm.saveQuotationTemplate({name:'Hidden archived template',content:content(),archived:true})
+ await root.tenantUserAccess.update({where:{tenantId_userId:{tenantId:tenant,userId:manager.id}},data:{rules:{...materializeRules('MANAGER','ALL'),'quotationTemplates.read':'ACTIVE','quotationTemplates.edit':'ALL'}}})
+ try{await assert.rejects(crm.saveQuotationTemplate({name:'Should stay hidden',content:content(),archived:false,version:t.version},t.id),status(404))}
+ finally{await resetFixtureRoles(root,{where:{tenantId:tenant,userId:manager.id}})}
+ assert.equal((await crm.getQuotationTemplate(t.id)).name,'Hidden archived template')
+})
 test('staff ownership, cross-tenant access and row security hold for documents and revisions',async()=>{
  const q=await staffCrm.saveQuotation(deal.id,{content:content()})
  for(const service of [otherCrm,foreign]){

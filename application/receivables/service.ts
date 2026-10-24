@@ -1,19 +1,16 @@
 import { Prisma, type PrismaClient } from "@prisma/client"
 import type { BusinessActor } from "@/platform/policy"
-import { enquiryScope } from "@/modules/crm/policy"
-import { salesRecordAccess } from "@/platform/access/record-scope"
+import { ownedRecordSql, ownedRecordScope } from "@/platform/access/record-scope"
 import type { QuotationSnapshot } from "@/modules/sales-documents/quotation-service"
 import { createReceivableService } from "@/modules/receivables/service"
 import type { ReceivableSource } from "@/modules/receivables/contracts"
 const source: ReceivableSource = {
-  scope: actor => ({ source: { quotation: { opportunity: enquiryScope(actor) } } }),
+  scope: actor => ({ source: { quotation: { opportunity: { AND: [ownedRecordScope(actor, actor.operation?.resource === "orderPayments" ? "orderPayments" : "receivables"), ownedRecordScope(actor, "receivables", "read"), ownedRecordScope(actor, "salesOrders", "read")] } } } }),
   visibleOrderIds(actor) {
-    const scope = salesRecordAccess(actor)
     return Prisma.sql`SELECT o.id FROM "SalesOrder" o
       JOIN "CrmQuotation" q ON q."tenantId"=o."tenantId" AND q.id=o."quotationId"
       JOIN "CrmOpportunity" p ON p."tenantId"=q."tenantId" AND p.id=q."opportunityId"
-      WHERE o."tenantId"=${actor.tenantId} ${scope === "ALL" ? Prisma.empty : Prisma.sql`AND (p."assignedUserId"=${actor.userId}
-        ${scope === "MANAGED_TEAMS" && actor.managedTeamIds?.length ? Prisma.sql`OR p."salesTeamId" IN (${Prisma.join(actor.managedTeamIds)})` : Prisma.empty})`}`
+      WHERE o."tenantId"=${actor.tenantId} AND ${ownedRecordSql(actor, actor.operation?.resource === "orderPayments" ? "orderPayments" : "receivables", "p")} AND ${ownedRecordSql(actor, "receivables", "p", "read")} AND ${ownedRecordSql(actor, "salesOrders", "p", "read")}`
   },
   plan(value) {
     const { calculation: c } = value as unknown as QuotationSnapshot

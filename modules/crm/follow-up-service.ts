@@ -3,7 +3,7 @@ import { termText, resolveTermText, type TermText } from "@/platform/terminology
 import type { PermissionRun } from "@/platform/access/server"
 import { resolveActivityTypes } from "./activity-type-service"
 import type { Prisma, CrmTask } from "@prisma/client"
-import { CrmError, canManageCrm, type CrmActor } from "./policy"
+import { CrmError, type CrmActor } from "./policy"
 import { followUpRuleSchema, followUpRuleUpdateSchema } from "./follow-up-validation"
 import { crmListSchema } from "./validation"
 import { planStepSchema } from "./plan-validation"
@@ -45,7 +45,6 @@ export async function prepareRuleFollowUp(tx: Tx, actor: CrmActor, record: CrmTa
 }
 
 export function createFollowUpService({ run, audit }: Context) {
-  const manage = (actor: CrmActor) => { if (!canManageCrm(actor.role)) throw new CrmError(403, "Only a manager can configure follow-up rules.") }
   async function find(tx: Tx, actor: CrmActor, id: string) {
     const rule = await tx.crmFollowUpRule.findFirst({ where: { tenantId: actor.tenantId, id } })
     if (!rule) throw new CrmError(404, "Follow-up rule not found.")
@@ -57,18 +56,18 @@ export function createFollowUpService({ run, audit }: Context) {
       return run("followUpRules.read", async (tx, actor) => {
         const where = { tenantId: actor.tenantId, archived: query.archived === "true", name: { contains: query.q, mode: "insensitive" as const } }
         const [items, total] = await Promise.all([tx.crmFollowUpRule.findMany({ where, orderBy: [{ name: "asc" }, { id: "asc" }], skip: (query.page - 1) * query.pageSize, take: query.pageSize }), tx.crmFollowUpRule.count({ where })])
-        return { items, total, page: query.page, pageSize: query.pageSize, totalPages: Math.max(1, Math.ceil(total / query.pageSize)), canManage: canManageCrm(actor.role) && permits(actor, "followUpRules.edit") }
+        return { items, total, page: query.page, pageSize: query.pageSize, totalPages: Math.max(1, Math.ceil(total / query.pageSize)), canManage: permits(actor, "followUpRules.edit") }
       })
     },
-    getFollowUpRule(id: string) { return run("followUpRules.read", async (tx, actor) => ({ ...await find(tx, actor, id), canManage: canManageCrm(actor.role) && permits(actor, "followUpRules.edit") })) },
+    getFollowUpRule(id: string) { return run("followUpRules.read", async (tx, actor) => ({ ...await find(tx, actor, id), canManage: permits(actor, "followUpRules.edit") })) },
     createFollowUpRule(input: unknown) {
       const data = followUpRuleSchema.parse(input)
-      return run("followUpRules.create", async (tx, actor) => { requireWriteFields(actor, "followUpRules", undefined, data); manage(actor); await resolveActivityTypes(tx, actor, [data.nextStep]); const rule = await tx.crmFollowUpRule.create({ data: { ...data, tenantId: actor.tenantId, nextStep: snapshot(data.nextStep) } }); await audit(tx, actor, "crm.rule.created", rule.id, undefined, snapshot(data)); return rule })
+      return run("followUpRules.create", async (tx, actor) => { requireWriteFields(actor, "followUpRules", undefined, data); await resolveActivityTypes(tx, actor, [data.nextStep]); const rule = await tx.crmFollowUpRule.create({ data: { ...data, tenantId: actor.tenantId, nextStep: snapshot(data.nextStep) } }); await audit(tx, actor, "crm.rule.created", rule.id, undefined, snapshot(data)); return rule })
     },
     updateFollowUpRule(id: string, input: unknown) {
       const { version, ...data } = followUpRuleUpdateSchema.parse(input)
       return run("followUpRules.edit", async (tx, actor) => {
-        manage(actor); const before = await find(tx, actor, id)
+        const before = await find(tx, actor, id)
         requireWriteFields(actor, "followUpRules", before ?? undefined, data)
         if (!data.archived) await resolveActivityTypes(tx, actor, [data.nextStep])
         const result = await tx.crmFollowUpRule.updateMany({ where: { tenantId: actor.tenantId, id, version }, data: { ...data, nextStep: snapshot(data.nextStep), version: { increment: 1 } } })

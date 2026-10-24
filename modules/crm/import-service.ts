@@ -1,3 +1,5 @@
+import { peopleScope } from "@/platform/access/people-scope"
+import { recordLimits } from "@/platform/access/rules"
 import { termText } from "@/platform/terminology/message"
 import type { TermReader } from "@/platform/terminology/read"
 import { createTermResolver } from "@/platform/terminology/resolver"
@@ -9,7 +11,7 @@ import { definitions, editableField } from "@/platform/custom-fields/values"
 import type { FieldValue } from "@/platform/custom-fields/validation"
 import type { CrmServiceContext } from "./service-context"
 import type { CrmExtensions } from "./extensions"
-import { CrmError, assigneeScope, type CrmActor } from "./policy"
+import { CrmError, type CrmActor } from "./policy"
 import { teamScope } from "@/platform/teams/service"
 import { enquiryFields } from "./custom-fields"
 import { crmListSchema } from "./validation"
@@ -79,9 +81,9 @@ export function createEnquiryImportService({ run, audit, readTerms }: CrmService
   }
   async function fields(tx: Tx, actor: CrmActor): Promise<ImportField[]> {
     const [users, sources, teams, custom, extension] = await Promise.all([
-      tx.user.findMany({ where: { ...assigneeScope(actor), ...(actor.role === "STAFF" || !permits(actor, "enquiries.assign") ? { id: actor.userId } : {}), status: "ACTIVE", role: { in: ["ADMIN", "MANAGER", "STAFF"] } }, select: { id: true, name: true, email: true }, orderBy: { name: "asc" }, take: 5000 }),
+      tx.user.findMany({ where: { ...peopleScope(actor), ...(!permits(actor, "enquiries.assign") ? { id: actor.userId } : {}), status: "ACTIVE", role: { in: ["ADMIN", "MANAGER", "STAFF"] } }, select: { id: true, name: true, email: true }, orderBy: { name: "asc" }, take: 5000 }),
       tx.crmLeadSource.findMany({ where: { tenantId: actor.tenantId, archived: false }, select: { id: true, name: true }, orderBy: { name: "asc" }, take: 5000 }),
-      tx.businessTeam.findMany({ where: { ...teamScope(actor), archived: false, workflow: { in: ["BOTH", "ENQUIRY_FIRST"] }, ...(actor.salesRecordScope === "MANAGED_TEAMS" ? { id: { in: actor.managedTeamIds || [] } } : {}) }, select: { id: true, name: true }, orderBy: { name: "asc" }, take: 5000 }),
+      tx.businessTeam.findMany({ where: { ...teamScope(actor), archived: false, workflow: { in: ["BOTH", "ENQUIRY_FIRST"] }, ...(recordLimits(actor, "enquiries", "create").includes("MANAGED_TEAMS") ? { id: { in: actor.managedTeamIds || [] } } : {}) }, select: { id: true, name: true }, orderBy: { name: "asc" }, take: 5000 }),
       definitions(tx, actor, enquiryFields), extensions.importFields?.(tx, actor) || [],
     ])
     return [

@@ -1,9 +1,10 @@
+import { opportunityScope } from "@/modules/crm/policy"
 import { termText } from "@/platform/terminology/message"
 import { requireWriteFields, permits } from "@/platform/access/policy"
 import type { PermissionRun } from "@/platform/access/server"
 import { resolveActivityTypes } from "./activity-type-service"
 import type { Prisma } from "@prisma/client"
-import { CrmError, canManageCrm, contactScope, enquiryScope, type CrmActor } from "./policy"
+import { CrmError, contactScope, enquiryScope, type CrmActor } from "./policy"
 import { activityPlanSchema, activityPlanUpdateSchema, applyPlanSchema } from "./plan-validation"
 import { crmListSchema } from "./validation"
 import { wallTimeToInstant } from "./work-time"
@@ -18,7 +19,6 @@ type Context = {
 }
 const snapshot = (value: unknown): Prisma.InputJsonValue => JSON.parse(JSON.stringify(value))
 export function createPlanService({ run, audit, checkAssignee, createWork }: Context) {
-  const manage = (actor: CrmActor) => { if (!canManageCrm(actor.role)) throw new CrmError(403, termText("crm.activity.singular", "Only a manager can configure activity plans.", "Only a manager can configure {label} plans.")) }
   async function find(tx: Tx, actor: CrmActor, id: string) {
     const plan = await tx.crmActivityPlan.findFirst({ where: { tenantId: actor.tenantId, id } })
     if (!plan) throw new CrmError(404, termText("crm.activity.singular", "Activity plan not found.", "{label} plan not found."))
@@ -31,7 +31,7 @@ export function createPlanService({ run, audit, checkAssignee, createWork }: Con
     await checkAssignee(tx, actor, data.assignedUserId)
     if (!await tx.crmContact.findFirst({ where: { ...contactScope(actor), id: data.contactId, archived: false } })) throw new CrmError(404, termText("crm.contact.singular", "Active contact not found.", "Active {label} not found."))
     if (data.enquiryId && !await tx.crmEnquiry.findFirst({ where: { ...enquiryScope(actor), id: data.enquiryId, contactId: data.contactId, status: { not: "CLOSED" } } })) throw new CrmError(404, termText("crm.enquiry.singular", "Matching open enquiry not found.", "Matching open {label} not found."))
-    if (data.opportunityId && !await tx.crmOpportunity.findFirst({ where: { ...enquiryScope(actor), id: data.opportunityId, contactId: data.contactId, stage: { kind: "OPEN", archived: false }, pipeline: { archived: false } } })) throw new CrmError(404, termText("crm.opportunity.singular", "Matching active opportunity not found.", "Matching active {label} not found."))
+    if (data.opportunityId && !await tx.crmOpportunity.findFirst({ where: { ...opportunityScope(actor), id: data.opportunityId, contactId: data.contactId, stage: { kind: "OPEN", archived: false }, pipeline: { archived: false } } })) throw new CrmError(404, termText("crm.opportunity.singular", "Matching active opportunity not found.", "Matching active {label} not found."))
     const timeZone = (await tx.appSetting.findUnique({ where: { tenantId: actor.tenantId }, select: { timeZone: true } }))?.timeZone || "UTC"
     const template = activityPlanSchema.parse({ name: plan.name, description: plan.description || "", steps: plan.steps })
     const resolved = await resolveActivityTypes(tx, actor, template.steps)
@@ -52,18 +52,18 @@ export function createPlanService({ run, audit, checkAssignee, createWork }: Con
       return run("activityPlans.read", async (tx, actor) => {
         const where = { tenantId: actor.tenantId, archived: query.archived === "true", name: { contains: query.q, mode: "insensitive" as const } }
         const [items, total] = await Promise.all([tx.crmActivityPlan.findMany({ where, orderBy: [{ name: "asc" }, { id: "asc" }], skip: (query.page - 1) * query.pageSize, take: query.pageSize }), tx.crmActivityPlan.count({ where })])
-        return { items, total, page: query.page, pageSize: query.pageSize, totalPages: Math.max(1, Math.ceil(total / query.pageSize)), canManage: canManageCrm(actor.role) && permits(actor, "activityPlans.edit") }
+        return { items, total, page: query.page, pageSize: query.pageSize, totalPages: Math.max(1, Math.ceil(total / query.pageSize)), canManage: permits(actor, "activityPlans.edit") }
       })
     },
-    getActivityPlan(id: string) { return run("activityPlans.read", async (tx, actor) => ({ ...await find(tx, actor, id), canManage: canManageCrm(actor.role) && permits(actor, "activityPlans.edit") })) },
+    getActivityPlan(id: string) { return run("activityPlans.read", async (tx, actor) => ({ ...await find(tx, actor, id), canManage: permits(actor, "activityPlans.edit") })) },
     createActivityPlan(input: unknown) {
       const data = activityPlanSchema.parse(input)
-      return run("activityPlans.create", async (tx, actor) => { requireWriteFields(actor, "activityPlans", undefined, data); manage(actor); await resolveActivityTypes(tx, actor, data.steps); const plan = await tx.crmActivityPlan.create({ data: { ...data, tenantId: actor.tenantId, steps: snapshot(data.steps) } }); await audit(tx, actor, "crm.plan.created", plan.id, undefined, snapshot(data)); return plan })
+      return run("activityPlans.create", async (tx, actor) => { requireWriteFields(actor, "activityPlans", undefined, data); await resolveActivityTypes(tx, actor, data.steps); const plan = await tx.crmActivityPlan.create({ data: { ...data, tenantId: actor.tenantId, steps: snapshot(data.steps) } }); await audit(tx, actor, "crm.plan.created", plan.id, undefined, snapshot(data)); return plan })
     },
     updateActivityPlan(id: string, input: unknown) {
       const { version, ...data } = activityPlanUpdateSchema.parse(input)
       return run("activityPlans.edit", async (tx, actor) => {
-        manage(actor); const before = await find(tx, actor, id)
+        const before = await find(tx, actor, id)
         requireWriteFields(actor, "activityPlans", before ?? undefined, data)
         if (!data.archived) await resolveActivityTypes(tx, actor, data.steps)
         const updated = await tx.crmActivityPlan.updateMany({ where: { tenantId: actor.tenantId, id, version }, data: { ...data, steps: snapshot(data.steps), version: { increment: 1 } } })

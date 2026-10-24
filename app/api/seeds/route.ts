@@ -31,7 +31,7 @@ import {
   withRequestId,
 } from "@/lib/api-logging"
 import { checkStaffAppointmentAvailability } from "@/modules/workforce/availability"
-import { canManageUsers } from "@/lib/permissions"
+
 import { prisma } from "@/lib/prisma"
 import { requireTenantSession } from "@/lib/tenant-auth"
 
@@ -424,7 +424,7 @@ const ensureAuthorized = async (request: Request) => {
   const tenantSession = await requireTenantSession(request)
   if (tenantSession.error) return { error: tenantSession.error }
   const role = tenantSession.context.role as Role | null
-  if (!canManageUsers(role ?? null)) {
+  if (role !== "ADMIN") {
     return { error: NextResponse.json({ error: "Unauthorized" }, { status: 401 }) }
   }
   return { context: tenantSession.context }
@@ -2743,7 +2743,7 @@ async function handlePOST(request: Request) {
 // Maintenance must not bypass module switches or a restricted access role.
 export async function POST(request: Request) {
   return withBusinessApi(request, async actor => {
-    if (!canManageUsers(actor.role as Role) || actor.permissions !== undefined) throw new BusinessError(403, "Seed maintenance requires unrestricted administrator or manager access.")
+    if (actor.role !== "ADMIN") throw new BusinessError(403, "Seed maintenance requires tenant administrator access.")
     const parsed = requestSchema.safeParse(await readJson(request.clone()))
     if (parsed.success) {
       const input = parsed.data

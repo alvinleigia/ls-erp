@@ -1,7 +1,7 @@
 import { requireWriteFields, permits } from "@/platform/access/policy"
 import type { PermissionRun } from "@/platform/access/server"
 import type { Prisma } from "@prisma/client"
-import { CrmError, canManageCrm, type CrmActor } from "./policy"
+import { CrmError, type CrmActor } from "./policy"
 import { lostReasonSchema, lostReasonUpdateSchema, lostReasonListSchema } from "./lost-reason-validation"
 type Tx = Prisma.TransactionClient
 type Context = {
@@ -23,7 +23,6 @@ export async function resolveLostReason(tx: Tx, actor: CrmActor, lost: boolean, 
   return { lostReasonId: reason.id, lostReasonName: reason.name }
 }
 export function createLostReasonService({ run, audit }: Context) {
-  const manage = (actor: CrmActor) => { if (!canManageCrm(actor.role)) throw new CrmError(403, "Only a manager can configure lost reasons.") }
   return {
     listLostReasons(input: unknown) {
       const query = lostReasonListSchema.parse(input)
@@ -32,13 +31,12 @@ export function createLostReasonService({ run, audit }: Context) {
         const [items, total] = await Promise.all([
           tx.crmLostReason.findMany({ where, orderBy: [{ name: "asc" }, { id: "asc" }], skip: (query.page - 1) * query.pageSize, take: query.pageSize }), tx.crmLostReason.count({ where }),
         ])
-        return { items, total, page: query.page, pageSize: query.pageSize, totalPages: Math.max(1, Math.ceil(total / query.pageSize)), canManage: canManageCrm(actor.role) && permits(actor, "lostReasons.edit") }
+        return { items, total, page: query.page, pageSize: query.pageSize, totalPages: Math.max(1, Math.ceil(total / query.pageSize)), canManage: permits(actor, "lostReasons.edit") }
       })
     },
     createLostReason(input: unknown) {
       const data = lostReasonSchema.parse(input)
       return run("lostReasons.create", async (tx, actor) => { requireWriteFields(actor, "lostReasons", undefined, data);
-        manage(actor)
         const record = await tx.crmLostReason.create({ data: { ...data, nameKey: reasonKey(data.name), tenantId: actor.tenantId } })
         await audit(tx, actor, "crm.lostReason.created", record.id, undefined, data)
         return record
@@ -47,7 +45,6 @@ export function createLostReasonService({ run, audit }: Context) {
     updateLostReason(id: string, input: unknown) {
       const { version, ...data } = lostReasonUpdateSchema.parse(input)
       return run("lostReasons.edit", async (tx, actor) => {
-        manage(actor)
         const before = await tx.crmLostReason.findFirst({ where: { tenantId: actor.tenantId, id } })
         requireWriteFields(actor, "lostReasons", before ?? undefined, data)
         if (!before) throw new CrmError(404, "Lost reason not found.")

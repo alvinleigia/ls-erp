@@ -1,15 +1,16 @@
+import { authorizeBusinessOperation } from "@/platform/access/operation"
+
 import { Prisma, type PrismaClient } from "@prisma/client"
-import { findAccessUser, accessContext } from "@/platform/access/server"
-import { requirePermission, requireWriteFields, permits } from "@/platform/access/policy"
+
+import { requireWriteFields, permits } from "@/platform/access/policy"
 import type { Requirement } from "@/platform/access/catalog"
-import { BusinessError, hasBusinessAccess, type BusinessActor } from "@/platform/policy"
+import { BusinessError, type BusinessActor } from "@/platform/policy"
 import { recordDomainAuditEvent } from "@/lib/domain-audit"
 import { catalogItemSchema, catalogListSchema } from "./validation"
 import type { CatalogExtension } from "./contracts"
 import { serializationConflict } from "@/platform/database-errors"
 import { activeReservation, reservationClock, reservedUnits } from "./reservation-availability"
 type Tx = Prisma.TransactionClient
-const manager = (actor: BusinessActor) => ["ADMIN", "MANAGER"].includes(actor.role)
 const json = (value: unknown): Prisma.InputJsonValue => JSON.parse(JSON.stringify(value))
 
 export async function catalogScope(tx: Tx, actor: BusinessActor, extensions: readonly CatalogExtension[], filter?: { extensionKey?: string; contextId?: string }) {
@@ -26,11 +27,7 @@ export function createCatalogService(db: PrismaClient, identity: Pick<BusinessAc
     for (let attempt = 0; ; attempt++) {
       try {
         return await db.$transaction(async tx => {
-          const user = await findAccessUser(tx, identity.tenantId, identity.userId)
-          if (!user || !hasBusinessAccess(user.role) || user.tenant?.status !== "ACTIVE" || user.tenant.slug === (process.env.PLATFORM_ADMIN_TENANT_SLUG?.trim().toLowerCase() || "platform")) throw new BusinessError(403, "Business workspace access is not permitted.")
-          if (!await tx.tenantModule.count({ where: { tenantId: identity.tenantId, key: "catalog", allowed: true, enabled: true } })) throw new BusinessError(403, "Sales Catalog is not enabled.")
-          const actor = { ...identity, ...accessContext(user) }
-          requirePermission(actor, requirement)
+          const actor = await authorizeBusinessOperation(tx, identity, requirement, ["catalog"])
           return operation(tx, actor)
         }, { isolationLevel: "Serializable", maxWait: 20000, timeout: 20000 })
       } catch (e) {
@@ -55,7 +52,7 @@ export function createCatalogService(db: PrismaClient, identity: Pick<BusinessAc
         const where: Prisma.CatalogItemWhereInput = { AND: [await catalogScope(tx, actor, extensions, q), availability, { archived: q.archived === "true", ...(q.currency ? {currency:q.currency} : {}), ...(q.q ? { OR: [{ code: { contains: q.q, mode: "insensitive" } }, { name: { contains: q.q, mode: "insensitive" } }] } : {}) }] }
         const [items, total] = await Promise.all([tx.catalogItem.findMany({ where, select: { id: true, code: true, name: true, kind: true, unit: true, price: true, currency: true, availability: true, archived: true, version: true, extensionKey: true }, orderBy: [{ name: "asc" }, { id: "asc" }], skip: (q.page - 1) * q.pageSize, take: q.pageSize }), tx.catalogItem.count({ where })])
         const occupied = await reservedUnits(tx, actor.tenantId, items.map(i => i.id), now)
-        return { items: items.map(row => ({ ...row, reservationState: occupied.get(row.id) || null })), total, page: q.page, pageSize: q.pageSize, totalPages: Math.max(1, Math.ceil(total / q.pageSize)), canCreate: manager(actor) && permits(actor, "catalogItems.create") }
+        return { items: items.map(row => ({ ...row, reservationState: occupied.get(row.id) || null })), total, page: q.page, pageSize: q.pageSize, totalPages: Math.max(1, Math.ceil(total / q.pageSize)), canCreate: permits(actor, "catalogItems.create") }
       })
     },
     get(id: string) {
@@ -63,13 +60,12 @@ export function createCatalogService(db: PrismaClient, identity: Pick<BusinessAc
         const row = await find(tx, actor, id)
         const extension = extensions.find(e => e.key === row.extensionKey)
         const reservationState = (await reservedUnits(tx, actor.tenantId, [id], await reservationClock(tx))).get(id) || null
-        return { ...row, reservationState, extension: extension ? await extension.read(tx, actor, id) : null, canManage: !reservationState && manager(actor) && permits(actor, "catalogItems.edit") }
+        return { ...row, reservationState, extension: extension ? await extension.read(tx, actor, id) : null, canManage: !reservationState && permits(actor, "catalogItems.edit") }
       })
     },
     save(input: unknown, id?: string) {
       const data = catalogItemSchema.parse(input)
       return run(id ? "catalogItems.edit" : "catalogItems.create", async (tx, actor) => {
-        if (!manager(actor)) throw new BusinessError(403, "Only managers can change catalog items.")
         if (id) {
           await find(tx, actor, id)
           await tx.$queryRaw`SELECT id FROM "CatalogItem" WHERE "tenantId"=${actor.tenantId} AND id=${id} FOR UPDATE`

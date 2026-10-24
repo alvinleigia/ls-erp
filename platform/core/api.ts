@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { canManageUsers, type Role } from "@/lib/permissions"
 import { withCurrentAccountApi, readJson } from "../business-api"
 import { requirePermission } from "../access/policy"
 import { BusinessError, type BusinessActor } from "../policy"
@@ -16,7 +15,6 @@ export function withCoreApi(request: Request, resource: CoreResource, action: Pe
   return withCurrentAccountApi(request, async actor => {
     const own = resource === "users" && id === actor.userId
     if (!own) {
-      if (resource !== "dashboard" && !canManageUsers(actor.role as Role)) throw new BusinessError(403, "Management access is required.")
       if (actor.role === "CUSTOMER") throw new BusinessError(403, "Business access is required.")
       if (resource === "invitations" || (resource === "users" && action !== "read")) {
         if (actor.role !== "ADMIN") throw new BusinessError(403, "Administrator access is required.")

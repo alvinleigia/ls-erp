@@ -1,7 +1,6 @@
 import { Role, UserStatus } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 import { permits } from "@/platform/access/policy"
-import { canManageUsers, type Role as AccessRole } from "@/lib/permissions"
 import type { BusinessActor } from "@/platform/policy"
 import { salesDashboard } from "./sales-summary"
 import { appointmentsDashboardData } from "@/modules/appointments/dashboard"
@@ -52,7 +51,7 @@ export async function dashboardSummary(actor: BusinessActor, options: {
     workforceDashboardData(prisma, actor, moduleFlags),
     servicesDashboardData(prisma, actor, moduleFlags),
     inventoryDashboardData(prisma, actor, moduleFlags),
-    canManageUsers(actor.role as AccessRole) && permits(actor, "users.read") ? prisma.user.count({ where: { tenantId, role: Role.STAFF, status: UserStatus.ACTIVE } }) : Promise.resolve(0),
+    permits(actor, "users.read") ? prisma.user.count({ where: { tenantId, role: Role.STAFF, status: UserStatus.ACTIVE } }) : Promise.resolve(0),
     salesDashboard(prisma, actor, moduleFlags, { start: rangeStart, end: rangeEndExclusive, now, today: todayDateKey }),
   ])
   const { visible: canReadBookings, periodOrders, todayOrders, periodAppointments, todayAppointments, distinctCustomers, upcomingAppointments, appointmentStatusRows, topServiceLines, staffRangeAppointments } = bookings

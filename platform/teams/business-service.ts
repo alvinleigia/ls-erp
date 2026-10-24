@@ -1,7 +1,9 @@
+import { authorizeBusinessOperation } from "@/platform/access/operation"
+
 import type { PrismaClient, Prisma } from "@prisma/client"
-import { BusinessError, hasBusinessAccess, type BusinessActor } from "@/platform/policy"
-import { findAccessUser, accessContext } from "@/platform/access/server"
-import { requirePermission } from "@/platform/access/policy"
+import { BusinessError, type BusinessActor } from "@/platform/policy"
+
+
 import type { PermissionRun } from "@/platform/access/server"
 import { recordDomainAuditEvent } from "@/lib/domain-audit"
 import { serializationConflict } from "@/platform/database-errors"
@@ -11,10 +13,7 @@ export function createBusinessTeamService(db: PrismaClient, identity: Pick<Busin
   const run: PermissionRun = async (requirement, operation) => {
     for (let attempt = 0; ; attempt++) {
       try { return await db.$transaction(async tx => {
-        const user = await findAccessUser(tx, identity.tenantId, identity.userId)
-        if (!user || !hasBusinessAccess(user.role) || user.tenant.status !== "ACTIVE" || user.tenant.slug === (process.env.PLATFORM_ADMIN_TENANT_SLUG?.trim().toLowerCase() || "platform")) throw new BusinessError(403, "Business access is not permitted.")
-        const actor = { ...identity, ...accessContext(user) }
-        requirePermission(actor, requirement)
+          const actor = await authorizeBusinessOperation(tx, identity, requirement, [])
         return operation(tx, actor)
       }, { isolationLevel: "Serializable", maxWait: 20000, timeout: 20000 }) }
       catch (error) {

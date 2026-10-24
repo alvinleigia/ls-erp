@@ -4,6 +4,7 @@ import { recordDomainAuditEvent } from "@/lib/domain-audit"
 import { BusinessError, type BusinessActor } from "../policy"
 import { accessListSchema, accessRoleSchema, roleAssignmentSchema } from "./validation"
 import { validProfilePermissions } from "./profiles"
+import { defaultRecordRules } from "./rules"
 
 type Identity = Pick<BusinessActor, "tenantId" | "userId" | "requestId">
 const snapshot = (value: unknown): Prisma.InputJsonValue => JSON.parse(JSON.stringify(value))
@@ -62,7 +63,7 @@ export function createAccessRoleService(db: PrismaClient, identity: Identity) {
       return run(false, async tx => {
         const user = await tx.user.findFirst({ where: { tenantId: identity.tenantId, id: userId }, select: { id: true, name: true, role: true, accessAssignments: { orderBy: { roleId: "asc" }, select: { roleId: true, role: { select: { name: true, moduleKey: true, archived: true } } } }, accessPolicy: true } })
         if (!user) throw new BusinessError(404, "User not found.")
-        return { ...user, accessPolicy: user.accessPolicy ?? { tenantId: identity.tenantId, userId, salesRecordScope: "OWN", projectRecordScope: "OWN", version: 0 } }
+        return { ...user, accessPolicy: user.accessPolicy ?? { tenantId: identity.tenantId, userId, rules: defaultRecordRules(), version: 0 } }
       })
     },
     assign(userId: string, input: unknown) {
@@ -76,8 +77,8 @@ export function createAccessRoleService(db: PrismaClient, identity: Identity) {
         const profiles = await tx.tenantAccessRole.findMany({ where: { tenantId: identity.tenantId, id: { in: roleIds }, archived: false }, select: { id: true } })
         if (profiles.length !== roleIds.length) throw new BusinessError(409, "Choose active profiles from this business.")
         const previousRoleIds = user.accessAssignments.map(item => item.roleId).sort()
-        const scopes = { salesRecordScope: data.salesRecordScope, projectRecordScope: data.projectRecordScope }
-        if (user.accessPolicy && JSON.stringify(previousRoleIds) === JSON.stringify(roleIds) && user.accessPolicy.salesRecordScope === scopes.salesRecordScope && user.accessPolicy.projectRecordScope === scopes.projectRecordScope) return { roleIds, ...scopes, version: data.version }
+        const scopes = { rules: data.rules }
+        if (user.accessPolicy && JSON.stringify(previousRoleIds) === JSON.stringify(roleIds) && JSON.stringify(user.accessPolicy.rules) === JSON.stringify(scopes.rules)) return { roleIds, ...scopes, version: data.version }
         await tx.tenantRoleAssignment.deleteMany({ where: { tenantId: identity.tenantId, userId } })
         if (roleIds.length) await tx.tenantRoleAssignment.createMany({ data: roleIds.map(roleId => ({ tenantId: identity.tenantId, userId, roleId })) })
         const policy = await tx.tenantUserAccess.upsert({ where: { tenantId_userId: { tenantId: identity.tenantId, userId } }, create: { tenantId: identity.tenantId, userId, ...scopes }, update: { ...scopes, version: { increment: 1 } } })

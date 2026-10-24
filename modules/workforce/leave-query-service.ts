@@ -1,3 +1,4 @@
+import { leaveApprovalScope } from "./leave-access"
 import { prisma } from "@/lib/prisma"
 import { BusinessError, type BusinessActor } from "@/platform/policy"
 import type { LeaveRosterItem } from "@/types/leaves"
@@ -6,7 +7,7 @@ import type { WorkforceDateRangeQuery } from "./schedule-validation"
 // Module/action authorization and tenant DB context belong to withWorkforceApi.
 export async function listApprovedLeaves(actor: BusinessActor, query: WorkforceDateRangeQuery) {
   const { tenantId } = actor
-  if (!tenantId || !actor.userId || !["ADMIN", "MANAGER"].includes(actor.role)) throw new BusinessError(401, "Unauthorized")
+  if (!tenantId || !actor.userId || !["ADMIN", "MANAGER", "STAFF"].includes(actor.role)) throw new BusinessError(401, "Unauthorized")
   const { startDate, endDate, staffIds } = query
   const staffUserIds = (staffIds ?? "")
     .split(",")
@@ -14,14 +15,14 @@ export async function listApprovedLeaves(actor: BusinessActor, query: WorkforceD
     .filter(Boolean)
   const items = await prisma.leaveRequest.findMany({
     where: {
-      tenantId,
+      ...leaveApprovalScope(actor, "read"),
       status: "APPROVED",
       startDate: { lte: new Date(`${endDate}T00:00:00.000Z`) },
       endDate: { gte: new Date(`${startDate}T00:00:00.000Z`) },
       staffProfile: {
-        user: { tenantId, ...(staffUserIds.length ? { id: { in: staffUserIds } } : {}), ...(actor.role === "MANAGER" ? { role: "STAFF" } : {}) },
-        ...(actor.role === "MANAGER" ? { managerUserId: actor.userId } : {}),
+        user: { tenantId, ...(staffUserIds.length ? { id: { in: staffUserIds } } : {}) },
       },
+      AND: [leaveApprovalScope(actor, "read")],
     },
     select: {
       id: true,

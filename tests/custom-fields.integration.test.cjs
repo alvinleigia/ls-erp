@@ -141,8 +141,8 @@ test("all typed fields validate, filter and export with no per-record field quer
 })
 
 test("field and record permissions protect details, writes, filters and exports", async () => {
-  const secret = await config.save(definition("private_notes", { visibility: "MANAGERS", editability: "MANAGERS", filterable: true, defaultValue: "private" }))
-  const readonly = await config.save(definition("approved", { editability: "MANAGERS" }))
+  const secret = await config.save(definition("private_notes", { visibility: "PRIVILEGED", editability: "PRIVILEGED", filterable: true, defaultValue: "private" }))
+  const readonly = await config.save(definition("approved", { editability: "PRIVILEGED" }))
   const row = await staffCrm.createEnquiry(leadInput())
   assert.equal(row.customFields.some(field => field.id === secret.id), false)
   assert.equal(row.customFields.find(field => field.id === readonly.id).editable, false)
@@ -153,7 +153,7 @@ test("field and record permissions protect details, writes, filters and exports"
   const otherRow = await crm.createEnquiry(leadInput({ assignedUserId: other.id }))
   await assert.rejects(staffCrm.getEnquiry(otherRow.id), status(404))
   assert.equal((await staffCrm.listEnquiries({}, true)).customFieldExport.values[otherRow.id], undefined)
-  await assert.rejects(config.save(definition("invalid_required", { required: true, editability: "MANAGERS" })), status(400))
+  await assert.rejects(config.save(definition("invalid_required", { required: true, editability: "PRIVILEGED" })), status(400))
 })
 
 test("required changes are prospective and preserve legacy conversion cohorts", async () => {

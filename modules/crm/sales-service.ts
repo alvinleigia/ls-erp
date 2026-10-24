@@ -1,6 +1,8 @@
+import { recordActionAccess } from "@/platform/access/record-actions"
+import { permits } from "@/platform/access/policy"
 import { termText } from "@/platform/terminology/message"
 import type { TermReader } from "@/platform/terminology/read"
-import { requireWriteFields, requirePermission } from "@/platform/access/policy"
+import { requireWriteFields, requireScopedWriteFields, requirePermission } from "@/platform/access/policy"
 import type { PermissionRun } from "@/platform/access/server"
 import { resolveSalesTeam } from "./team-service"
 import { teamSelect } from "@/platform/teams/service"
@@ -11,7 +13,7 @@ import { resolveLostReason } from "./lost-reason-service"
 import { checkExportLimit, CRM_EXPORT_LIMIT } from "./csv"
 import type { Prisma, CrmOpportunity, CrmEnquiry } from "@prisma/client"
 import { maskReferrals, referralInclude } from "./intake-service"
-import { CrmError, canManageCrm, contactScope, accountScope, enquiryScope, type CrmActor } from "./policy"
+import { CrmError, opportunityScope, contactScope, accountScope, enquiryScope, type CrmActor } from "./policy"
 import { crmListSchema, crmNoteSchema } from "./validation"
 import { pipelineSchema, pipelineUpdateSchema, opportunitySchema, opportunityUpdateSchema, opportunityMoveSchema, opportunityListSchema } from "./sales-validation"
 import { workScope } from "./work-service"
@@ -28,10 +30,9 @@ const include = { salesTeam: { select: teamSelect }, contact: { select: { id: tr
 const stages = { orderBy: [{ position: "asc" as const }, { id: "asc" as const }] }
 const page = <T>(items: T[], total: number, page: number, pageSize: number) => ({ items, total, page, pageSize, totalPages: Math.max(1, Math.ceil(total / pageSize)) })
 const snapshot = (value: unknown): Prisma.InputJsonValue => JSON.parse(JSON.stringify(value))
-const scope = enquiryScope // Opportunities follow the same salesperson assignment rule.
+const scope = opportunityScope
 
 export function createSalesService<Fields extends object, Metadata extends object>({ run, audit, checkAssignee, readTerms }: Context, extensions: CrmExtensions<Fields, Metadata>) {
-  const manage = (actor: CrmActor) => { if (!canManageCrm(actor.role)) throw new CrmError(403, "Only a manager can configure sales pipelines.") }
   async function find(tx: Tx, actor: CrmActor, id: string) {
     const record = await tx.crmOpportunity.findFirst({ where: { ...scope(actor), id }, include })
     if (!record) throw new CrmError(404, termText("crm.opportunity.singular", "Opportunity not found.", "{label} not found."))
@@ -70,20 +71,19 @@ export function createSalesService<Fields extends object, Metadata extends objec
         const [items, total] = await Promise.all([
           tx.crmPipeline.findMany({ where, orderBy: [{ name: "asc" }, { id: "asc" }], skip: (query.page - 1) * query.pageSize, take: query.pageSize }), tx.crmPipeline.count({ where }),
         ])
-        return { ...page(items, total, query.page, query.pageSize), canManage: canManageCrm(actor.role) }
+        return { ...page(items, total, query.page, query.pageSize), canManage: permits(actor, "pipelines.edit") }
       })
     },
     getPipeline(id: string) {
       return run("pipelines.read", async (tx, actor) => {
         const record = await tx.crmPipeline.findFirst({ where: { tenantId: actor.tenantId, id }, include: { stages } })
         if (!record) throw new CrmError(404, "Pipeline not found.")
-        return { ...record, canManage: canManageCrm(actor.role) }
+        return { ...record, canManage: permits(actor, "pipelines.edit") }
       })
     },
     createPipeline(input: unknown) {
       const data = pipelineSchema.parse(input)
       return run("pipelines.create", async (tx, actor) => { requireWriteFields(actor, "pipelines", undefined, data);
-        manage(actor)
         if (data.stages.some(stage => stage.id)) throw new CrmError(400, "New stages must not supply IDs.")
         const pipeline = await tx.crmPipeline.create({ data: { tenantId: actor.tenantId, name: data.name, archived: data.archived } })
         for (const stage of data.stages) requireWriteFields(actor, "pipelines", undefined, stage)
@@ -95,7 +95,6 @@ export function createSalesService<Fields extends object, Metadata extends objec
     updatePipeline(id: string, input: unknown) {
       const data = pipelineUpdateSchema.parse(input)
       return run("pipelines.edit", async (tx, actor) => {
-        manage(actor)
         const before = await tx.crmPipeline.findFirst({ where: { tenantId: actor.tenantId, id }, include: { stages } })
         requireWriteFields(actor, "pipelines", before ?? undefined, data)
         if (!before) throw new CrmError(404, "Pipeline not found.")
@@ -146,7 +145,7 @@ export function createSalesService<Fields extends object, Metadata extends objec
         return { ...page(decorated.items.map(item => ({ ...item, overdueActivityCount: counts.get(item.id) || 0 })), total, query.page, query.pageSize), ...decorated.metadata, exportTerms: exporting ? await readTerms(tx, actor) : undefined, extensionExport: decorated.exportFields, customFieldExport: exporting ? await customFieldExport(tx, actor, opportunityFields, items.map(item => item.id)) : undefined }
       })
     },
-    getOpportunity(id: string) { return run("opportunities.read", (tx, actor) => find(tx, actor, id)) },
+    getOpportunity(id: string) { return run("opportunities.read", async (tx, actor) => ({ ...await find(tx, actor, id), recordAccess: await recordActionAccess(actor, "opportunities", async action => !!await tx.crmOpportunity.findFirst({ where: { ...scope(actor, action), id }, select: { id: true } })) })) },
     createOpportunity(input: unknown) {
       const custom = splitCustomFields(input)
       const { core, extension } = extensions.splitWrite(custom.core)
@@ -200,7 +199,7 @@ export function createSalesService<Fields extends object, Metadata extends objec
       const { version, ...data } = opportunityUpdateSchema.parse(core)
       return run("opportunities.edit", async (tx, actor) => {
         const before = await find(tx, actor, id)
-        requireWriteFields(actor, "opportunities", before ?? undefined, data)
+        await requireScopedWriteFields(actor, "opportunities", before ?? undefined, data, async action => { if (!await tx.crmOpportunity.findFirst({ where: { ...scope(actor, action), id }, select: { id: true } })) throw new CrmError(403, "This action is outside your record access.") })
         if (before.enquiryId && before.contactId !== data.contactId) throw new CrmError(409, ["A converted ", termText("crm.opportunity.singular", "opportunity"), " keeps the ", termText("crm.enquiry.singular", "enquiry"), "'s ", termText("crm.contact.singular", "contact"), "."])
         if (before.contactId !== data.contactId && await tx.crmTask.count({ where: { tenantId: actor.tenantId, opportunityId: id } })) throw new CrmError(409, ["This ", termText("crm.opportunity.singular", "opportunity"), " has ", termText("crm.activity.plural", "activities"), ". Keep its ", termText("crm.contact.singular", "contact"), " to preserve interaction history."])
         await checkAssignee(tx, actor, data.assignedUserId, before.assignedUserId)
@@ -227,7 +226,7 @@ export function createSalesService<Fields extends object, Metadata extends objec
       const data = opportunityMoveSchema.parse(input)
       return run("opportunities.edit", async (tx, actor) => {
         const before = await find(tx, actor, id)
-        requireWriteFields(actor, "opportunities", before ?? undefined, data)
+        await requireScopedWriteFields(actor, "opportunities", before ?? undefined, data, async action => { if (!await tx.crmOpportunity.findFirst({ where: { ...scope(actor, action), id }, select: { id: true } })) throw new CrmError(403, "This action is outside your record access.") })
         if (before.version !== data.version) throw new CrmError(409, termText("crm.opportunity.singular", "This opportunity changed. Refresh before moving it.", "This {label} changed. Refresh before moving it."))
         const stage = await destination(tx, actor, data.pipelineId, data.stageId)
         if (before.stageId === stage.id) return before

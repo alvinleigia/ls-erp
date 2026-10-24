@@ -1,11 +1,11 @@
 import { withBusinessApi } from "@/platform/business-api"
-import { requireBrandingAdmin } from "@/platform/branding/service"
+import { requireBrandingEdit } from "@/platform/branding/service"
 import { brandingForm } from "@/platform/branding/request"
 import { optimizeLogo } from "@/platform/branding/images"
 import { BusinessError } from "@/platform/policy"
 export const runtime = "nodejs"
 export function POST(request: Request) { return withBusinessApi(request, async actor => {
-  requireBrandingAdmin(actor)
+  requireBrandingEdit(actor)
   const { file } = await brandingForm(request)
   if (!file) throw new BusinessError(400, "Choose a logo.")
   const result = await optimizeLogo(file)

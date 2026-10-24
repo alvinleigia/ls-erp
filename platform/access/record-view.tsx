@@ -2,6 +2,8 @@
 
 import { useCurrentResourceAction } from "@/platform/access/view-guard"
 import type { Requirement } from "@/platform/access/catalog"
+import type { RecordAccess } from "./record-actions"
+import { RecordAccessContext } from "./record-context"
 import * as React from "react"
 import { Button } from "@/components/ui/button"
 import { EditPanel, ReadOnlyFields } from "@/components/erp/record-detail"
@@ -9,7 +11,7 @@ import { AccessRecordTabs } from "@/platform/access/record-tabs"
 import { Section } from "@/components/erp/section"
 import { EditSections } from "@/components/erp/edit-sections"
 
-type View = { existing: boolean; editing: boolean; section: string; tab: string; setTab: (tab: string) => void; begin: (section?: string) => void; done: () => void; discard: () => void }
+type View = { existing: boolean; editing: boolean; section: string; tab: string; setTab: (tab: string) => void; begin: (section?: string) => void; done: () => void; discard: () => void; loadAccess: (access: RecordAccess | undefined) => void }
 const Context = React.createContext<View | null>(null)
 export const useRecordView = () => React.useContext(Context)
 
@@ -18,10 +20,12 @@ export const useRecordView = () => React.useContext(Context)
 function RecordView({ existing, children }: { existing: boolean; children: React.ReactNode }) {
   const [editing, setEditing] = React.useState(false), [section, setSection] = React.useState("")
   const [revision, setRevision] = React.useState(0), [tab, setTab] = React.useState("overview")
+  const [access, setAccess] = React.useState<RecordAccess>()
+  const loadAccess = React.useCallback((next: RecordAccess | undefined) => { if (next) setAccess(previous => JSON.stringify(previous) === JSON.stringify(next) ? previous : next) }, [])
   const begin = React.useCallback((section = "") => { setSection(section); setEditing(true) }, [])
   const done = React.useCallback(() => setEditing(false), [])
   const discard = React.useCallback(() => { setEditing(false); setRevision(value => value + 1) }, [])
-  return <Context.Provider value={{ existing, editing, section, tab, setTab, begin, done, discard }}><React.Fragment key={revision}>{children}</React.Fragment></Context.Provider>
+  return <RecordAccessContext.Provider value={access}><Context.Provider value={{ existing, editing, section, tab, setTab, begin, done, discard, loadAccess }}><React.Fragment key={revision}>{children}</React.Fragment></Context.Provider></RecordAccessContext.Provider>
 }
 export function withRecordView<P extends { id?: string }>(Editor: React.ComponentType<P>) {
   return function RecordEditor(props: P) { return <RecordView key={props.id || "new"} existing={!!props.id}><Editor {...props} /></RecordView> }

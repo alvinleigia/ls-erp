@@ -21,6 +21,7 @@ function AccountEditorBody({ id }: { id?: string }) {
   const readTerm = useTerminologyReader()
   const term = useTerminology()
   const view = useRecordView()!
+  const { loadAccess } = view
   const router = useRouter()
   const [account, setAccount] = React.useState<CrmAccountRow | null>(null)
   const [values, setValues] = React.useState({ name: "", email: "", phone: "", website: "", notes: "", archived: false })
@@ -35,10 +36,10 @@ function AccountEditorBody({ id }: { id?: string }) {
     fetch(`/api/crm/accounts/${id}`, { signal: controller.signal, cache: "no-store" }).then(async response => {
       const data = await response.json()
       if (!response.ok) throw new Error(data.error || readTerm("crm.account.singular", "Unable to load account.", "Unable to load {label}."))
-      setAccount(data); setValues({ name: data.name, email: data.email || "", phone: data.phone || "", website: data.website || "", notes: data.notes || "", archived: data.archived })
+      setAccount(data); loadAccess(data.recordAccess); setValues({ name: data.name, email: data.email || "", phone: data.phone || "", website: data.website || "", notes: data.notes || "", archived: data.archived })
     }).catch(error => { if (!controller.signal.aborted) setError(error.message) }).finally(() => { if (!controller.signal.aborted) setLoading(false) })
     return () => controller.abort()
-  }, [readTerm, id])
+  }, [loadAccess, readTerm, id])
   async function save(event: React.FormEvent) {
     event.preventDefault()
     if (account && !account.archived && values.archived) { setConfirmArchive(true); return }

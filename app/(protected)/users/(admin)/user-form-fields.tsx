@@ -1,6 +1,8 @@
 "use client"
+import { defaultRecordRules } from "@/platform/access/rules"
 
-import { ProfilePicker, RecordScopeFields } from "@/platform/access/profile-picker"
+
+import { ProfilePicker, RecordPolicyFields } from "@/platform/access/profile-picker"
 import * as React from "react"
 
 import { FormField } from "@/components/form-field"
@@ -40,7 +42,7 @@ export function UserFormFields({
 
   return (
     <div className="grid gap-4 sm:grid-cols-2">
-      {mode === "create" && canManage && ["STAFF", "MANAGER"].includes(values.role) && <div className="space-y-4 sm:col-span-2"><ProfilePicker id="new-user-access-profiles" value={values.accessRoleIds || []} onChange={ids => update("accessRoleIds", ids)} /><RecordScopeFields value={{ salesRecordScope: values.salesRecordScope ?? "OWN", projectRecordScope: values.projectRecordScope ?? "OWN" }} onChange={patch => onChange({ ...values, ...patch })} /><p className="text-xs text-muted-foreground">Manage reusable profiles in Settings &gt; Access profiles. Empty selection grants no business access.</p></div>}
+      {mode === "create" && canManage && ["STAFF", "MANAGER"].includes(values.role) && <div className="space-y-4 sm:col-span-2"><ProfilePicker id="new-user-access-profiles" value={values.accessRoleIds || []} onChange={ids => update("accessRoleIds", ids)} /><RecordPolicyFields value={{ rules: values.recordRules ?? defaultRecordRules() }} onChange={patch => onChange({ ...values, recordRules: patch.rules })} /><p className="text-xs text-muted-foreground">Manage reusable profiles in Settings &gt; Access profiles. Empty selection grants no business access.</p></div>}
       <FormField id={`${mode}-name`} label="Full name" error={errors.name}>
         <Input
           id={`${mode}-name`}

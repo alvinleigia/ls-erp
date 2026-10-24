@@ -51,7 +51,7 @@ test('membership alone grants no managed-team access; only administrators design
  await scope('MANAGED_TEAMS');assert.equal((await limited.listEnquiries({})).total,1)
  const current=await crm.getTeam(teamA.id)
  await assert.rejects(limited.changeTeamMember(teamA.id,{userId:manager.id,isManager:true,version:current.version}),denied(403))
- await assert.rejects(crm.changeTeamMember(teamA.id,{userId:a.id,isManager:true,version:current.version}),denied(400))
+ const designated=await crm.changeTeamMember(teamA.id,{userId:a.id,isManager:true,version:current.version});assert.ok(designated.version>current.version);assert.equal((await staff.listEnquiries({})).items.every(item=>item.assignedUserId===a.id),true)
  teamA=await managerFlag(teamA,manager,true)
  assert.equal((await limited.listEnquiries({})).total,2)
  await assert.rejects(limited.getEnquiry(leadB.id),denied(404))
@@ -95,7 +95,7 @@ test('audit failure rolls back team-manager authority and version',async()=>{
  assert.equal((await crm.getTeam(teamA.id)).version,current.version)
  assert.equal((await limited.listEnquiries({})).total,2)
  const saved=await roles.save({name:role.name,permissions:allPermissions,version:role.version},role.id)
- assert.equal((await roles.assignment(manager.id)).accessPolicy.salesRecordScope,'MANAGED_TEAMS');role=saved
+ assert.equal((await roles.assignment(manager.id)).accessPolicy.rules["enquiries.read"],'MANAGED_TEAMS');role=saved
 })
 
 test('activity and SQL sales reports respect managed scope before aggregation, pagination and export',async()=>{

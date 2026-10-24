@@ -4,7 +4,7 @@ import type { PermissionRun } from "@/platform/access/server"
 import { createHash } from "node:crypto"
 import type { Prisma } from "@prisma/client"
 import { z } from "zod"
-import { CrmError, canManageCrm, type CrmActor } from "./policy"
+import { CrmError, type CrmActor } from "./policy"
 
 export type PresetItem = {
   resource: Resource; key: string; label: string; description: string
@@ -18,7 +18,6 @@ type Context = {
 }
 export function createPresetService({ run, audit }: Context, presets: readonly CrmPreset[]) {
   async function preview(tx: Prisma.TransactionClient, actor: CrmActor, presetId: string) {
-    if (!canManageCrm(actor.role)) throw new CrmError(403, "Only managers can apply configuration presets.")
     const preset = presets.find(preset => preset.id === presetId)
     if (!preset) throw new CrmError(404, "Preset not found.")
     if (!await tx.tenantModule.findFirst({ where: { tenantId: actor.tenantId, key: preset.module, enabled: true, allowed: true } })) throw new CrmError(403, "Enable the preset's business module first.")
@@ -33,16 +32,15 @@ export function createPresetService({ run, audit }: Context, presets: readonly C
   }
   return {
     listPresets() {
-      return run("pipelines.read", async (tx, actor) => {
-        if (!canManageCrm(actor.role)) throw new CrmError(403, "Only managers can configure presets.")
+      return run("configurationPresets.read", async (tx, actor) => {
         const modules = await tx.tenantModule.findMany({ where: { tenantId: actor.tenantId, enabled: true, allowed: true } })
         return presets.filter(preset => modules.some(module => module.key === preset.module)).map(({ id, name, version }) => ({ id, name, version }))
       })
     },
-    previewPreset(id: string) { return run("pipelines.read", (tx, actor) => preview(tx, actor, id)) },
+    previewPreset(id: string) { return run("configurationPresets.read", (tx, actor) => preview(tx, actor, id)) },
     applyPreset(id: string, input: unknown) {
       const { token } = z.object({ token: z.string().regex(/^[a-f0-9]{64}$/) }).strict().parse(input)
-      return run("pipelines.create", async (tx, actor) => {
+      return run("configurationPresets.create", async (tx, actor) => {
         const review = await preview(tx, actor, id)
         if (review.token !== token) throw new CrmError(409, "Configuration changed. Preview the preset again before applying.")
         const preset = presets.find(preset => preset.id === id)!

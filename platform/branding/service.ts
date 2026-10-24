@@ -8,22 +8,24 @@ import { BusinessError, type BusinessActor } from "../policy"
 import { optimizeLogo } from "./images"
 import { logoUrl, storageReady, uploadLogo, removeUncommittedLogos } from "./storage"
 import type { BrandingState, TenantBranding } from "./types"
+import { authorizeBusinessOperation } from "../access/operation"
 
-export function requireBrandingAdmin(actor: BusinessActor) {
-  if (actor.role !== "ADMIN") throw new BusinessError(403, "Only a tenant administrator can change branding.")
-  requirePermission(actor, "businessSettings.edit")
+export function requireBrandingEdit(actor: BusinessActor) {
+  requirePermission(actor, "branding.edit")
 }
 export async function readBranding(db: Prisma.TransactionClient, actor: BusinessActor): Promise<BrandingState> {
+  actor = await authorizeBusinessOperation(db, actor, "branding.read")
   const [settings, tenant] = await Promise.all([
     db.appSetting.findUniqueOrThrow({ where: { tenantId: actor.tenantId }, select: { branding: true, brandingVersion: true } }),
     db.tenant.findUniqueOrThrow({ where: { id: actor.tenantId }, select: { name: true } }),
   ])
   const branding = settings.branding as TenantBranding
-  return { branding, version: settings.brandingVersion, defaultName: tenant.name, canManage: actor.role === "ADMIN" && permits(actor, "businessSettings.edit"),
+  return { branding, version: settings.brandingVersion, defaultName: tenant.name, canManage: permits(actor, "branding.edit"),
     logoUrl: branding.logo && storageReady() ? logoUrl(branding.logo.document.path) : null, storageReady: storageReady() }
 }
 export async function saveBranding(db: PrismaClient, actor: BusinessActor, input: unknown, file?: Buffer) {
-  requireBrandingAdmin(actor)
+  requireBrandingEdit(actor)
+  actor = await authorizeBusinessOperation(db, actor, "branding.edit")
   const data = brandingUpdateSchema.parse(input)
   if (file && data.removeLogo === "true") throw new BusinessError(400, "Choose either a new logo or remove the current logo.")
   const optimized = file ? await optimizeLogo(file) : null
@@ -46,7 +48,7 @@ export async function saveBranding(db: PrismaClient, actor: BusinessActor, input
       const user = await findAccessUser(tx, actor.tenantId, actor.userId)
       if (!user || user.tenant.status !== "ACTIVE" || user.tenant.slug === (process.env.PLATFORM_ADMIN_TENANT_SLUG || "platform")) throw new BusinessError(403, "Business workspace access is not permitted.")
       const fresh = { ...actor, ...accessContext(user) }
-      requireBrandingAdmin(fresh)
+      requireBrandingEdit(fresh)
       const before = await tx.appSetting.findUniqueOrThrow({ where: { tenantId: actor.tenantId }, select: { branding: true, brandingVersion: true } })
       if (before.brandingVersion !== data.version) throw new BusinessError(409, "Branding changed. Refresh before saving.")
       const branding: TenantBranding = { ...(before.branding as TenantBranding), name: data.name }

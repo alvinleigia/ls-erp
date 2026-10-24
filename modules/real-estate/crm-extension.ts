@@ -1,3 +1,4 @@
+import { opportunityScope } from "@/modules/crm/policy"
 import { termText } from "@/platform/terminology/message"
 import { projectScope } from "./access"
 import { permits, requirePermission } from "@/platform/access/policy"
@@ -80,7 +81,7 @@ export const realEstateCrmExtension: CrmExtensions<Omit<Fields, "id">, Metadata>
     const relation = { propertyContext: { is: context } }
     return { enquiry: relation, opportunity: relation, work: { OR: [
       { enquiry: { AND: [enquiryScope(actor), relation] } },
-      { opportunity: { AND: [enquiryScope(actor), relation] } },
+      { opportunity: { AND: [opportunityScope(actor, "read"), relation] } },
     ] } }
   },
   async report(tx, actor, query): Promise<CrmReportExtension> {
