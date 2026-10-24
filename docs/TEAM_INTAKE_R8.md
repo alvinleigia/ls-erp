@@ -47,7 +47,17 @@ browser checks passed, including terminology overrides and desktop/mobile forms.
 The complete application build and targeted lint passed. Both migration rehearsal
 and the staging migration advanced history from 106 to 107 and preserved all 116
 existing business tables. Runtime RLS was verified with the restricted account.
-Hosted application verification follows the staging deployment.
+Staging application `defb9ad` was deployed to the main staging and both QA aliases
+and passed the hosted team intake workflow in 45.4 seconds. It exercised the UI
+default, both creation paths, optional conversion qualification, required
+qualification, direct-only rejection, retention of existing records and foreign
+tenant denial. Desktop/mobile screenshots were inspected without overflow or
+browser errors. Restricted runtime queries saw no team or audit records without
+tenant context or from the other tenant; the owning tenant saw the team and all
+five matching team configuration audits.
+
+The synthetic team `QA R8 Flexible team 8b83d6c3` remains in QA Staging A with
+workflow BOTH so it can be reviewed. Existing user-created teams were not changed.
 Production release is separate from this staging increment. The earlier Word/PDF
 client guide describes the previous two-option model; use this page for the new
 team intake controls until that guide receives its next edition.
