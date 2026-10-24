@@ -1,4 +1,4 @@
-import { ownedRecordScope } from "@/platform/access/record-scope"
+import { ownedRecordScope, quotationRecordScope, salesOrderRecordScope } from "@/platform/access/record-scope"
 import type { Prisma, PrismaClient } from "@prisma/client"
 import { BusinessError, type BusinessActor } from "@/platform/policy"
 import { createSalesOrderService } from "@/modules/sales-orders/service"
@@ -11,9 +11,9 @@ const source: SalesOrderSource = {
     await requireResolvedPayments(tx, actor, id)
     await releaseOrderReservations(tx, actor, id, reason)
   },
-  scope: actor => ({ source: { quotation: { opportunity: ownedRecordScope(actor, "salesOrders") } } }),
+  scope: actor => salesOrderRecordScope(actor),
   async read(tx, actor, quotationId, revision) {
-    const row = await tx.crmQuotationRevision.findFirst({ where: { tenantId: actor.tenantId, quotationId, number: revision, quotation: { opportunity: { AND: [ownedRecordScope(actor, "salesOrders"), ownedRecordScope(actor, "quotations", "read")] } } }, include: { quotation: { select: { opportunity: { select: { contact: { select: { archived: true } } } } } } } })
+    const row = await tx.crmQuotationRevision.findFirst({ where: { tenantId: actor.tenantId, quotationId, number: revision, quotation: { AND: [quotationRecordScope(actor, "read"), { opportunity: ownedRecordScope(actor, "salesOrders") }] } }, include: { quotation: { select: { opportunity: { select: { contact: { select: { archived: true } } } } } } } })
     if (!row) throw new BusinessError(404, "Quotation revision not found.")
     if (row.quotation.opportunity.contact.archived) throw new BusinessError(409, "Restore the customer before creating a sales order.")
     const snapshot = row.snapshot as unknown as QuotationSnapshot

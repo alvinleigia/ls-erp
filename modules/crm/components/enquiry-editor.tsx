@@ -40,6 +40,7 @@ function EnquiryEditorBody({ id, initialContactId, initialReferences }: { id?: s
   const readTerm = useTerminologyReader()
   const term = useTerminology()
   const allowedAssignment = useCurrentResourceAction("assign")
+  const canEdit = useCurrentResourceAction("edit")
   const extension = useCrmExtensionEditor(initialReferences)
   const loadExtension = extension.load
   const custom = useCustomFields("enquiry", id)
@@ -115,7 +116,7 @@ function EnquiryEditorBody({ id, initialContactId, initialReferences }: { id?: s
   if (loading) return <p>{term("crm.enquiry.singular", "Loading enquiry…", "Loading {label}…")}</p>
   const selectedAssignee = enquiry?.assignee ?? { id: values.assignedUserId, name: session?.user?.name || "Me" }
   return <div className={pageClass}>
-      <AccessPageHeader title={id ? enquiry?.title || term("crm.enquiry.singular", "Enquiry") : term("crm.enquiry.singular", "New enquiry", "New {label}")} backHref="/crm/enquiries" backLabel={term("crm.enquiry.plural", "Back to enquiries", "Back to {label}")} actions={<AccessFormActions form="enquiry-form" cancelHref="/crm/enquiries" saving={saving} disabled={loadFailed || custom.blocked} canSave={true} saveLabel={term("crm.enquiry.singular", "Save enquiry", "Save {label}")}>{enquiry && <>{enquiry.opportunity ? <Button variant="outline" asChild><Link href={`/crm/opportunities/${enquiry.opportunity.id}`}>{term("crm.opportunity.singular", "Open opportunity", "Open {label}")}</Link></Button> : enquiry.status !== "CLOSED" && <Button variant="outline" asChild><Link href={`/crm/opportunities/new?enquiryId=${enquiry.id}`}>{term("crm.opportunity.singular", "Convert to opportunity", "Convert to {label}")}</Link></Button>}</>}</AccessFormActions>} />
+      <AccessPageHeader title={id ? enquiry?.title || term("crm.enquiry.singular", "Enquiry") : term("crm.enquiry.singular", "New enquiry", "New {label}")} backHref="/crm/enquiries" backLabel={term("crm.enquiry.plural", "Back to enquiries", "Back to {label}")} actions={<AccessFormActions form="enquiry-form" cancelHref="/crm/enquiries" saving={saving} disabled={loadFailed || custom.blocked} canSave={true} saveLabel={term("crm.enquiry.singular", "Save enquiry", "Save {label}")}>{enquiry && <>{enquiry.opportunity ? <Button variant="outline" asChild><Link href={`/crm/opportunities/${enquiry.opportunity.id}`}>{term("crm.opportunity.singular", "Open opportunity", "Open {label}")}</Link></Button> : enquiry.status !== "CLOSED" && canEdit && <Button variant="outline" asChild><Link href={`/crm/opportunities/new?enquiryId=${enquiry.id}`}>{term("crm.opportunity.singular", "Convert to opportunity", "Convert to {label}")}</Link></Button>}</>}</AccessFormActions>} />
     <AccessRecordForm id="enquiry-form" onSubmit={save} saving={saving} disabled={loadFailed || custom.blocked} error={error} fingerprint={{ values, referralType, extension: extension.payload, custom: custom.payload }} initialSection="Enquiry details" createSection="Customer"
       overview={enquiry && <>
         <AccessSummarySection title="Customer" fields={[{ label: term("crm.contact.singular", "Contact"), value: <Link href={`/crm/contacts/${enquiry.contact.id}`} className="underline">{enquiry.contact.name}</Link> }, { label: term("crm.account.singular", "Buyer company"), value: enquiry.account?.name }]} />

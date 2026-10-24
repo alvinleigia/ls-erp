@@ -98,7 +98,7 @@ export function createCrmService<Fields extends object = object, Metadata extend
   }
 
   async function activity(tx: Tx, actor: CrmActor, enquiryId: string, event: string, message: string) {
-    await tx.crmActivity.create({ data: { tenantId: actor.tenantId, enquiryId, actorUserId: actor.userId, event, message } })
+    await tx.crmActivity.createMany({ data: { tenantId: actor.tenantId, enquiryId, actorUserId: actor.userId, event, message } })
   }
 
   async function findEnquiry(tx: Tx, actor: CrmActor, id: string) {
@@ -194,7 +194,7 @@ export function createCrmService<Fields extends object = object, Metadata extend
       return run("accounts.read", async (tx, actor) => {
         const account = await tx.crmAccount.findFirst({ where: { ...accountScope(actor), id } })
         if (!account) throw new CrmError(404, termText("crm.account.singular", "Business account not found.", "{label} not found."))
-        return { ...account, recordAccess: await recordActionAccess(actor, "accounts", async action => !!await tx.crmAccount.findFirst({ where: { ...accountScope(actor, action), id }, select: { id: true } })), canEdit: permits(actor, "accounts.edit") && !!await tx.crmAccount.findFirst({ where: { ...accountScope(actor, "edit"), id }, select: { id: true } }) }
+        return { ...account, recordAccess: await recordActionAccess(actor, "accounts", id, tx, async action => !!await tx.crmAccount.findFirst({ where: { ...accountScope(actor, action), id }, select: { id: true } })), canEdit: permits(actor, "accounts.edit") && !!await tx.crmAccount.findFirst({ where: { ...accountScope(actor, "edit"), id }, select: { id: true } }) }
       })
     },
     createAccount(input: unknown) {
@@ -299,7 +299,7 @@ export function createCrmService<Fields extends object = object, Metadata extend
       return run("contacts.read", async (tx, actor) => {
         const contact = await tx.crmContact.findFirst({ where: { ...contactScope(actor), id } })
         if (!contact) throw new CrmError(404, termText("crm.contact.singular", "Contact not found.", "{label} not found."))
-        return { ...contact, recordAccess: await recordActionAccess(actor, "contacts", async action => !!await tx.crmContact.findFirst({ where: { ...contactScope(actor, action), id }, select: { id: true } })), canEdit: permits(actor, "contacts.edit") && !!await tx.crmContact.findFirst({ where: { ...contactScope(actor, "edit"), id }, select: { id: true } }) }
+        return { ...contact, recordAccess: await recordActionAccess(actor, "contacts", id, tx, async action => !!await tx.crmContact.findFirst({ where: { ...contactScope(actor, action), id }, select: { id: true } })), canEdit: permits(actor, "contacts.edit") && !!await tx.crmContact.findFirst({ where: { ...contactScope(actor, "edit"), id }, select: { id: true } }) }
       })
     },
     createContact(input: unknown) {
@@ -351,7 +351,7 @@ export function createCrmService<Fields extends object = object, Metadata extend
       return run("enquiries.read", async (tx, actor) => {
         const { items: [record] } = await extensions.decorate(tx, actor, "enquiry", await maskReferrals(tx, actor, [await findEnquiry(tx, actor, id)]))
         const events = await Promise.all(["created", "updated", "assigned"].map(event => tx.crmActivity.findFirst({ where: { tenantId: actor.tenantId, enquiryId: id, event }, orderBy: [{ createdAt: "desc" }, { id: "desc" }], select: { createdAt: true, actor: { select: personSelect } } })))
-        return { ...record, recordAccess: await recordActionAccess(actor, "enquiries", async action => !!await tx.crmEnquiry.findFirst({ where: { ...enquiryScope(actor, action), id }, select: { id: true } })), customFields: await readCustomFields(tx, actor, enquiryFields, record), metadata: { created: events[0], updated: events[1] || events[0], assigned: events[2] }, canAssign: permits(actor, "enquiries.assign"), opportunity: await tx.crmOpportunity.findFirst({ where: { ...opportunityScope(actor), enquiryId: id }, select: { id: true } }) }
+        return { ...record, recordAccess: await recordActionAccess(actor, "enquiries", id, tx, async action => !!await tx.crmEnquiry.findFirst({ where: { ...enquiryScope(actor, action), id }, select: { id: true } })), customFields: await readCustomFields(tx, actor, enquiryFields, record), metadata: { created: events[0], updated: events[1] || events[0], assigned: events[2] }, canAssign: permits(actor, "enquiries.assign"), opportunity: await tx.crmOpportunity.findFirst({ where: { ...opportunityScope(actor), enquiryId: id }, select: { id: true } }) }
       })
     },
     createEnquiry(input: unknown) {
@@ -373,28 +373,32 @@ export function createCrmService<Fields extends object = object, Metadata extend
         const fieldRecord = { ...before, salesTeamId: team?.id ?? null }
         const context = await enquiryContext(tx, actor, before.contactId, data, before)
         const lost = await resolveLostReason(tx, actor, data.status === "CLOSED", data.lostReasonId, before.status === "CLOSED" ? before : undefined)
+        let inheritedIds: { id: string }[] = []
         if (before.assignedUserId !== data.assignedUserId) {
+          const [handoff] = await tx.$queryRaw<{ allowed: boolean }[]>`SELECT app.record_sharing_handoff_allowed(${actor.tenantId}, ${id}, ${actor.userId}) AS allowed`
+          if (!handoff?.allowed) throw new CrmError(403, "A restricted inherited activity prevents this reassignment.")
           const inherited = { tenantId: actor.tenantId, enquiryId: id, followParentAssignment: true, status: { in: ["OPEN", "IN_PROGRESS"] as ("OPEN" | "IN_PROGRESS")[] } }
-          if (await tx.crmTask.count({ where: inherited })) {
+          inheritedIds = await tx.crmTask.findMany({ where: inherited, select: { id: true } })
+          if (inheritedIds.length) {
             requirePermission(actor, ["activities.edit", "activities.assign"])
             if (await tx.crmTask.count({ where: { AND: [inherited, { OR: [{ NOT: workScope(actor, "edit") }, { NOT: workScope(actor, "assign") }] }] } })) throw new CrmError(403, "The inherited activities are outside your assignment access.")
           }
         }
-        const changed = await tx.crmEnquiry.updateMany({ where: { ...enquiryScope(actor), id, version }, data: { ...data, salesTeamId: team?.id ?? null, ...context, ...lost, version: { increment: 1 } } })
-        if (!changed.count) throw new CrmError(409, termText("crm.enquiry.singular", "This enquiry changed. Refresh before saving.", "This {label} changed. Refresh before saving."))
         await extensions.save(tx, actor, "enquiry", id, extension)
         await saveCustomFields(tx, actor, enquiryFields, fieldRecord, custom.patch)
+        const changed = await tx.crmEnquiry.updateManyAndReturn({ where: { ...enquiryScope(actor), id, version }, data: { ...data, salesTeamId: team?.id ?? null, ...context, ...lost, version: { increment: 1 } }, include: enquiryInclude })
+        if (!changed.length) throw new CrmError(409, termText("crm.enquiry.singular", "This enquiry changed. Refresh before saving.", "This {label} changed. Refresh before saving."))
         if (before.assignedUserId !== data.assignedUserId) {
           const nextOwner = await tx.user.findFirstOrThrow({ where: { tenantId: actor.tenantId, id: data.assignedUserId }, select: personSelect })
           await activity(tx, actor, id, "assigned", `Salesperson changed from ${before.assignee.name || "unnamed user"} to ${nextOwner.name || "unnamed user"}.`)
-          const inherited = await tx.crmTask.findMany({ where: { tenantId: actor.tenantId, enquiryId: id, followParentAssignment: true, status: { in: ["OPEN", "IN_PROGRESS"] } }, select: { id: true } })
+          const inherited = inheritedIds
           // The database trigger transfers inherited assignments atomically.
           // Record the handoff actor in activity history in the same transaction.
           if (inherited.length) await tx.crmTaskEvent.createMany({ data: inherited.map(item => ({ tenantId: actor.tenantId, taskId: item.id, actorUserId: actor.userId, event: "crm.work.assignment.inherited", message: "Activity reassigned with its enquiry." })) })
         }
         await activity(tx, actor, id, "updated", `Enquiry updated. Status: ${data.status === "CLOSED" ? "Lost" : data.status}.${lost.lostReasonName ? ` Lost reason: ${lost.lostReasonName}.` : ""}${data.assignedUserId !== before.assignedUserId ? " Salesperson changed." : ""}`)
         await audit(tx, actor, "crm.enquiry.updated", id, snapshot(before), snapshot({ ...data, ...context, ...lost }))
-        return { ...(await extensions.decorate(tx, actor, "enquiry", await maskReferrals(tx, actor, [await tx.crmEnquiry.findFirstOrThrow({ where: { tenantId: actor.tenantId, id }, include: enquiryInclude })]))).items[0], customFields: await readCustomFields(tx, actor, enquiryFields, fieldRecord) }
+        return { ...(await extensions.decorate(tx, actor, "enquiry", await maskReferrals(tx, actor, [changed[0]]))).items[0], customFields: await readCustomFields(tx, actor, enquiryFields, fieldRecord) }
       })
     },
     listTasks(input: unknown, enquiryId?: string) {

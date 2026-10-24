@@ -5,9 +5,9 @@ export type PermissionAction = typeof permissionActions[number]
 const editable = ["read", "create", "edit"] as const
 const records = ["read", "create", "edit", "archive"] as const
 export const accessResources = {
-  receivables: { name: "Order receivables", module: "receivables", actions: ["read", "create"] },
-  orderPayments: { name: "Order payments (cancel records a correction or full refund)", module: "receivables", actions: ["read", "create", "cancel"] },
-  unitReservations: { name: "Unit reservations (confirm allocates; cancel releases)", module: "catalog", actions: ["read", "create", "confirm", "cancel"] },
+  receivables: { name: "Order receivables", module: "receivables", actions: ["read", "create"], createOnRecord: true },
+  orderPayments: { name: "Order payments (cancel records a correction or full refund)", module: "receivables", actions: ["read", "create", "cancel"], createOnRecord: true },
+  unitReservations: { name: "Unit reservations (confirm allocates; cancel releases)", module: "catalog", actions: ["read", "create", "confirm", "cancel"], createOnRecord: true },
   salesOrders: { name: "Sales orders", module: "salesOrders", actions: ["read", "create", "confirm", "cancel"] },
   catalogItems: { name: "Sales catalog items", module: "catalog", actions: records },
   dashboard: { name: "Business dashboard", module: "core", actions: ["read"] },
@@ -55,7 +55,7 @@ export const accessResources = {
   projectSettings: { name: "Property choices", module: "realEstate", actions: records },
   quotations: { name: "Quotations", module: "salesDocuments", actions: [...editable, "export"] },
   quotationTemplates: { name: "Quotation templates", module: "salesDocuments", actions: records },
-} as const satisfies Record<string, { name: string; module: BusinessModuleKey | "core"; actions: readonly PermissionAction[] }>
+} as const satisfies Record<string, { name: string; module: BusinessModuleKey | "core"; actions: readonly PermissionAction[]; createOnRecord?: boolean }>
 export type Resource = keyof typeof accessResources
 export type Permission = `${Resource}.${PermissionAction}`
 export type Requirement = Permission | { any: readonly Permission[] } | readonly Requirement[]

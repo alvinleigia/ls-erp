@@ -1,5 +1,6 @@
 import { PrismaPg } from "@prisma/adapter-pg"
 import type { Pool } from "pg"
+import { databaseActorId } from "./database-actor"
 
 type Scope = { tenantId?: string; bypass?: boolean }
 type Adapter = Awaited<ReturnType<PrismaPg["connect"]>>
@@ -69,7 +70,9 @@ export class TenantPgAdapter extends PrismaPg {
       tx.commit = () => release(true)
       tx.rollback = () => release(false)
       try {
-        await tx.queryRaw({ sql: this.scopeSql, args: [], argTypes: [] })
+        const actorId = databaseActorId()
+        if (actorId && !/^[A-Za-z0-9_-]+$/.test(actorId)) throw new Error("Invalid database actor identity.")
+        await tx.queryRaw({ sql: `${this.scopeSql}, set_config('app.actor_id', '${actorId}', true)`, args: [], argTypes: [] })
         return tx
       } catch (error) {
         await finish(tx, false)

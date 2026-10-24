@@ -123,7 +123,7 @@ test('concurrent updates create one new version and stale writer gets a conflict
  assert.equal(await root.crmQuotationRevision.count({where:{tenantId:tenant,quotationId:q.id}}),2)
 })
 test('required audit failure rolls document header, snapshot and history back',async()=>{
- const broken={$transaction:(operation,options)=>db.$transaction(tx=>operation(new Proxy(tx,{get(target,key){if(key==='auditLog')return {create:async()=>{throw Error('audit unavailable')}};return target[key]}})),options)}
+ const broken={$transaction:(operation,options)=>db.$transaction(tx=>operation(new Proxy(tx,{get(target,key){if(key==='auditLog')return {createMany:async()=>{throw Error('audit unavailable')}};return target[key]}})),options)}
  const service=createCrmService(broken,{tenantId:tenant,userId:manager.id})
  const before=await root.crmQuotation.count({where:{tenantId:tenant}})
  await assert.rejects(service.saveQuotation(deal.id,{content:content()}),/audit unavailable/)
@@ -202,7 +202,7 @@ test('module switches guard every document operation, dependencies, audit and co
  await updateBusinessModule(db,identity,{key:'salesDocuments',enabled:true})
  await updateBusinessModule(db,identity,{key:'paymentPlans',enabled:true})
  assert.equal((await crm.getQuotation(quote.id)).version,1)
- const broken={$transaction:(fn,options)=>db.$transaction(tx=>fn(new Proxy(tx,{get(target,key){if(key==='auditLog')return {create:async()=>{throw Error('audit unavailable')}};return target[key]}})),options)}
+ const broken={$transaction:(fn,options)=>db.$transaction(tx=>fn(new Proxy(tx,{get(target,key){if(key==='auditLog')return {createMany:async()=>{throw Error('audit unavailable')}};return target[key]}})),options)}
  await assert.rejects(updateBusinessModule(broken,identity,{key:'paymentPlans',enabled:false}),/audit unavailable/)
  assert.equal((await root.tenantModule.findUnique({where:{tenantId_key:{tenantId:tenant,key:'paymentPlans'}}})).enabled,true)
 })

@@ -47,7 +47,7 @@ export function createReservationService(db: PrismaClient, identity: Pick<Busine
     list(orderId: string) {
       return run("unitReservations.read", async (tx, actor) => {
         const selected = await order(tx, actor, orderId), refs = source.units(selected)
-        const recordAccess = await recordActionAccess(actor, "unitReservations", action => source.find(tx, { ...actor, operation: { resource: "unitReservations", action } }, orderId))
+        const recordAccess = await recordActionAccess(actor, "unitReservations", orderId, tx, action => source.find(tx, { ...actor, operation: { resource: "unitReservations", action } }, orderId))
         const visible = await tx.catalogItem.findMany({ where: { AND: [await catalogScope(tx, actor, extensions), { id: { in: refs.map(ref => ref.itemId) } }] }, select: { id: true, archived: true, availability: true, kind: true } })
         const now = await reservationClock(tx), occupied = await reservedUnits(tx, actor.tenantId, visible.map(v => v.id), now)
         // One order has a bounded quotation; history is paged separately below.
@@ -81,14 +81,12 @@ export function createReservationService(db: PrismaClient, identity: Pick<Busine
         const current = await item(tx, actor, data.itemId), now = await reservationClock(tx), expiresAt = new Date(data.expiresAt)
         if (expiresAt <= now || expiresAt.getTime() > now.getTime() + 30 * 86400000) throw new BusinessError(400, "Choose a future expiry within 30 days.")
         if (current.archived || current.kind !== "UNIT" || current.availability !== "AVAILABLE") throw new BusinessError(409, "This unit is unavailable.")
+        await tx.$executeRaw`SELECT app.expire_item_reservations(${actor.tenantId},${data.itemId},${actor.requestId ?? null})`
         const existing = await tx.unitReservation.findFirst({ where: { tenantId: actor.tenantId, itemId: data.itemId, status: { in: ["HELD", "ALLOCATED"] } } })
+        if (!existing && (await reservedUnits(tx, actor.tenantId, [data.itemId], now)).has(data.itemId)) throw new BusinessError(409, "This unit is already reserved or allocated.")
         if (existing) {
-          if (existing.status === "ALLOCATED" || existing.expiresAt > now) {
-            if (existing.orderId === orderId) return existing
-            throw new BusinessError(409, "This unit is already reserved or allocated.")
-          }
-          const expired = await tx.unitReservation.update({ where: { tenantId_id: { tenantId: actor.tenantId, id: existing.id } }, data: { status: "EXPIRED", version: { increment: 1 } } })
-          await reservationEvent(tx, actor, expired, "HELD", "Hold expired at its scheduled expiry.")
+          if (existing.orderId === orderId) return existing
+          throw new BusinessError(409, "This unit is already reserved or allocated.")
         }
         const row = await tx.unitReservation.create({ data: { tenantId: actor.tenantId, orderId, itemId: data.itemId, itemCode: ref.code, itemName: ref.name, expiresAt } })
         await reservationEvent(tx, actor, row)

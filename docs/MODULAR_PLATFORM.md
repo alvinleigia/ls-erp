@@ -1,3 +1,31 @@
+## R9 - Selected sharing and Restricted visibility (local staging)
+
+Tenant administrators can share supported records with selected users/teams as
+Read only or Read and edit. Normal retains existing visibility; Restricted limits
+ordinary tenant-wide managers to responsibility/selected grants while preserving
+tenant-admin oversight. Profiles, None rules, activation, native action limits and
+source privacy still apply. CRM, project inheritance, quotations and orders share
+the same mechanism; order financial children inherit it. Flat multi-team management
+remains; nested team trees are deferred. Operational scheduling/purchasing retain
+their registered adapters without per-record sharing in this release.
+
+Migration 111 preserves all 117 prior business tables and leaves existing records
+Normal. Restrictive RLS covers source copies/history; minimal item availability
+remains authoritative when an order is private. Enquiry conversion requires source
+Edit and opportunity Create. No runtime compatibility flags or tenant overrides.
+
+Local verification: sharing 13 passed; ERP access 258 passed / 2 historical-only
+skips; CRM/configuration 136 passed / 2 historical-only skips; financial 61 passed;
+teams/import 30 passed; existing CRM units 60 passed; policy/notification units 10
+passed; real-Chrome access/sharing 15 passed with screenshots inspected. Build,
+TypeScript and changed-source lint pass. A loaded parallel run hit the existing
+five-second workforce transaction timeout; the quieter full rerun passed without
+changing runtime timeouts. Database evidence is disposable/synthetic only.
+
+Pending migrations 108-111 and code remain local. No push, deployment, hosted
+migration or client-data changes. See [sharing contract and verification](RECORD_SHARING_R9.md).
+Earlier milestone entries below describe the preceding implementation.
+
 ## R9 - Resource/action access standardization (local staging)
 
 Existing modules now use composed profile grants and permission-keyed per-user

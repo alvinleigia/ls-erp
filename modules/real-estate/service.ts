@@ -107,8 +107,8 @@ export function createRealEstateService(db: PrismaClient, identity: Pick<Busines
         const team = record.teamId ? await tx.businessTeam.findFirst({ where: { tenantId: actor.tenantId, id: record.teamId }, select: { id: true, name: true } }) : null
         const developerAccount = record.developerAccountId ? await tx.crmAccount.findFirst({ where: { AND: [accountScope(actor), { id: record.developerAccountId }] }, select: { id: true, name: true } }) : null
         const parent = record.parentId ? await tx.realEstateProject.findFirst({ where: { tenantId: actor.tenantId, id: record.parentId }, select: { id: true, name: true, archived: true } }) : null
-        const recordAccess = await recordActionAccess(actor, "projects", action => tx.realEstateProject.findFirst({ where: { AND: [projectScope(actor, action), { id }] }, select: { id: true } }))
-        const membersAccess = await recordActionAccess(actor, "projectMembers", action => tx.realEstateProject.findFirst({ where: { AND: [projectScope(actor, "read"), projectScope(actor, action, "projectMembers"), { id }] }, select: { id: true } }))
+        const recordAccess = await recordActionAccess(actor, "projects", id, tx, action => tx.realEstateProject.findFirst({ where: { AND: [projectScope(actor, action), { id }] }, select: { id: true } }))
+        const membersAccess = await recordActionAccess(actor, "projectMembers", id, tx, action => tx.realEstateProject.findFirst({ where: { AND: [projectScope(actor, "read"), projectScope(actor, action, "projectMembers"), { id }] }, select: { id: true } }))
         Object.assign(recordAccess.permissions, membersAccess.permissions)
         return { ...record, team, recordAccess, customFields: await readCustomFields(tx, actor, projectFields, record), developerAccountId: developerAccount?.id || null, developerAccount, developerRestricted: !!record.developerAccountId && !developerAccount, parent, canManage: !!recordAccess.permissions["projects.edit"] }
       })

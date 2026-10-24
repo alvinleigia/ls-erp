@@ -7,17 +7,21 @@ import { Section } from "@/components/erp/section"
 import { ReadOnlyFields } from "@/components/erp/record-detail"
 import { pageClass } from "@/components/erp/page"
 import { AccessPageHeader } from "@/platform/access/record-page"
+import { withRecordView, useRecordView } from "@/platform/access/record-view"
+import type { RecordAccess } from "@/platform/access/record-actions"
 import Link from "@/platform/access/link"
 import { useTerminology } from "@/platform/terminology/provider"
 import { useDateFormatter } from "@/hooks/use-date-formatter"
 import { formatDecimalCurrency } from "@/lib/formatting"
 import { orderRequest } from "./request"
 import { orderStatus, type OrderRow } from "./list"
-type OrderDetail = OrderRow & { snapshot: unknown; canConfirm: boolean; canCancel: boolean; history: { version: number; status: string; actorName: string; reason: string; createdAt: string }[] }
-export function OrderDetail({ id, renderSnapshot, renderRelated }: { id: string; renderSnapshot: (snapshot: unknown) => ReactNode; renderRelated?: (version: number) => ReactNode }) {
+type OrderDetail = OrderRow & { recordAccess: RecordAccess; snapshot: unknown; canConfirm: boolean; canCancel: boolean; history: { version: number; status: string; actorName: string; reason: string; createdAt: string }[] }
+export const OrderDetail = withRecordView(OrderDetailBody)
+function OrderDetailBody({ id, renderSnapshot, renderRelated }: { id: string; renderSnapshot: (snapshot: unknown) => ReactNode; renderRelated?: (version: number) => ReactNode }) {
+  const { loadAccess } = useRecordView()!
   const term = useTerminology(), { formatDateTime } = useDateFormatter()
   const [row, setRow] = useState<OrderDetail>(), [error, setError] = useState(""), [busy, setBusy] = useState(false), [action, setAction] = useState<"confirm" | "cancel" | null>(null), [reason, setReason] = useState("")
-  const load = useCallback(async (signal?: AbortSignal) => setRow(await orderRequest<OrderDetail>(`/api/sales-orders/${id}`, { signal })), [id])
+  const load = useCallback(async (signal?: AbortSignal) => { const data = await orderRequest<OrderDetail>(`/api/sales-orders/${id}`, { signal }); loadAccess(data.recordAccess); setRow(data) }, [id, loadAccess])
   useEffect(() => { const c = new AbortController(); load(c.signal).catch(e => { if (!c.signal.aborted) setError(e.message) }); return () => c.abort() }, [load])
   async function transition() {
     if (!row || !action) return

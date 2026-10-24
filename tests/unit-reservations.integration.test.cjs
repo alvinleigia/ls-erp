@@ -116,7 +116,7 @@ test('tenant RLS, composite FKs, immutable snapshots/history and catalog write g
 test('cancelling order releases allocations even with catalog disabled; audit failure rolls everything back',async()=>{
  const f=await fixture(),held=await hold(f)
  await orders.transition(f.order.id,{action:'confirm',version:1});await reservations.transition(f.order.id,held.id,{action:'allocate',version:1})
- const broken=new Proxy(db,{get(target,key){if(key==='$transaction')return (fn,options)=>target.$transaction(tx=>fn(new Proxy(tx,{get(t,k){if(k==='auditLog')return {create:async()=>{throw Error('Audit unavailable')}};return t[k]}})),options);return target[key]}})
+ const broken=new Proxy(db,{get(target,key){if(key==='$transaction')return (fn,options)=>target.$transaction(tx=>fn(new Proxy(tx,{get(t,k){if(k==='auditLog')return {createMany:async()=>{throw Error('Audit unavailable')}};return t[k]}})),options);return target[key]}})
  await assert.rejects(applicationSalesOrders(broken,identity(manager)).transition(f.order.id,{action:'cancel',version:2,reason:'Cancel with audit failure'}),/Audit unavailable/)
  assert.equal((await orders.get(f.order.id)).status,'CONFIRMED');assert.equal((await reservations.history(f.order.id)).items[0].status,'ALLOCATED')
  await root.tenantModule.update({where:{tenantId_key:{tenantId:tenant,key:'catalog'}},data:{enabled:false}})

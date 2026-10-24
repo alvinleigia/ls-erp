@@ -80,7 +80,7 @@ test('collection links are tenant-safe and immutable; audit failure rolls back t
  for(const collectionOrderId of [otherId,null])await assert.rejects(root.crmTask.update({where:{tenantId_id:{tenantId:tenant,id:task.id}},data:{collectionOrderId}}))
  assert.equal((await dbB.crmTask.findMany({where:{tenantId:tenant,collectionOrderId:id}})).length,0)
  assert.equal((await unscoped.crmTask.findMany({where:{collectionOrderId:id}})).length,0)
- const broken=new Proxy(db,{get(target,key){if(key==='$transaction')return (fn,options)=>target.$transaction(tx=>fn(new Proxy(tx,{get(t,k){if(k==='auditLog')return new Proxy(t.auditLog,{get(a,m){return m==='create'?async()=>{throw Error('Audit unavailable')}:a[m]}});return t[k]}})),options);return target[key]}})
+ const broken=new Proxy(db,{get(target,key){if(key==='$transaction')return (fn,options)=>target.$transaction(tx=>fn(new Proxy(tx,{get(t,k){if(k==='auditLog')return new Proxy(t.auditLog,{get(a,m){return m==='createMany'?async()=>{throw Error('Audit unavailable')}:a[m]}});return t[k]}})),options);return target[key]}})
  const before=await root.crmTask.count({where:{tenantId:tenant,collectionOrderId:otherId}})
  await assert.rejects(createApplicationCrmService(broken,identity(manager)).createWork(collection(otherId)),/Audit unavailable/)
  assert.equal(await root.crmTask.count({where:{tenantId:tenant,collectionOrderId:otherId}}),before)
@@ -158,7 +158,7 @@ test('deferred database checks reject unreconciled receipts and cross-order allo
  await assert.rejects(root.$transaction(async tx=>{const p=await tx.orderReceipt.create({data});await tx.orderReceiptAllocation.create({data:{tenantId:tenant,orderId:id,paymentId:p.id,lineId:line.id,amount:'10'}})}))
 })
 test('audit failure rolls back opening, payment and reversal with all balances intact',async()=>{
- const broken=new Proxy(db,{get(target,key){if(key==='$transaction')return (fn,options)=>target.$transaction(tx=>fn(new Proxy(tx,{get(t,k){if(k==='auditLog')return new Proxy(t.auditLog,{get(a,m){return m==='create'?async()=>{throw Error('Audit unavailable')}:a[m]}});return t[k]}})),options);return target[key]}}),service=applicationReceivables(broken,identity(manager))
+ const broken=new Proxy(db,{get(target,key){if(key==='$transaction')return (fn,options)=>target.$transaction(tx=>fn(new Proxy(tx,{get(t,k){if(k==='auditLog')return new Proxy(t.auditLog,{get(a,m){return m==='createMany'?async()=>{throw Error('Audit unavailable')}:a[m]}});return t[k]}})),options);return target[key]}}),service=applicationReceivables(broken,identity(manager))
  const id=await fresh();await assert.rejects(service.open(id,{dueDates:[null]}),/Audit unavailable/);assert.equal((await svc().get(id)).account,null)
  await svc().open(id,{dueDates:[null]});await assert.rejects(service.record(id,pay()),/Audit unavailable/);assert.equal(String((await svc().get(id)).paid),'0')
  const p=await svc().record(id,pay());await assert.rejects(service.reverse(id,p.id,reverse()),/Audit unavailable/);const view=await svc().get(id);assert.equal(view.items[0].status,'POSTED');assert.equal(view.account.version,2)

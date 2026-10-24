@@ -60,7 +60,7 @@ export function createSalesService<Fields extends object, Metadata extends objec
     }
   }
   async function history(tx: Tx, actor: CrmActor, id: string, event: string, message: string, before?: unknown, after?: unknown) {
-    await tx.crmOpportunityActivity.create({ data: { tenantId: actor.tenantId, opportunityId: id, actorUserId: actor.userId, event, message } })
+    await tx.crmOpportunityActivity.createMany({ data: { tenantId: actor.tenantId, opportunityId: id, actorUserId: actor.userId, event, message } })
     await audit(tx, actor, event, id, before ? snapshot(before) : undefined, after ? snapshot(after) : undefined)
   }
   return {
@@ -145,7 +145,7 @@ export function createSalesService<Fields extends object, Metadata extends objec
         return { ...page(decorated.items.map(item => ({ ...item, overdueActivityCount: counts.get(item.id) || 0 })), total, query.page, query.pageSize), ...decorated.metadata, exportTerms: exporting ? await readTerms(tx, actor) : undefined, extensionExport: decorated.exportFields, customFieldExport: exporting ? await customFieldExport(tx, actor, opportunityFields, items.map(item => item.id)) : undefined }
       })
     },
-    getOpportunity(id: string) { return run("opportunities.read", async (tx, actor) => ({ ...await find(tx, actor, id), recordAccess: await recordActionAccess(actor, "opportunities", async action => !!await tx.crmOpportunity.findFirst({ where: { ...scope(actor, action), id }, select: { id: true } })) })) },
+    getOpportunity(id: string) { return run("opportunities.read", async (tx, actor) => ({ ...await find(tx, actor, id), recordAccess: await recordActionAccess(actor, "opportunities", id, tx, async action => !!await tx.crmOpportunity.findFirst({ where: { ...scope(actor, action), id }, select: { id: true } })) })) },
     createOpportunity(input: unknown) {
       const custom = splitCustomFields(input)
       const { core, extension } = extensions.splitWrite(custom.core)
@@ -154,7 +154,8 @@ export function createSalesService<Fields extends object, Metadata extends objec
         let sourceEnquiry: CrmEnquiry | null = null
         if (data.enquiryId) {
           requirePermission(actor, "enquiries.read")
-          const enquiry = await tx.crmEnquiry.findFirst({ where: { ...enquiryScope(actor), id: data.enquiryId } })
+          requirePermission(actor, "enquiries.edit")
+          const enquiry = await tx.crmEnquiry.findFirst({ where: { ...enquiryScope(actor, "edit"), id: data.enquiryId } })
           if (!enquiry) throw new CrmError(404, termText("crm.enquiry.singular", "Enquiry not found.", "{label} not found."))
           const existing = await tx.crmOpportunity.findFirst({ where: { tenantId: actor.tenantId, enquiryId: enquiry.id } })
           if (existing) return find(tx, actor, existing.id)
@@ -187,7 +188,7 @@ export function createSalesService<Fields extends object, Metadata extends objec
         await saveCustomFields(tx, actor, opportunityFields, result, custom.patch, true, !!sourceEnquiry)
         await history(tx, actor, result.id, "crm.opportunity.created", `Created in ${stage.pipeline.name} / ${stage.name}.`, undefined, result)
         if (data.enquiryId) {
-          await tx.crmActivity.create({ data: { tenantId: actor.tenantId, enquiryId: data.enquiryId, actorUserId: actor.userId, event: "crm.enquiry.converted", message: `Created opportunity: ${result.title}.` } })
+          await tx.crmActivity.createMany({ data: { tenantId: actor.tenantId, enquiryId: data.enquiryId, actorUserId: actor.userId, event: "crm.enquiry.converted", message: `Created opportunity: ${result.title}.` } })
           await audit(tx, actor, "crm.enquiry.converted", data.enquiryId, undefined, { opportunityId: result.id })
         }
         return { ...(await extensions.decorate(tx, actor, "opportunity", await maskReferrals(tx, actor, [result]))).items[0], customFields: await readCustomFields(tx, actor, opportunityFields, result) }
@@ -207,16 +208,16 @@ export function createSalesService<Fields extends object, Metadata extends objec
         await relations(tx, actor, data.contactId, data.accountId, before)
         const changedStage = data.stageId !== before.stageId
         const stage = await destination(tx, actor, data.pipelineId, data.stageId, changedStage)
-        const updated = await tx.crmOpportunity.updateMany({ where: { ...scope(actor), id, version }, data: {
+        await extensions.save(tx, actor, "opportunity", id, extension)
+        await saveCustomFields(tx, actor, opportunityFields, { ...before, salesTeamId: team?.id ?? null }, custom.patch)
+        const updated = await tx.crmOpportunity.updateManyAndReturn({ where: { ...scope(actor), id, version }, data: {
           ...data, salesTeamId: team?.id ?? null, ...outcome(stage, data.lossReason, data.probability ?? (changedStage ? undefined : before.probability)),
           ...await resolveLostReason(tx, actor, stage.kind === "LOST", data.lostReasonId, before.stage.kind === "LOST" ? before : undefined), accountId: data.accountId || null,
           expectedCloseOn: new Date(`${data.expectedCloseOn}T00:00:00Z`), version: { increment: 1 },
           closedAt: stage.kind === "OPEN" ? null : before.closedAt ?? new Date(),
-        } })
-        if (!updated.count) throw new CrmError(409, termText("crm.opportunity.singular", "This opportunity changed. Refresh before saving.", "This {label} changed. Refresh before saving."))
-        await extensions.save(tx, actor, "opportunity", id, extension)
-        await saveCustomFields(tx, actor, opportunityFields, { ...before, salesTeamId: team?.id ?? null }, custom.patch)
-        const after = await tx.crmOpportunity.findFirstOrThrow({ where: { tenantId: actor.tenantId, id }, include })
+        }, include })
+        if (!updated.length) throw new CrmError(409, termText("crm.opportunity.singular", "This opportunity changed. Refresh before saving.", "This {label} changed. Refresh before saving."))
+        const after = updated[0]
         await history(tx, actor, id, changedStage ? "crm.opportunity.stage.changed" : "crm.opportunity.updated",
           changedStage ? `${before.pipeline.name} / ${before.stage.name} → ${stage.pipeline.name} / ${stage.name}.${after.lostReasonName ? ` Lost reason: ${after.lostReasonName}.` : ""}${after.lossReason ? ` Closing note: ${after.lossReason}` : ""}` : "Opportunity details updated.", before, after)
         return { ...(await extensions.decorate(tx, actor, "opportunity", await maskReferrals(tx, actor, [after]))).items[0], customFields: await readCustomFields(tx, actor, opportunityFields, after) }

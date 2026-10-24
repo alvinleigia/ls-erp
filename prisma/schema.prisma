@@ -146,6 +146,9 @@ model CrmStage {
 }
 
 model CrmOpportunity {
+  sharingPolicyId String?
+  sharingPolicy RecordSharingPolicy? @relation(fields: [tenantId, sharingPolicyId], references: [tenantId, id], onDelete: Restrict)
+  @@unique([tenantId, sharingPolicyId])
   quotations CrmQuotation[]
   salesTeamId String?
   salesTeam BusinessTeam? @relation(fields: [tenantId, salesTeamId], references: [tenantId, id], onDelete: Restrict)
@@ -229,6 +232,9 @@ model TenantModule {
 }
 
 model CrmContact {
+  sharingPolicyId String?
+  sharingPolicy RecordSharingPolicy? @relation(fields: [tenantId, sharingPolicyId], references: [tenantId, id], onDelete: Restrict)
+  @@unique([tenantId, sharingPolicyId])
   id           String @id @default(cuid())
   tenantId     String
   name         String
@@ -267,6 +273,9 @@ model CrmContact {
 }
 
 model CrmAccount {
+  sharingPolicyId String?
+  sharingPolicy RecordSharingPolicy? @relation(fields: [tenantId, sharingPolicyId], references: [tenantId, id], onDelete: Restrict)
+  @@unique([tenantId, sharingPolicyId])
   realEstateProjects RealEstateProject[]
   id          String @id @default(cuid())
   tenantId    String
@@ -343,6 +352,9 @@ model CrmLostReason {
 }
 
 model CrmEnquiry {
+  sharingPolicyId String?
+  sharingPolicy RecordSharingPolicy? @relation(fields: [tenantId, sharingPolicyId], references: [tenantId, id], onDelete: Restrict)
+  @@unique([tenantId, sharingPolicyId])
   salesTeamId String?
   salesTeam BusinessTeam? @relation(fields: [tenantId, salesTeamId], references: [tenantId, id], onDelete: Restrict)
   @@index([tenantId, salesTeamId])
@@ -390,6 +402,9 @@ model CrmEnquiry {
 }
 
 model CrmTask {
+  sharingPolicyId String?
+  sharingPolicy RecordSharingPolicy? @relation(fields: [tenantId, sharingPolicyId], references: [tenantId, id], onDelete: Restrict)
+  @@unique([tenantId, sharingPolicyId])
   id          String @id @default(cuid())
   tenantId    String
   collectionOrderId String?
@@ -711,6 +726,7 @@ enum StockMovementType {
 }
 
 model User {
+  recordSharingGrants RecordSharingGrant[]
   accessAssignments TenantRoleAssignment[]
   accessPolicy TenantUserAccess?
   businessTeamMemberships BusinessTeamMember[]
@@ -807,6 +823,9 @@ model Organization {
 }
 
 model Tenant {
+  catalogReservationAvailability CatalogReservationAvailability[]
+  recordSharingPolicies RecordSharingPolicy[]
+  recordSharingGrants RecordSharingGrant[]
   catalogItems CatalogItem[]
   propertyUnits RealEstateUnit[]
   terminologyRevision TenantTerminologyRevision?
@@ -2021,6 +2040,9 @@ model InventoryStockMovement {
   @@index([occurredAt])
 }
 model RealEstateProject {
+  sharingPolicyId String?
+  sharingPolicy RecordSharingPolicy? @relation(fields: [tenantId, sharingPolicyId], references: [tenantId, id], onDelete: Restrict)
+  @@unique([tenantId, sharingPolicyId])
   teamId String?
   team BusinessTeam? @relation(fields: [tenantId, teamId], references: [tenantId, id], onDelete: Restrict)
   @@index([tenantId, teamId])
@@ -2325,6 +2347,7 @@ model RealEstateProjectFieldValue {
 }
 
 model BusinessTeam {
+  recordSharingGrants RecordSharingGrant[]
   projects RealEstateProject[]
   tenantId String
   id String @default(cuid())
@@ -2371,6 +2394,9 @@ model CrmQuotationTemplate {
 }
 
 model CrmQuotation {
+  sharingPolicyId String?
+  sharingPolicy RecordSharingPolicy? @relation(fields: [tenantId, sharingPolicyId], references: [tenantId, id], onDelete: Restrict)
+  @@unique([tenantId, sharingPolicyId])
   tenantId String
   id String @default(cuid())
   opportunityId String
@@ -2402,6 +2428,9 @@ model CrmQuotationRevision {
 }
 
 model SalesOrder {
+  sharingPolicyId String?
+  sharingPolicy RecordSharingPolicy? @relation(fields: [tenantId, sharingPolicyId], references: [tenantId, id], onDelete: Restrict)
+  @@unique([tenantId, sharingPolicyId])
   tenantId String
   id String @default(cuid())
   quotationId String
@@ -2566,6 +2595,7 @@ model TenantUserAccess {
 }
 
 model CatalogItem {
+  reservationAvailability CatalogReservationAvailability?
   tenantId String
   id String @default(cuid())
   code String
@@ -2640,4 +2670,57 @@ model RealEstateUnit {
   @@id([tenantId, itemId])
   @@index([tenantId, projectId, itemId])
   @@index([tenantId, categoryId])
+}
+
+model RecordSharingPolicy {
+  id String @id @default(cuid())
+  tenantId String
+  resource String
+  recordId String
+  restricted Boolean @default(false)
+  version Int @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  grants RecordSharingGrant[]
+  contacts CrmContact[]
+  accounts CrmAccount[]
+  enquiries CrmEnquiry[]
+  opportunities CrmOpportunity[]
+  activities CrmTask[]
+  projects RealEstateProject[]
+  quotations CrmQuotation[]
+  salesOrders SalesOrder[]
+  @@unique([tenantId, id])
+  @@unique([tenantId, resource, recordId])
+  @@index([tenantId, restricted, resource])
+}
+
+// Public availability facts, maintained only by UnitReservation's database
+// trigger. Contains no order, customer or reservation identifier.
+model CatalogReservationAvailability {
+  tenantId String
+  itemId String
+  status String
+  expiresAt DateTime
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  item CatalogItem @relation(fields: [tenantId, itemId], references: [tenantId, id], onDelete: Cascade)
+  @@id([tenantId, itemId])
+}
+
+model RecordSharingGrant {
+  id String @id @default(cuid())
+  tenantId String
+  policyId String
+  userId String?
+  teamId String?
+  level String
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  policy RecordSharingPolicy @relation(fields: [tenantId, policyId], references: [tenantId, id], onDelete: Cascade)
+  user User? @relation(fields: [tenantId, userId], references: [tenantId, id], onDelete: Restrict)
+  team BusinessTeam? @relation(fields: [tenantId, teamId], references: [tenantId, id], onDelete: Restrict)
+  @@unique([policyId, userId])
+  @@unique([policyId, teamId])
+  @@index([tenantId, userId, policyId])
+  @@index([tenantId, teamId, policyId])
 }

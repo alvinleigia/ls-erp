@@ -1,16 +1,19 @@
 import { Prisma, type PrismaClient } from "@prisma/client"
 import type { BusinessActor } from "@/platform/policy"
-import { ownedRecordSql, ownedRecordScope } from "@/platform/access/record-scope"
+import { ownedRecordSql, sharingGrantSql, salesOrderRecordScope } from "@/platform/access/record-scope"
+import { recordLimits } from "@/platform/access/rules"
 import type { QuotationSnapshot } from "@/modules/sales-documents/quotation-service"
 import { createReceivableService } from "@/modules/receivables/service"
 import type { ReceivableSource } from "@/modules/receivables/contracts"
 const source: ReceivableSource = {
-  scope: actor => ({ source: { quotation: { opportunity: { AND: [ownedRecordScope(actor, actor.operation?.resource === "orderPayments" ? "orderPayments" : "receivables"), ownedRecordScope(actor, "receivables", "read"), ownedRecordScope(actor, "salesOrders", "read")] } } } }),
+  scope: actor => salesOrderRecordScope(actor, actor.operation?.resource === "orderPayments" ? "orderPayments" : "receivables"),
   visibleOrderIds(actor) {
+    const resource = actor.operation?.resource === "orderPayments" ? "orderPayments" : "receivables"
+    if (recordLimits(actor, resource).includes("NONE") || recordLimits(actor, "receivables", "read").includes("NONE") || recordLimits(actor, "salesOrders", "read").includes("NONE")) return Prisma.sql`SELECT id FROM "SalesOrder" WHERE FALSE`
     return Prisma.sql`SELECT o.id FROM "SalesOrder" o
       JOIN "CrmQuotation" q ON q."tenantId"=o."tenantId" AND q.id=o."quotationId"
       JOIN "CrmOpportunity" p ON p."tenantId"=q."tenantId" AND p.id=q."opportunityId"
-      WHERE o."tenantId"=${actor.tenantId} AND ${ownedRecordSql(actor, actor.operation?.resource === "orderPayments" ? "orderPayments" : "receivables", "p")} AND ${ownedRecordSql(actor, "receivables", "p", "read")} AND ${ownedRecordSql(actor, "salesOrders", "p", "read")}`
+      WHERE o."tenantId"=${actor.tenantId} AND ((${ownedRecordSql(actor, resource, "p")} AND ${ownedRecordSql(actor, "receivables", "p", "read")} AND ${ownedRecordSql(actor, "salesOrders", "p", "read")}) OR ${sharingGrantSql(actor, "salesOrders", "o", actor.operation?.action ?? "read", resource)})`
   },
   plan(value) {
     const { calculation: c } = value as unknown as QuotationSnapshot

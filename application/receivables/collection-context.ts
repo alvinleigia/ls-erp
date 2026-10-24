@@ -1,5 +1,5 @@
 import type { CrmExtensions } from "@/modules/crm/extensions"
-import { ownedRecordScope } from "@/platform/access/record-scope"
+import { salesOrderRecordScope } from "@/platform/access/record-scope"
 import { permits, requirePermission } from "@/platform/access/policy"
 import { moduleEnabled } from "@/platform/modules"
 import { BusinessError } from "@/platform/policy"
@@ -9,7 +9,7 @@ import { BusinessError } from "@/platform/policy"
 export const collectionContext: NonNullable<CrmExtensions["collectionContext"]> = async (tx, actor, orderId, creating) => {
   requirePermission(actor, ["receivables.read", "salesOrders.read"])
   if (!moduleEnabled(await tx.tenantModule.findMany({ where: { tenantId: actor.tenantId } }), "receivables")) throw new BusinessError(403, "Receivables is not enabled.")
-  const account = await tx.orderReceivable.findFirst({ where: { tenantId: actor.tenantId, orderId, order: { source: { quotation: { opportunity: { AND: [ownedRecordScope(actor, "receivables", "read"), ownedRecordScope(actor, "salesOrders", "read")] } } } } },
+  const account = await tx.orderReceivable.findFirst({ where: { tenantId: actor.tenantId, orderId, order: salesOrderRecordScope({ ...actor, operation: { resource: "receivables", action: "read" } }, "receivables") },
     include: { order: { select: { status: true, title: true, source: { select: { quotation: { select: { opportunity: { select: { id: true, contactId: true } } } } } } } } } })
   if (!account) throw new BusinessError(404, "Receivable not found.")
   const paid = await tx.orderReceipt.aggregate({ where: { tenantId: actor.tenantId, orderId, status: "POSTED" }, _sum: { amount: true } })

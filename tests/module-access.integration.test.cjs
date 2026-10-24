@@ -102,7 +102,7 @@ test('tenant isolation, database constraint, audit rollback and concurrent chang
   await assert.rejects(updateBusinessModule(dbB, identity(admin), { key: 'crm', enabled: false }), status(403))
   assert.equal(await dbB.tenantModule.count({ where: { tenantId: tenant } }), 0)
   await assert.rejects(root.tenantModule.update({ where: { tenantId_key: { tenantId: tenant, key: 'salesDocuments' } }, data: { enabled: true } }))
-  const broken = { $transaction: (fn, options) => root.$transaction(tx => fn(new Proxy(tx, { get(target, key) { if (key === 'auditLog') return { create: async () => { throw Error('audit unavailable') } }; return target[key] } })), options) }
+  const broken = { $transaction: (fn, options) => root.$transaction(tx => fn(new Proxy(tx, { get(target, key) { if (key === 'auditLog') return { createMany: async () => { throw Error('audit unavailable') } }; return target[key] } })), options) }
   await assert.rejects(updateTenantModuleAllowance(broken, identity(operator), tenant, { key: 'crm', allowed: false }), /audit unavailable/)
   assert.equal((await getTenantModules(root, identity(operator), tenant)).modules.find(row => row.key === 'crm').enabled, true)
   await allow('realEstate')

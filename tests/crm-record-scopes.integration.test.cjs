@@ -85,7 +85,7 @@ test('linked business accounts and contact writes inherit the same sales boundar
 test('audit failure rolls back team-manager authority and version',async()=>{
  const fault=new Proxy(db,{get(target,key){
   if(key==='$transaction')return(operation,options)=>target.$transaction(tx=>operation(new Proxy(tx,{get(inner,prop){
-   if(prop==='auditLog')return{create:async()=>{throw Error('audit unavailable')}}
+   if(prop==='auditLog')return{createMany:async()=>{throw Error('audit unavailable')}}
    const value=inner[prop];return typeof value==='function'?value.bind(inner):value
   }})),options)
   const value=target[key];return typeof value==='function'?value.bind(target):value

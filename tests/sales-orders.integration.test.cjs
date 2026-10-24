@@ -84,7 +84,7 @@ test('database rejects snapshot edits, deletion, invalid starts, duplicate activ
  assert.throws(()=>orders.create({quotationId:q.id,revision:1,snapshot:{consideration:'0'}}))
 })
 test('failed mandatory audit rolls back draft and transitions',async()=>{
- const broken=new Proxy(db,{get(target,key){if(key==='$transaction')return (fn,options)=>target.$transaction(tx=>fn(new Proxy(tx,{get(t,k){if(k==='auditLog')return new Proxy(t.auditLog,{get(a,method){return method==='create'?async()=>{throw Error('Audit unavailable')}:a[method]}});return t[k]}})),options);return target[key]}})
+ const broken=new Proxy(db,{get(target,key){if(key==='$transaction')return (fn,options)=>target.$transaction(tx=>fn(new Proxy(tx,{get(t,k){if(k==='auditLog')return new Proxy(t.auditLog,{get(a,method){return method==='createMany'?async()=>{throw Error('Audit unavailable')}:a[method]}});return t[k]}})),options);return target[key]}})
  const service=applicationSalesOrders(broken,identity(manager)),q=await quote()
  await assert.rejects(service.create({quotationId:q.id,revision:1}),/Audit unavailable/);assert.equal(await root.salesOrder.count({where:{tenantId:tenant,quotationId:q.id}}),0)
  const order=await orders.create({quotationId:q.id,revision:1});await assert.rejects(service.transition(order.id,{action:'confirm',version:1}),/Audit unavailable/)

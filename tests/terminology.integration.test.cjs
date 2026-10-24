@@ -109,7 +109,7 @@ test("audit failure rolls configuration and revision back together", async () =>
   const current = await service.read()
   const faulty = new Proxy(db, { get(target, prop) {
     if (prop === "$transaction") return (operation, options) => target.$transaction(tx => operation(new Proxy(tx, { get(inner, key) {
-      if (key === "auditLog") return { create: async () => { throw Error("audit fault") } }
+      if (key === "auditLog") return { createMany: async () => { throw Error("audit fault") } }
       const value = inner[key]; return typeof value === "function" ? value.bind(inner) : value
     } })), options)
     const value = target[prop]; return typeof value === "function" ? value.bind(target) : value

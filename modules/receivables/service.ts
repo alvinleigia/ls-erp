@@ -76,9 +76,9 @@ export function createReceivableService(db: PrismaClient, identity: Pick<Busines
         const order = await find(tx, actor, id), tenantId = actor.tenantId, plan = source.plan(order.snapshot), currentDay = await today(tx, tenantId)
         const account = await tx.orderReceivable.findUnique({ where: { tenantId_orderId: { tenantId, orderId: id } } })
         const lines = account ? await balances(tx, tenantId, id) : []
-        const rights = (resource: "receivables" | "orderPayments") => recordActionAccess(actor, resource, async action => tx.salesOrder.findFirst({ where: { AND: [{ tenantId, id }, source.scope({ ...actor, operation: { resource, action } })] }, select: { id: true } }))
+        const rights = (resource: "receivables" | "orderPayments") => recordActionAccess(actor, resource, id, tx, async action => tx.salesOrder.findFirst({ where: { AND: [{ tenantId, id }, source.scope({ ...actor, operation: { resource, action } })] }, select: { id: true } }))
         const [receivableAccess, paymentAccess] = await Promise.all([rights("receivables"), rights("orderPayments")])
-        const recordAccess = { resource: "receivables" as const, permissions: { ...receivableAccess.permissions, ...paymentAccess.permissions } }
+        const recordAccess = { resource: "receivables" as const, id, permissions: { ...receivableAccess.permissions, ...paymentAccess.permissions } }
         const canReadPayments = !!paymentAccess.permissions["orderPayments.read"], active = order.status === "CONFIRMED"
         const page = Number.isSafeInteger(requestedPage) && requestedPage > 0 ? Math.min(requestedPage, 1000000) : 1, pageSize = 10
         const where = { tenantId, orderId: id }

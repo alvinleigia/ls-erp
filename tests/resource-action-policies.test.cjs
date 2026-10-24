@@ -30,7 +30,7 @@ test('read all/edit own is enforced and broad edits can never bypass a narrow re
 })
 test('operation context does not change related read lookups; project scope intersections are not ranked',()=>{
  const a=authorizeOperation({...actor,recordRules:{...actor.recordRules,'projects.read':'ASSIGNED','projects.edit':'OWN'}},'projects.edit')
- assert.deepEqual(recordLimits(a,'projects'),['OWN','ASSIGNED']);assert.equal(projectScope(a).AND.length,2)
+ assert.deepEqual(recordLimits(a,'projects'),['OWN','ASSIGNED']);assert.equal(projectScope(a).OR.length,2)
  assert.equal(recordScope(a,'contacts'),'RELATED')
  assert.equal(recordScope(a,'projects','read'),'ASSIGNED')
 })
@@ -42,18 +42,19 @@ test('leave authority uses configured routing and reporting relationships, indep
 })
 
 test('record action metadata uses the same intersected scopes and fails closed for hidden records',async()=>{
+ const tx={$queryRaw:async()=>[{allowed:true}]}
  const a={...actor,recordRules:{'enquiries.read':'ALL','enquiries.edit':'OWN','enquiries.assign':'NONE'}}
  const probed=[]
- const access=await recordActionAccess(a,'enquiries',async action=>{probed.push(action);throw new BusinessError(404,'Not found')})
+ const access=await recordActionAccess(a,'enquiries','e',tx,async action=>{probed.push(action);throw new BusinessError(404,'Not found')})
  assert.equal(access.permissions['enquiries.read'],true)
  assert.equal(access.permissions['enquiries.edit'],false)
  assert.equal(access.permissions['enquiries.assign'],false)
  assert.deepEqual(probed,['edit'])
- const own=await recordActionAccess(a,'enquiries',async()=>({id:'own'}))
+ const own=await recordActionAccess(a,'enquiries','e',tx,async()=>({id:'own'}))
  assert.equal(own.permissions['enquiries.edit'],true)
- const noGrant=await recordActionAccess({...a,permissions:['enquiries.read']},'enquiries',async()=>{throw new Error('Unexpected probe')})
+ const noGrant=await recordActionAccess({...a,permissions:['enquiries.read']},'enquiries','e',tx,async()=>{throw new Error('Unexpected probe')})
  assert.equal(noGrant.permissions['enquiries.edit'],false)
- await assert.rejects(()=>recordActionAccess(a,'enquiries',async()=>{throw new Error('Database unavailable')}),/Database unavailable/)
+ await assert.rejects(()=>recordActionAccess(a,'enquiries','e',tx,async()=>{throw new Error('Database unavailable')}),/Database unavailable/)
 })
 
 test('optional reference access never blocks a primary record or grants lookup authority',async t=>{

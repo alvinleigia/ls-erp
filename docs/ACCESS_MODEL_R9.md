@@ -5,6 +5,11 @@ Profiles grant actions; each user's record rules bound where those actions apply
 Tenant isolation, activation and native business rules apply to every operation.
 A report filter can only narrow accessible records.
 
+Supported native records also use [selected sharing and Restricted visibility](RECORD_SHARING_R9.md).
+Explicit sharing can extend Own eligibility within granted actions; None still
+denies. Restricted visibility excludes ordinary tenant-wide managers unless
+responsible or selected. This is separate from the report/team filter.
+
 ## Teams and hierarchy
 
 Teams belong to the business under **Users > Teams**, independently of CRM.

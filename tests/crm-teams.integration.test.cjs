@@ -255,7 +255,7 @@ test("concurrent membership and conversion requests remain consistent", async ()
 test("required audit failure rolls team creation back", async () => {
   const auditFault = client => new Proxy(client, { get(target, key) {
     if (key === "$transaction") return (operation, options) => target.$transaction(tx => operation(new Proxy(tx, { get(inner, prop) {
-      if (prop === "auditLog") return { create: async () => { throw new Error("audit unavailable") } }
+      if (prop === "auditLog") return { createMany: async () => { throw new Error("audit unavailable") } }
       const value = inner[prop]; return typeof value === "function" ? value.bind(inner) : value
     } })), options)
     const value = target[key]; return typeof value === "function" ? value.bind(target) : value

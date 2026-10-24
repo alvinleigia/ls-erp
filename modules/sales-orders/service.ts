@@ -52,7 +52,7 @@ export function createSalesOrderService(db: PrismaClient, identity: Pick<Busines
     get(id: string) {
       return run("salesOrders.read", async (tx, actor) => {
         const row = await find(tx, actor, id)
-        const recordAccess = await recordActionAccess(actor, "salesOrders", async action => tx.salesOrder.findFirst({ where: { AND: [scope({ ...actor, operation: { resource: "salesOrders", action } }), { id }] }, select: { id: true } }))
+        const recordAccess = await recordActionAccess(actor, "salesOrders", id, tx, async action => tx.salesOrder.findFirst({ where: { AND: [scope({ ...actor, operation: { resource: "salesOrders", action } }), { id }] }, select: { id: true } }))
         const history = await tx.salesOrderEvent.findMany({ where: { tenantId: actor.tenantId, orderId: id }, orderBy: { version: "asc" } })
         return { ...row, history, recordAccess, canConfirm: row.status === "DRAFT" && !!recordAccess.permissions["salesOrders.confirm"], canCancel: row.status !== "CANCELLED" && !!recordAccess.permissions["salesOrders.cancel"] }
       })

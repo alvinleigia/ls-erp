@@ -35,7 +35,8 @@ export const recordDomainAuditEvent = async (db: DbClient, input: DomainAuditInp
     metadata: input.metadata,
   })
 
-  await db.auditLog.create({
+  // Logging an authorized mutation must not require reading its audit copy.
+  await db.auditLog.createMany({
     data: {
       tenantId: input.tenantId ?? null,
       event: input.event,

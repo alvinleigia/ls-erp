@@ -1,4 +1,5 @@
 import { findAccessUser, accessContext } from "./access/server"
+import { runWithDatabaseActor } from "@/lib/database-actor"
 import { NextResponse } from "next/server"
 import { ZodError } from "zod"
 import { prisma, runWithTenantDbContext } from "@/lib/prisma"
@@ -29,7 +30,7 @@ export async function withCurrentAccountApi(request: Request, handler: (actor: B
         throw new BusinessError(403, "Business workspace access is not permitted.")
       }
       actor = { tenantId, userId: sessionUserId!, ...accessContext(user), requestId: log.requestId }
-      return handler(actor)
+      return runWithDatabaseActor(actor.userId, () => handler(actor!))
     })
     logApiRequestSuccess(log, result instanceof NextResponse ? result.status : successStatus)
     if (result instanceof NextResponse) { result.headers.set("Cache-Control", "no-store"); return withRequestId(result, log.requestId) }

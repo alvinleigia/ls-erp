@@ -3,7 +3,10 @@
 Work target: local staging branch. Hosted/production data is unchanged.
 
 The final contract is tenant isolation + module activation + composed profile
-permissions + per-user resource/action record limits + native business rules.
+permissions + per-user resource/action record limits + selected sharing/privacy
+bounds + native business rules. See [record sharing](RECORD_SHARING_R9.md) for
+the next local milestone and migration 111; verification below records the
+preceding resource/action milestone.
 Staff and Manager account labels do not grant business capabilities. Tenant
 administration and customer/personal entrypoints retain their security boundaries.
 

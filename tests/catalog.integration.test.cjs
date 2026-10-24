@@ -84,7 +84,7 @@ test('concurrent updates accept one writer, audits are atomic and staff cannot w
   const results=await Promise.allSettled(['First','Second'].map(name=>service.save({...payload,name,version:item.version},item.id)))
   assert.equal(results.filter(r=>r.status==='fulfilled').length,1);assert.equal(results.find(r=>r.status==='rejected').reason.status,409)
   assert.equal(await root.auditLog.count({where:{tenantId:tenant,entityId:item.id,event:'catalog.item.updated'}}),1)
-  const broken={$transaction:(operation,options)=>db.$transaction(tx=>operation(new Proxy(tx,{get(target,key){if(key==='auditLog')return {create:async()=>{throw Error('audit unavailable')}};return target[key]}})),options)}
+  const broken={$transaction:(operation,options)=>db.$transaction(tx=>operation(new Proxy(tx,{get(target,key){if(key==='auditLog')return {createMany:async()=>{throw Error('audit unavailable')}};return target[key]}})),options)}
   const before=await root.catalogItem.count({where:{tenantId:tenant}})
   await assert.rejects(applicationCatalog(broken,identity(admin)).save(product()),/audit unavailable/)
   assert.equal(await root.catalogItem.count({where:{tenantId:tenant}}),before)

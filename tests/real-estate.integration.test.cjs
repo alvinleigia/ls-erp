@@ -137,7 +137,7 @@ test("concurrent defaults leave a single default and stale edits cannot replace 
 
 test("catalog audit failure rolls back replacement defaults, and disabled modules reject configuration", async () => {
   const before = (await service.choiceDefaults())["project-statuses"]
-  const broken = new Proxy(db, { get(target, prop) { if (prop !== "$transaction") return Reflect.get(target, prop); return (operation, options) => target.$transaction(tx => operation(new Proxy(tx, { get(inner, key) { return key === "auditLog" ? { create: async () => { throw new Error("catalog audit unavailable") } } : Reflect.get(inner, key) } })), options) } })
+  const broken = new Proxy(db, { get(target, prop) { if (prop !== "$transaction") return Reflect.get(target, prop); return (operation, options) => target.$transaction(tx => operation(new Proxy(tx, { get(inner, key) { return key === "auditLog" ? { createMany: async () => { throw new Error("catalog audit unavailable") } } : Reflect.get(inner, key) } })), options) } })
   await assert.rejects(createRealEstateService(broken, { tenantId: a, userId: admin.id }).saveChoice("project-statuses", { name: "Rolled back choice", isDefault: true }), /catalog audit unavailable/)
   assert.equal((await service.choiceDefaults())["project-statuses"].id, before.id)
   assert.equal((await service.listChoices("project-statuses", { q: "Rolled back choice" })).total, 0)
@@ -274,7 +274,7 @@ test("optimistic versions prevent stale edits and membership changes; audits com
   assert.equal(results.filter(item => item.status === "fulfilled").length, 1)
   const events = await root.auditLog.findMany({ where: { tenantId: a, entityId: project.id }, orderBy: { createdAt: "asc" } })
   assert.deepEqual(events.map(row => row.event), ["realEstate.project.created", "realEstate.project.updated", "realEstate.project.updated"])
-  const broken = new Proxy(db, { get(target, prop) { if (prop !== "$transaction") return Reflect.get(target, prop); return (operation, options) => target.$transaction(tx => operation(new Proxy(tx, { get(inner, key) { return key === "auditLog" ? { create: async () => { throw new Error("audit unavailable") } } : Reflect.get(inner, key) } })), options) } })
+  const broken = new Proxy(db, { get(target, prop) { if (prop !== "$transaction") return Reflect.get(target, prop); return (operation, options) => target.$transaction(tx => operation(new Proxy(tx, { get(inner, key) { return key === "auditLog" ? { createMany: async () => { throw new Error("audit unavailable") } } : Reflect.get(inner, key) } })), options) } })
   await assert.rejects(createRealEstateService(broken, { tenantId: a, userId: admin.id }).createProject(input("ROLLBACK")), /audit unavailable/)
   assert.equal(await root.realEstateProject.count({ where: { tenantId: a, code: "ROLLBACK" } }), 0)
 })
@@ -438,7 +438,7 @@ test("extension contexts enforce tenant RLS and composite parent-child constrain
 
 test("failed context copy audit rolls back the entire opportunity conversion", async () => {
   const f = await salesFixture("SALES-ROLLBACK")
-  const broken = new Proxy(db, { get(target, prop) { if (prop !== "$transaction") return Reflect.get(target, prop); return (operation, options) => target.$transaction(tx => operation(new Proxy(tx, { get(inner, key) { if (key !== "auditLog") return Reflect.get(inner, key); return { create: async args => { if (args.data.event === "realEstate.opportunity.context.copied") throw new Error("context audit unavailable"); return inner.auditLog.create(args) } } } })), options) } })
+  const broken = new Proxy(db, { get(target, prop) { if (prop !== "$transaction") return Reflect.get(target, prop); return (operation, options) => target.$transaction(tx => operation(new Proxy(tx, { get(inner, key) { if (key !== "auditLog") return Reflect.get(inner, key); return { createMany: async args => { if (args.data.event === "realEstate.opportunity.context.copied") throw new Error("context audit unavailable"); return inner.auditLog.createMany(args) } } } })), options) } })
   await assert.rejects(createCrmService(broken, { tenantId: a, userId: manager.id }).createOpportunity(f.conversion), /context audit unavailable/)
   assert.equal(await root.crmOpportunity.count({ where: { tenantId: a, enquiryId: f.lead.id } }), 0)
   assert.equal(await root.crmActivity.count({ where: { tenantId: a, enquiryId: f.lead.id, event: "crm.enquiry.converted" } }), 0)

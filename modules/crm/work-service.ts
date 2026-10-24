@@ -1,9 +1,10 @@
 import { recordLimits, scopeAllowsOthers } from "@/platform/access/rules"
+import { sharedRecordWhere } from "@/platform/access/sharing-scope"
 import type { PermissionAction } from "@/platform/access/catalog"
 import { opportunityScope } from "@/modules/crm/policy"
 import { termText } from "@/platform/terminology/message"
 import { activityTeamFilter, requireSalesTeamFilter } from "./team-filter"
-import { ownedRecordScope, canReadSalesRecord } from "@/platform/access/record-scope"
+import { relatedSalesScope } from "@/platform/access/record-scope"
 import { requireScopedWriteFields, permits, authorizeOperation } from "@/platform/access/policy"
 import { recordActionAccess } from "@/platform/access/record-actions"
 import type { PermissionRun } from "@/platform/access/server"
@@ -31,23 +32,35 @@ const snapshot = (value: unknown): Prisma.InputJsonValue => JSON.parse(JSON.stri
 const include = { contact: { select: { id: true, name: true, email: true, phone: true, ownerUserId: true } }, assignee: { select: { id: true, name: true } }, enquiry: { select: { id: true, title: true, assignedUserId: true, salesTeamId: true } }, opportunity: { select: { id: true, title: true, assignedUserId: true, salesTeamId: true } }, planLaunch: { select: { planName: true, planVersion: true } } } as const
 type Loaded = Prisma.CrmTaskGetPayload<{ include: typeof include }>
 export function workScope(actor: CrmActor, action?: PermissionAction): Prisma.CrmTaskWhereInput {
-  return { tenantId: actor.tenantId, AND: recordLimits(actor, "activities", action).map(scope => scope === "NONE" ? { id: { in: [] } } : { OR: [
+  const base: Prisma.CrmTaskWhereInput = { tenantId: actor.tenantId, AND: recordLimits(actor, "activities", action).map(scope => scope === "NONE" ? { id: { in: [] } } : { OR: [
     { assignedUserId: actor.userId }, ...(scope === "OWN" ? [] : [
-      { enquiry: ownedRecordScope(actor, "activities", action) }, { opportunity: ownedRecordScope(actor, "activities", action) },
+      { enquiry: relatedSalesScope(actor, "activities", action) }, { opportunity: relatedSalesScope(actor, "activities", action) },
       { enquiryId: null, opportunityId: null, contact: { ownerUserId: actor.userId } },
     ]),
   ] }) }
+  return sharedRecordWhere(actor, "activities", base, { assignedUserId: actor.userId }, action)
 }
-function dto(record: Loaded, actor: CrmActor) {
+function dto(record: Loaded, canViewParent: boolean, canEdit: boolean) {
   const { enquiry, opportunity, ...data } = record
   const source = enquiry || opportunity
-  const { ownerUserId, ...contact } = record.contact
-  const canViewParent = permits(actor, enquiry ? "enquiries.read" : "opportunities.read") && !!source && canReadSalesRecord(actor, source, enquiry ? "enquiries" : "opportunities")
+  const contact = { id: record.contact.id, name: record.contact.name, email: record.contact.email, phone: record.contact.phone }
   return { ...data, contact, enquiryId: canViewParent ? record.enquiryId : null, opportunityId: canViewParent ? record.opportunityId : null,
-    parent: canViewParent ? { id: source.id, title: source.title, kind: enquiry ? "enquiry" : "opportunity" } : null,
-    canEdit: permits(actor, "activities.edit") && recordLimits(actor, "activities", "edit").every(scope => scope !== "NONE" && (record.assignedUserId === actor.userId || (scope !== "OWN" && (source ? source.assignedUserId === actor.userId || (scope === "MANAGED_TEAMS" && !!source.salesTeamId && !!actor.managedTeamIds?.includes(source.salesTeamId)) : ownerUserId === actor.userId)))) }
+    parent: canViewParent && source ? { id: source.id, title: source.title, kind: enquiry ? "enquiry" : "opportunity" } : null,
+    canEdit }
 }
 export function createWorkService({ run, audit, checkAssignee }: Context, extensions: Pick<CrmExtensions, "filters" | "splitQuery" | "collectionContext">) {
+  async function present(tx: Tx, actor: CrmActor, records: Loaded[]) {
+    if (!records.length) return []
+    // Batch through the same action adapters as details and writes. Sharing can
+    // extend ownership, and a readable activity need not expose its parent link.
+    const [editable, enquiries, opportunities] = await Promise.all([
+      permits(actor, "activities.edit") ? tx.crmTask.findMany({ where: { AND: [workScope(actor, "edit"), { id: { in: records.map(r => r.id) } }] }, select: { id: true } }) : [],
+      permits(actor, "enquiries.read") ? tx.crmEnquiry.findMany({ where: { AND: [enquiryScope(actor, "read"), { id: { in: records.flatMap(r => r.enquiryId ? [r.enquiryId] : []) } }] }, select: { id: true } }) : [],
+      permits(actor, "opportunities.read") ? tx.crmOpportunity.findMany({ where: { AND: [opportunityScope(actor, "read"), { id: { in: records.flatMap(r => r.opportunityId ? [r.opportunityId] : []) } }] }, select: { id: true } }) : [],
+    ])
+    const editIds = new Set(editable.map(r => r.id)), parentIds = new Set([...enquiries, ...opportunities].map(r => r.id))
+    return records.map(record => dto(record, parentIds.has(record.enquiryId || record.opportunityId || ""), editIds.has(record.id)))
+  }
   async function collectionContext(tx: Tx, actor: CrmActor, orderId: string, creating = false) {
     if (!extensions.collectionContext) throw new CrmError(403, "Collection follow-ups are unavailable.")
     return extensions.collectionContext(tx, actor, orderId, creating)
@@ -64,7 +77,7 @@ export function createWorkService({ run, audit, checkAssignee }: Context, extens
     if (!openStatuses.includes(record.status as typeof openStatuses[number])) throw new CrmError(409, termText("crm.activity.singular", "This activity is already closed. Add a note or schedule another activity.", "This {label} is already closed. Add a note or schedule another {label}."))
   }
   async function log(tx: Tx, actor: CrmActor, id: string, event: string, message: string, before?: unknown, after?: unknown) {
-    await tx.crmTaskEvent.create({ data: { tenantId: actor.tenantId, taskId: id, actorUserId: actor.userId, event, message } })
+    await tx.crmTaskEvent.createMany({ data: { tenantId: actor.tenantId, taskId: id, actorUserId: actor.userId, event, message } })
     await audit(tx, actor, event, id, before ? snapshot(before) : undefined, after ? snapshot(after) : undefined)
   }
   async function schedule(tx: Tx, actor: CrmActor, data: WorkScheduleInput, before?: CrmTask) {
@@ -179,29 +192,29 @@ export function createWorkService({ run, audit, checkAssignee }: Context, extens
         const [items, total] = await Promise.all([
           tx.crmTask.findMany({ where, include, orderBy: [{ [query.sort]: query.order }, { startsAt: "asc" }, { id: "asc" }], skip: (query.page - 1) * query.pageSize, take: query.pageSize }), tx.crmTask.count({ where }),
         ])
-        return { ...page(items.map(item => dto(item, actor)), total, query.page, query.pageSize), timeZone, currentUserId: actor.userId, canManage: scopeAllowsOthers(actor, "activities", "assign"), serverTime: now.toISOString() }
+        return { ...page(await present(tx, actor, items), total, query.page, query.pageSize), timeZone, currentUserId: actor.userId, canManage: scopeAllowsOthers(actor, "activities", "assign"), serverTime: now.toISOString() }
       })
     },
     getWork(id: string) { return run("activities.read", async (tx, actor) => {
       const record = await find(tx, actor, id)
-      const recordAccess = await recordActionAccess(actor, "activities", action => tx.crmTask.findFirst({ where: { AND: [workScope(actor, action), { id }] }, select: { id: true } }))
-      return { ...dto(record, actor), canEdit: !!recordAccess.permissions["activities.edit"], recordAccess, timeZone: await zone(tx, actor) }
+      const recordAccess = await recordActionAccess(actor, "activities", id, tx, action => tx.crmTask.findFirst({ where: { AND: [workScope(actor, action), { id }] }, select: { id: true } }))
+      return { ...(await present(tx, actor, [record]))[0], canEdit: !!recordAccess.permissions["activities.edit"], recordAccess, timeZone: await zone(tx, actor) }
     }) },
-    createWork(input: unknown) { const data = workCreateSchema.parse(input); return run("activities.create", async (tx, actor) => dto(await create(tx, actor, data), actor)) },
+    createWork(input: unknown) { const data = workCreateSchema.parse(input); return run("activities.create", async (tx, actor) => (await present(tx, actor, [await create(tx, actor, data)]))[0]) },
     updateWork(id: string, input: unknown) {
       const { version, status, ...data } = workUpdateSchema.parse(input)
       return run("activities.edit", async (tx, actor) => {
         const before = await find(tx, actor, id); requireOpen(before)
         const prepared = await schedule(tx, actor, data, before)
         const resetReminder = before.assignedUserId !== data.assignedUserId || before.reminderAt?.getTime() !== prepared.reminderAt?.getTime() || before.startsAt?.getTime() !== prepared.startsAt?.getTime() || before.dueOn.getTime() !== prepared.dueOn.getTime()
-        const updated = await tx.crmTask.updateMany({ where: { tenantId: actor.tenantId, id, version, status: { in: [...openStatuses] } }, data: { ...prepared, status, followParentAssignment: false, version: { increment: 1 }, ...(resetReminder ? { snoozedUntil: null, reminderDismissedAt: null } : {}) } })
-        if (!updated.count) throw new CrmError(409, termText("crm.activity.singular", "This activity changed. Refresh before saving.", "This {label} changed. Refresh before saving."))
-        const after = await tx.crmTask.findFirstOrThrow({ where: { tenantId: actor.tenantId, id }, include })
+        const updated = await tx.crmTask.updateManyAndReturn({ where: { tenantId: actor.tenantId, id, version, status: { in: [...openStatuses] } }, data: { ...prepared, status, followParentAssignment: false, version: { increment: 1 }, ...(resetReminder ? { snoozedUntil: null, reminderDismissedAt: null } : {}) }, include })
+        if (!updated.length) throw new CrmError(409, termText("crm.activity.singular", "This activity changed. Refresh before saving.", "This {label} changed. Refresh before saving."))
+        const after = updated[0]
         await log(tx, actor, id, "crm.work.updated", `Activity updated.${before.assignedUserId !== after.assignedUserId ? ` Assigned to ${after.assignee.name || "another staff member"}.` : ""}${before.dueOn.getTime() !== after.dueOn.getTime() || before.startsAt?.getTime() !== after.startsAt?.getTime() ? ` Rescheduled to ${data.dueOn}${data.startsAt ? ` (${data.startsAt})` : ""}.` : ""}`, before, after)
-        return dto(after, actor)
+        return (await present(tx, actor, [after]))[0]
       })
     },
-    completeWork(id: string, input: unknown) { const data = workCompleteSchema.parse(input); return run("activities.edit", async (tx, actor) => dto(await complete(tx, actor, await find(tx, actor, id), data), actor)) },
+    completeWork(id: string, input: unknown) { const data = workCompleteSchema.parse(input); return run("activities.edit", async (tx, actor) => (await present(tx, actor, [await complete(tx, actor, await find(tx, actor, id), data)]))[0]) },
     cancelWork(id: string, input: unknown) {
       const data = workCancelSchema.parse(input)
       return run("activities.archive", async (tx, actor) => {

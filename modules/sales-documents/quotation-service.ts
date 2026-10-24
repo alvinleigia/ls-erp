@@ -1,5 +1,5 @@
 import { recordActionAccess } from "@/platform/access/record-actions"
-import { ownedRecordScope } from "@/platform/access/record-scope"
+import { quotationRecordScope } from "@/platform/access/record-scope"
 import { recordLimits } from "@/platform/access/rules"
 import { termText } from "@/platform/terminology/message"
 import { readDocumentBranding } from "@/platform/branding/read"
@@ -50,7 +50,7 @@ export function createQuotationService({ run: checkedRun, audit, opportunityScop
     return row
   }
   async function find(tx: Tx, actor: BusinessActor, id: string) {
-    const row = await tx.crmQuotation.findFirst({ where: { tenantId: actor.tenantId, id, opportunity: opportunityScope(actor) } })
+    const row = await tx.crmQuotation.findFirst({ where: { ...quotationRecordScope(actor), id } })
     if (!row) throw new BusinessError(404, termText("salesDocuments.quotation.singular", "Quotation not found.", "{label} not found."))
     return row
   }
@@ -103,7 +103,7 @@ export function createQuotationService({ run: checkedRun, audit, opportunityScop
       const q = quotationListSchema.parse(input)
       return run("quotations.read", async (tx, actor, paymentPlans) => {
         if (opportunityId) await opportunity(tx, actor, opportunityId)
-        const where = { tenantId: actor.tenantId, ...(opportunityId ? { opportunityId } : {}), opportunity: opportunityScope(actor), title: { contains: q.q, mode: "insensitive" as const } }
+        const where = { tenantId: actor.tenantId, ...(opportunityId ? { opportunityId } : {}), ...quotationRecordScope(actor), title: { contains: q.q, mode: "insensitive" as const } }
         const [items, total] = await Promise.all([tx.crmQuotation.findMany({ where, orderBy: [{ createdAt: "desc" }, { id: "asc" }], skip: (q.page - 1) * q.pageSize, take: q.pageSize }), tx.crmQuotation.count({ where })])
         return { ...page(items, total, q), paymentPlansEnabled: paymentPlans }
       })
@@ -113,7 +113,7 @@ export function createQuotationService({ run: checkedRun, audit, opportunityScop
         const row = await find(tx, actor, id)
         const item = await tx.crmQuotationRevision.findUnique({ where: { tenantId_quotationId_number: { tenantId: actor.tenantId, quotationId: id, number: revision ?? row.version } } })
         if (!item) throw new BusinessError(404, termText("salesDocuments.quotation.singular", "Quotation version not found.", "{label} version not found."))
-        return { ...row, recordAccess: await recordActionAccess(actor, "quotations", async action => !!await tx.crmQuotation.findFirst({ where: { tenantId: actor.tenantId, id, opportunity: ownedRecordScope(actor, "quotations", action) }, select: { id: true } })), revision: item.number, revisionCreatedAt: item.createdAt, snapshot: item.snapshot as unknown as QuotationSnapshot, archivedPdf: item.archivedPdf as ArchivedPdf | null, paymentPlansEnabled: paymentPlans }
+        return { ...row, recordAccess: await recordActionAccess(actor, "quotations", id, tx, async action => !!await tx.crmQuotation.findFirst({ where: { ...quotationRecordScope(actor, action), id }, select: { id: true } })), revision: item.number, revisionCreatedAt: item.createdAt, snapshot: item.snapshot as unknown as QuotationSnapshot, archivedPdf: item.archivedPdf as ArchivedPdf | null, paymentPlansEnabled: paymentPlans }
       })
     },
     async issueQuotation(id: string, revision: number) {
