@@ -13,6 +13,9 @@ This is the baseline for new modules (API + UI) in this codebase.
   - List endpoints may optionally accept `status` filters when applicable.
 
 ## Permissions
+- Teams are shared business data under `/users/teams`; CRM owns the sales workflow setting. See `docs/ACCESS_MODEL_R9.md` for module record policies and migration rules.
+- Register each permission resource in both `platform/access/catalog.ts` and the exhaustive `platform/access/resource-policy.ts`. Offer record scope choices only where every query path can enforce them.
+- Use `accessContext(findAccessUser(...))` when refreshing an actor inside a transaction; keep permissions, sales/project scopes and current team memberships together. Module/action checks and record predicates remain mandatory for lists, details, writes, selectors, reports and exports.
 - Use helpers from `lib/permissions.ts` in both server and client.
 - Server always checks `auth()` + helper.
 - UI should only hide/disable; server is source of truth.

@@ -1,4 +1,5 @@
 import { termText } from "@/platform/terminology/message"
+import { projectScope } from "./access"
 import { permits, requirePermission } from "@/platform/access/policy"
 import { Prisma } from "@prisma/client"
 import { z } from "zod"
@@ -27,9 +28,7 @@ export const realEstateCrmExtension: CrmExtensions<Omit<Fields, "id">, Metadata>
   async importFields(tx, actor) {
     if (!await realEstateEnabled(tx, actor.tenantId)) return []
     const canReadProjects = permits(actor, "projects.read")
-    const projects = canReadProjects ? await tx.realEstateProject.findMany({ where: { tenantId: actor.tenantId, archived: false,
-      ...(actor.role === "STAFF" ? { OR: [{ members: { some: { tenantId: actor.tenantId, userId: actor.userId } } }, { parent: { archived: false, members: { some: { tenantId: actor.tenantId, userId: actor.userId } } } }] } : {}),
-    }, select: { id: true, name: true, code: true, parentId: true }, orderBy: { name: "asc" }, take: 5000 }) : []
+    const projects = canReadProjects ? await tx.realEstateProject.findMany({ where: { AND: [projectScope(actor), { archived: false }] }, select: { id: true, name: true, code: true, parentId: true }, orderBy: { name: "asc" }, take: 5000 }) : []
     const [categories, timeframes] = await Promise.all([
       tx.realEstatePropertyCategory.findMany({ where: { tenantId: actor.tenantId, archived: false }, select: { id: true, name: true }, orderBy: { name: "asc" }, take: 5000 }),
       tx.realEstateBuyingTimeframe.findMany({ where: { tenantId: actor.tenantId, archived: false }, select: { id: true, name: true }, orderBy: { name: "asc" }, take: 5000 }),

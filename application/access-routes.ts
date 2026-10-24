@@ -3,6 +3,7 @@ import { createRouteAccess } from "@/platform/access/routes"
 import { crmConfigurationGroups } from "@/modules/crm/configuration"
 
 const routes: [string, Resource][] = [
+  ["/users/teams", "teams"],
   ["/sales-orders/receivables", "receivables"],
   ["/sales-orders", "salesOrders"],
   ["/catalog", "catalogItems"],
@@ -16,7 +17,7 @@ const routes: [string, Resource][] = [
   ["/inventory/categories", "inventoryCategories"], ["/inventory/suppliers", "inventorySuppliers"],
   ["/inventory/purchases", "inventoryPurchases"], ["/inventory", "inventoryProducts"],
   ["/crm/configuration/quotation-templates", "quotationTemplates"], ["/crm/configuration/real-estate", "projectSettings"],
-  ["/crm/configuration/custom-fields", "customFields"], ["/crm/configuration/sales-teams", "salesTeams"], ["/crm/configuration/presets", "pipelines"],
+  ["/crm/configuration/custom-fields", "customFields"], ["/crm/configuration/sales-teams", "teams"], ["/crm/configuration/presets", "pipelines"],
   ["/crm/contacts", "contacts"], ["/crm/accounts", "accounts"], ["/crm/enquiries", "enquiries"], ["/crm/opportunities", "opportunities"],
   ["/crm/activities", "activities"], ["/crm/tasks", "activities"], ["/crm/calendar", "activities"],
   ["/crm/overview", "reports"], ["/crm/sales", "reports"], ["/crm/pipelines", "pipelines"], ["/crm/lead-sources", "leadSources"],

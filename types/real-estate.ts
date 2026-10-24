@@ -1,6 +1,7 @@
 import type { FieldView } from "@/platform/custom-fields/validation"
 
 export type Project = {
+  teamId?: string | null; team?: { id: string; name: string } | null;
   customFields?: FieldView[];
   id: string; name: string; code: string; parentId: string | null; developerAccountId: string | null;
   location: string; description: string; categories: string[]; lifecycle: string; lifecycleName?: string; categoryNames?: Record<string, string>;

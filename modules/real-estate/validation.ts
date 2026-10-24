@@ -6,6 +6,7 @@ const money = z.string().trim().regex(/^(?:\d{1,14}(?:\.\d{1,4})?)?$/, "Enter a 
 export const projectSchema = z.object({
   name: z.string().trim().min(1).max(160), code: z.string().trim().toUpperCase().regex(/^[A-Z0-9][A-Z0-9_-]{0,39}$/, "Use up to 40 letters, numbers, hyphens or underscores."),
   parentId: text(100), developerAccountId: text(100), location: text(300), description: text(5000),
+  teamId: z.string().trim().max(100).optional(),
   categories: z.array(z.string().trim().min(1).max(100)).max(50).optional(),
   lifecycle: text(100), priceMin: money, priceMax: money,
   currency: z.string().trim().toUpperCase().regex(/^(?:[A-Z]{3})?$/, "Use a three-letter currency code.").default(""),

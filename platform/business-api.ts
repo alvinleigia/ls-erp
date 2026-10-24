@@ -1,4 +1,4 @@
-import { findAccessUser, assignedPermissions } from "./access/server"
+import { findAccessUser, accessContext } from "./access/server"
 import { NextResponse } from "next/server"
 import { ZodError } from "zod"
 import { prisma, runWithTenantDbContext } from "@/lib/prisma"
@@ -28,7 +28,7 @@ export async function withCurrentAccountApi(request: Request, handler: (actor: B
       if (!user || (!hasBusinessAccess(user.role) && !(allowCustomer && user.role === "CUSTOMER")) || user.tenant?.status !== "ACTIVE" || user.tenant.slug === platformSlug) {
         throw new BusinessError(403, "Business workspace access is not permitted.")
       }
-      actor = { tenantId, userId: sessionUserId!, role: user.role, permissions: assignedPermissions(user), crmRecordScope: user.crmRecordScope, managedTeamIds: user.managedTeamIds, requestId: log.requestId }
+      actor = { tenantId, userId: sessionUserId!, ...accessContext(user), requestId: log.requestId }
       return handler(actor)
     })
     logApiRequestSuccess(log, result instanceof NextResponse ? result.status : successStatus)

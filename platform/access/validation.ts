@@ -1,11 +1,12 @@
 import { z } from "zod"
-import { crmRecordScopes } from "./record-scope"
+import { recordScopes } from "./record-scope"
 import { allPermissions } from "./catalog"
 
 export const accessRoleSchema = z.object({
   name: z.string().trim().min(2).max(80),
   permissions: z.array(z.enum(allPermissions as [string, ...string[]])).max(allPermissions.length),
-  crmRecordScope: z.enum(crmRecordScopes).optional(),
+  salesRecordScope: z.enum(recordScopes).optional(),
+  projectRecordScope: z.enum(recordScopes).optional(),
   archived: z.boolean().default(false),
   version: z.number().int().positive().optional(),
 }).strict().superRefine((data, ctx) => {

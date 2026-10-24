@@ -1,6 +1,6 @@
 import type { Prisma } from "@prisma/client"
 import { recordDomainAuditEvent } from "@/lib/domain-audit"
-import { findAccessUser, assignedPermissions } from "@/platform/access/server"
+import { findAccessUser, accessContext } from "@/platform/access/server"
 import { requirePermission } from "@/platform/access/policy"
 import { requireBusinessModule } from "@/platform/module-server"
 import { BusinessError, type BusinessActor } from "@/platform/policy"
@@ -17,7 +17,7 @@ export function planTransaction<T>(actor: BusinessActor, resource: Resource, act
       throw new BusinessError(403, "Plan management access is no longer available.")
     }
     await requireBusinessModule(tx, actor.tenantId, "shifts")
-    const current = { ...actor, role: user.role, permissions: assignedPermissions(user) }
+    const current = { ...actor, ...accessContext(user) }
     requirePermission(current, `${resource}.read`)
     requirePermission(current, `${resource}.${action}`)
     return write(tx, current)

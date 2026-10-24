@@ -5,6 +5,17 @@ const {permits}=require('../platform/access/policy.ts')
 const {moduleKeys}=require('../platform/modules.ts')
 const flags=moduleKeys.map(key=>({key,enabled:true,allowed:true}))
 
+test('shared teams have core routes, explicit resource policies and protected security history',()=>{
+ const {applicationRouteAccess: access}=require('../application/access-routes.ts')
+ const {resourceKeys,accessResources}=require('../platform/access/catalog.ts')
+ const {resourceRecordPolicies}=require('../platform/access/resource-policy.ts')
+ const {securityEvents}=require('../platform/audit/policy.ts')
+ assert.equal(access.routeRequirement('/users/teams/new'),'teams.create')
+ assert.equal(accessResources.teams.module,'core')
+ assert.deepEqual(Object.keys(resourceRecordPolicies).sort(),[...resourceKeys].sort())
+ for(const prefix of ['crm.team.','team.'])assert.ok(securityEvents.OR.some(item=>item.event.startsWith===prefix))
+})
+
 test('application route metadata preserves special requirements and prefix boundaries',()=>{
  const {applicationRouteAccess: access}=require('../application/access-routes.ts')
  assert.equal(access.routeResource('/inventory/categories/new'),'inventoryCategories')

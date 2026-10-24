@@ -1,7 +1,7 @@
 "use client"
 import { useTerminology, useTerminologyReader } from "@/platform/terminology/provider"
 import { withRecordView, useRecordView, AccessRecordForm, AccessSummarySection, AccessSectionEdit } from "@/platform/access/record-view"
-import { SalesTeamSelect } from "./sales-teams"
+import { SalesTeamSelect } from "@/platform/teams/controls"
 import { useCustomFields } from "./custom-fields"
 import { LostReasonFields } from "./lost-reason-fields"
 import type { CrmViewReferences } from "../view-context"

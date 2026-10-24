@@ -55,6 +55,8 @@
     "test:crm:quotations:integration": "node --require ./tests/register.cjs --test --test-force-exit tests/quotations.integration.test.cjs",
     "test:access:integration": "node --require ./tests/register.cjs --test --test-force-exit tests/access-roles.integration.test.cjs tests/access-role-migration.test.cjs",
     "test:access:e2e": "playwright test --config playwright.local-access.config.ts access.spec.ts",
+    "test:access:all": "node scripts/test-sales-orders.cjs --access",
+    "test:access:all:browser": "node scripts/test-sales-orders.cjs --access --browser",
     "test:workflows:e2e": "playwright test --config playwright.local-access.config.ts",
     "test:dates": "node --require ./tests/register.cjs --test tests/date-display.test.cjs tests/work-history-format.test.cjs"
   },

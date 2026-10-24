@@ -3,7 +3,7 @@ import { useTerminology, useTerminologyReader } from "@/platform/terminology/pro
 import { initialOpportunityStage } from "../conversion-stage"
 import { withRecordView, useRecordView, AccessRecordForm, AccessSummarySection, AccessSectionEdit } from "@/platform/access/record-view"
 import { CrmOpportunityPanels } from "./extension-provider"
-import { SalesTeamSelect } from "./sales-teams"
+import { SalesTeamSelect } from "@/platform/teams/controls"
 import { useCustomFields } from "./custom-fields"
 import { LostReasonFields } from "./lost-reason-fields"
 import type { CrmViewReferences } from "../view-context"

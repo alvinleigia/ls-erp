@@ -1,4 +1,5 @@
 import { termText } from "@/platform/terminology/message"
+import { activityTeamFilter, requireSalesTeamFilter } from "./team-filter"
 import { salesRecordAccess, canReadSalesRecord } from "@/platform/access/record-scope"
 import { requirePermission, requireWriteFields, permits } from "@/platform/access/policy"
 import type { PermissionRun } from "@/platform/access/server"
@@ -151,6 +152,8 @@ export function createWorkService({ run, audit, checkAssignee }: Context, extens
           ...(query.state === "open" ? { status: { in: [...openStatuses] } } : query.state === "completed" ? { status: "COMPLETED" } : query.state === "cancelled" ? { status: "CANCELLED" } : {}),
         }
         const clauses: Prisma.CrmTaskWhereInput[] = [workScope(actor), filter]
+        await requireSalesTeamFilter(tx, actor, query.salesTeamId)
+        if (query.salesTeamId) clauses.push(activityTeamFilter(query.salesTeamId))
         const extensionFilter = await extensions.filters(tx, actor, split.extension)
         if (extensionFilter.work) clauses.push(extensionFilter.work)
         if (query.scope === "mine" || query.due === "reminders") clauses.push({ assignedUserId: actor.userId })

@@ -4,11 +4,11 @@ import { seed, login, json, password } from "./fixtures"
 test.describe.configure({ mode: "serial" })
 let fixture: Awaited<ReturnType<typeof seed>>
 let admin: Awaited<ReturnType<typeof login>>, manager: typeof admin, staff: typeof admin, other: typeof admin, platform: typeof admin
-let role: { id: string; name: string; version: number; permissions: string[]; crmRecordScope: string }
+let role: { id: string; name: string; version: number; permissions: string[]; salesRecordScope: string }
 let team: { id: string; version: number }
 let own: { id: string; title: string }, managed: typeof own, hidden: typeof own
 let auditId: string
-const permissions = ["dashboard.read", "contacts.read", "enquiries.read", "enquiries.edit", "enquiries.export", "salesTeams.read", "auditLogs.read", "inventoryCategories.read"]
+const permissions = ["dashboard.read", "contacts.read", "enquiries.read", "enquiries.edit", "enquiries.export", "teams.read", "auditLogs.read", "inventoryCategories.read"]
 
 test.beforeAll(async ({ browser }) => {
   fixture = await seed()
@@ -17,7 +17,7 @@ test.beforeAll(async ({ browser }) => {
   staff = await login(browser, fixture.origin, fixture.users.staff.email)
   other = await login(browser, `http://${fixture.otherSlug}.localhost:3108`, fixture.users.other.email)
   platform = await login(browser, "http://localhost:3108", fixture.users.platform.email)
-  role = await json(admin.context, "/api/access/roles", 201, "POST", { name: "Scoped sales manager", permissions, crmRecordScope: "OWN" })
+  role = await json(admin.context, "/api/access/roles", 201, "POST", { name: "Scoped sales manager", permissions, salesRecordScope: "OWN" })
   await json(admin.context, `/api/access/users/${fixture.users.manager.id}`, 200, "PATCH", { roleId: role.id, previousRoleId: null })
   team = await json(admin.context, "/api/crm/sales-teams", 201, "POST", { name: "Local access team" })
   for (const key of ["staff", "manager"]) team = await json(admin.context, `/api/crm/sales-teams/${team.id}/members`, 200, "POST", { userId: fixture.users[key].id, version: team.version })
@@ -39,7 +39,7 @@ test("real sign-ins enforce ownership, tenant isolation and explicit team-manage
   expect(list.items.map((r: { id: string }) => r.id)).toEqual([own.id])
   await json(manager.context, `/api/crm/enquiries/${managed.id}`, 404)
   await json(other.context, `/api/crm/enquiries/${own.id}`, 404)
-  role = await json(admin.context, `/api/access/roles/${role.id}`, 200, "PATCH", { name: role.name, version: role.version, permissions, crmRecordScope: "MANAGED_TEAMS" })
+  role = await json(admin.context, `/api/access/roles/${role.id}`, 200, "PATCH", { name: role.name, version: role.version, permissions, salesRecordScope: "MANAGED_TEAMS" })
   expect((await json(manager.context, "/api/crm/enquiries")).total).toBe(1)
   team = await json(admin.context, `/api/crm/sales-teams/${team.id}/members`, 200, "POST", { userId: fixture.users.manager.id, version: team.version, isManager: true })
   expect((await json(manager.context, "/api/crm/enquiries")).total).toBe(2)
@@ -67,7 +67,7 @@ test("manager edits preserve ownership and identify the actual actor in audit hi
 })
 
 test("role updates revoke a live session and stale role saves cannot overwrite newer permissions", async () => {
-  const updated = { name: role.name, permissions: ["dashboard.read"], crmRecordScope: role.crmRecordScope, version: role.version }
+  const updated = { name: role.name, permissions: ["dashboard.read"], salesRecordScope: role.salesRecordScope, version: role.version }
   const results = await Promise.all([admin.context.request.patch(`/api/access/roles/${role.id}`, { data: updated }), admin.context.request.patch(`/api/access/roles/${role.id}`, { data: updated })])
   expect(results.map(r => r.status()).sort()).toEqual([200, 409])
   role = await json(admin.context, `/api/access/roles/${role.id}`)
@@ -75,7 +75,7 @@ test("role updates revoke a live session and stale role saves cannot overwrite n
   await manager.page.reload()
   await expect(manager.page.getByRole("heading", { name: "Access unavailable", exact: true })).toBeVisible()
   await expect(manager.page.getByRole("link", { name: "Team lead reviewed", exact: true })).toHaveCount(0)
-  role = await json(admin.context, `/api/access/roles/${role.id}`, 200, "PATCH", { name: role.name, permissions, crmRecordScope: "MANAGED_TEAMS", version: role.version })
+  role = await json(admin.context, `/api/access/roles/${role.id}`, 200, "PATCH", { name: role.name, permissions, salesRecordScope: "MANAGED_TEAMS", version: role.version })
   expect((await json(manager.context, "/api/crm/enquiries")).total).toBe(2)
   team = await json(admin.context, `/api/crm/sales-teams/${team.id}/members`, 200, "POST", { userId: fixture.users.manager.id, version: team.version, isManager: false })
   await json(manager.context, `/api/crm/enquiries/${managed.id}`, 404)
@@ -100,9 +100,9 @@ test("operational module disabling denies APIs and views while reactivation pres
 })
 
 test("All scope stays tenant-bound and cannot elevate a staff account or bypass action permissions", async () => {
-  role = await json(admin.context, `/api/access/roles/${role.id}`, 200, "PATCH", { name: role.name, permissions, crmRecordScope: "ALL", version: role.version })
+  role = await json(admin.context, `/api/access/roles/${role.id}`, 200, "PATCH", { name: role.name, permissions, salesRecordScope: "ALL", version: role.version })
   expect((await json(manager.context, "/api/crm/enquiries")).total).toBe(3)
-  const readonly = await json(admin.context, "/api/access/roles", 201, "POST", { name: "Staff read-only", permissions: ["contacts.read", "enquiries.read"], crmRecordScope: "ALL" })
+  const readonly = await json(admin.context, "/api/access/roles", 201, "POST", { name: "Staff read-only", permissions: ["contacts.read", "enquiries.read"], salesRecordScope: "ALL" })
   await json(admin.context, `/api/access/users/${fixture.users.staff.id}`, 200, "PATCH", { roleId: readonly.id, previousRoleId: null })
   expect((await json(staff.context, "/api/crm/enquiries")).total).toBe(2)
   await json(staff.context, `/api/crm/enquiries/${own.id}`, 404)

@@ -1,9 +1,10 @@
 import { termText } from "@/platform/terminology/message"
+import { projectScope } from "./access"
 import { Prisma } from "@prisma/client"
 import { BusinessError, type BusinessActor } from "@/platform/policy"
 import { recordDomainAuditEvent } from "@/lib/domain-audit"
 import type { PropertyContextInput } from "./sales-validation"
-import { enquiryScope, canManageCrm } from "@/modules/crm/policy"
+import { enquiryScope } from "@/modules/crm/policy"
 import { projectListSchema } from "./validation"
 import { propertyChoiceDefaults, resolvePropertyChoice } from "./choice-service"
 import { requirePermission } from "@/platform/access/policy"
@@ -23,9 +24,7 @@ export async function projectFilterChoices(tx: Tx, actor: BusinessActor, input: 
     { enquiryContexts: { some: { enquiry: enquiryScope(actor) } } }, { subEnquiryContexts: { some: { enquiry: enquiryScope(actor) } } },
     { opportunityContexts: { some: { opportunity: enquiryScope(actor) } } }, { subOpportunityContexts: { some: { opportunity: enquiryScope(actor) } } },
   ] }
-  const where: Prisma.RealEstateProjectWhereInput = { tenantId: actor.tenantId, parentId: query.parentId || null, name: { contains: query.q, mode: "insensitive" },
-    ...(!canManageCrm(actor.role) ? { OR: [linked, { archived: false, members: { some: { tenantId: actor.tenantId, userId: actor.userId } } }, { archived: false, parent: { archived: false, members: { some: { tenantId: actor.tenantId, userId: actor.userId } } } }] } : {}),
-  }
+  const where: Prisma.RealEstateProjectWhereInput = { tenantId: actor.tenantId, parentId: query.parentId || null, name: { contains: query.q, mode: "insensitive" }, OR: [projectScope(actor), linked] }
   const [items, total] = await Promise.all([tx.realEstateProject.findMany({ where, select: brief, orderBy: [{ name: "asc" }, { id: "asc" }], skip: (query.page - 1) * query.pageSize, take: query.pageSize }), tx.realEstateProject.count({ where })])
   return { items, total, page: query.page, pageSize: query.pageSize, totalPages: Math.max(1, Math.ceil(total / query.pageSize)) }
 }
@@ -60,9 +59,7 @@ export async function savePropertyContext(tx: Tx, actor: BusinessActor, kind: Ki
   const timeframe = await resolvePropertyChoice(tx, actor.tenantId, "buying-timeframes", buyingTimeframe, before?.buyingTimeframe)
   if (projectId && (projectId !== before?.projectId || (subprojectId && subprojectId !== before?.subprojectId))) {
     requirePermission(actor, "projects.read")
-    const project = await tx.realEstateProject.findFirst({ where: { tenantId: actor.tenantId, id: projectId, parentId: null, archived: false,
-      ...(actor.role === "STAFF" ? { members: { some: { tenantId: actor.tenantId, userId: actor.userId } } } : {}),
-    } })
+    const project = await tx.realEstateProject.findFirst({ where: { AND: [projectScope(actor), { id: projectId, parentId: null, archived: false }] } })
     if (!project) throw new BusinessError(400, termText("realEstate.project.singular", "Choose an active project you can access.", "Choose an active {label} you can access."))
     if (subprojectId && !await tx.realEstateProject.findFirst({ where: { tenantId: actor.tenantId, id: subprojectId, parentId: projectId, archived: false } })) throw new BusinessError(400, ["Choose an active ", termText("realEstate.subproject.singular", "subproject"), " belonging to this ", termText("realEstate.project.singular", "project"), "."])
   }

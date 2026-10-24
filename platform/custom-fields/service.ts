@@ -1,6 +1,6 @@
 import { requireWriteFields } from "@/platform/access/policy"
 import type { Requirement } from "@/platform/access/catalog"
-import { findAccessUser, assignedPermissions } from "@/platform/access/server"
+import { findAccessUser, accessContext } from "@/platform/access/server"
 import { requirePermission } from "@/platform/access/policy"
 import { randomUUID } from "node:crypto"
 import { Prisma, type PrismaClient } from "@prisma/client"
@@ -21,7 +21,7 @@ export function createCustomFieldService(db: PrismaClient, identity: Pick<Busine
         const modules = await tx.tenantModule.findMany({ where: { tenantId: identity.tenantId }, select: { key: true, enabled: true, allowed: true } })
         const available = resources.filter(resource => moduleEnabled(modules, resource.module))
         if (!available.length) throw new BusinessError(403, "No custom-field record types are available.")
-        const actor = { ...identity, role: user.role, permissions: assignedPermissions(user), crmRecordScope: user.crmRecordScope, managedTeamIds: user.managedTeamIds }; requirePermission(actor, requirement)
+        const actor = { ...identity, ...accessContext(user) }; requirePermission(actor, requirement)
         return operation(tx, actor, available)
       }, { isolationLevel: "Serializable", maxWait: 20000, timeout: 20000 }) } catch (error) {
         const code = (error as { code?: string }).code

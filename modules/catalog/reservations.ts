@@ -1,5 +1,5 @@
 import type { Prisma, PrismaClient } from "@prisma/client"
-import { findAccessUser, assignedPermissions } from "@/platform/access/server"
+import { findAccessUser, accessContext } from "@/platform/access/server"
 import { permits, requirePermission } from "@/platform/access/policy"
 import type { Requirement } from "@/platform/access/catalog"
 import { BusinessError, hasBusinessAccess, type BusinessActor } from "@/platform/policy"
@@ -23,7 +23,7 @@ export function createReservationService(db: PrismaClient, identity: Pick<Busine
           if (!user || !hasBusinessAccess(user.role) || user.tenant.status !== "ACTIVE" || user.tenant.slug === (process.env.PLATFORM_ADMIN_TENANT_SLUG?.trim().toLowerCase() || "platform")) throw new BusinessError(403, "Business workspace access is not permitted.")
           const flags = await tx.tenantModule.findMany({ where: { tenantId: identity.tenantId } })
           if (!moduleEnabled(flags, "catalog") || !moduleEnabled(flags, "salesOrders")) throw new BusinessError(403, "Sales Catalog and Sales Orders must be enabled.")
-          const actor = { ...identity, role: user.role, permissions: assignedPermissions(user), crmRecordScope: user.crmRecordScope, managedTeamIds: user.managedTeamIds }
+          const actor = { ...identity, ...accessContext(user) }
           requirePermission(actor, ["salesOrders.read", "catalogItems.read", "unitReservations.read", requirement])
           return operation(tx, actor)
         }, { isolationLevel: "Serializable", maxWait: 20000, timeout: 20000 })

@@ -5,6 +5,7 @@ export const activityReportSchema = z.object({
   activityTypeId: z.string().trim().min(1).max(100).optional(),
   from: z.iso.date().optional(), through: z.iso.date().optional(),
   assignedUserId: z.string().trim().min(1).max(100).optional(),
+  salesTeamId: z.string().trim().min(1).max(100).optional(),
   scope: z.enum(["mine", "team"]).default("mine"), type: z.enum(workTypes).optional(),
 }).strict().superRefine((value, ctx) => {
   if (!!value.from !== !!value.through || (value.from && value.through && (value.through < value.from || Date.parse(value.through) - Date.parse(value.from) > 365 * 86400000))) {

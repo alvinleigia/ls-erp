@@ -29,9 +29,9 @@ before(async()=>{
  await root.query(`INSERT INTO "TenantAccessRole" (id,"tenantId",name,"nameKey",permissions,"updatedAt") VALUES ($1,$2,'Audit reviewer','audit reviewer',$3,now())`,[roleId,a,['auditLogs.read','inventoryProducts.read']])
  await root.query('INSERT INTO "TenantRoleAssignment" ("tenantId","userId","roleId","updatedAt") VALUES ($1,$2,$3,now())',[a,a+'_manager',roleId])
  await entry(a+'_product','inventory.inventoryProducts.edit','InventoryProduct',{before:{name:'Before',unchanged:'keep',version:1,credentials:{api_key:'old-secret',password:'old-password'},status:'DRAFT'},after:{name:'After',version:2,status:'ACTIVE',credentials:{api_key:'new-secret',password:'new-password'}},metadata:{nested:[{access_token:'token-secret'}]}})
- await entry(a+'_security','access.role.updated','TenantAccessRole',{after:{crmRecordScope:'OWN'}})
+ await entry(a+'_security','access.role.updated','TenantAccessRole',{after:{salesRecordScope:'OWN'}})
  await entry(a+'_module','module.updated','TenantModule')
- await entry(a+'_managerflag','crm.team.manager.updated','CrmSalesTeam')
+ await entry(a+'_managerflag','crm.team.manager.updated','BusinessTeam')
  await entry(a+'_crm','crm.enquiry.updated','CrmEnquiry')
  await entry(a+'_quote','crm.quotation.updated','CrmQuotation')
  await entry(a+'_unknown','unclassified.updated')
@@ -50,7 +50,7 @@ test('lists omit payloads and details show recorded field changes with nested cr
 })
 test('manager report permissions never expose security, unrecognized or CRM historical snapshots',async()=>{
  for(const scope of ['ACCOUNT_ROLE','OWN','MANAGED_TEAMS','ALL']){
-  await root.query('UPDATE "TenantAccessRole" SET "crmRecordScope"=$1 WHERE id=$2',[scope,roleId])
+  await root.query('UPDATE "TenantAccessRole" SET "salesRecordScope"=$1 WHERE id=$2',[scope,roleId])
   const rows=await body(await call('MANAGER','?pageSize=1'));assert.equal(rows.total,1);assert.equal(rows.canReviewSecurity,false);assert.equal(rows.items[0].id,a+'_product')
   for(const key of ['security','module','managerflag','crm','unknown'])await body(await call('MANAGER','',a+'_'+key),404)
  }

@@ -1,9 +1,12 @@
 import { termText } from "@/platform/terminology/message"
+import { projectScope } from "./access"
+import { recordAccess } from "@/platform/access/record-scope"
+export { projectScope } from "./access"
 import { readTermReplacements } from "@/platform/terminology/read"
 import { realEstateTerms } from "./terminology"
 import { requireWriteFields, permits } from "@/platform/access/policy"
 import type { Requirement } from "@/platform/access/catalog"
-import { findAccessUser, assignedPermissions } from "@/platform/access/server"
+import { findAccessUser, accessContext } from "@/platform/access/server"
 import { requirePermission } from "@/platform/access/policy"
 import { splitCustomFields } from "@/platform/custom-fields/validation"
 import { readCustomFields, saveCustomFields, customFieldFilter, customFieldExport } from "@/platform/custom-fields/values"
@@ -20,12 +23,6 @@ type Tx = Prisma.TransactionClient
 const manage = (actor: BusinessActor) => actor.role === "ADMIN" || actor.role === "MANAGER"
 const requireManager = (actor: BusinessActor) => { if (!manage(actor)) throw new BusinessError(403, termText("realEstate.project.plural", "Only managers can change projects and staff access.", "Only managers can change {label} and staff access.")) }
 const snapshot = (value: unknown): Prisma.InputJsonValue => JSON.parse(JSON.stringify(value))
-export const projectScope = (actor: BusinessActor): Prisma.RealEstateProjectWhereInput => ({ tenantId: actor.tenantId, ...(!manage(actor) ? {
-  archived: false, OR: [
-    { parentId: null, members: { some: { tenantId: actor.tenantId, userId: actor.userId } } },
-    { parent: { archived: false, members: { some: { tenantId: actor.tenantId, userId: actor.userId } } } },
-  ],
-} : {}) })
 const pageResult = <T>(items: T[], total: number, page: number, pageSize: number) => ({ items, total, page, pageSize, totalPages: Math.max(1, Math.ceil(total / pageSize)) })
 
 // Module operations own permissions, tenant scope and audited writes. Callers
@@ -39,7 +36,7 @@ export function createRealEstateService(db: PrismaClient, identity: Pick<Busines
           if (!user || !hasBusinessAccess(user.role) || user.tenant?.status !== "ACTIVE" || user.tenant.slug === (process.env.PLATFORM_ADMIN_TENANT_SLUG?.trim().toLowerCase() || "platform")) throw new BusinessError(403, "Business workspace access is not permitted.")
           const enabled = await tx.tenantModule.count({ where: { tenantId: identity.tenantId, key: { in: ["crm", "realEstate"] }, enabled: true, allowed: true } })
           if (enabled !== 2) throw new BusinessError(403, "Real Estate and CRM must be enabled for this business.")
-          const actor = { ...identity, role: user.role, permissions: assignedPermissions(user), crmRecordScope: user.crmRecordScope, managedTeamIds: user.managedTeamIds }; requirePermission(actor, requirement)
+          const actor = { ...identity, ...accessContext(user) }; requirePermission(actor, requirement)
           return operation(tx, actor)
         }, { isolationLevel: "Serializable", maxWait: 20000, timeout: 20000 })
       } catch (error) {
@@ -70,7 +67,7 @@ export function createRealEstateService(db: PrismaClient, identity: Pick<Busines
     await validatePropertyCategories(tx, actor.tenantId, categories, before?.categories)
     if (before && (data.parentId || null) !== before.parentId) throw new BusinessError(400, ["A ", termText("realEstate.project.singular", "project"), "'s parent cannot be changed. Create a ", termText("realEstate.subproject.singular", "subproject"), " under the correct ", termText("realEstate.project.singular", "project"), "."])
     if (data.parentId) {
-      const parent = await tx.realEstateProject.findFirst({ where: { tenantId: actor.tenantId, id: data.parentId, parentId: null } })
+      const parent = await tx.realEstateProject.findFirst({ where: { AND: [projectScope(actor), { id: data.parentId, parentId: null }] } })
       if (!parent) throw new BusinessError(400, termText("realEstate.project.singular", "Choose a top-level project in this business.", "Choose a top-level {label} in this business."))
       if (parent.archived && (!before || !data.archived)) throw new BusinessError(409, ["Restore the parent ", termText("realEstate.project.singular", "project"), " before creating or restoring a ", termText("realEstate.subproject.singular", "subproject"), "."])
     }
@@ -79,7 +76,15 @@ export function createRealEstateService(db: PrismaClient, identity: Pick<Busines
     const priceMax = data.priceMax ? new Prisma.Decimal(data.priceMax) : null
     if ((priceMin || priceMax) && !data.currency) throw new BusinessError(400, "Choose a currency for the indicative price range.")
     if (priceMin && priceMax && priceMin.greaterThan(priceMax)) throw new BusinessError(400, "Maximum price must be at least the minimum price.")
-    return { ...data, lifecycle, categories: [...new Set(categories)], parentId: data.parentId || null, developerAccountId: data.developerAccountId || null, priceMin, priceMax, currency: data.currency || null }
+    const teamId = data.teamId === undefined ? before?.teamId ?? null : data.teamId || null
+    if (teamId && data.parentId) throw new BusinessError(400, "Subprojects inherit their parent's team.")
+    if (teamId && teamId !== before?.teamId) {
+      requirePermission(actor, "projects.assign")
+      if (recordAccess(actor, "projects") !== "ALL" && !actor.managedTeamIds?.includes(teamId)) throw new BusinessError(403, "Choose a team you manage.")
+      if (!await tx.businessTeam.findFirst({ where: { tenantId: actor.tenantId, id: teamId, archived: false } })) throw new BusinessError(400, "Choose an active team in this business.")
+    }
+    if (before?.teamId && teamId !== before.teamId) requirePermission(actor, "projects.assign")
+    return { ...data, teamId, lifecycle, categories: [...new Set(categories)], parentId: data.parentId || null, developerAccountId: data.developerAccountId || null, priceMin, priceMax, currency: data.currency || null }
   }
   return {
     ...createPropertyChoiceService(run),
@@ -101,9 +106,10 @@ export function createRealEstateService(db: PrismaClient, identity: Pick<Busines
     getProject(id: string) {
       return run("projects.read", async (tx, actor) => {
         const record = await find(tx, actor, id)
+        const team = record.teamId ? await tx.businessTeam.findFirst({ where: { tenantId: actor.tenantId, id: record.teamId }, select: { id: true, name: true } }) : null
         const developerAccount = record.developerAccountId ? await tx.crmAccount.findFirst({ where: { AND: [accountScope(actor), { id: record.developerAccountId }] }, select: { id: true, name: true } }) : null
         const parent = record.parentId ? await tx.realEstateProject.findFirst({ where: { tenantId: actor.tenantId, id: record.parentId }, select: { id: true, name: true, archived: true } }) : null
-        return { ...record, customFields: await readCustomFields(tx, actor, projectFields, record), developerAccountId: developerAccount?.id || null, developerAccount, developerRestricted: !!record.developerAccountId && !developerAccount, parent, canManage: manage(actor) && permits(actor, "projects.edit") }
+        return { ...record, team, customFields: await readCustomFields(tx, actor, projectFields, record), developerAccountId: developerAccount?.id || null, developerAccount, developerRestricted: !!record.developerAccountId && !developerAccount, parent, canManage: manage(actor) && permits(actor, "projects.edit") }
       })
     },
     createProject(input: unknown) {
@@ -112,6 +118,7 @@ export function createRealEstateService(db: PrismaClient, identity: Pick<Busines
       return run("projects.create", async (tx, actor) => { requireWriteFields(actor, "projects", undefined, data);
         requireManager(actor)
         const record = await tx.realEstateProject.create({ data: { ...await values(tx, actor, data), tenantId: actor.tenantId } })
+        if (!record.parentId && recordAccess(actor, "projects") !== "ALL") await tx.realEstateProjectMember.create({ data: { tenantId: actor.tenantId, projectId: record.id, userId: actor.userId } })
         await saveCustomFields(tx, actor, projectFields, record, custom.patch, true)
         await audit(tx, actor, "realEstate.project.created", record.id, null, record)
         return record

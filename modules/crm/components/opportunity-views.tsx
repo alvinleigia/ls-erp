@@ -1,6 +1,6 @@
 "use client"
 import { useTerminology, useTerminologyReader } from "@/platform/terminology/provider"
-import { SalesTeamSelect } from "./sales-teams"
+import { SalesTeamSelect } from "@/platform/teams/controls"
 import { CustomFieldFilter, emptyCustomFilter } from "./custom-fields"
 import { LostReasonFields, LostReasonFilter } from "./lost-reason-fields"
 import { ExportButton } from "@/components/erp/export-button"

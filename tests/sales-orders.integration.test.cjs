@@ -110,20 +110,20 @@ test('custom role permissions are independent, refreshed, and do not grant manag
   await root.tenantAccessRole.update({where:{tenantId_id:{tenantId:tenant,id:role.id}},data:{permissions:['salesOrders.read','salesOrders.confirm']}})
   await orders.transition(order.id,{action:'confirm',version:1})
   await assert.rejects(orders.transition(order.id,{action:'cancel',version:2,reason:'Denied'}),status(403))
-  await root.tenantAccessRole.update({where:{tenantId_id:{tenantId:tenant,id:role.id}},data:{crmRecordScope:'OWN'}});await assert.rejects(orders.get(order.id),status(404))
+  await root.tenantAccessRole.update({where:{tenantId_id:{tenantId:tenant,id:role.id}},data:{salesRecordScope:'OWN'}});await assert.rejects(orders.get(order.id),status(404))
  }finally{await root.tenantRoleAssignment.deleteMany({where:{tenantId:tenant,userId:manager.id}})}
 })
 test('team manager scope is rechecked and ordinary membership does not widen staff access',async()=>{
  const q=await quote(),order=await orders.create({quotationId:q.id,revision:1})
- const team=await root.crmSalesTeam.create({data:{tenantId:tenant,name:'Support',nameKey:'support'}})
- const role=await root.tenantAccessRole.create({data:{tenantId:tenant,name:'Team orders',nameKey:'team orders',permissions:['salesOrders.read','salesOrders.confirm'],crmRecordScope:'MANAGED_TEAMS'}})
+ const team=await root.businessTeam.create({data:{tenantId:tenant,name:'Support',nameKey:'support'}})
+ const role=await root.tenantAccessRole.create({data:{tenantId:tenant,name:'Team orders',nameKey:'team orders',permissions:['salesOrders.read','salesOrders.confirm'],salesRecordScope:'MANAGED_TEAMS'}})
  await root.tenantRoleAssignment.create({data:{tenantId:tenant,userId:manager.id,roleId:role.id}})
- await root.crmSalesTeamMember.createMany({data:[{tenantId:tenant,teamId:team.id,userId:manager.id,isManager:true},{tenantId:tenant,teamId:team.id,userId:other.id,isManager:false}]})
+ await root.businessTeamMember.createMany({data:[{tenantId:tenant,teamId:team.id,userId:manager.id,isManager:true},{tenantId:tenant,teamId:team.id,userId:other.id,isManager:false}]})
  try{
   await assert.rejects(orders.get(order.id),status(404))
   await root.crmOpportunity.update({where:{tenantId_id:{tenantId:tenant,id:deal.id}},data:{salesTeamId:team.id}})
   assert.equal((await orders.get(order.id)).canConfirm,true);await assert.rejects(otherOrders.get(order.id),status(404))
-  await root.crmSalesTeamMember.update({where:{tenantId_teamId_userId:{tenantId:tenant,teamId:team.id,userId:manager.id}},data:{isManager:false}})
+  await root.businessTeamMember.update({where:{tenantId_teamId_userId:{tenantId:tenant,teamId:team.id,userId:manager.id}},data:{isManager:false}})
   await assert.rejects(orders.transition(order.id,{action:'confirm',version:1}),status(404))
  }finally{await root.tenantRoleAssignment.deleteMany({where:{tenantId:tenant,userId:manager.id}});await root.crmOpportunity.update({where:{tenantId_id:{tenantId:tenant,id:deal.id}},data:{salesTeamId:null}})}
 })

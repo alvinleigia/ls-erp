@@ -136,7 +136,7 @@ test('fresh role, user, scope, module dependency and forced RLS checks protect f
  for(const model of ['orderReceivable','orderReceivableLine','orderReceipt','orderReceiptAllocation','orderReceiptReversal']){assert.equal((await unscoped[model].findMany()).length,0);assert.equal((await dbB[model].findMany({where:{tenantId:tenant}})).length,0)}
  const role=await root.tenantAccessRole.create({data:{tenantId:tenant,name:'Balance only',nameKey:randomUUID(),permissions:['salesOrders.read','receivables.read']}})
  await root.tenantRoleAssignment.create({data:{tenantId:tenant,userId:manager.id,roleId:role.id}})
- try{const view=await svc().get(id);assert.equal(view.canRecord,false);assert.equal(view.items.length,0);await assert.rejects(svc().record(id,pay({version:2})),status(403));await root.tenantAccessRole.update({where:{tenantId_id:{tenantId:tenant,id:role.id}},data:{crmRecordScope:'OWN'}});await assert.rejects(svc().get(id),status(404))}finally{await root.tenantRoleAssignment.deleteMany({where:{tenantId:tenant,userId:manager.id}})}
+ try{const view=await svc().get(id);assert.equal(view.canRecord,false);assert.equal(view.items.length,0);await assert.rejects(svc().record(id,pay({version:2})),status(403));await root.tenantAccessRole.update({where:{tenantId_id:{tenantId:tenant,id:role.id}},data:{salesRecordScope:'OWN'}});await assert.rejects(svc().get(id),status(404))}finally{await root.tenantRoleAssignment.deleteMany({where:{tenantId:tenant,userId:manager.id}})}
  await root.tenantModule.update({where:{tenantId_key:{tenantId:tenant,key:'salesOrders'}},data:{enabled:false}});try{await assert.rejects(svc().get(id),status(403))}finally{await root.tenantModule.update({where:{tenantId_key:{tenantId:tenant,key:'salesOrders'}},data:{enabled:true}})}
 })
 test('deferred database checks reject unreconciled receipts and cross-order allocations',async()=>{
@@ -201,16 +201,16 @@ test('overview counts, currency options and summaries enforce own/team scope and
  assert.deepEqual((await applicationReceivables(db,identity(other)).list(search)).summaries,[])
  assert.deepEqual((await applicationReceivables(db,identity(other)).list(search)).currencies,[])
  assert.equal((await applicationReceivables(db,identity(staff)).list(search)).total,1)
- const role=await root.tenantAccessRole.create({data:{tenantId:tenant,name:'Scoped balances',nameKey:randomUUID(),permissions:['salesOrders.read','receivables.read'],crmRecordScope:'OWN'}})
+ const role=await root.tenantAccessRole.create({data:{tenantId:tenant,name:'Scoped balances',nameKey:randomUUID(),permissions:['salesOrders.read','receivables.read'],salesRecordScope:'OWN'}})
  await root.tenantRoleAssignment.create({data:{tenantId:tenant,userId:manager.id,roleId:role.id}})
- const team=await root.crmSalesTeam.create({data:{tenantId:tenant,name:'Payments team',nameKey:'payments team'}})
+ const team=await root.businessTeam.create({data:{tenantId:tenant,name:'Payments team',nameKey:'payments team'}})
  try{
   assert.equal((await svc().list(search)).total,0)
-  await root.tenantAccessRole.update({where:{tenantId_id:{tenantId:tenant,id:role.id}},data:{crmRecordScope:'MANAGED_TEAMS'}})
-  await root.crmSalesTeamMember.create({data:{tenantId:tenant,teamId:team.id,userId:manager.id,isManager:true}})
+  await root.tenantAccessRole.update({where:{tenantId_id:{tenantId:tenant,id:role.id}},data:{salesRecordScope:'MANAGED_TEAMS'}})
+  await root.businessTeamMember.create({data:{tenantId:tenant,teamId:team.id,userId:manager.id,isManager:true}})
   await root.crmOpportunity.update({where:{tenantId_id:{tenantId:tenant,id:deal.id}},data:{salesTeamId:team.id}})
   assert.equal((await svc().list(search)).total,1)
-  await root.crmSalesTeamMember.update({where:{tenantId_teamId_userId:{tenantId:tenant,teamId:team.id,userId:manager.id}},data:{isManager:false}})
+  await root.businessTeamMember.update({where:{tenantId_teamId_userId:{tenantId:tenant,teamId:team.id,userId:manager.id}},data:{isManager:false}})
   assert.equal((await svc().list(search)).total,0)
   await root.tenantAccessRole.update({where:{tenantId_id:{tenantId:tenant,id:role.id}},data:{permissions:['salesOrders.read']}})
   await assert.rejects(svc().list(search),status(403))

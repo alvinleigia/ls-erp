@@ -1,2 +1,2 @@
-import { SalesTeamList } from "@/modules/crm/components/sales-teams"
-export default function Page() { return <SalesTeamList /> }
+import { TeamList } from "@/platform/teams/controls"
+export default function Page() { return <TeamList /> }

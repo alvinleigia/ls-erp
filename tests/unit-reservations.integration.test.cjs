@@ -135,7 +135,7 @@ test('current custom permissions, staff/order scope, user status and module gate
   await assert.rejects(hold(f),status(403));await assert.rejects(reservations.transition(f.order.id,held.id,{action:'release',version:1,reason:'Denied'}),status(403))
   await root.tenantAccessRole.update({where:{tenantId_id:{tenantId:tenant,id:role.id}},data:{permissions:[...permissions,'unitReservations.cancel']}})
   await reservations.transition(f.order.id,held.id,{action:'release',version:1,reason:'Granted separately'})
-  await root.tenantAccessRole.update({where:{tenantId_id:{tenantId:tenant,id:role.id}},data:{crmRecordScope:'OWN'}});await assert.rejects(reservations.list(f.order.id),status(404))
+  await root.tenantAccessRole.update({where:{tenantId_id:{tenantId:tenant,id:role.id}},data:{salesRecordScope:'OWN'}});await assert.rejects(reservations.list(f.order.id),status(404))
  }finally{await root.tenantRoleAssignment.deleteMany({where:{tenantId:tenant,userId:manager.id}})}
  for(const key of ['salesOrders','catalog','crm','salesDocuments']){
   await root.tenantModule.update({where:{tenantId_key:{tenantId:tenant,key}},data:{enabled:false}})

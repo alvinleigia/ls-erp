@@ -1,4 +1,7 @@
 import { termText } from "@/platform/terminology/message"
+import { activityTeamFilter, requireSalesTeamFilter } from "./team-filter"
+import { salesRecordAccess } from "@/platform/access/record-scope"
+import { accessListSchema } from "@/platform/access/validation"
 import type { PermissionRun } from "@/platform/access/server"
 import type { Prisma } from "@prisma/client"
 import { CrmError, canManageCrm, enquiryScope, assigneeScope, type CrmActor } from "./policy"
@@ -22,14 +25,25 @@ export function createReportService({ run }: Context) {
     const now = new Date(), today = businessDate(now, timeZone)
     const from = query.from || dateAfter(today, -29), through = query.through || today
     const owner = query.scope === "mine" ? actor.userId : query.assignedUserId
-    const base: Prisma.CrmTaskWhereInput = { AND: [workScope(actor)], tenantId: actor.tenantId, assignedUserId: owner, type: query.type, activityTypeId: query.activityTypeId }
+    if (query.salesTeamId && query.scope !== "team") throw new CrmError(400, "Choose all accessible work before filtering a team.")
+    await requireSalesTeamFilter(tx, actor, query.salesTeamId)
+    const base: Prisma.CrmTaskWhereInput = { AND: [workScope(actor), ...(query.salesTeamId ? [activityTeamFilter(query.salesTeamId)] : [])], tenantId: actor.tenantId, assignedUserId: owner, type: query.type, activityTypeId: query.activityTypeId }
     const completed: Prisma.CrmTaskWhereInput = { status: "COMPLETED", completedAt: { gte: startOfBusinessDate(from, timeZone), lt: startOfBusinessDate(dateAfter(through, 1), timeZone) } }
     const overdue: Prisma.CrmTaskWhereInput = { status: { in: [...open] }, OR: [{ startsAt: { lt: now } }, { startsAt: null, dueOn: { lt: new Date(`${today}T00:00:00Z`) } }] }
     const dueToday: Prisma.CrmTaskWhereInput = { status: { in: [...open] }, dueOn: new Date(`${today}T00:00:00Z`) }
-    const gaps: Prisma.CrmOpportunityWhereInput = { ...enquiryScope(actor), assignedUserId: owner, pipeline: { archived: false }, stage: { kind: "OPEN", archived: false }, contact: { archived: false }, workItems: { none: { tenantId: actor.tenantId, status: { in: [...open] } } } }
+    const gaps: Prisma.CrmOpportunityWhereInput = { ...enquiryScope(actor), salesTeamId: query.salesTeamId, assignedUserId: owner, pipeline: { archived: false }, stage: { kind: "OPEN", archived: false }, contact: { archived: false }, workItems: { none: { tenantId: actor.tenantId, status: { in: [...open] } } } }
     return { base, completed, overdue, dueToday, gaps, owner, metadata: { from, through, today, timeZone, scope: query.scope, canManage, generatedAt: now.toISOString() } }
   }
   return {
+    listReportTeams(input: unknown) {
+      const q = accessListSchema.parse(input)
+      return run(["reports.read", "activities.read", "opportunities.read"], async (tx, actor) => {
+        if (!canManageCrm(actor.role)) throw new CrmError(403, "Team reporting is available to managers only.")
+        const where = { tenantId: actor.tenantId, ...(salesRecordAccess(actor) === "ALL" ? {} : { id: { in: actor.managedTeamIds ?? [] } }), name: { contains: q.q, mode: "insensitive" as const } }
+        const [items, total] = await Promise.all([tx.businessTeam.findMany({ where, select: { id: true, name: true }, orderBy: [{ name: "asc" }, { id: "asc" }], skip: (q.page - 1) * q.pageSize, take: q.pageSize }), tx.businessTeam.count({ where })])
+        return pageResult(items, total, q.page, q.pageSize)
+      })
+    },
     activityOverview(input: unknown) {
       const query = activityReportSchema.parse(input)
       return run(["reports.read", "activities.read", "opportunities.read"], async (tx, actor) => {
@@ -53,7 +67,7 @@ export function createReportService({ run }: Context) {
       return run(["reports.read", "activities.read", "opportunities.read"], async (tx, actor) => {
         const c = await context(tx, actor, query)
         // Include former staff who still own activities, so their backlog cannot disappear.
-        const where: Prisma.UserWhereInput = { AND: [{ OR: [assigneeScope(actor), { crmAssignedWork: { some: workScope(actor) } }] }], tenantId: actor.tenantId, id: c.owner, OR: [{ role: { in: ["ADMIN", "MANAGER", "STAFF"] } }, { crmAssignedWork: { some: { tenantId: actor.tenantId } } }] }
+        const where: Prisma.UserWhereInput = { AND: [{ OR: [assigneeScope(actor), { crmAssignedWork: { some: workScope(actor) } }] }, ...(query.salesTeamId ? [{ OR: [{ businessTeamMemberships: { some: { tenantId: actor.tenantId, teamId: query.salesTeamId } } }, { crmAssignedWork: { some: c.base } }] }] : [])], tenantId: actor.tenantId, id: c.owner, OR: [{ role: { in: ["ADMIN", "MANAGER", "STAFF"] } }, { crmAssignedWork: { some: { tenantId: actor.tenantId } } }] }
         const [users, total] = await Promise.all([tx.user.findMany({ where, select: { id: true, name: true, status: true }, orderBy: [{ name: "asc" }, { id: "asc" }], skip: (query.page - 1) * query.pageSize, take: query.pageSize }), tx.user.count({ where })])
         const base = { ...c.base, assignedUserId: { in: users.map(user => user.id) } }
         const counts = await Promise.all([{ status: { in: [...open] } }, c.overdue, c.dueToday, c.completed].map(filter => tx.crmTask.groupBy({ by: ["assignedUserId"], where: { AND: [base, filter] }, _count: { _all: true } })))

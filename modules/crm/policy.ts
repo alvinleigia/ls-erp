@@ -47,6 +47,6 @@ export function assigneeScope(actor: CrmActor) {
   const scope = salesRecordAccess(actor)
   return { tenantId: actor.tenantId, ...(scope === "ALL" ? {} : { OR: [
     { id: actor.userId },
-    ...(scope === "MANAGED_TEAMS" ? [{ crmSalesTeamMemberships: { some: { tenantId: actor.tenantId, teamId: { in: actor.managedTeamIds ?? [] } } } }] : []),
+    ...(scope === "MANAGED_TEAMS" ? [{ businessTeamMemberships: { some: { tenantId: actor.tenantId, teamId: { in: actor.managedTeamIds ?? [] } } } }] : []),
   ] }) }
 }

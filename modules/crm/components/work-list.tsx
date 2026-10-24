@@ -20,7 +20,7 @@ import { DropdownSelect } from "@/components/ui/dropdown-select"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { EmptyState, Section } from "@/components/erp/section"
 
-export function WorkList({ extensionQuery = "", guidance, allowCreate = true, contactId, enquiryId, opportunityId, planLaunchId, initialDue = "", initialScope, initialState, assignedUserId, initialType, activityTypeId, completedFrom, completedThrough }: { extensionQuery?: string; guidance?: React.ReactNode; allowCreate?: boolean; contactId?: string; enquiryId?: string; opportunityId?: string; planLaunchId?: string; initialDue?: string; initialScope?: string; initialState?: string; assignedUserId?: string; initialType?: string; activityTypeId?: string; completedFrom?: string; completedThrough?: string }) {
+export function WorkList({ extensionQuery = "", guidance, allowCreate = true, contactId, enquiryId, opportunityId, planLaunchId, initialDue = "", initialScope, initialState, assignedUserId, salesTeamId, initialType, activityTypeId, completedFrom, completedThrough }: { extensionQuery?: string; guidance?: React.ReactNode; allowCreate?: boolean; contactId?: string; enquiryId?: string; opportunityId?: string; planLaunchId?: string; initialDue?: string; initialScope?: string; initialState?: string; assignedUserId?: string; salesTeamId?: string; initialType?: string; activityTypeId?: string; completedFrom?: string; completedThrough?: string }) {
   const readTerm = useTerminologyReader()
   const term = useTerminology()
   const embedded = !!(extensionQuery || contactId || enquiryId || opportunityId)
@@ -46,13 +46,13 @@ export function WorkList({ extensionQuery = "", guidance, allowCreate = true, co
       const params = new URLSearchParams(extensionQuery)
       for (const [key, value] of Object.entries({ q, scope, state, sort, order: sort === "dueOn" ? "asc" : "desc", page: String(pagination.pageIndex + 1), pageSize: String(pagination.pageSize) })) params.set(key, value)
       if (completionPeriod) { params.set("completedFrom", completionPeriod.completedFrom); params.set("completedThrough", completionPeriod.completedThrough) }
-      for (const [key, value] of Object.entries({ due, ...activityTypeFilter(type), assignedUserId: owner, contactId, enquiryId, opportunityId, planLaunchId })) if (value) params.set(key, value)
+      for (const [key, value] of Object.entries({ due, ...activityTypeFilter(type), assignedUserId: owner, salesTeamId, contactId, enquiryId, opportunityId, planLaunchId })) if (value) params.set(key, value)
       try { const response = await fetch(`/api/crm/work?${params}`, { signal: controller.signal, cache: "no-store" }); const result = await response.json(); if (!response.ok) throw new Error(result.error || readTerm("crm.activity.plural", "Unable to load activities.", "Unable to load {label}.")); setData(result) }
       catch (error) { if (!controller.signal.aborted) { setError((error as Error).message); setData(null) } }
       finally { if (!controller.signal.aborted) setLoading(false) }
     }, 150)
     return () => { clearTimeout(timer); controller.abort() }
-  }, [readTerm, q, scope, state, sort, pagination, due, type, owner, extensionQuery, contactId, enquiryId, opportunityId, planLaunchId, revision, completionPeriod])
+  }, [readTerm, salesTeamId, q, scope, state, sort, pagination, due, type, owner, extensionQuery, contactId, enquiryId, opportunityId, planLaunchId, revision, completionPeriod])
   const columns = React.useMemo<ColumnDef<CrmWorkRow>[]>(() => [
     { accessorKey: "title", header: term("crm.activity.singular", "Activity"), cell: ({ row }) => <div><Link className="font-medium underline" href={`/crm/activities/${row.original.id}`}>{row.original.title}</Link>{row.original.planLaunch && <p className="text-xs text-muted-foreground">{row.original.planLaunch.planName} · Step {(row.original.planPosition ?? 0) + 1}</p>}</div> },
     { accessorKey: "type", header: "Type", cell: ({ row }) => row.original.activityTypeName || row.original.type },

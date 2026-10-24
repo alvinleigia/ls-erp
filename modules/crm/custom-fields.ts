@@ -13,7 +13,7 @@ const salesContext: FieldContext = {
   teamScoped: true,
   async validate(tx, actor, salesTeamId, mode) {
     if (!salesTeamId) return
-    const team = await tx.crmSalesTeam.findFirst({ where: {
+    const team = await tx.businessTeam.findFirst({ where: {
       tenantId: actor.tenantId, id: salesTeamId,
       ...(mode === "form" && !managesFields(actor) ? { members: { some: { tenantId: actor.tenantId, userId: actor.userId } } } : {}),
     }, select: { archived: true } })

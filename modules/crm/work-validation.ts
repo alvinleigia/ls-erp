@@ -36,6 +36,7 @@ export const workListSchema = crmListSchema.omit({ status: true, due: true, arch
   contactId: id.optional(), enquiryId: id.optional(), opportunityId: id.optional(), assignedUserId: id.optional(),
   planLaunchId: id.optional(),
   collectionOrderId: id.optional(),
+  salesTeamId: id.optional(),
   scope: z.enum(["mine", "visible"]).default("mine"),   type: z.enum(workTypes).optional(),
   activityTypeId: id.optional(),
   state: z.enum(["open", "all", "completed", "cancelled"]).default("open"),

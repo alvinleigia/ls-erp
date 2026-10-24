@@ -1,7 +1,7 @@
 "use client"
 import { useTerminology } from "@/platform/terminology/provider"
 import { salesReportLabels, reportLabel, reportBucketLabel } from "../report-labels"
-import { SalesTeamSelect } from "./sales-teams"
+import { SalesTeamSelect } from "@/platform/teams/controls"
 import { LostReasonFilter } from "./lost-reason-fields"
 import * as React from "react"
 import Link from "@/platform/access/link"

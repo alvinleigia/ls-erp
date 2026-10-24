@@ -1,7 +1,7 @@
 import { Prisma, type PrismaClient } from "@prisma/client"
 import { z } from "zod"
 import { BusinessError, type BusinessActor } from "../policy"
-import { assignedPermissions, findAccessUser } from "../access/server"
+import { accessContext, findAccessUser } from "../access/server"
 import { requirePermission } from "../access/policy"
 import { auditScope, securityEvents } from "./policy"
 import { auditChanges, redactAudit } from "./format"
@@ -24,7 +24,7 @@ export function createAuditReportService(db: PrismaClient, identity: Pick<Busine
   return db.$transaction(async tx => {
    const user = await findAccessUser(tx, identity.tenantId, identity.userId)
    if (!user || !["ADMIN", "MANAGER"].includes(user.role) || user.tenant.status !== "ACTIVE" || user.tenant.slug === (process.env.PLATFORM_ADMIN_TENANT_SLUG?.trim().toLowerCase() || "platform")) throw new BusinessError(403, "Audit reports require administrator or manager access.")
-   const actor = { ...identity, role: user.role, permissions: assignedPermissions(user) }
+   const actor = { ...identity, ...accessContext(user) }
    requirePermission(actor, "auditLogs.read")
    return operation(tx, actor, await auditScope(tx, actor))
   }, { isolationLevel: "RepeatableRead", maxWait: 10000, timeout: 15000 })

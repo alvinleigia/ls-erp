@@ -51,8 +51,8 @@ after(async () => { await Promise.all(clients.map(c => c.$disconnect())); await 
 async function flexibleTeamImport() {
   const teams = []
   for (const workflow of ["BOTH", "ENQUIRY_FIRST", "DIRECT"]) {
-    const row = await service.saveSalesTeam({ name: `Import ${workflow}`, workflow })
-    teams.push(await service.changeSalesTeamMember(row.id, { userId: admin.id, version: row.version }))
+    const row = await service.saveTeam({ name: `Import ${workflow}`, workflow })
+    teams.push(await service.changeTeamMember(row.id, { userId: admin.id, version: row.version }))
   }
   try {
     const job = await upload('Contact name,Email,Sales team\nFlexible import,flexible-intake@example.com,Import BOTH\n')
@@ -62,20 +62,20 @@ async function flexibleTeamImport() {
     assert.ok(!choices.includes(teams[2].id))
     let checked = await review(job)
     assert.equal(checked.counts.READY, 1)
-    const changed = await service.saveSalesTeam({ name: teams[0].name, version: teams[0].version, workflow: "DIRECT" }, teams[0].id)
+    const changed = await service.saveTeam({ name: teams[0].name, version: teams[0].version, workflow: "DIRECT" }, teams[0].id)
     teams[0] = changed
     const before = await root.crmContact.count({ where: { tenantId: a, email: "flexible-intake@example.com" } })
     checked = await finish(checked)
     assert.equal(checked.counts.IMPORTED || 0, 0)
     assert.equal(await root.crmContact.count({ where: { tenantId: a, email: "flexible-intake@example.com" } }), before)
-    teams[0] = await service.saveSalesTeam({ name: changed.name, version: changed.version, workflow: "BOTH" }, changed.id)
+    teams[0] = await service.saveTeam({ name: changed.name, version: changed.version, workflow: "BOTH" }, changed.id)
     const retry = await review(await upload('Contact name,Email,Sales team\nFlexible import,flexible-intake@example.com,Import BOTH\n'))
     const imported = await finish(retry)
     assert.equal(imported.counts.IMPORTED, 1)
     const contact = await root.crmContact.findFirst({ where: { tenantId: a, email: "flexible-intake@example.com" } })
     assert.equal((await root.crmEnquiry.findFirst({ where: { tenantId: a, contactId: contact.id } })).salesTeamId, teams[0].id)
   } finally {
-    for (const row of teams) await root.crmSalesTeam.update({ where: { tenantId_id: { tenantId: a, id: row.id } }, data: { archived: true } })
+    for (const row of teams) await root.businessTeam.update({ where: { tenantId_id: { tenantId: a, id: row.id } }, data: { archived: true } })
   }
 }
 

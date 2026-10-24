@@ -1,5 +1,5 @@
 import type { Prisma } from "@prisma/client"
-import { findAccessUser, assignedPermissions } from "@/platform/access/server"
+import { findAccessUser, accessContext } from "@/platform/access/server"
 import { requirePermission } from "@/platform/access/policy"
 import { requireBusinessModule } from "@/platform/module-server"
 import { BusinessError, type BusinessActor } from "@/platform/policy"
@@ -13,7 +13,7 @@ export function appointmentTransaction<T>(actor: BusinessActor, action: "create"
       throw new BusinessError(403, "Appointment management access is no longer available.")
     }
     await requireBusinessModule(tx, actor.tenantId, "appointments")
-    const current = { ...actor, role: user.role, permissions: assignedPermissions(user) }
+    const current = { ...actor, ...accessContext(user) }
     requirePermission(current, `${resource}.read`)
     requirePermission(current, `${resource}.${action}`)
     return write(tx, current)

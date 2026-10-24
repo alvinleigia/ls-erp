@@ -48,19 +48,19 @@ before(async () => {
 after(async () => { await Promise.all(clients.map(client => client.$disconnect())); await Promise.all(pools.map(pool => pool.end())) })
 
 async function team(name, workflow = "ENQUIRY_FIRST", members = [staff]) {
-  let row = await crm.saveSalesTeam({ name: `${name}-${randomUUID()}`, workflow })
-  for (const user of members) row = await crm.changeSalesTeamMember(row.id, { userId: user.id, version: row.version })
+  let row = await crm.saveTeam({ name: `${name}-${randomUUID()}`, workflow })
+  for (const user of members) row = await crm.changeTeamMember(row.id, { userId: user.id, version: row.version })
   return row
 }
 const teamEdit = (row, extra = {}) => ({ name: row.name, workflow: row.workflow, archived: row.archived, version: row.version, ...extra })
 
 test("new teams default to both intake paths; omitted workflow preserves an existing restriction", async () => {
-  const row = await crm.saveSalesTeam({ name: `Both default ${randomUUID()}` })
+  const row = await crm.saveTeam({ name: `Both default ${randomUUID()}` })
   assert.equal(row.workflow, "BOTH")
   const strict = await team("Keep qualification")
-  const renamed = await crm.saveSalesTeam({ name: `${strict.name} renamed`, version: strict.version }, strict.id)
+  const renamed = await crm.saveTeam({ name: `${strict.name} renamed`, version: strict.version }, strict.id)
   assert.equal(renamed.workflow, "ENQUIRY_FIRST")
-  assert.throws(() => crm.saveSalesTeam({ name: "Invalid workflow", workflow: "UNKNOWN" }))
+  assert.throws(() => crm.saveTeam({ name: "Invalid workflow", workflow: "UNKNOWN" }))
 })
 
 test("a flexible team accepts direct opportunities and enquiries without changing staff visibility", async () => {
@@ -83,28 +83,28 @@ test("switching workflow applies to new intake while keeping existing enquiries 
   let row = await team("Intake switch", "BOTH")
   const lead = await staffCrm.createEnquiry(leadInput({ salesTeamId: row.id }))
   const deal = await staffCrm.createOpportunity(dealInput({ salesTeamId: row.id }))
-  row = await crm.saveSalesTeam(teamEdit(row, { workflow: "ENQUIRY_FIRST" }), row.id)
+  row = await crm.saveTeam(teamEdit(row, { workflow: "ENQUIRY_FIRST" }), row.id)
   await assert.rejects(staffCrm.createOpportunity(dealInput({ salesTeamId: row.id })), status(400))
   await assert.rejects(staffCrm.createOpportunity(dealInput({ enquiryId: lead.id })), status(400))
   assert.equal((await staffCrm.getOpportunity(deal.id)).salesTeamId, row.id)
-  row = await crm.saveSalesTeam(teamEdit(row, { workflow: "BOTH" }), row.id)
+  row = await crm.saveTeam(teamEdit(row, { workflow: "BOTH" }), row.id)
   assert.equal((await staffCrm.createOpportunity(dealInput({ enquiryId: lead.id }))).salesTeamId, row.id)
 })
 
 test("sales teams are manager-configured, paginated, tenant-safe and versioned", async () => {
-  await assert.rejects(staffCrm.saveSalesTeam({ name: "Denied" }), status(403))
+  await assert.rejects(staffCrm.saveTeam({ name: "Denied" }), status(403))
   const row = await team("Permissions")
   const foreign = createCrmService(dbB, { tenantId: otherTenant, userId: adminB.id })
-  await assert.rejects(foreign.getSalesTeam(row.id), status(404))
-  await assert.rejects(crm.changeSalesTeamMember(row.id, { userId: adminB.id, version: row.version }), status(400))
-  await assert.rejects(crm.saveSalesTeam(teamEdit(row, { name: "Stale", version: 1 }), row.id), status(409))
-  assert.equal((await crm.listSalesTeamMembers(row.id, { pageSize: 1 })).total, 1)
-  await assert.rejects(staffCrm.listSalesTeamMembers(row.id, {}), status(403))
-  assert.ok((await staffCrm.listSalesTeams({})).items.some(item => item.id === row.id))
-  assert.equal((await unscoped.crmSalesTeam.findMany()).length, 0)
-  assert.equal((await dbB.crmSalesTeam.findMany({ where: { tenantId: tenant } })).length, 0)
-  await assert.rejects(root.crmSalesTeamMember.create({ data: { tenantId: otherTenant, teamId: row.id, userId: adminB.id } }))
-  assert.ok(await root.auditLog.count({ where: { tenantId: tenant, entityType: "CrmSalesTeam", entityId: row.id } }) >= 2)
+  await assert.rejects(foreign.getTeam(row.id), status(404))
+  await assert.rejects(crm.changeTeamMember(row.id, { userId: adminB.id, version: row.version }), status(400))
+  await assert.rejects(crm.saveTeam(teamEdit(row, { name: "Stale", version: 1 }), row.id), status(409))
+  assert.equal((await crm.listTeamMembers(row.id, { pageSize: 1 })).total, 1)
+  await assert.rejects(staffCrm.listTeamMembers(row.id, {}), status(403))
+  assert.ok((await staffCrm.listTeams({})).items.some(item => item.id === row.id))
+  assert.equal((await unscoped.businessTeam.findMany()).length, 0)
+  assert.equal((await dbB.businessTeam.findMany({ where: { tenantId: tenant } })).length, 0)
+  await assert.rejects(root.businessTeamMember.create({ data: { tenantId: otherTenant, teamId: row.id, userId: adminB.id } }))
+  assert.ok(await root.auditLog.count({ where: { tenantId: tenant, entityType: "BusinessTeam", entityId: row.id } }) >= 2)
 })
 
 test("membership never broadens record visibility and assignments require active members", async () => {
@@ -146,21 +146,21 @@ test("direct teams skip enquiry intake; legacy unassigned records retain both cr
   assert.equal((await staffCrm.createOpportunity(dealInput())).salesTeamId, null)
   const intake = await team("Change workflow")
   const old = await crm.createEnquiry(leadInput({ salesTeamId: intake.id }))
-  await crm.saveSalesTeam(teamEdit(intake, { workflow: "DIRECT" }), intake.id)
+  await crm.saveTeam(teamEdit(intake, { workflow: "DIRECT" }), intake.id)
   assert.equal((await crm.createOpportunity(dealInput({ enquiryId: old.id }))).salesTeamId, intake.id)
 })
 
 test("archive preserves history; member removal blocks open records and transfer is manager-only", async () => {
   let row = await team("Archive", "ENQUIRY_FIRST", [staff, other])
   const lead = await staffCrm.createEnquiry(leadInput({ salesTeamId: row.id }))
-  await assert.rejects(crm.changeSalesTeamMember(row.id, { userId: staff.id, version: row.version, remove: true }), status(409))
+  await assert.rejects(crm.changeTeamMember(row.id, { userId: staff.id, version: row.version, remove: true }), status(409))
   await assert.rejects(staffCrm.updateEnquiry(lead.id, leadUpdate(lead, { salesTeamId: null })), status(403))
   const moved = await crm.updateEnquiry(lead.id, leadUpdate(lead, { assignedUserId: other.id }))
-  row = await crm.changeSalesTeamMember(row.id, { userId: staff.id, version: row.version, remove: true })
-  row = await crm.saveSalesTeam(teamEdit(row, { archived: true }), row.id)
+  row = await crm.changeTeamMember(row.id, { userId: staff.id, version: row.version, remove: true })
+  row = await crm.saveTeam(teamEdit(row, { archived: true }), row.id)
   await assert.rejects(crm.createEnquiry(leadInput({ salesTeamId: row.id, assignedUserId: other.id })), status(409))
   assert.equal((await crm.updateEnquiry(moved.id, leadUpdate(moved, { title: "Archived team history" }))).title, "Archived team history")
-  assert.equal((await crm.listSalesTeams({ archived: "true" })).items.some(item => item.id === row.id), true)
+  assert.equal((await crm.listTeams({ archived: "true" })).items.some(item => item.id === row.id), true)
 })
 
 test("team fields apply only to matching records; transfers preserve history without leaking it to filters/exports", async () => {
@@ -224,7 +224,7 @@ test("presets preview, preserve customized/archived settings, reject stale revie
   try {
     assert.equal((await crm.listPresets()).some(item => item.id === "real-estate-sales"), false)
     await assert.rejects(crm.previewPreset("real-estate-sales"), status(403))
-    assert.equal((await crm.listSalesTeams({})).total > 0, true)
+    assert.equal((await crm.listTeams({})).total > 0, true)
   } finally { await root.tenantModule.update({ where: { tenantId_key: { tenantId: tenant, key: "realEstate" } }, data: { enabled: true } }) }
   const property = await crm.previewPreset("real-estate-sales")
   assert.ok((await crm.applyPreset("real-estate-sales", { token: property.token })).items.every(item => item.action === "KEEP"))
@@ -232,7 +232,7 @@ test("presets preview, preserve customized/archived settings, reject stale revie
 
 test("concurrent membership and conversion requests remain consistent", async () => {
   const row = await team("Concurrent")
-  const outcomes = await Promise.allSettled([other, manager].map(user => crm.changeSalesTeamMember(row.id, { userId: user.id, version: row.version })))
+  const outcomes = await Promise.allSettled([other, manager].map(user => crm.changeTeamMember(row.id, { userId: user.id, version: row.version })))
   assert.equal(outcomes.filter(item => item.status === "fulfilled").length, 1)
   assert.equal(outcomes.find(item => item.status === "rejected").reason.status, 409)
   const lead = await crm.createEnquiry(leadInput({ salesTeamId: row.id }))
@@ -242,11 +242,11 @@ test("concurrent membership and conversion requests remain consistent", async ()
   assert.equal(await root.crmOpportunity.count({ where: { tenantId: tenant, enquiryId: lead.id } }), 1)
   const removal = await team("Removal race")
   const race = await Promise.allSettled([
-    crm.changeSalesTeamMember(removal.id, { userId: staff.id, version: removal.version, remove: true }),
+    crm.changeTeamMember(removal.id, { userId: staff.id, version: removal.version, remove: true }),
     crm.createEnquiry(leadInput({ salesTeamId: removal.id })),
   ])
   assert.equal(race.filter(item => item.status === "fulfilled").length, 1)
-  const members = await crm.listSalesTeamMembers(removal.id, {})
+  const members = await crm.listTeamMembers(removal.id, {})
   const leads = await crm.listEnquiries({ salesTeamId: removal.id })
   assert.ok(!leads.total || members.items.some(item => item.id === staff.id))
 })
@@ -260,8 +260,8 @@ test("required audit failure rolls team creation back", async () => {
     const value = target[key]; return typeof value === "function" ? value.bind(target) : value
   } })
   const broken = createCrmService(auditFault(db), { tenantId: tenant, userId: manager.id }, undefined, crmPresets)
-  await assert.rejects(broken.saveSalesTeam({ name: "Must roll back" }), /audit unavailable/)
-  assert.equal(await root.crmSalesTeam.count({ where: { tenantId: tenant, name: "Must roll back" } }), 0)
+  await assert.rejects(broken.saveTeam({ name: "Must roll back" }), /audit unavailable/)
+  assert.equal(await root.businessTeam.count({ where: { tenantId: tenant, name: "Must roll back" } }), 0)
   const brokenPreset = createCrmService(auditFault(dbB), { tenantId: otherTenant, userId: adminB.id }, undefined, crmPresets)
   const preview = await brokenPreset.previewPreset("general-sales")
   await assert.rejects(brokenPreset.applyPreset("general-sales", { token: preview.token }), /audit unavailable/)

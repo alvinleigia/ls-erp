@@ -117,7 +117,7 @@ test("custom-field registration rejects ambiguous policies and unsafe table iden
   assert.throws(() => registerFieldResources([enquiry, { ...enquiry, key: "different", module: "services" }]), /same module and context/)
   for (const file of ["service.ts", "values.ts"]) {
     const source = fs.readFileSync(path.join(__dirname, "../platform/custom-fields", file), "utf8")
-    assert.doesNotMatch(source, /crmSalesTeam|\.crmEnquiry|\.crmOpportunity|\.realEstateProject|resource\.table\.replace|["']PROJECT["']/)
+    assert.doesNotMatch(source, /businessTeam|\.crmEnquiry|\.crmOpportunity|\.realEstateProject|resource\.table\.replace|["']PROJECT["']/)
   }
 })
 

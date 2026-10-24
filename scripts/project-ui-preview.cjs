@@ -55,7 +55,7 @@ import { WorkEditor } from '@/modules/crm/components/work-editor';
 import { ActivityPlanEditor } from '@/modules/crm/components/activity-plan-editor';
 import { FollowUpRuleEditor } from '@/modules/crm/components/follow-up-rule-editor';
 import { PipelineEditor } from '@/modules/crm/components/pipeline-editor';
-import { SalesTeamEditor } from '@/modules/crm/components/sales-teams';
+import { TeamEditor } from '@/platform/teams/controls';
 import { CustomFieldEditor } from '@/modules/crm/components/custom-field-configuration';
 import { QuotationEditor } from '@/modules/sales-documents/components/quotations';
 import { LeadSourceList } from '@/modules/crm/components/lead-source-list';
@@ -75,7 +75,7 @@ function Preview(){
  if(key==='modules')return <ModuleControls tenantId={query.get('tenant') || undefined}/>;
  if(key==='tenants')return <TenantsPageClient rootDomain='example.test' platformAccessMode='SUPER_ADMIN'/>;
  if(key==='projects')return <BusinessModuleProvider><ProjectEditor key={id || query.get('parentId') || 'new'} id={id} parentId={query.get('parentId') || undefined}/></BusinessModuleProvider>;
- const editors:any={enquiries:EnquiryEditor,opportunities:OpportunityEditor,contacts:ContactEditor,accounts:AccountEditor,activities:WorkEditor,'activity-plans':ActivityPlanEditor,'follow-up-rules':FollowUpRuleEditor,pipelines:PipelineEditor,'sales-teams':SalesTeamEditor,'custom-fields':CustomFieldEditor,quotations:QuotationEditor,'quotation-templates':QuotationEditor,'lead-sources':LeadSourceList,'lost-reasons':LostReasonList,'activity-types':ActivityTypeList};
+ const editors:any={enquiries:EnquiryEditor,opportunities:OpportunityEditor,contacts:ContactEditor,accounts:AccountEditor,activities:WorkEditor,'activity-plans':ActivityPlanEditor,'follow-up-rules':FollowUpRuleEditor,pipelines:PipelineEditor,'sales-teams':TeamEditor,'custom-fields':CustomFieldEditor,quotations:QuotationEditor,'quotation-templates':QuotationEditor,'lead-sources':LeadSourceList,'lost-reasons':LostReasonList,'activity-types':ActivityTypeList};
  const Editor=key==='real-estate'?PropertyChoiceEditor:editors[key];
  return <SessionProvider session={{user:{id:'admin',name:'Test Admin',role:'ADMIN'},expires:'2099-01-01'}}><BusinessModuleProvider><ApplicationCrmProvider><BusinessViewGuard>{Editor && <Editor key={key+raw} id={key==='real-estate'?path[5]:id} kind={path[4]} enquiryId={query.get('enquiryId') || undefined} template={key==='quotation-templates'} revision={Number(query.get('revision'))||undefined}/>}</BusinessViewGuard></ApplicationCrmProvider></BusinessModuleProvider></SessionProvider>
 }

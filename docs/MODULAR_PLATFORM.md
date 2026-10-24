@@ -1,3 +1,13 @@
+## R9 - Shared teams and ERP access foundation (local verification)
+
+Business teams are now independent of CRM, with separate sales/project scope
+controls, project-team assignments and a team filter in Activity overview.
+The migration preserves team identifiers, membership, existing sales scopes and
+forced RLS. Existing project authority is the default. Operational modules retain
+their explicit native policies; team membership never grants leave approval.
+Production is unchanged. See [R9 access model](ACCESS_MODEL_R9.md) for the resource
+matrix, migration and verification status.
+
 ## R7.5 - Collection follow-ups verified on staging (2026-10-23)
 
 Receivables now link to existing Activities for owners, dates, calls, outcomes,

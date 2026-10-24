@@ -145,7 +145,7 @@ test("sales KPIs reconcile scoped records, custom activity types, currencies and
   const staff = await read({ ...actor, userId: "dashboard_staff_a", role: "STAFF" })
   assert.equal(staff.enquiries.total, 0); assert.equal(staff.opportunities.open, 1); assert.equal(staff.activities.completed, 0)
   assert.equal(staff.projects.active, 0); assert.equal(staff.quotations.total, 1); assert.equal(staff.paymentPlans.documents, 1)
-  const ownManager = await read({ ...actor, userId: "dashboard_staff_a", role: "MANAGER", crmRecordScope: "OWN" })
+  const ownManager = await read({ ...actor, userId: "dashboard_staff_a", role: "MANAGER", salesRecordScope: "OWN" })
   assert.equal(ownManager.opportunities.open, 1); assert.equal(ownManager.paymentPlans.documents, 1)
   const otherTenant = await runWithTenantDbContext("dashboard_b", () => salesDashboard(prisma, { ...actor, tenantId: "dashboard_b", userId: "dashboard_b_admin" }, flags, period))
   assert.equal(otherTenant.enquiries.total, 0); assert.equal(otherTenant.quotations.total, 0); assert.equal(otherTenant.paymentPlans.documents, 0)

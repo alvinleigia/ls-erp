@@ -6,11 +6,12 @@ import { enquiryCsv, opportunityCsv } from "./record-exports"
 import { createEnquiryImportService } from "./import-service"
 import { requireWriteFields, permits, requirePermission } from "@/platform/access/policy"
 import type { Requirement } from "@/platform/access/catalog"
-import { findAccessUser, assignedPermissions } from "@/platform/access/server"
+import { findAccessUser, accessContext } from "@/platform/access/server"
 import { workspaceRead } from "@/platform/access/catalog"
 import type { CrmServiceContext } from "./service-context"
 import { createPresetService, type CrmPreset } from "./preset-service"
-import { createTeamService, resolveSalesTeam, teamSelect } from "./team-service"
+import { resolveSalesTeam } from "./team-service"
+import { createTeamService, teamSelect } from "@/platform/teams/service"
 import { constraintTarget, serializationConflict } from "@/platform/database-errors"
 import { splitCustomFields } from "@/platform/custom-fields/validation"
 import { readCustomFields, saveCustomFields, customFieldFilter, customFieldExport } from "@/platform/custom-fields/values"
@@ -64,7 +65,7 @@ export function createCrmService<Fields extends object = object, Metadata extend
             where: { tenantId_key: { tenantId: identity.tenantId, key: "crm" } },
           })
           if (!enabledModule?.allowed || !enabledModule.enabled) throw new CrmError(403, "CRM is not enabled for this business.")
-          const actor = { ...identity, role: user.role, permissions: assignedPermissions(user), crmRecordScope: user.crmRecordScope, managedTeamIds: user.managedTeamIds }; requirePermission(actor, requirement)
+          const actor = { ...identity, ...accessContext(user) }; requirePermission(actor, requirement)
           return operation(tx, actor)
         }, { isolationLevel: "Serializable", maxWait: 20000, timeout: 20000 })
       } catch (error) {
@@ -92,7 +93,7 @@ export function createCrmService<Fields extends object = object, Metadata extend
   async function audit(tx: Tx, actor: CrmActor, event: string, entityId: string, before?: Prisma.InputJsonValue, after?: Prisma.InputJsonValue) {
     await recordDomainAuditEvent(tx, {
       tenantId: actor.tenantId, actorUserId: actor.userId, actorRole: actor.role as Role,
-      requestId: actor.requestId, event, entityType: event.startsWith("crm.enquiry.import.") ? "CrmEnquiryImport" : event.startsWith("crm.quotationTemplate.") ? "CrmQuotationTemplate" : event.startsWith("crm.quotation.") ? "CrmQuotation" : event.startsWith("crm.preset.") ? "CrmPreset" : event.startsWith("crm.team.") ? "CrmSalesTeam" : event.startsWith("crm.activityType.") ? "CrmActivityType" : event.startsWith("crm.lostReason.") ? "CrmLostReason" : event.startsWith("crm.source.") ? "CrmLeadSource" : event.startsWith("crm.rule.") ? "CrmFollowUpRule" : event.startsWith("crm.plan.") ? "CrmActivityPlan" : event.startsWith("crm.work") ? "CrmTask" : event.startsWith("crm.opportunity") ? "CrmOpportunity" : event.startsWith("crm.pipeline") ? "CrmPipeline" : event.startsWith("crm.account") ? "CrmAccount" : event.startsWith("crm.contact") ? "CrmContact" : "CrmEnquiry",
+      requestId: actor.requestId, event, entityType: event.startsWith("crm.enquiry.import.") ? "CrmEnquiryImport" : event.startsWith("crm.quotationTemplate.") ? "CrmQuotationTemplate" : event.startsWith("crm.quotation.") ? "CrmQuotation" : event.startsWith("crm.preset.") ? "CrmPreset" : event.startsWith("crm.team.") ? "BusinessTeam" : event.startsWith("crm.activityType.") ? "CrmActivityType" : event.startsWith("crm.lostReason.") ? "CrmLostReason" : event.startsWith("crm.source.") ? "CrmLeadSource" : event.startsWith("crm.rule.") ? "CrmFollowUpRule" : event.startsWith("crm.plan.") ? "CrmActivityPlan" : event.startsWith("crm.work") ? "CrmTask" : event.startsWith("crm.opportunity") ? "CrmOpportunity" : event.startsWith("crm.pipeline") ? "CrmPipeline" : event.startsWith("crm.account") ? "CrmAccount" : event.startsWith("crm.contact") ? "CrmContact" : "CrmEnquiry",
       entityId, before, after,
     })
   }
@@ -172,7 +173,7 @@ export function createCrmService<Fields extends object = object, Metadata extend
     ...createFollowUpService({ run, audit }),
     ...createIntakeService({ run, audit }),
     ...createLostReasonService({ run, audit }),
-    ...createTeamService({ run, audit }),
+    ...createTeamService({ run, audit, allowSalesWorkflow: true }),
     ...createPresetService({ run, audit }, presets),
     listAccounts(input: unknown) {
       const query = crmListSchema.parse(input)
@@ -459,7 +460,7 @@ export function createCrmService<Fields extends object = object, Metadata extend
       return run(workspaceRead, async (tx, actor) => {
         const where: Prisma.UserWhereInput = { status: "ACTIVE", role: { in: ["ADMIN", "MANAGER", "STAFF"] },
           ...assigneeScope(actor),
-          ...(query.salesTeamId ? { crmSalesTeamMemberships: { some: { tenantId: actor.tenantId, teamId: query.salesTeamId } } } : {}),
+          ...(query.salesTeamId ? { businessTeamMemberships: { some: { tenantId: actor.tenantId, teamId: query.salesTeamId } } } : {}),
           ...(query.q ? { name: { contains: query.q, mode: "insensitive" } } : {}),
         }
         const [items, total] = await Promise.all([

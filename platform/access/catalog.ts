@@ -43,7 +43,7 @@ export const accessResources = {
   activityTypes: { name: "Activity types", module: "crm", actions: records },
   activityPlans: { name: "Activity plans", module: "crm", actions: records },
   followUpRules: { name: "Follow-up rules", module: "crm", actions: records },
-  salesTeams: { name: "Sales teams", module: "crm", actions: [...records, "assign"] },
+  teams: { name: "Business teams", module: "core", actions: [...records, "assign"] },
   customFields: { name: "Custom field configuration", module: "crm", actions: records },
   projects: { name: "Projects and subprojects", module: "realEstate", actions: [...records, "export", "assign"] },
   projectSettings: { name: "Property choices", module: "realEstate", actions: records },

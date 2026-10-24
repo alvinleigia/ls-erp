@@ -1,7 +1,7 @@
 import { test, expect } from "@playwright/test"
 
 test("role template permissions and assignment are reviewable on desktop and mobile", async ({ page }) => {
- const writes: { name?: string; crmRecordScope?: string; permissions?: string[]; roleId?: string; previousRoleId?: string | null }[] = []
+ const writes: { name?: string; salesRecordScope?: string; permissions?: string[]; roleId?: string; previousRoleId?: string | null }[] = []
  let saved: { id: string; name: string; permissions: string[]; archived: boolean; version: number } | null = null
  await page.route("**/api/**", async route => {
   const path = new URL(route.request().url()).pathname, method = route.request().method()
@@ -30,7 +30,7 @@ test("role template permissions and assignment are reviewable on desktop and mob
  await page.screenshot({ path: test.info().outputPath("access-role-mobile.png"), fullPage: true })
  await page.getByRole("button", { name: "Save changes", exact: true }).click()
  await expect(page.getByRole("button", { name: "Sales observer", exact: true })).toBeVisible()
- expect(writes[0].crmRecordScope).toBe("MANAGED_TEAMS")
+ expect(writes[0].salesRecordScope).toBe("MANAGED_TEAMS")
  expect(writes[0].permissions).not.toContain("contacts.read")
  await page.getByRole("button", { name: "Assign role", exact: true }).click()
  await page.locator("#access-user").click()

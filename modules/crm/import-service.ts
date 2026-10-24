@@ -10,7 +10,7 @@ import type { FieldValue } from "@/platform/custom-fields/validation"
 import type { CrmServiceContext } from "./service-context"
 import type { CrmExtensions } from "./extensions"
 import { CrmError, assigneeScope, type CrmActor } from "./policy"
-import { teamScope } from "./team-service"
+import { teamScope } from "@/platform/teams/service"
 import { enquiryFields } from "./custom-fields"
 import { crmListSchema } from "./validation"
 import { baseImportFields, importChoices, importReportColumns, suggestImportMapping, type ImportConfig, type ImportField, type ImportIssue } from "./import-types"
@@ -81,7 +81,7 @@ export function createEnquiryImportService({ run, audit, readTerms }: CrmService
     const [users, sources, teams, custom, extension] = await Promise.all([
       tx.user.findMany({ where: { ...assigneeScope(actor), ...(actor.role === "STAFF" || !permits(actor, "enquiries.assign") ? { id: actor.userId } : {}), status: "ACTIVE", role: { in: ["ADMIN", "MANAGER", "STAFF"] } }, select: { id: true, name: true, email: true }, orderBy: { name: "asc" }, take: 5000 }),
       tx.crmLeadSource.findMany({ where: { tenantId: actor.tenantId, archived: false }, select: { id: true, name: true }, orderBy: { name: "asc" }, take: 5000 }),
-      tx.crmSalesTeam.findMany({ where: { ...teamScope(actor), archived: false, workflow: { in: ["BOTH", "ENQUIRY_FIRST"] }, ...(actor.crmRecordScope === "MANAGED_TEAMS" ? { id: { in: actor.managedTeamIds || [] } } : {}) }, select: { id: true, name: true }, orderBy: { name: "asc" }, take: 5000 }),
+      tx.businessTeam.findMany({ where: { ...teamScope(actor), archived: false, workflow: { in: ["BOTH", "ENQUIRY_FIRST"] }, ...(actor.salesRecordScope === "MANAGED_TEAMS" ? { id: { in: actor.managedTeamIds || [] } } : {}) }, select: { id: true, name: true }, orderBy: { name: "asc" }, take: 5000 }),
       definitions(tx, actor, enquiryFields), extensions.importFields?.(tx, actor) || [],
     ])
     return [

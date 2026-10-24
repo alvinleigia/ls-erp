@@ -148,7 +148,7 @@ model CrmStage {
 model CrmOpportunity {
   quotations CrmQuotation[]
   salesTeamId String?
-  salesTeam CrmSalesTeam? @relation(fields: [tenantId, salesTeamId], references: [tenantId, id], onDelete: Restrict)
+  salesTeam BusinessTeam? @relation(fields: [tenantId, salesTeamId], references: [tenantId, id], onDelete: Restrict)
   @@index([tenantId, salesTeamId])
   customFieldsCreatedAt DateTime?
   customFieldValues CrmOpportunityFieldValue[]
@@ -344,7 +344,7 @@ model CrmLostReason {
 
 model CrmEnquiry {
   salesTeamId String?
-  salesTeam CrmSalesTeam? @relation(fields: [tenantId, salesTeamId], references: [tenantId, id], onDelete: Restrict)
+  salesTeam BusinessTeam? @relation(fields: [tenantId, salesTeamId], references: [tenantId, id], onDelete: Restrict)
   @@index([tenantId, salesTeamId])
   customFieldValues CrmEnquiryFieldValue[]
   propertyContext RealEstateEnquiryContext?
@@ -712,7 +712,7 @@ enum StockMovementType {
 
 model User {
   accessAssignment TenantRoleAssignment?
-  crmSalesTeamMemberships CrmSalesTeamMember[]
+  businessTeamMemberships BusinessTeamMember[]
   realEstateMemberships RealEstateProjectMember[]
   id                    String                    @id @default(cuid())
   tenantId              String?
@@ -818,8 +818,8 @@ model Tenant {
   salesOrders SalesOrder[]
   unitReservations UnitReservation[]
   orderReceivables OrderReceivable[]
-  crmSalesTeams CrmSalesTeam[]
-  crmSalesTeamMembers CrmSalesTeamMember[]
+  businessTeams BusinessTeam[]
+  businessTeamMembers BusinessTeamMember[]
   customFieldDefinitions CustomFieldDefinition[]
   customFieldOptions CustomFieldOption[]
   enquiryFieldValues CrmEnquiryFieldValue[]
@@ -2019,6 +2019,9 @@ model InventoryStockMovement {
   @@index([occurredAt])
 }
 model RealEstateProject {
+  teamId String?
+  team BusinessTeam? @relation(fields: [tenantId, teamId], references: [tenantId, id], onDelete: Restrict)
+  @@index([tenantId, teamId])
   units RealEstateUnit[]
   customFieldValues RealEstateProjectFieldValue[]
   enquiryContexts RealEstateEnquiryContext[] @relation("EnquiryProject")
@@ -2191,7 +2194,7 @@ model RealEstateProjectCategory {
 // Shared definitions; industry modules register record resources in application composition.
 model CustomFieldDefinition {
   salesTeamId String?
-  salesTeam CrmSalesTeam? @relation(fields: [tenantId, salesTeamId], references: [tenantId, id], onDelete: Restrict)
+  salesTeam BusinessTeam? @relation(fields: [tenantId, salesTeamId], references: [tenantId, id], onDelete: Restrict)
   @@index([tenantId, salesTeamId])
   tenantId String
   id String @default(cuid())
@@ -2319,7 +2322,8 @@ model RealEstateProjectFieldValue {
   @@index([tenantId, fieldId, optionId, recordId])
 }
 
-model CrmSalesTeam {
+model BusinessTeam {
+  projects RealEstateProject[]
   tenantId String
   id String @default(cuid())
   name String
@@ -2330,7 +2334,7 @@ model CrmSalesTeam {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  members CrmSalesTeamMember[]
+  members BusinessTeamMember[]
   enquiries CrmEnquiry[]
   opportunities CrmOpportunity[]
   fields CustomFieldDefinition[]
@@ -2338,13 +2342,13 @@ model CrmSalesTeam {
   @@unique([tenantId, nameKey])
   @@index([tenantId, archived, name, id])
 }
-model CrmSalesTeamMember {
+model BusinessTeamMember {
   isManager Boolean @default(false)
   tenantId String
   teamId String
   userId String
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  team CrmSalesTeam @relation(fields: [tenantId, teamId], references: [tenantId, id], onDelete: Restrict)
+  team BusinessTeam @relation(fields: [tenantId, teamId], references: [tenantId, id], onDelete: Restrict)
   user User @relation(fields: [tenantId, userId], references: [tenantId, id], onDelete: Restrict)
   @@id([tenantId, teamId, userId])
   @@index([tenantId, userId, teamId])
@@ -2526,7 +2530,8 @@ model TenantAccessRole {
   name String
   nameKey String
   permissions String[]
-  crmRecordScope String @default("ACCOUNT_ROLE")
+  salesRecordScope String @default("ACCOUNT_ROLE")
+  projectRecordScope String @default("ACCOUNT_ROLE")
   archived Boolean @default(false)
   version Int @default(1)
   createdAt DateTime @default(now())

@@ -79,8 +79,8 @@ test("configuration is manager-only, tenant scoped, versioned and audited", asyn
 })
 
 test("resource policies validate team context, scope and module dependencies before querying fields", async () => {
-  const team = await root.crmSalesTeam.create({ data: { tenantId: tenant, name: "Context", nameKey: "context" } })
-  const foreign = await root.crmSalesTeam.create({ data: { tenantId: otherTenant, name: "Foreign", nameKey: "foreign" } })
+  const team = await root.businessTeam.create({ data: { tenantId: tenant, name: "Context", nameKey: "context" } })
+  const foreign = await root.businessTeam.create({ data: { tenantId: otherTenant, name: "Foreign", nameKey: "foreign" } })
   const noMembership = () => staffConfig.form("enquiry", team.id)
   await assert.rejects(noMembership(), status(404))
   await assert.rejects(config.form("enquiry", foreign.id), status(404))
@@ -91,9 +91,9 @@ test("resource policies validate team context, scope and module dependencies bef
   await assert.rejects(config.form("unknown"), status(403))
   const field = await config.save(definition("context_policy", { salesTeamId: team.id }))
   assert.ok((await config.form("enquiry", team.id)).some(item => item.id === field.id))
-  await root.crmSalesTeamMember.create({ data: { tenantId: tenant, teamId: team.id, userId: staff.id } })
+  await root.businessTeamMember.create({ data: { tenantId: tenant, teamId: team.id, userId: staff.id } })
   assert.ok((await staffConfig.form("opportunity", team.id)).some(item => item.id === field.id))
-  await root.crmSalesTeam.update({ where: { tenantId_id: { tenantId: tenant, id: team.id } }, data: { archived: true } })
+  await root.businessTeam.update({ where: { tenantId_id: { tenantId: tenant, id: team.id } }, data: { archived: true } })
   await assert.rejects(config.save(definition("archived_context", { salesTeamId: team.id })), status(400))
   const updated = await config.save(edit(field, { salesTeamId: team.id, name: "Retained archived team field" }), field.id)
   assert.equal(updated.name, "Retained archived team field")

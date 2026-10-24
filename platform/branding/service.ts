@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto"
 import type { Prisma, PrismaClient } from "@prisma/client"
 import { recordDomainAuditEvent } from "@/lib/domain-audit"
 import { brandingUpdateSchema } from "@/lib/validation"
-import { assignedPermissions, findAccessUser } from "../access/server"
+import { accessContext, findAccessUser } from "../access/server"
 import { requirePermission, permits } from "../access/policy"
 import { BusinessError, type BusinessActor } from "../policy"
 import { optimizeLogo } from "./images"
@@ -45,7 +45,7 @@ export async function saveBranding(db: PrismaClient, actor: BusinessActor, input
       await tx.$queryRaw`SELECT id FROM "Tenant" WHERE id=${actor.tenantId} FOR UPDATE`
       const user = await findAccessUser(tx, actor.tenantId, actor.userId)
       if (!user || user.tenant.status !== "ACTIVE" || user.tenant.slug === (process.env.PLATFORM_ADMIN_TENANT_SLUG || "platform")) throw new BusinessError(403, "Business workspace access is not permitted.")
-      const fresh = { ...actor, role: user.role, permissions: assignedPermissions(user) }
+      const fresh = { ...actor, ...accessContext(user) }
       requireBrandingAdmin(fresh)
       const before = await tx.appSetting.findUniqueOrThrow({ where: { tenantId: actor.tenantId }, select: { branding: true, brandingVersion: true } })
       if (before.brandingVersion !== data.version) throw new BusinessError(409, "Branding changed. Refresh before saving.")

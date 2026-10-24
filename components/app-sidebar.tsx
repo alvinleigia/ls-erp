@@ -161,6 +161,7 @@ export function AppSidebar({ brandingLogo, brandingName }: { brandingLogo?: stri
           isActive: (current) => current === "/users" || current.startsWith("/users/"),
           items: [
             { title: "View", href: "/users", icon: UsersIcon, isActive: (current) => current === "/users" },
+            { title: "Teams", href: "/users/teams", icon: UsersIcon, isActive: (current) => current === "/users/teams" || current.startsWith("/users/teams/") },
             ...(canInvite(role ?? null)
               ? [
                   {

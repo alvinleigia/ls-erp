@@ -28,6 +28,7 @@ export function ActivityOverview() {
   const [gaps, setGaps] = React.useState<ListResponse<FollowUpGapRow> | null>(null)
   const [scope, setScope] = React.useState("mine")
   const [owner, setOwner] = React.useState("")
+  const [team, setTeam] = React.useState("")
   const [type, setType] = React.useState("")
   const [from, setFrom] = React.useState("")
   const [through, setThrough] = React.useState("")
@@ -40,7 +41,7 @@ export function ActivityOverview() {
   const [revision, setRevision] = React.useState(0)
   const { formatDate } = useDateFormatter()
   const reset = () => { setStaffPage(1); setGapPage(1) }
-  const params = new URLSearchParams({ scope, ...(period || {}), ...(owner ? { assignedUserId: owner } : {}), ...activityTypeFilter(type) }).toString()
+  const params = new URLSearchParams({ scope, ...(period || {}), ...(owner ? { assignedUserId: owner } : {}), ...(team ? { salesTeamId: team } : {}), ...activityTypeFilter(type) }).toString()
   React.useEffect(() => {
     const controller = new AbortController()
     const timer = setTimeout(async () => {
@@ -54,16 +55,17 @@ export function ActivityOverview() {
     }, 100)
     return () => { clearTimeout(timer); controller.abort() }
   }, [readTerm, params, period, staffPage, gapPage, revision])
-  const workLink = (kind: "open" | "overdue" | "today" | "completed", assignedUserId = owner) => `/crm/activities?${new URLSearchParams({ scope: scope === "team" ? "visible" : "mine", state: kind === "completed" ? "completed" : "open", ...(assignedUserId ? { assignedUserId } : {}), ...activityTypeFilter(type), ...(kind === "completed" && data ? { completedFrom: data.from, completedThrough: data.through } : kind !== "open" ? { due: kind } : {}) })}`
+  const workLink = (kind: "open" | "overdue" | "today" | "completed", assignedUserId = owner) => `/crm/activities?${new URLSearchParams({ scope: scope === "team" ? "visible" : "mine", state: kind === "completed" ? "completed" : "open", ...(assignedUserId ? { assignedUserId } : {}), ...(team ? { salesTeamId: team } : {}), ...activityTypeFilter(type), ...(kind === "completed" && data ? { completedFrom: data.from, completedThrough: data.through } : kind !== "open" ? { due: kind } : {}) })}`
   return <section className={pageClass}>
     <AccessPageHeader title={term("crm.activity.singular", "Activity overview", "{label} overview")} description={term("crm.activity.plural", "Current workload, completed activities and follow-up gaps.", "Current workload, completed {label} and follow-up gaps.")} actions={<Button asChild><Link href="/crm/activities/new">{term("crm.activity.singular", "Schedule activity", "Schedule {label}")}</Link></Button>} />
     <Surface className="p-3 sm:p-3">
       <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Overview filters">
-        <Select id="report-scope" aria-label="Scope" className={selectClass} value={scope} onValueChange={value => { setScope(value); setOwner(""); reset() }}><option value="mine">My work</option>{data?.canManage && <option value="team">Team</option>}</Select>
+        <Select id="report-scope" aria-label="Scope" className={selectClass} value={scope} onValueChange={value => { setScope(value); setOwner(""); setTeam(""); reset() }}><option value="mine">My work</option>{data?.canManage && <option value="team">All accessible work</option>}</Select>
+        {scope === "team" && <div className="min-w-0 basis-full sm:basis-48"><label htmlFor="report-team" className="sr-only">Sales team</label><RecordSelect id="report-team" placeholder="All accessible teams" endpoint="/api/crm/report-teams?includeArchived=true" value={team} onChange={value => { setTeam(value); setOwner(""); reset() }} />{team && <Button type="button" size="sm" variant="link" onClick={() => { setTeam(""); setOwner(""); reset() }}>All accessible teams</Button>}</div>}
         <div className="min-w-0 w-60"><label htmlFor="report-type" className="sr-only">{term("crm.activity.singular", "Activity type", "{label} type")}</label><ActivityTypeSelect id="report-type" filter value={type} onChange={value => { setType(value); reset() }} /></div>
         {scope === "team" && <div className="min-w-0 basis-full sm:basis-48"><label htmlFor="report-owner" className="sr-only">Assigned staff</label><RecordSelect id="report-owner" placeholder="All staff" endpoint="/api/crm/assignees" value={owner} onChange={value => { setOwner(value); reset() }} /></div>}
         <Popover open={periodOpen} onOpenChange={open => { setPeriodOpen(open); if (open && data) { setFrom(data.from); setThrough(data.through) } }}>
-          <PopoverTrigger asChild><Button type="button" variant="outline" aria-label="Completion period" disabled={!data} className="min-w-0 basis-full justify-between font-normal sm:basis-auto"><CalendarDays className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" /><span className="truncate">{data ? `${formatDate(data.from)} â€“ ${formatDate(data.through)}` : "Completion period"}</span><ChevronDown className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" /></Button></PopoverTrigger>
+          <PopoverTrigger asChild><Button type="button" variant="outline" aria-label="Completion period" disabled={!data} className="min-w-0 basis-full justify-between font-normal sm:basis-auto"><CalendarDays className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" /><span className="truncate">{data ? `${formatDate(data.from)} \u2013 ${formatDate(data.through)}` : "Completion period"}</span><ChevronDown className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" /></Button></PopoverTrigger>
           <PopoverContent align="start" collisionPadding={16} className="w-[min(24rem,calc(100vw-2rem))] space-y-4 p-4" aria-label="Completion period">
             <div><h2 className="font-semibold">Completion period</h2><p className="mt-1 text-sm text-muted-foreground">{term("crm.activity.plural", "Choose which completed activities to include.", "Choose which completed {label} to include.")}</p></div>
             <form className="space-y-4 [color-scheme:light] dark:[color-scheme:dark]" onSubmit={event => { event.preventDefault(); setPeriod({ from, through }); reset(); setPeriodOpen(false) }}>
@@ -72,11 +74,11 @@ export function ActivityOverview() {
             </form>
           </PopoverContent>
         </Popover>
-        <div className="ml-auto flex items-center gap-1"><Button variant="ghost" size="sm" disabled={loading} onClick={() => { setOwner(""); setType(""); setPeriod(null); reset(); setRevision(value => value + 1) }}>Reset filters</Button><span className="mx-1 h-5 w-px bg-border" aria-hidden="true" /><Button variant="ghost" size="icon" aria-label="Refresh" title="Refresh" disabled={loading} onClick={() => setRevision(value => value + 1)}><RefreshCw className="size-4" aria-hidden="true" /></Button></div>
+        <div className="ml-auto flex items-center gap-1"><Button variant="ghost" size="sm" disabled={loading} onClick={() => { setOwner(""); setTeam(""); setType(""); setPeriod(null); reset(); setRevision(value => value + 1) }}>Reset filters</Button><span className="mx-1 h-5 w-px bg-border" aria-hidden="true" /><Button variant="ghost" size="icon" aria-label="Refresh" title="Refresh" disabled={loading} onClick={() => setRevision(value => value + 1)}><RefreshCw className="size-4" aria-hidden="true" /></Button></div>
       </div>
     </Surface>
     {error && <p role="alert" className="text-destructive">{error}</p>}
-    {loading && <p role="status">{term("crm.activity.singular", "Loading activity reportâ€¦", "Loading {label} report…")}</p>}
+    {loading && <p role="status">{term("crm.activity.singular", "Loading activity report...", "Loading {label} report...")}</p>}
     {!loading && !error && data && <>
       <p className="text-sm text-muted-foreground">Current workload is shown regardless of period. Completions use the date work was marked complete or logged, from {formatDate(data.from)} through {formatDate(data.through)} in {data.timeZone}, credited to the assigned staff member.</p>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">{([

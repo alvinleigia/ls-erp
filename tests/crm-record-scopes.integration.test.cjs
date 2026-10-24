@@ -11,8 +11,8 @@ const root=client(undefined,true),db=client(tenant),otherDb=client(foreign),unsc
 const identity=u=>({tenantId:u.tenantId,userId:u.id,requestId:'scope-test'}),denied=code=>e=>e.status===code
 let admin,manager,a,b,peer,foreignAdmin,crm,limited,staff,roles,role,teamA,teamB,ownContact,contactA,contactB,own,leadA,leadB,dealA,dealB,workA,workB,quoteA,quoteB
 const leadEdit=(row,extra={})=>({title:row.title,assignedUserId:row.assignedUserId,status:row.status,version:row.version,...extra})
-async function scope(value,permissions=allPermissions){role=await roles.save({name:role.name,permissions,crmRecordScope:value,version:role.version},role.id)}
-async function managerFlag(team,user,isManager){const fresh=await crm.getSalesTeam(team.id);return crm.changeSalesTeamMember(team.id,{userId:user.id,isManager,version:fresh.version})}
+async function scope(value,permissions=allPermissions){role=await roles.save({name:role.name,permissions,salesRecordScope:value,version:role.version},role.id)}
+async function managerFlag(team,user,isManager){const fresh=await crm.getTeam(team.id);return crm.changeTeamMember(team.id,{userId:user.id,isManager,version:fresh.version})}
 before(async()=>{
  await root.tenant.createMany({data:[tenant,foreign].map(id=>({id,slug:id,name:id}))})
  const user=(tenantId,role)=>root.user.create({data:{tenantId,role,name:role,email:`${randomUUID()}@example.test`}})
@@ -20,7 +20,7 @@ before(async()=>{
  await root.tenantModule.createMany({data:[tenant,foreign].flatMap(tenantId=>['crm','salesDocuments','paymentPlans'].map(key=>({tenantId,key,allowed:true,enabled:true})))})
  crm=createApplicationCrmService(db,identity(admin));limited=createApplicationCrmService(db,identity(manager));staff=createApplicationCrmService(db,identity(a));roles=createAccessRoleService(db,identity(admin))
  role=await roles.save({name:'Scoped manager',permissions:allPermissions});await roles.assign(manager.id,{roleId:role.id,previousRoleId:null})
- async function team(name,members){let t=await crm.saveSalesTeam({name,workflow:'ENQUIRY_FIRST'});for(const u of members)t=await crm.changeSalesTeamMember(t.id,{userId:u.id,version:t.version});return t}
+ async function team(name,members){let t=await crm.saveTeam({name,workflow:'ENQUIRY_FIRST'});for(const u of members)t=await crm.changeTeamMember(t.id,{userId:u.id,version:t.version});return t}
  teamA=await team('Team A',[manager,peer,a]);teamB=await team('Team B',[manager,b])
  const contact=(owner,name)=>root.crmContact.create({data:{tenantId:tenant,ownerUserId:owner.id,name}})
  ownContact=await contact(manager,'Own customer');contactA=await contact(a,'Team A customer');contactB=await contact(b,'Team B customer')
@@ -48,15 +48,15 @@ test('legacy access is preserved and own scope filters list/detail/edit/export w
 })
 test('membership alone grants no managed-team access; only administrators designate managers',async()=>{
  await scope('MANAGED_TEAMS');assert.equal((await limited.listEnquiries({})).total,1)
- const current=await crm.getSalesTeam(teamA.id)
- await assert.rejects(limited.changeSalesTeamMember(teamA.id,{userId:manager.id,isManager:true,version:current.version}),denied(403))
- await assert.rejects(crm.changeSalesTeamMember(teamA.id,{userId:a.id,isManager:true,version:current.version}),denied(400))
+ const current=await crm.getTeam(teamA.id)
+ await assert.rejects(limited.changeTeamMember(teamA.id,{userId:manager.id,isManager:true,version:current.version}),denied(403))
+ await assert.rejects(crm.changeTeamMember(teamA.id,{userId:a.id,isManager:true,version:current.version}),denied(400))
  teamA=await managerFlag(teamA,manager,true)
  assert.equal((await limited.listEnquiries({})).total,2)
  await assert.rejects(limited.getEnquiry(leadB.id),denied(404))
  const audit=await root.auditLog.findFirst({where:{tenantId:tenant,event:'crm.team.manager.updated',entityId:teamA.id}})
  assert.equal(audit.actorUserId,admin.id);assert.equal(audit.before.isManager,false);assert.equal(audit.after.isManager,true)
- const member=await crm.listSalesTeamMembers(teamA.id,{});assert.equal(member.items.find(u=>u.id===manager.id).isManager,true)
+ const member=await crm.listTeamMembers(teamA.id,{});assert.equal(member.items.find(u=>u.id===manager.id).isManager,true)
 })
 test('managed reads include linked customers, work, quotations and queries; edits retain owner and actor audit',async()=>{
  assert.equal((await limited.getContact(contactA.id)).id,contactA.id)
@@ -89,12 +89,12 @@ test('audit failure rolls back team-manager authority and version',async()=>{
   }})),options)
   const value=target[key];return typeof value==='function'?value.bind(target):value
  }})
- const current=await crm.getSalesTeam(teamA.id)
- await assert.rejects(createApplicationCrmService(fault,identity(admin)).changeSalesTeamMember(teamA.id,{userId:manager.id,isManager:false,version:current.version}),/audit unavailable/)
- assert.equal((await crm.getSalesTeam(teamA.id)).version,current.version)
+ const current=await crm.getTeam(teamA.id)
+ await assert.rejects(createApplicationCrmService(fault,identity(admin)).changeTeamMember(teamA.id,{userId:manager.id,isManager:false,version:current.version}),/audit unavailable/)
+ assert.equal((await crm.getTeam(teamA.id)).version,current.version)
  assert.equal((await limited.listEnquiries({})).total,2)
  const saved=await roles.save({name:role.name,permissions:allPermissions,version:role.version},role.id)
- assert.equal(saved.crmRecordScope,'MANAGED_TEAMS');role=saved
+ assert.equal(saved.salesRecordScope,'MANAGED_TEAMS');role=saved
 })
 
 test('activity and SQL sales reports respect managed scope before aggregation, pagination and export',async()=>{
@@ -108,8 +108,8 @@ test('activity and SQL sales reports respect managed scope before aggregation, p
 test('former team members retain attributed visible work without allowing new assignments',async()=>{
  const fields={title:'Former member work',contactId:contactA.id,opportunityId:dealA.id,assignedUserId:peer.id,type:'TASK',dueOn:'2030-10-07'}
  const task=await crm.createWork(fields)
- const current=await crm.getSalesTeam(teamA.id)
- await crm.changeSalesTeamMember(teamA.id,{userId:peer.id,remove:true,version:current.version})
+ const current=await crm.getTeam(teamA.id)
+ await crm.changeTeamMember(teamA.id,{userId:peer.id,remove:true,version:current.version})
  const report=await limited.staffActivityReport({scope:'team'})
  assert.equal(report.items.find(u=>u.id===peer.id).open,1)
  const {contactId,opportunityId,...update}=fields;assert.ok(contactId&&opportunityId)
@@ -126,9 +126,9 @@ test('scope and team revocation take effect without login; explicit All stays te
  await roles.assign(a.id,{roleId:role.id,previousRoleId:null});assert.equal((await staff.listEnquiries({})).total,1);await assert.rejects(staff.getEnquiry(leadB.id),denied(404))
  await roles.assign(a.id,{roleId:null,previousRoleId:role.id})
  await scope('MANAGED_TEAMS');await managerFlag(teamA,manager,true)
- const before=await crm.getSalesTeam(teamA.id);await crm.saveSalesTeam({name:before.name,workflow:before.workflow,version:before.version,archived:true},teamA.id)
+ const before=await crm.getTeam(teamA.id);await crm.saveTeam({name:before.name,workflow:before.workflow,version:before.version,archived:true},teamA.id)
  await assert.rejects(limited.getEnquiry(leadA.id),denied(404))
- const archived=await crm.getSalesTeam(teamA.id);await crm.saveSalesTeam({name:archived.name,workflow:archived.workflow,version:archived.version,archived:false},teamA.id)
+ const archived=await crm.getTeam(teamA.id);await crm.saveTeam({name:archived.name,workflow:archived.workflow,version:archived.version,archived:false},teamA.id)
 })
 test('scoped manager cannot obtain unrelated parent details through an assigned activity',async()=>{
  const task=await root.crmTask.create({data:{tenantId:tenant,title:'Assigned handoff',contactId:contactB.id,opportunityId:dealB.id,assignedUserId:manager.id,createdByUserId:admin.id,type:'CALL',callDirection:'OUTBOUND',dueOn:new Date('2030-10-07')}})

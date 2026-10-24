@@ -1,5 +1,5 @@
 import { Prisma, type PrismaClient } from "@prisma/client"
-import { findAccessUser, assignedPermissions } from "@/platform/access/server"
+import { findAccessUser, accessContext } from "@/platform/access/server"
 import { permits, requirePermission } from "@/platform/access/policy"
 import type { Requirement } from "@/platform/access/catalog"
 import { BusinessError, hasBusinessAccess, type BusinessActor } from "@/platform/policy"
@@ -22,7 +22,7 @@ export function createReceivableService(db: PrismaClient, identity: Pick<Busines
           const user = await findAccessUser(tx, identity.tenantId, identity.userId)
           if (!user || !hasBusinessAccess(user.role) || user.tenant.status !== "ACTIVE" || user.tenant.slug === (process.env.PLATFORM_ADMIN_TENANT_SLUG?.trim().toLowerCase() || "platform")) throw new BusinessError(403, "Business workspace access is not permitted.")
           if (!moduleEnabled(await tx.tenantModule.findMany({ where: { tenantId: identity.tenantId } }), "receivables")) throw new BusinessError(403, "Receivables is not enabled.")
-          const actor = { ...identity, role: user.role, permissions: assignedPermissions(user), crmRecordScope: user.crmRecordScope, managedTeamIds: user.managedTeamIds }
+          const actor = { ...identity, ...accessContext(user) }
           requirePermission(actor, ["salesOrders.read", "receivables.read"])
           requirePermission(actor, requirement)
           if (write && !manager(actor)) throw new BusinessError(403, "Only administrators and managers can change receivables.")
