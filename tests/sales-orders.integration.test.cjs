@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
+const {fixtureUser,fixtureRole,fixtureProfile,resetFixtureRoles}=require("./helpers/access-fixtures.cjs")
 const {test,before,after}=require('node:test'),assert=require('node:assert/strict'),{randomUUID}=require('node:crypto'),{Pool}=require('pg'),{PrismaClient}=require('@prisma/client')
 const {TenantPgAdapter}=require('../lib/tenant-pg-adapter.ts'),{createApplicationCrmService}=require('../application/crm/service.ts'),{applicationSalesOrders}=require('../application/sales-orders/service.ts'),{emptyQuotationContent}=require('../modules/sales-documents/quotation-validation.ts')
 const {updateBusinessModule}=require('../platform/module-service.ts')
@@ -14,7 +15,7 @@ const content=(extra={})=>({...structuredClone(emptyQuotationContent),title:'Ann
 const quote=()=>crm.saveQuotation(deal.id,{content:content()})
 before(async()=>{
  await root.tenant.createMany({data:[{id:tenant,slug:tenant,name:'Generic orders'},{id:otherTenant,slug:otherTenant,name:'Other'}]})
- const user=(tenantId,role)=>root.user.create({data:{tenantId,role,name:role,email:randomUUID()+'@example.test'}})
+ const user=(tenantId,role)=>fixtureUser(root,{data:{tenantId,role,name:role,email:randomUUID()+'@example.test'}})
  admin=await user(tenant,'ADMIN');manager=await user(tenant,'MANAGER');staff=await user(tenant,'STAFF');other=await user(tenant,'STAFF');foreign=await user(otherTenant,'ADMIN')
  await root.tenantModule.createMany({data:[tenant,otherTenant].flatMap(tenantId=>['crm','salesDocuments','salesOrders'].map(key=>({tenantId,key,allowed:true,enabled:true})))})
  orders=applicationSalesOrders(db,identity(manager));staffOrders=applicationSalesOrders(db,identity(staff));otherOrders=applicationSalesOrders(db,identity(other));foreignOrders=applicationSalesOrders(dbB,identity(foreign));crm=createApplicationCrmService(db,identity(manager))
@@ -102,22 +103,22 @@ test('fresh module allowance, dependency, tenant and user status checks apply to
 })
 test('custom role permissions are independent, refreshed, and do not grant managers wider record scope',async()=>{
  const q=await quote(),order=await orders.create({quotationId:q.id,revision:1})
- const role=await root.tenantAccessRole.create({data:{tenantId:tenant,name:'Order reader',nameKey:'order reader',permissions:['salesOrders.read']}})
- await root.tenantRoleAssignment.create({data:{tenantId:tenant,userId:manager.id,roleId:role.id}})
+ const role=await fixtureProfile(root,{data:{tenantId:tenant,name:'Order reader',nameKey:'order reader',permissions:['salesOrders.read']}})
+ await fixtureRole(root,{data:{tenantId:tenant,userId:manager.id,roleId:role.id}})
  try{
   assert.equal((await orders.get(order.id)).canConfirm,false)
   await assert.rejects(orders.create({quotationId:q.id,revision:1}),status(403));await assert.rejects(orders.transition(order.id,{action:'confirm',version:1}),status(403))
   await root.tenantAccessRole.update({where:{tenantId_id:{tenantId:tenant,id:role.id}},data:{permissions:['salesOrders.read','salesOrders.confirm']}})
   await orders.transition(order.id,{action:'confirm',version:1})
   await assert.rejects(orders.transition(order.id,{action:'cancel',version:2,reason:'Denied'}),status(403))
-  await root.tenantAccessRole.update({where:{tenantId_id:{tenantId:tenant,id:role.id}},data:{salesRecordScope:'OWN'}});await assert.rejects(orders.get(order.id),status(404))
- }finally{await root.tenantRoleAssignment.deleteMany({where:{tenantId:tenant,userId:manager.id}})}
+  await root.tenantUserAccess.update({where:{tenantId_userId:{tenantId:tenant,userId:manager.id}},data:{salesRecordScope:'OWN'}});await assert.rejects(orders.get(order.id),status(404))
+ }finally{await resetFixtureRoles(root,{where:{tenantId:tenant,userId:manager.id}})}
 })
 test('team manager scope is rechecked and ordinary membership does not widen staff access',async()=>{
  const q=await quote(),order=await orders.create({quotationId:q.id,revision:1})
  const team=await root.businessTeam.create({data:{tenantId:tenant,name:'Support',nameKey:'support'}})
- const role=await root.tenantAccessRole.create({data:{tenantId:tenant,name:'Team orders',nameKey:'team orders',permissions:['salesOrders.read','salesOrders.confirm'],salesRecordScope:'MANAGED_TEAMS'}})
- await root.tenantRoleAssignment.create({data:{tenantId:tenant,userId:manager.id,roleId:role.id}})
+ const role=await fixtureProfile(root,{data:{tenantId:tenant,name:'Team orders',nameKey:'team orders',permissions:['salesOrders.read','salesOrders.confirm'],salesRecordScope:'MANAGED_TEAMS'}})
+ await fixtureRole(root,{data:{tenantId:tenant,userId:manager.id,roleId:role.id}})
  await root.businessTeamMember.createMany({data:[{tenantId:tenant,teamId:team.id,userId:manager.id,isManager:true},{tenantId:tenant,teamId:team.id,userId:other.id,isManager:false}]})
  try{
   await assert.rejects(orders.get(order.id),status(404))
@@ -125,5 +126,5 @@ test('team manager scope is rechecked and ordinary membership does not widen sta
   assert.equal((await orders.get(order.id)).canConfirm,true);await assert.rejects(otherOrders.get(order.id),status(404))
   await root.businessTeamMember.update({where:{tenantId_teamId_userId:{tenantId:tenant,teamId:team.id,userId:manager.id}},data:{isManager:false}})
   await assert.rejects(orders.transition(order.id,{action:'confirm',version:1}),status(404))
- }finally{await root.tenantRoleAssignment.deleteMany({where:{tenantId:tenant,userId:manager.id}});await root.crmOpportunity.update({where:{tenantId_id:{tenantId:tenant,id:deal.id}},data:{salesTeamId:null}})}
+ }finally{await resetFixtureRoles(root,{where:{tenantId:tenant,userId:manager.id}});await root.crmOpportunity.update({where:{tenantId_id:{tenantId:tenant,id:deal.id}},data:{salesTeamId:null}})}
 })

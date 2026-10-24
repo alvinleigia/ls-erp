@@ -1,3 +1,14 @@
+## R9 - Composable module profiles verified locally
+
+Users can combine module access profiles. Active profiles add action permissions;
+record scopes live in a separate per-user policy and do not expand when an
+unrelated profile is added. Future module templates derive from the shared
+resource registry. Migration 109 preserves existing grants/scopes and replaces
+implicit account access with explicit frozen grants for existing users. New
+Staff/Manager accounts need profiles. Local ERP, financial, import and real-Chrome
+checks pass. Production is unchanged; no R9 migrations or code are deployed.
+See [profile contract, usage and verification](ACCESS_PROFILES_R9.md).
+
 ## R9 - Shared teams and ERP access foundation (local verification)
 
 Business teams are now independent of CRM, with separate sales/project scope

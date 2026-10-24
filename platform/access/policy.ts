@@ -2,7 +2,8 @@ import { BusinessError, type BusinessActor } from "../policy"
 import { accessResources, type Permission, type Requirement, type Resource } from "./catalog"
 
 export function permits(actor: Pick<BusinessActor, "permissions">, permission: Permission) {
-  // No assignment retains legacy authorization, whose existing checks still run.
+  // Admin/customer entrypoints may use account authority. Staff and Managers
+  // resolve explicit profile arrays, including [] when no profile grants access.
   return actor.permissions === undefined || (actor.permissions.includes(permission) && actor.permissions.includes(`${permission.split(".")[0]}.read` as Permission))
 }
 export function satisfies(actor: Pick<BusinessActor, "permissions">, requirement: Requirement): boolean {

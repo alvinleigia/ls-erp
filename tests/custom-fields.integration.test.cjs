@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
+const {fixtureUser}=require("./helpers/access-fixtures.cjs")
 const { test, before, after } = require("node:test")
 const assert = require("node:assert/strict")
 const { randomUUID } = require("node:crypto")
@@ -34,7 +35,7 @@ const leadUpdate = (row, extra = {}) => ({ title: row.title, assignedUserId: row
 const dealInput = (extra = {}) => ({ title: "Custom field deal", contactId: contact.id, assignedUserId: staff.id, pipelineId: pipeline.id, stageId: stage.id, amount: "100", currency: "INR", expectedCloseOn: "2026-12-31", ...extra })
 before(async () => {
   await root.tenant.createMany({ data: [{ id: tenant, slug: tenant, name: "Custom fields" }, { id: otherTenant, slug: otherTenant, name: "Other fields" }] })
-  const user = (tenantId, role) => root.user.create({ data: { tenantId, role, name: role, email: `${randomUUID()}@example.test` } })
+  const user = (tenantId, role) => fixtureUser(root,{ data: { tenantId, role, name: role, email: `${randomUUID()}@example.test` } })
   manager = await user(tenant, "MANAGER"); staff = await user(tenant, "STAFF"); other = await user(tenant, "STAFF"); adminB = await user(otherTenant, "ADMIN")
   await root.tenantModule.createMany({ data: [tenant, otherTenant].flatMap(tenantId => ["crm", "realEstate"].map(key => ({ tenantId, key, allowed: true, enabled: true }))) })
   config = createCustomFieldService(db, { tenantId: tenant, userId: manager.id }, resources)

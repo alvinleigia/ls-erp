@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
+const {fixtureUser}=require("./helpers/access-fixtures.cjs")
 const { test, before, after } = require("node:test")
 const assert = require("node:assert/strict")
 const { randomUUID } = require("node:crypto")
@@ -52,7 +53,7 @@ const completionInput = (record, extra = {}) => ({ version: record.version, outc
 before(async () => {
   await root.tenant.createMany({ data: [{ id: a, slug: a, name: "CRM test A" }, { id: b, slug: b, name: "CRM test B" }] })
   async function user(tenantId, role, name) {
-    return root.user.create({ data: { tenantId, role, name, email: `${name}-${suffix}@example.test` } })
+    return fixtureUser(root,{ data: { tenantId, role, name, email: `${name}-${suffix}@example.test` } })
   }
   adminA = await user(a, "ADMIN", "admin-a")
   staffA = await user(a, "STAFF", "staff-a")

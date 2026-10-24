@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
+const {grantPgFixtureUsers}=require("./helpers/access-fixtures.cjs")
 const {test,before,after}=require('node:test'),assert=require('node:assert/strict'),path=require('node:path'),{randomUUID}=require('node:crypto')
 const {AsyncLocalStorage}=require('node:async_hooks'),{Client,Pool}=require('pg'),{PrismaClient}=require('@prisma/client')
 const raw=process.env.CRM_TEST_DATABASE_URL,url=new URL(raw||'http://invalid')
@@ -35,6 +36,8 @@ before(async()=>{
  await entry(a+'_crm','crm.enquiry.updated','CrmEnquiry')
  await entry(a+'_quote','crm.quotation.updated','CrmQuotation')
  await entry(a+'_unknown','unclassified.updated')
+
+ await grantPgFixtureUsers(root,[a,b])
 })
 after(async()=>{await db.$disconnect();await pool.end();await prisma.$disconnect();await global.prismaPool?.end();await root.end()})
 test('lists omit payloads and details show recorded field changes with nested credentials redacted',async()=>{
@@ -50,7 +53,7 @@ test('lists omit payloads and details show recorded field changes with nested cr
 })
 test('manager report permissions never expose security, unrecognized or CRM historical snapshots',async()=>{
  for(const scope of ['ACCOUNT_ROLE','OWN','MANAGED_TEAMS','ALL']){
-  await root.query('UPDATE "TenantAccessRole" SET "salesRecordScope"=$1 WHERE id=$2',[scope,roleId])
+  await root.query('UPDATE "TenantUserAccess" SET "salesRecordScope"=$1 WHERE "userId"=$2',[scope,a+'_manager'])
   const rows=await body(await call('MANAGER','?pageSize=1'));assert.equal(rows.total,1);assert.equal(rows.canReviewSecurity,false);assert.equal(rows.items[0].id,a+'_product')
   for(const key of ['security','module','managerflag','crm','unknown'])await body(await call('MANAGER','',a+'_'+key),404)
  }

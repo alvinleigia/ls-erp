@@ -711,7 +711,8 @@ enum StockMovementType {
 }
 
 model User {
-  accessAssignment TenantRoleAssignment?
+  accessAssignments TenantRoleAssignment[]
+  accessPolicy TenantUserAccess?
   businessTeamMemberships BusinessTeamMember[]
   realEstateMemberships RealEstateProjectMember[]
   id                    String                    @id @default(cuid())
@@ -2530,8 +2531,7 @@ model TenantAccessRole {
   name String
   nameKey String
   permissions String[]
-  salesRecordScope String @default("ACCOUNT_ROLE")
-  projectRecordScope String @default("ACCOUNT_ROLE")
+  moduleKey String @default("all")
   archived Boolean @default(false)
   version Int @default(1)
   createdAt DateTime @default(now())
@@ -2550,8 +2550,19 @@ model TenantRoleAssignment {
   updatedAt DateTime @updatedAt
   user User @relation(fields: [tenantId, userId], references: [tenantId, id], onDelete: Cascade)
   role TenantAccessRole @relation(fields: [tenantId, roleId], references: [tenantId, id], onDelete: Restrict)
-  @@id([tenantId, userId])
+  @@id([tenantId, userId, roleId])
   @@index([tenantId, roleId])
+}
+
+model TenantUserAccess {
+  tenantId String
+  userId String
+  salesRecordScope String @default("OWN")
+  projectRecordScope String @default("OWN")
+  version Int @default(1)
+  updatedAt DateTime @updatedAt
+  user User @relation(fields: [tenantId, userId], references: [tenantId, id], onDelete: Cascade)
+  @@id([tenantId, userId])
 }
 
 model CatalogItem {

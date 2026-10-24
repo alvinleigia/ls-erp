@@ -1,3 +1,4 @@
+import { assignProfiles } from './helpers'
 // Opt-in hosted writes, restricted to the two existing synthetic staging tenants.
 // Never imports the local database fixture or accepts arbitrary target origins.
 import fs from 'node:fs'
@@ -102,13 +103,13 @@ test('hosted Sales Orders: frozen revisions, transitions, access, module control
     ids.replacement = replacement.id; expect(replacement.id).not.toBe(id); expect(replacement.revision).toBe(2)
     checks.push('UI confirms and cancels with reason/history; stale writes and invalid transitions rejected; replacement uses v2')
     const testUser = (await json(admin, '/api/users', 200, 'POST', { name: `QA R7 manager ${run}`, email: `qa-r7-manager-${run}@example.test`, role: 'MANAGER', password: state.password })).user
-    const role = await json(admin, '/api/access/roles', 201, 'POST', { name: `QA R7 reader ${run}`, permissions: ['salesOrders.read'], salesRecordScope: 'ALL' })
-    await json(admin, `/api/access/users/${testUser.id}`, 200, 'PATCH', { roleId: role.id, previousRoleId: null })
+    const role = await json(admin, '/api/access/roles', 201, 'POST', { name: `QA R7 reader ${run}`, permissions: ['salesOrders.read'] })
+    await assignProfiles(admin, testUser.id, [role.id], { salesRecordScope: 'ALL' })
     const manager = await open(a.origin, testUser.email, state.password, a.tenant.id)
     expect((await json(manager, `/api/sales-orders/${replacement.id}`)).canConfirm).toBe(false)
     await json(manager, `/api/sales-orders/${replacement.id}`, 403, 'PATCH', { action: 'confirm', version: 1 })
     await json(manager, '/api/sales-orders', 403, 'POST', { quotationId: quote.id, revision: 2 })
-    await json(admin, `/api/access/roles/${role.id}`, 200, 'PATCH', { name: role.name, version: role.version, permissions: ['salesOrders.read', 'salesOrders.confirm'], salesRecordScope: 'ALL' })
+    await json(admin, `/api/access/roles/${role.id}`, 200, 'PATCH', { name: role.name, version: role.version, permissions: ['salesOrders.read', 'salesOrders.confirm'] })
     await json(manager, `/api/sales-orders/${replacement.id}`, 200, 'PATCH', { action: 'confirm', version: 1 })
     await json(manager, `/api/sales-orders/${replacement.id}`, 403, 'PATCH', { action: 'cancel', version: 2, reason: 'No cancel permission' })
     checks.push('Custom manager role requires distinct create/confirm/cancel permissions and refreshes immediately')

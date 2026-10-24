@@ -1,4 +1,5 @@
 import { z } from "zod"
+import { recordScopes } from "@/platform/access/record-scope"
 export const brandingUpdateSchema = z.object({
   name: z.string().trim().max(200),
   version: z.coerce.number().int().nonnegative(),
@@ -131,7 +132,9 @@ export const signUpSchema = addCountryStateValidation(z.object({
 }))
 
 export const createUserSchema = addCountryStateValidation(z.object({
-  accessRoleId: z.string().trim().max(100).optional(),
+  accessRoleIds: z.array(z.string().trim().min(1).max(100)).max(50).optional(),
+  salesRecordScope: z.enum(recordScopes).optional(),
+  projectRecordScope: z.enum(recordScopes).optional(),
   name: z.string().trim().min(1).max(100).optional().or(z.literal("")),
   email: z.string().trim().email(),
   role: roleSchema.optional(),

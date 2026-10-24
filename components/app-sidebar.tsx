@@ -203,7 +203,7 @@ export function AppSidebar({ brandingLogo, brandingName }: { brandingLogo?: stri
           : [
               { title: "General", href: "/settings", icon: SettingsIcon, isActive: (current) => current === "/settings" },
               { title: "Branding", href: "/settings/branding", icon: Building2Icon, isActive: (current) => current === "/settings/branding" },
-              { title: "Access roles", href: "/settings/roles", icon: UsersIcon, isActive: (current) => current.startsWith("/settings/roles") },
+              { title: "Access profiles", href: "/settings/roles", icon: UsersIcon, isActive: (current) => current.startsWith("/settings/roles") },
               { title: "Modules", href: "/settings/modules", icon: PackageIcon, isActive: (current) => current === "/settings/modules" },
               { title: "Terminology", href: "/settings/terminology", icon: TagIcon, isActive: (current) => current === "/settings/terminology" },
               { title: "Taxes", href: "/settings/taxes", icon: TagIcon, isActive: (current) => current === "/settings/taxes" },

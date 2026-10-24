@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
+const {fixtureUser}=require("./helpers/access-fixtures.cjs")
 const { test, before, after } = require("node:test")
 const assert = require("node:assert/strict")
 const { randomUUID } = require("node:crypto")
@@ -185,7 +186,7 @@ test("new project and buyer APIs apply defaults while explicit empty selections 
 })
 before(async () => {
   await root.tenant.createMany({ data: [{ id: a, slug: a, name: "Property A" }, { id: b, slug: b, name: "Property B" }] })
-  const user = (tenantId, role, name) => root.user.create({ data: { tenantId, role, name, email: `${name}-${suffix}@example.test` } })
+  const user = (tenantId, role, name) => fixtureUser(root,{ data: { tenantId, role, name, email: `${name}-${suffix}@example.test` } })
   admin = await user(a, "ADMIN", "admin"); manager = await user(a, "MANAGER", "manager"); staff = await user(a, "STAFF", "staff"); other = await user(a, "STAFF", "other"); outsider = await user(a, "CUSTOMER", "customer"); adminB = await user(b, "ADMIN", "admin-b")
   await root.tenantModule.createMany({ data: [a, b].flatMap(tenantId => [{ tenantId, key: "crm", allowed: true, enabled: true }, { tenantId, key: "realEstate", allowed: true, enabled: true }]) })
   service = createRealEstateService(db, { tenantId: a, userId: manager.id }); reader = createRealEstateService(db, { tenantId: a, userId: staff.id }); stranger = createRealEstateService(db, { tenantId: a, userId: other.id }); second = createRealEstateService(dbB, { tenantId: b, userId: adminB.id })

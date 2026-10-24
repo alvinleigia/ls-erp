@@ -49,7 +49,9 @@ export type UserProfile = UserCore & {
 }
 
 export type UserFormValues = {
-  accessRoleId?: string
+  accessRoleIds?: string[]
+  salesRecordScope?: import("@/platform/access/record-scope").RecordScope
+  projectRecordScope?: import("@/platform/access/record-scope").RecordScope
   name: string
   email: string
   phone: string

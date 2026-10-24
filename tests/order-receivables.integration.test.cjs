@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
+const {fixtureUser,fixtureRole,fixtureProfile,resetFixtureRoles}=require("./helpers/access-fixtures.cjs")
 const {test,before,after}=require('node:test'),assert=require('node:assert/strict'),{randomUUID}=require('node:crypto'),{Pool}=require('pg'),{PrismaClient}=require('@prisma/client')
 const {TenantPgAdapter}=require('../lib/tenant-pg-adapter.ts'),{createApplicationCrmService}=require('../application/crm/service.ts'),{applicationSalesOrders}=require('../application/sales-orders/service.ts'),{emptyQuotationContent}=require('../modules/sales-documents/quotation-validation.ts')
 require('../lib/logger.ts').logger.info=()=>{}
@@ -13,7 +14,7 @@ const content=(extra={})=>({...structuredClone(emptyQuotationContent),title:'Ann
 const quote=()=>crm.saveQuotation(deal.id,{content:content()})
 before(async()=>{
  await root.tenant.createMany({data:[{id:tenant,slug:tenant,name:'Generic orders'},{id:otherTenant,slug:otherTenant,name:'Other'}]})
- const user=(tenantId,role)=>root.user.create({data:{tenantId,role,name:role,email:randomUUID()+'@example.test'}})
+ const user=(tenantId,role)=>fixtureUser(root,{data:{tenantId,role,name:role,email:randomUUID()+'@example.test'}})
  manager=await user(tenant,'MANAGER');staff=await user(tenant,'STAFF');other=await user(tenant,'STAFF');foreign=await user(otherTenant,'ADMIN')
  await root.tenantModule.createMany({data:[tenant,otherTenant].flatMap(tenantId=>['crm','salesDocuments','salesOrders','receivables','paymentPlans'].map(key=>({tenantId,key,allowed:true,enabled:true})))})
  orders=applicationSalesOrders(db,identity(manager));crm=createApplicationCrmService(db,identity(manager))
@@ -58,14 +59,14 @@ test('collection access is fresh; activity assignees do not gain financial acces
  const id=await opened(),task=await crm.createWork(collection(id,{assignedUserId:other.id})),assigned=createApplicationCrmService(db,identity(other))
  assert.equal((await assigned.getWork(task.id)).id,task.id);await assert.rejects(applicationReceivables(db,identity(other)).get(id),status(404))
  await assert.rejects(assigned.listWork({collectionOrderId:id,scope:'visible'}),status(404))
- const role=await root.tenantAccessRole.create({data:{tenantId:tenant,name:'Follow-up test',nameKey:randomUUID(),permissions:['activities.read','activities.create','activities.edit','salesOrders.read','receivables.read']}})
- await root.tenantRoleAssignment.create({data:{tenantId:tenant,userId:manager.id,roleId:role.id}})
+ const role=await fixtureProfile(root,{data:{tenantId:tenant,name:'Follow-up test',nameKey:randomUUID(),permissions:['activities.read','activities.create','activities.edit','salesOrders.read','receivables.read']}})
+ await fixtureRole(root,{data:{tenantId:tenant,userId:manager.id,roleId:role.id}})
  try{
   await assert.rejects(crm.createWork(collection(id)),status(403)) // assignment needs assign permission
   await crm.createWork(collection(id,{assignedUserId:manager.id}))
   await root.tenantAccessRole.update({where:{tenantId_id:{tenantId:tenant,id:role.id}},data:{permissions:['activities.read','activities.create','activities.edit']}})
   await assert.rejects(crm.getCollectionContext(id),status(403));await assert.rejects(crm.createWork(collection(id,{assignedUserId:manager.id})),status(403))
- }finally{await root.tenantRoleAssignment.deleteMany({where:{tenantId:tenant,userId:manager.id}})}
+ }finally{await resetFixtureRoles(root,{where:{tenantId:tenant,userId:manager.id}})}
  await root.tenantModule.update({where:{tenantId_key:{tenantId:tenant,key:'receivables'}},data:{enabled:false}})
  try{
   await assert.rejects(crm.getCollectionContext(id),status(403));await assert.rejects(crm.createWork(collection(id)),status(403))
@@ -134,9 +135,9 @@ test('fresh role, user, scope, module dependency and forced RLS checks protect f
  await assert.rejects(applicationReceivables(db,identity(other)).get(id),status(404))
  await assert.rejects(applicationReceivables(db,identity(staff)).record(id,pay({version:2})),status(403))
  for(const model of ['orderReceivable','orderReceivableLine','orderReceipt','orderReceiptAllocation','orderReceiptReversal']){assert.equal((await unscoped[model].findMany()).length,0);assert.equal((await dbB[model].findMany({where:{tenantId:tenant}})).length,0)}
- const role=await root.tenantAccessRole.create({data:{tenantId:tenant,name:'Balance only',nameKey:randomUUID(),permissions:['salesOrders.read','receivables.read']}})
- await root.tenantRoleAssignment.create({data:{tenantId:tenant,userId:manager.id,roleId:role.id}})
- try{const view=await svc().get(id);assert.equal(view.canRecord,false);assert.equal(view.items.length,0);await assert.rejects(svc().record(id,pay({version:2})),status(403));await root.tenantAccessRole.update({where:{tenantId_id:{tenantId:tenant,id:role.id}},data:{salesRecordScope:'OWN'}});await assert.rejects(svc().get(id),status(404))}finally{await root.tenantRoleAssignment.deleteMany({where:{tenantId:tenant,userId:manager.id}})}
+ const role=await fixtureProfile(root,{data:{tenantId:tenant,name:'Balance only',nameKey:randomUUID(),permissions:['salesOrders.read','receivables.read']}})
+ await fixtureRole(root,{data:{tenantId:tenant,userId:manager.id,roleId:role.id}})
+ try{const view=await svc().get(id);assert.equal(view.canRecord,false);assert.equal(view.items.length,0);await assert.rejects(svc().record(id,pay({version:2})),status(403));await root.tenantUserAccess.update({where:{tenantId_userId:{tenantId:tenant,userId:manager.id}},data:{salesRecordScope:'OWN'}});await assert.rejects(svc().get(id),status(404))}finally{await resetFixtureRoles(root,{where:{tenantId:tenant,userId:manager.id}})}
  await root.tenantModule.update({where:{tenantId_key:{tenantId:tenant,key:'salesOrders'}},data:{enabled:false}});try{await assert.rejects(svc().get(id),status(403))}finally{await root.tenantModule.update({where:{tenantId_key:{tenantId:tenant,key:'salesOrders'}},data:{enabled:true}})}
 })
 test('deferred database checks reject unreconciled receipts and cross-order allocations',async()=>{
@@ -201,12 +202,12 @@ test('overview counts, currency options and summaries enforce own/team scope and
  assert.deepEqual((await applicationReceivables(db,identity(other)).list(search)).summaries,[])
  assert.deepEqual((await applicationReceivables(db,identity(other)).list(search)).currencies,[])
  assert.equal((await applicationReceivables(db,identity(staff)).list(search)).total,1)
- const role=await root.tenantAccessRole.create({data:{tenantId:tenant,name:'Scoped balances',nameKey:randomUUID(),permissions:['salesOrders.read','receivables.read'],salesRecordScope:'OWN'}})
- await root.tenantRoleAssignment.create({data:{tenantId:tenant,userId:manager.id,roleId:role.id}})
+ const role=await fixtureProfile(root,{data:{tenantId:tenant,name:'Scoped balances',nameKey:randomUUID(),permissions:['salesOrders.read','receivables.read'],salesRecordScope:'OWN'}})
+ await fixtureRole(root,{data:{tenantId:tenant,userId:manager.id,roleId:role.id}})
  const team=await root.businessTeam.create({data:{tenantId:tenant,name:'Payments team',nameKey:'payments team'}})
  try{
   assert.equal((await svc().list(search)).total,0)
-  await root.tenantAccessRole.update({where:{tenantId_id:{tenantId:tenant,id:role.id}},data:{salesRecordScope:'MANAGED_TEAMS'}})
+  await root.tenantUserAccess.update({where:{tenantId_userId:{tenantId:tenant,userId:manager.id}},data:{salesRecordScope:'MANAGED_TEAMS'}})
   await root.businessTeamMember.create({data:{tenantId:tenant,teamId:team.id,userId:manager.id,isManager:true}})
   await root.crmOpportunity.update({where:{tenantId_id:{tenantId:tenant,id:deal.id}},data:{salesTeamId:team.id}})
   assert.equal((await svc().list(search)).total,1)
@@ -214,7 +215,7 @@ test('overview counts, currency options and summaries enforce own/team scope and
   assert.equal((await svc().list(search)).total,0)
   await root.tenantAccessRole.update({where:{tenantId_id:{tenantId:tenant,id:role.id}},data:{permissions:['salesOrders.read']}})
   await assert.rejects(svc().list(search),status(403))
- }finally{await root.tenantRoleAssignment.deleteMany({where:{tenantId:tenant,userId:manager.id}});await root.crmOpportunity.update({where:{tenantId_id:{tenantId:tenant,id:deal.id}},data:{salesTeamId:null}})}
+ }finally{await resetFixtureRoles(root,{where:{tenantId:tenant,userId:manager.id}});await root.crmOpportunity.update({where:{tenantId_id:{tenantId:tenant,id:deal.id}},data:{salesTeamId:null}})}
  await root.tenantModule.update({where:{tenantId_key:{tenantId:tenant,key:'receivables'}},data:{enabled:false}})
  try{await assert.rejects(svc().list(search),status(403))}finally{await root.tenantModule.update({where:{tenantId_key:{tenantId:tenant,key:'receivables'}},data:{enabled:true}})}
 })

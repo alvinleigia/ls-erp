@@ -2,6 +2,9 @@
 
 Target: staging. Production release requires separate authorization.
 
+The current permission model uses [composable module profiles](ACCESS_PROFILES_R9.md).
+Profiles grant actions; sales and project visibility are configured per user.
+
 Every request must pass tenant isolation, current account status, module activation,
 resource/action permission, and the resource's record policy. A report filter can
 only narrow that result. Team membership is not a permission grant.
@@ -34,7 +37,7 @@ Do not offer a team scope for records without an explicit team/ownership relatio
 Adding such a scope requires list, detail, mutation, selector, export and report
 adapters, along with cross-tenant and scope-revocation tests.
 
-## Migration
+## Migration 108: shared teams
 
 Rename team tables and the sales-scope column in place; preserve identifiers,
 membership, sales workflow, record links and existing scope selections. Translate
@@ -50,9 +53,9 @@ scoped record timelines. Existing tenant-wide managers keep their audit authorit
 
 1. Open **Users > Teams** to create teams and manage members. A tenant admin can
    designate several Manager accounts in each team; users may join several teams.
-2. Open **Settings > Access roles**. Set sales and project scopes independently,
-   then assign the role to the relevant Staff or Manager account. Actions still
-   require the corresponding read/create/edit/assign permission.
+2. Open **Settings > Access profiles**. Create reusable profiles, then choose
+   **Assign profiles** to combine them for a user and set sales/project scopes
+   independently. Actions require the corresponding read/create/edit permission.
 3. Assign a **Responsible team** to a top-level project. Team members can read it
    and its active subprojects; explicit staff assignments continue to work.
 4. In **Activity overview**, choose **All accessible work**, then a sales team.
@@ -68,17 +71,18 @@ Git push or hosted deployment has been performed for R9.
 - Isolated migration replay through migration 108 preserves all 116 business
   tables after normalizing the reviewed table/column/permission renames. Includes
   all four existing sales scopes, team membership, Manager flags and forced RLS.
-- ERP access run: 232 passed, two historical-upgrade-only checks skipped.
+- ERP access run with composable profiles: 239 passed, two historical-upgrade-only checks skipped.
   Covers core, CRM, workforce, bookings, inventory, services, projects, catalog,
   dashboards, scope revocation, audits and cross-tenant access.
-- Architecture, policy and existing CRM/unit checks: 57 passed.
-- Real Chrome tests: 13 passed, including shared teams with CRM disabled, scope
+- Architecture, policy and existing CRM/unit checks also include profile composition.
+- Real Chrome tests: 14 passed, including shared teams with CRM disabled, scope
   controls on mobile, team reporting/drill-down and staff project-team access.
 - Next build and TypeScript pass. Changed TypeScript/TSX files pass ESLint; a
   stale unused import found during review was removed.
 
 Before a hosted release, verify the staging database identity and take its backup,
-apply migration 108 and deploy the matching code together. The old application
-cannot use the renamed team tables. Recheck the isolated QA tenants afterward.
+apply migrations 108 and 109 and deploy the matching code together. The old
+application cannot use the renamed team tables or removed profile-scope columns.
+Recheck the isolated QA tenants afterward.
 Production release still requires its own fresh recovery/rehearsal checks and
 authorization; fixture migration tests do not replace a client-data rehearsal.

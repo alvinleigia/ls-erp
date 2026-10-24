@@ -1,6 +1,6 @@
 import { requireBusinessModule } from "@/platform/module-server"
 import { recordDomainAuditEvent } from "@/lib/domain-audit"
-import { guardUserWrite, auditUserSecurity, assignInitialRole } from "@/platform/access/user-security"
+import { guardUserWrite, auditUserSecurity, assignInitialProfiles } from "@/platform/access/user-security"
 import { BusinessError } from "@/platform/policy"
 import { NextResponse } from "next/server"
 import bcrypt from "bcryptjs"
@@ -293,7 +293,7 @@ async function handlePOST(request: Request, actor: BusinessActor) {
         },
       })
 
-      await assignInitialRole(tx, identity, created, parsed.data.accessRoleId)
+      await assignInitialProfiles(tx, identity, created, parsed.data.accessRoleIds, { salesRecordScope: parsed.data.salesRecordScope, projectRecordScope: parsed.data.projectRecordScope })
         if (normalizedEligibleServiceIds.length) await recordDomainAuditEvent(tx, { tenantId, actorUserId: sessionUserId, actorRole: "ADMIN", requestId: logContext.requestId, event: "services.eligibility.updated", entityType: "User", entityId: created.id, after: { serviceIds: normalizedEligibleServiceIds } })
         await auditUserSecurity(tx, identity, created.id, null, created)
         return created

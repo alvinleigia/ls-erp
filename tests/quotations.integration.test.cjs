@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
+const {fixtureUser,fixtureRole,fixtureProfile,resetFixtureRoles}=require("./helpers/access-fixtures.cjs")
 const { test, before, after } = require('node:test')
 const assert = require('node:assert/strict')
 const { randomUUID } = require('node:crypto')
@@ -23,7 +24,7 @@ const status = code => error => error.status === code
 const content = (extra={}) => ({...structuredClone(emptyQuotationContent),supplierName:'Example Developer',currency:'INR',lines:[{description:'Plot 29',quantity:'247',unit:'sq. m',rate:'15000'}],...extra})
 before(async()=>{
  await root.tenant.createMany({data:[{id:tenant,slug:tenant,name:'Quotation test'},{id:otherTenant,slug:otherTenant,name:'Other'}]})
- const user=(tenantId,role)=>root.user.create({data:{tenantId,role,name:role,email:`${randomUUID()}@example.test`}})
+ const user=(tenantId,role)=>fixtureUser(root,{data:{tenantId,role,name:role,email:`${randomUUID()}@example.test`}})
  admin=await user(tenant,'ADMIN');manager=await user(tenant,'MANAGER');staff=await user(tenant,'STAFF');other=await user(tenant,'STAFF');adminB=await user(otherTenant,'ADMIN')
  await root.tenantModule.createMany({data:[tenant,otherTenant].flatMap(tenantId=>['crm','realEstate','salesDocuments','paymentPlans'].map(key=>({tenantId,key,allowed:true,enabled:true})))})
  const service=(client,user)=>createCrmService(client,{tenantId:user.tenantId,userId:user.id})
@@ -273,9 +274,9 @@ test('upload failure leaves a draft unissued and module or permission denial pre
  await root.tenantModule.update({where:{tenantId_key:{tenantId:tenant,key:'salesDocuments'}},data:{enabled:false}})
  await assert.rejects(crm.issueQuotation(q.id,1),status(403));assert.equal(uploads,1)
  await root.tenantModule.update({where:{tenantId_key:{tenantId:tenant,key:'salesDocuments'}},data:{enabled:true}})
- const role=await root.tenantAccessRole.create({data:{tenantId:tenant,name:'Archive reader',nameKey:'archive reader',permissions:['quotations.read','quotations.export']}})
- await root.tenantRoleAssignment.create({data:{tenantId:tenant,userId:manager.id,roleId:role.id}})
+ const role=await fixtureProfile(root,{data:{tenantId:tenant,name:'Archive reader',nameKey:'archive reader',permissions:['quotations.read','quotations.export']}})
+ await fixtureRole(root,{data:{tenantId:tenant,userId:manager.id,roleId:role.id}})
  await assert.rejects(crm.issueQuotation(q.id,1),status(403));assert.equal(uploads,1)
- await root.tenantRoleAssignment.deleteMany({where:{tenantId:tenant,userId:manager.id}})
+ await resetFixtureRoles(root,{where:{tenantId:tenant,userId:manager.id}})
  }finally{storage.uploadQuotationPdf=original;await root.tenantModule.update({where:{tenantId_key:{tenantId:tenant,key:'salesDocuments'}},data:{enabled:true}})}
 })

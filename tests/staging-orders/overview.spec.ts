@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto'
 import { parse } from 'dotenv'
 import { test, expect, type BrowserContext } from '@playwright/test'
 import { emptyQuotationContent } from '../../modules/sales-documents/quotation-validation'
-import { json, login, type QaTenant } from './helpers'
+import { json, login, assignProfiles, type QaTenant } from './helpers'
 
 test('hosted receivables overview: currency totals, filters, paging, scope and responsive UI', async ({ browser }) => {
   expect(process.env.RUN_STAGING_ORDER_WRITES).toBe('1')
@@ -68,13 +68,14 @@ test('hosted receivables overview: currency totals, filters, paging, scope and r
     await expect(page).toHaveURL(new RegExp(`/sales-orders/${overdueId}$`))
     await expect(page.getByRole('region', { name: 'Receivables', exact: true })).toContainText('INR 60.00')
     const user = (await json(admin, '/api/users', 200, 'POST', { name: `QA overview manager ${run}`, email: `qa-overview-${run}@example.test`, role: 'MANAGER', password: state.password })).user
-    const role = await json(admin, '/api/access/roles', 201, 'POST', { name: `QA own balances ${run}`, permissions: ['salesOrders.read', 'receivables.read'], salesRecordScope: 'OWN' })
-    await json(admin, `/api/access/users/${user.id}`, 200, 'PATCH', { roleId: role.id, previousRoleId: null })
+    const role = await json(admin, '/api/access/roles', 201, 'POST', { name: `QA own balances ${run}`, permissions: ['salesOrders.read', 'receivables.read'] })
+    await assignProfiles(admin, user.id, [role.id], { salesRecordScope: 'OWN' })
     const manager = await open(a.origin, user.email, state.password, a.tenant.id)
     const denied = await json(manager, path); expect(denied.total).toBe(0); expect(denied.summaries).toEqual([]); expect(denied.currencies).toEqual([])
-    const updated = await json(admin, `/api/access/roles/${role.id}`, 200, 'PATCH', { name: role.name, version: role.version, permissions: ['salesOrders.read', 'receivables.read'], salesRecordScope: 'ALL' })
+    const updated = await json(admin, `/api/access/roles/${role.id}`, 200, 'PATCH', { name: role.name, version: role.version, permissions: ['salesOrders.read', 'receivables.read'] })
+    await assignProfiles(admin, user.id, [role.id], { salesRecordScope: 'ALL' })
     expect((await json(manager, path)).total).toBe(2)
-    await json(admin, `/api/access/roles/${role.id}`, 200, 'PATCH', { name: role.name, version: updated.version, permissions: ['salesOrders.read'], salesRecordScope: 'ALL' })
+    await json(admin, `/api/access/roles/${role.id}`, 200, 'PATCH', { name: role.name, version: updated.version, permissions: ['salesOrders.read'] })
     await json(manager, path, 403)
     await json(admin, '/api/modules', 200, 'PATCH', { key: 'receivables', enabled: false })
     await json(admin, path, 403); await page.goto('/sales-orders/receivables'); await expect(page.getByRole('heading', { name: 'Module unavailable' })).toBeVisible()

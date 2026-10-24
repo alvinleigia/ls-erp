@@ -1,6 +1,7 @@
 import type { Prisma } from "@prisma/client"
 import { BusinessError, type BusinessActor } from "../policy"
 import { recordDomainAuditEvent } from "@/lib/domain-audit"
+import type { RecordScope } from "./record-scope"
 
 type Identity = Pick<BusinessActor, "tenantId" | "userId" | "requestId">
 // Lock first: concurrent demotions/suspensions cannot remove the last admin.
@@ -21,11 +22,15 @@ export async function auditUserSecurity(tx: Prisma.TransactionClient, identity: 
   if (before?.role === after.role && before?.status === after.status) return
   await recordDomainAuditEvent(tx, { ...identity, actorUserId: identity.userId, actorRole: "ADMIN", event: "access.user.updated", entityType: "User", entityId: userId, before: before ?? undefined, after: { role: after.role, status: after.status } })
 }
-export async function assignInitialRole(tx: Prisma.TransactionClient, identity: Identity, user: { id: string; role: string }, roleId?: string) {
-  if (!roleId) return
-  if (!["STAFF", "MANAGER"].includes(user.role)) throw new BusinessError(400, "Custom access roles apply only to Staff and Manager accounts.")
-  const role = await tx.tenantAccessRole.findFirst({ where: { tenantId: identity.tenantId, id: roleId, archived: false } })
-  if (!role) throw new BusinessError(400, "Choose an active access role from this business.")
-  await tx.tenantRoleAssignment.create({ data: { tenantId: identity.tenantId, userId: user.id, roleId } })
-  await recordDomainAuditEvent(tx, { ...identity, actorUserId: identity.userId, actorRole: "ADMIN", event: "access.assignment.updated", entityType: "User", entityId: user.id, after: { roleId } })
+export async function assignInitialProfiles(tx: Prisma.TransactionClient, identity: Identity, user: { id: string; role: string }, roleIds: string[] = [], scopes: { salesRecordScope?: RecordScope; projectRecordScope?: RecordScope } = {}) {
+  if (!["STAFF", "MANAGER"].includes(user.role)) {
+    if (roleIds.length) throw new BusinessError(400, "Access profiles apply only to Staff and Manager accounts.")
+    return
+  }
+  await guardUserWrite(tx, identity)
+  const profiles = await tx.tenantAccessRole.findMany({ where: { tenantId: identity.tenantId, id: { in: roleIds }, archived: false }, select: { id: true } })
+  if (new Set(roleIds).size !== roleIds.length || profiles.length !== roleIds.length) throw new BusinessError(400, "Choose active access profiles from this business.")
+  const policy = await tx.tenantUserAccess.create({ data: { tenantId: identity.tenantId, userId: user.id, salesRecordScope: scopes.salesRecordScope ?? "OWN", projectRecordScope: scopes.projectRecordScope ?? "OWN" } })
+  if (roleIds.length) await tx.tenantRoleAssignment.createMany({ data: roleIds.map(roleId => ({ tenantId: identity.tenantId, userId: user.id, roleId })) })
+  await recordDomainAuditEvent(tx, { ...identity, actorUserId: identity.userId, actorRole: "ADMIN", event: "access.assignment.updated", entityType: "User", entityId: user.id, after: { roleIds, policy } })
 }

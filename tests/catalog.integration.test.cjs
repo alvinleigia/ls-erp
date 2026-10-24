@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
+const {fixtureUser,fixtureRole,fixtureProfile}=require("./helpers/access-fixtures.cjs")
 const { test, before, after } = require('node:test')
 const assert = require('node:assert/strict')
 const { randomUUID } = require('node:crypto')
@@ -29,7 +30,7 @@ const content = item => ({...structuredClone(emptyQuotationContent),supplierName
 const toggle = (key,enabled) => root.tenantModule.update({where:{tenantId_key:{tenantId:tenant,key}},data:{enabled}})
 before(async()=>{
   await root.tenant.createMany({data:[tenant,otherTenant].map(id=>({id,slug:id,name:id}))})
-  const user=(tenantId,role)=>root.user.create({data:{tenantId,role,name:role,email:`${randomUUID()}@example.test`}})
+  const user=(tenantId,role)=>fixtureUser(root,{data:{tenantId,role,name:role,email:`${randomUUID()}@example.test`}})
   admin=await user(tenant,'ADMIN');staff=await user(tenant,'STAFF');other=await user(otherTenant,'ADMIN')
   await root.tenantModule.createMany({data:[tenant,otherTenant].flatMap(tenantId=>['catalog','crm','realEstate','salesDocuments'].map(key=>({tenantId,key,enabled:true,allowed:true})))})
   service=applicationCatalog(db,identity(admin));staffService=applicationCatalog(db,identity(staff));foreign=applicationCatalog(dbB,identity(other))
@@ -90,9 +91,9 @@ test('concurrent updates accept one writer, audits are atomic and staff cannot w
   await assert.rejects(staffService.save(payload),status(403))
 })
 test('custom manager roles require read, edit, archive and project permissions; audit obeys module gates',async()=>{
-  const user=await root.user.create({data:{tenantId:tenant,role:'MANAGER',name:'Restricted manager',email:`${randomUUID()}@example.test`}})
-  const role=await root.tenantAccessRole.create({data:{tenantId:tenant,name:'Catalog reviewer',nameKey:'catalog reviewer',permissions:['auditLogs.read','catalogItems.read','catalogItems.edit']}})
-  await root.tenantRoleAssignment.create({data:{tenantId:tenant,userId:user.id,roleId:role.id}})
+  const user=await fixtureUser(root,{data:{tenantId:tenant,role:'MANAGER',name:'Restricted manager',email:`${randomUUID()}@example.test`}})
+  const role=await fixtureProfile(root,{data:{tenantId:tenant,name:'Catalog reviewer',nameKey:'catalog reviewer',permissions:['auditLogs.read','catalogItems.read','catalogItems.edit']}})
+  await fixtureRole(root,{data:{tenantId:tenant,userId:user.id,roleId:role.id}})
   const restricted=applicationCatalog(db,identity(user)),audit=createAuditReportService(db,identity(user))
   const payload=product(),item=await service.save(payload),property=await service.save(unit())
   assert.equal((await restricted.get(item.id)).id,item.id)

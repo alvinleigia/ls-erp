@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
+const {grantPgFixtureUsers}=require("./helpers/access-fixtures.cjs")
 const { test, before, after } = require('node:test')
 const assert = require('node:assert/strict')
 const path = require('node:path')
@@ -44,6 +45,8 @@ before(async()=>{
  }
  await root.query('INSERT INTO "TenantAccessRole" (id,"tenantId",name,"nameKey",permissions,"updatedAt") VALUES ($1,$2,\'Services test\',\'services test\',$3,now())',[rid,a,[]])
  await root.query('INSERT INTO "TenantRoleAssignment" ("tenantId","userId","roleId","updatedAt") VALUES ($1,$2,$3,now())',[a,`${a}_manager`,rid])
+
+ await grantPgFixtureUsers(root,[a,b])
 })
 after(async()=>{
  for(const tenant of [a,b]){

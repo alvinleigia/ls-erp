@@ -1,45 +1,43 @@
 import { test, expect } from "@playwright/test"
 
 test("role template permissions and assignment are reviewable on desktop and mobile", async ({ page }) => {
- const writes: { name?: string; salesRecordScope?: string; permissions?: string[]; roleId?: string; previousRoleId?: string | null }[] = []
+ const writes: { name?: string; salesRecordScope?: string; permissions?: string[]; roleIds?: string[]; version?: number; moduleKey?: string }[] = []
  let saved: { id: string; name: string; permissions: string[]; archived: boolean; version: number } | null = null
  await page.route("**/api/**", async route => {
   const path = new URL(route.request().url()).pathname, method = route.request().method()
   if (method === "POST") { const data = route.request().postDataJSON(); writes.push(data); saved = { ...data, id: "role-1", version: 1 }; return route.fulfill({ json: saved }) }
-  if (method === "PATCH") { writes.push(route.request().postDataJSON()); return route.fulfill({ json: { roleId: "role-1" } }) }
-  if (path === "/api/access/users/staff") return route.fulfill({ json: { id: "staff", name: "Test Staff", role: "STAFF", accessAssignment: null } })
+  if (method === "PATCH") { writes.push(route.request().postDataJSON()); return route.fulfill({ json: { roleIds: ["role-1"], version: 1 } }) }
+  if (path === "/api/access/users/staff") return route.fulfill({ json: { id: "staff", name: "Test Staff", role: "STAFF", accessAssignments: [], accessPolicy: { salesRecordScope: "OWN", projectRecordScope: "OWN", version: 0 } } })
   if (["/api/users", "/api/directory"].includes(path)) return route.fulfill({ json: { items: [{ id: "staff", name: "Test Staff" }], total: 1 } })
   if (path === "/api/access/roles/role-1") return route.fulfill({ json: saved })
   return route.fulfill({ json: { items: saved ? [{ ...saved, _count: { assignments: 0 } }] : [], total: saved ? 1 : 0 } })
  })
  await page.goto("/settings/roles")
- await page.getByRole("button", { name: "New role", exact: true }).click()
+ await page.getByRole("button", { name: "New profile", exact: true }).click()
  await page.getByRole("button", { name: "Copy template" }).click()
- await page.getByRole("menuitemradio", { name: "Read-only", exact: true }).click()
- await page.getByLabel("Role name", { exact: true }).fill("Sales observer")
+ await page.getByRole("menuitemradio", { name: "CRM Viewer", exact: true }).click()
+ await page.getByLabel("Profile name", { exact: true }).fill("Sales observer")
  await expect(page.getByRole("checkbox", { name: "Contacts: read", exact: true })).toBeChecked()
  await expect(page.getByRole("checkbox", { name: "Contacts: edit", exact: true })).not.toBeChecked()
  await page.getByRole("checkbox", { name: "Contacts: edit", exact: true }).check()
  await page.getByRole("checkbox", { name: "Contacts: read", exact: true }).uncheck()
  await expect(page.getByRole("checkbox", { name: "Contacts: edit", exact: true })).not.toBeChecked()
- await page.getByRole("button", { name: "CRM sales record scope" }).click()
- await page.getByRole("menuitemradio", { name: "Own and managed sales teams", exact: true }).click()
  await page.screenshot({ path: test.info().outputPath("access-role-desktop.png"), fullPage: true })
  await page.setViewportSize({ width: 390, height: 844 })
  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
  await page.screenshot({ path: test.info().outputPath("access-role-mobile.png"), fullPage: true })
  await page.getByRole("button", { name: "Save changes", exact: true }).click()
  await expect(page.getByRole("button", { name: "Sales observer", exact: true })).toBeVisible()
- expect(writes[0].salesRecordScope).toBe("MANAGED_TEAMS")
+ expect(writes[0].moduleKey).toBe("crm")
  expect(writes[0].permissions).not.toContain("contacts.read")
- await page.getByRole("button", { name: "Assign role", exact: true }).click()
+ await page.getByRole("button", { name: "Assign profiles", exact: true }).click()
  await page.locator("#access-user").click()
  await page.getByRole("option", { name: "Test Staff", exact: true }).click()
- await page.locator("#assigned-role").click()
+ await page.locator("#assigned-profiles").click()
  await page.getByRole("option", { name: "Sales observer", exact: true }).click()
  await page.getByRole("button", { name: "Save changes", exact: true }).click()
  await expect(page.getByRole("dialog")).toHaveCount(0)
- expect(writes[1]).toEqual({ roleId: "role-1", previousRoleId: null })
+ expect(writes[1]).toEqual({ roleIds: ["role-1"], version: 0, salesRecordScope: "OWN", projectRecordScope: "OWN" })
 })
 
 test("denied CRM direct view does not mount its data requests", async ({ page }) => {

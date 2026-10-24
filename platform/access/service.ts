@@ -3,6 +3,7 @@ import type { Prisma, PrismaClient } from "@prisma/client"
 import { recordDomainAuditEvent } from "@/lib/domain-audit"
 import { BusinessError, type BusinessActor } from "../policy"
 import { accessListSchema, accessRoleSchema, roleAssignmentSchema } from "./validation"
+import { validProfilePermissions } from "./profiles"
 
 type Identity = Pick<BusinessActor, "tenantId" | "userId" | "requestId">
 const snapshot = (value: unknown): Prisma.InputJsonValue => JSON.parse(JSON.stringify(value))
@@ -38,7 +39,7 @@ export function createAccessRoleService(db: PrismaClient, identity: Identity) {
       const q = accessListSchema.parse(input)
       return run(false, async tx => {
         const where = { tenantId: identity.tenantId, archived: q.archived === "true", ...(q.q ? { name: { contains: q.q, mode: "insensitive" as const } } : {}) }
-        const [items, total] = await Promise.all([tx.tenantAccessRole.findMany({ where, select: { id: true, name: true, archived: true, version: true, _count: { select: { assignments: true } } }, orderBy: [{ name: "asc" }, { id: "asc" }], skip: (q.page - 1) * q.pageSize, take: q.pageSize }), tx.tenantAccessRole.count({ where })])
+        const [items, total] = await Promise.all([tx.tenantAccessRole.findMany({ where, select: { id: true, name: true, moduleKey: true, archived: true, version: true, _count: { select: { assignments: true } } }, orderBy: [{ name: "asc" }, { id: "asc" }], skip: (q.page - 1) * q.pageSize, take: q.pageSize }), tx.tenantAccessRole.count({ where })])
         return { items, total, page: q.page, pageSize: q.pageSize, totalPages: Math.max(1, Math.ceil(total / q.pageSize)) }
       })
     },
@@ -49,7 +50,9 @@ export function createAccessRoleService(db: PrismaClient, identity: Identity) {
         const before = id ? await find(tx, id) : null
         if (before && before.version !== data.version) throw new BusinessError(409, "This access role changed. Refresh before saving.")
         if (id && data.archived && !before?.archived && await tx.tenantRoleAssignment.count({ where: { tenantId: identity.tenantId, roleId: id } })) throw new BusinessError(409, "Reassign users before archiving this role.")
-        const fields = { name: data.name, nameKey: data.name.normalize("NFKC").toLocaleLowerCase("en-US"), permissions: data.permissions, salesRecordScope: data.salesRecordScope ?? before?.salesRecordScope ?? "ACCOUNT_ROLE", projectRecordScope: data.projectRecordScope ?? before?.projectRecordScope ?? "ACCOUNT_ROLE", archived: data.archived }
+        const moduleKey = data.moduleKey ?? before?.moduleKey ?? "all"
+        if (!validProfilePermissions(moduleKey, data.permissions)) throw new BusinessError(400, "Choose permissions within this profile's module.")
+        const fields = { name: data.name, nameKey: data.name.normalize("NFKC").toLocaleLowerCase("en-US"), permissions: data.permissions, moduleKey, archived: data.archived }
         const role = id ? await tx.tenantAccessRole.update({ where: { tenantId_id: { tenantId: identity.tenantId, id } }, data: { ...fields, version: { increment: 1 } } }) : await tx.tenantAccessRole.create({ data: { tenantId: identity.tenantId, ...fields } })
         await audit(tx, id ? "access.role.updated" : "access.role.created", "TenantAccessRole", role.id, before, role)
         return role
@@ -57,25 +60,29 @@ export function createAccessRoleService(db: PrismaClient, identity: Identity) {
     },
     assignment(userId: string) {
       return run(false, async tx => {
-        const user = await tx.user.findFirst({ where: { tenantId: identity.tenantId, id: userId }, select: { id: true, name: true, role: true, accessAssignment: { select: { roleId: true, role: { select: { name: true } } } } } })
+        const user = await tx.user.findFirst({ where: { tenantId: identity.tenantId, id: userId }, select: { id: true, name: true, role: true, accessAssignments: { orderBy: { roleId: "asc" }, select: { roleId: true, role: { select: { name: true, moduleKey: true, archived: true } } } }, accessPolicy: true } })
         if (!user) throw new BusinessError(404, "User not found.")
-        return user
+        return { ...user, accessPolicy: user.accessPolicy ?? { tenantId: identity.tenantId, userId, salesRecordScope: "OWN", projectRecordScope: "OWN", version: 0 } }
       })
     },
     assign(userId: string, input: unknown) {
       const data = roleAssignmentSchema.parse(input)
       return run(true, async tx => {
-        const user = await tx.user.findFirst({ where: { tenantId: identity.tenantId, id: userId }, select: { id: true, role: true, accessAssignment: { select: { roleId: true } } } })
+        const user = await tx.user.findFirst({ where: { tenantId: identity.tenantId, id: userId }, select: { id: true, role: true, accessAssignments: { select: { roleId: true } }, accessPolicy: true } })
         if (!user) throw new BusinessError(404, "User not found.")
         if (user.role !== "STAFF" && user.role !== "MANAGER") throw new BusinessError(409, "Access roles apply to staff and managers. Tenant administrators retain full administrative access.")
-        const previousRoleId = user.accessAssignment?.roleId ?? null
-        if (previousRoleId !== data.previousRoleId) throw new BusinessError(409, "This user's role changed. Refresh before saving.")
-        if (data.roleId && (await find(tx, data.roleId)).archived) throw new BusinessError(409, "Choose an active access role.")
-        if (previousRoleId === data.roleId) return { roleId: data.roleId }
-        if (data.roleId) await tx.tenantRoleAssignment.upsert({ where: { tenantId_userId: { tenantId: identity.tenantId, userId } }, create: { tenantId: identity.tenantId, userId, roleId: data.roleId }, update: { roleId: data.roleId } })
-        else await tx.tenantRoleAssignment.deleteMany({ where: { tenantId: identity.tenantId, userId } })
-        await audit(tx, "access.assignment.updated", "User", userId, { roleId: previousRoleId }, { roleId: data.roleId })
-        return { roleId: data.roleId }
+        if ((user.accessPolicy?.version ?? 0) !== data.version) throw new BusinessError(409, "This user's access changed. Refresh before saving.")
+        const roleIds = [...data.roleIds].sort()
+        const profiles = await tx.tenantAccessRole.findMany({ where: { tenantId: identity.tenantId, id: { in: roleIds }, archived: false }, select: { id: true } })
+        if (profiles.length !== roleIds.length) throw new BusinessError(409, "Choose active profiles from this business.")
+        const previousRoleIds = user.accessAssignments.map(item => item.roleId).sort()
+        const scopes = { salesRecordScope: data.salesRecordScope, projectRecordScope: data.projectRecordScope }
+        if (user.accessPolicy && JSON.stringify(previousRoleIds) === JSON.stringify(roleIds) && user.accessPolicy.salesRecordScope === scopes.salesRecordScope && user.accessPolicy.projectRecordScope === scopes.projectRecordScope) return { roleIds, ...scopes, version: data.version }
+        await tx.tenantRoleAssignment.deleteMany({ where: { tenantId: identity.tenantId, userId } })
+        if (roleIds.length) await tx.tenantRoleAssignment.createMany({ data: roleIds.map(roleId => ({ tenantId: identity.tenantId, userId, roleId })) })
+        const policy = await tx.tenantUserAccess.upsert({ where: { tenantId_userId: { tenantId: identity.tenantId, userId } }, create: { tenantId: identity.tenantId, userId, ...scopes }, update: { ...scopes, version: { increment: 1 } } })
+        await audit(tx, "access.assignment.updated", "User", userId, { roleIds: previousRoleIds, policy: user.accessPolicy }, { roleIds, policy })
+        return { roleIds, ...scopes, version: policy.version }
       })
     },
   }

@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
+const {fixtureUser,assignProfiles}=require("./helpers/access-fixtures.cjs")
 const {test,before,after}=require('node:test'),assert=require('node:assert/strict'),{randomUUID}=require('node:crypto'),{Pool}=require('pg')
 const {PrismaClient}=require('@prisma/client'),{TenantPgAdapter}=require('../lib/tenant-pg-adapter.ts')
 const {createApplicationCrmService}=require('../application/crm/service.ts'),{createAccessRoleService}=require('../platform/access/service.ts')
@@ -11,15 +12,15 @@ const root=client(undefined,true),db=client(tenant),otherDb=client(foreign),unsc
 const identity=u=>({tenantId:u.tenantId,userId:u.id,requestId:'scope-test'}),denied=code=>e=>e.status===code
 let admin,manager,a,b,peer,foreignAdmin,crm,limited,staff,roles,role,teamA,teamB,ownContact,contactA,contactB,own,leadA,leadB,dealA,dealB,workA,workB,quoteA,quoteB
 const leadEdit=(row,extra={})=>({title:row.title,assignedUserId:row.assignedUserId,status:row.status,version:row.version,...extra})
-async function scope(value,permissions=allPermissions){role=await roles.save({name:role.name,permissions,salesRecordScope:value,version:role.version},role.id)}
+async function scope(value,permissions=allPermissions){role=await roles.save({name:role.name,permissions,version:role.version},role.id);await assignProfiles(roles,manager.id,[role.id],{salesRecordScope:value})}
 async function managerFlag(team,user,isManager){const fresh=await crm.getTeam(team.id);return crm.changeTeamMember(team.id,{userId:user.id,isManager,version:fresh.version})}
 before(async()=>{
  await root.tenant.createMany({data:[tenant,foreign].map(id=>({id,slug:id,name:id}))})
- const user=(tenantId,role)=>root.user.create({data:{tenantId,role,name:role,email:`${randomUUID()}@example.test`}})
+ const user=(tenantId,role)=>fixtureUser(root,{data:{tenantId,role,name:role,email:`${randomUUID()}@example.test`}})
  admin=await user(tenant,'ADMIN');manager=await user(tenant,'MANAGER');peer=await user(tenant,'MANAGER');a=await user(tenant,'STAFF');b=await user(tenant,'STAFF');foreignAdmin=await user(foreign,'ADMIN')
  await root.tenantModule.createMany({data:[tenant,foreign].flatMap(tenantId=>['crm','salesDocuments','paymentPlans'].map(key=>({tenantId,key,allowed:true,enabled:true})))})
  crm=createApplicationCrmService(db,identity(admin));limited=createApplicationCrmService(db,identity(manager));staff=createApplicationCrmService(db,identity(a));roles=createAccessRoleService(db,identity(admin))
- role=await roles.save({name:'Scoped manager',permissions:allPermissions});await roles.assign(manager.id,{roleId:role.id,previousRoleId:null})
+ role=await roles.save({name:'Scoped manager',permissions:allPermissions});await assignProfiles(roles,manager.id,[role.id])
  async function team(name,members){let t=await crm.saveTeam({name,workflow:'ENQUIRY_FIRST'});for(const u of members)t=await crm.changeTeamMember(t.id,{userId:u.id,version:t.version});return t}
  teamA=await team('Team A',[manager,peer,a]);teamB=await team('Team B',[manager,b])
  const contact=(owner,name)=>root.crmContact.create({data:{tenantId:tenant,ownerUserId:owner.id,name}})
@@ -94,7 +95,7 @@ test('audit failure rolls back team-manager authority and version',async()=>{
  assert.equal((await crm.getTeam(teamA.id)).version,current.version)
  assert.equal((await limited.listEnquiries({})).total,2)
  const saved=await roles.save({name:role.name,permissions:allPermissions,version:role.version},role.id)
- assert.equal(saved.salesRecordScope,'MANAGED_TEAMS');role=saved
+ assert.equal((await roles.assignment(manager.id)).accessPolicy.salesRecordScope,'MANAGED_TEAMS');role=saved
 })
 
 test('activity and SQL sales reports respect managed scope before aggregation, pagination and export',async()=>{
@@ -123,8 +124,8 @@ test('scope and team revocation take effect without login; explicit All stays te
  await scope('ALL');assert.equal((await limited.listEnquiries({})).total,3)
  const other=createApplicationCrmService(otherDb,identity(foreignAdmin));await assert.rejects(other.getEnquiry(leadA.id),denied(404));assert.equal(await unscoped.crmEnquiry.count(),0)
  await scope('ALL',['enquiries.read']);await assert.rejects(limited.updateEnquiry(leadA.id,leadEdit(leadA)),denied(403))
- await roles.assign(a.id,{roleId:role.id,previousRoleId:null});assert.equal((await staff.listEnquiries({})).total,1);await assert.rejects(staff.getEnquiry(leadB.id),denied(404))
- await roles.assign(a.id,{roleId:null,previousRoleId:role.id})
+ await assignProfiles(roles,a.id,[role.id]);assert.equal((await staff.listEnquiries({})).total,1);await assert.rejects(staff.getEnquiry(leadB.id),denied(404))
+ await assignProfiles(roles,a.id,[])
  await scope('MANAGED_TEAMS');await managerFlag(teamA,manager,true)
  const before=await crm.getTeam(teamA.id);await crm.saveTeam({name:before.name,workflow:before.workflow,version:before.version,archived:true},teamA.id)
  await assert.rejects(limited.getEnquiry(leadA.id),denied(404))

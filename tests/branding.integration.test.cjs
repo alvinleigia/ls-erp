@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
+const {fixtureUser}=require("./helpers/access-fixtures.cjs")
 const {test,before,after}=require('node:test'),assert=require('node:assert/strict'),path=require('node:path'),{Pool}=require('pg'),{PrismaClient}=require('@prisma/client'),sharp=require('sharp')
 const {TenantPgAdapter}=require('../lib/tenant-pg-adapter.ts')
 const url=new URL(process.env.CRM_TEST_DATABASE_URL||'http://invalid');assert.ok(['localhost','127.0.0.1'].includes(url.hostname));assert.equal(url.pathname,'/ls_salon_crm_test')
@@ -15,7 +16,7 @@ before(async()=>{
  for(const id of ['branding_a','branding_b']){
  await root.tenant.create({data:{id,slug:id,name:id}})
  await root.appSetting.create({data:{tenantId:id}})
- await root.user.create({data:{id:id+'_admin',tenantId:id,email:id+'@example.test',name:'Admin',role:'ADMIN'}})
+ await fixtureUser(root,{data:{id:id+'_admin',tenantId:id,email:id+'@example.test',name:'Admin',role:'ADMIN'}})
  }
  logo=await sharp({create:{width:1200,height:400,channels:4,background:{r:30,g:80,b:150,alpha:.5}}}).png().toBuffer()
 })

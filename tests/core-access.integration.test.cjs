@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
+const {grantPgFixtureUsers}=require("./helpers/access-fixtures.cjs")
 const {test,before,after}=require('node:test'),assert=require('node:assert/strict'),path=require('node:path')
 const {AsyncLocalStorage}=require('node:async_hooks'),{Client}=require('pg')
 const raw=process.env.CRM_TEST_DATABASE_URL,url=new URL(raw||'http://invalid')
@@ -25,6 +26,8 @@ before(async()=>{
  }
  await root.query('INSERT INTO "TenantAccessRole" (id,"tenantId",name,"nameKey",permissions,"updatedAt") VALUES ($1,$2,\'Core test\',\'core test\',$3,now())',[rid,a,[]])
  await root.query('INSERT INTO "TenantRoleAssignment" ("tenantId","userId","roleId","updatedAt") VALUES ($1,$2,$3,now())',[a,a+'_manager',rid])
+
+ await grantPgFixtureUsers(root,[a,b])
 })
 after(async()=>{
  for(const tenant of [a,b])for(const table of ['RealEstateProjectStatus','RealEstatePropertyCategory','RealEstateBuyingTimeframe'])await root.query(`DELETE FROM "${table}" WHERE "tenantId"=$1`,[tenant])

@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto"
 import { Client } from "pg"
 import bcrypt from "bcryptjs"
+import { grantPgFixtureUsers } from "../helpers/access-fixtures.cjs"
+import type { UserRecordScopes } from "@/platform/access/profile-picker"
 import { expect, type Browser, type Page, type BrowserContext } from "@playwright/test"
 
 export const password = "IsolatedAccessTest!2026"
@@ -23,6 +25,7 @@ export async function seed() {
     await db.query('INSERT INTO "Tenant" (id,name,slug,"updatedAt") VALUES ($1,\'Local platform\',\'platform\',now()) ON CONFLICT (slug) DO NOTHING', [`${slug}_platform`])
     const platformId = (await db.query('SELECT id FROM "Tenant" WHERE slug=\'platform\'')).rows[0].id
     for (const [key, user] of Object.entries(users)) await db.query('INSERT INTO "User" (id,name,email,role,"tenantId","passwordHash","updatedAt") VALUES ($1,$2,$3,$4,$5,$6,now())', [user.id, `Access ${key}`, user.email, ["admin", "other", "platform"].includes(key) ? "ADMIN" : key.toUpperCase(), key === "platform" ? platformId : key === "other" ? otherSlug : slug, hash])
+    await grantPgFixtureUsers(db, [slug, otherSlug])
     await db.query("COMMIT")
     return { db, slug, otherSlug, users, origin: `http://${slug}.localhost:3108` }
   } catch (error) { await db.query("ROLLBACK"); await db.end(); throw error }
@@ -43,4 +46,8 @@ export async function json(context: BrowserContext, path: string, status = 200, 
   const result = await context.request.fetch(path, { method, ...(data === undefined ? {} : { data }) })
   expect(result.status(), `${method} ${path}: ${await result.text()}`).toBe(status)
   return result.json()
+}
+export async function assignProfiles(context: BrowserContext, userId: string, roleIds: string[], scopes: Partial<UserRecordScopes> = {}, status = 200) {
+  const current = await json(context, `/api/access/users/${userId}`)
+  return json(context, `/api/access/users/${userId}`, status, "PATCH", { roleIds, version: current.accessPolicy.version, salesRecordScope: current.accessPolicy.salesRecordScope, projectRecordScope: current.accessPolicy.projectRecordScope, ...scopes })
 }

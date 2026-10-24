@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
+const {grantPgFixtureUsers}=require("./helpers/access-fixtures.cjs")
 process.env.TZ='UTC'
 const {test,before,after}=require('node:test'),assert=require('node:assert/strict'),path=require('node:path')
 const {AsyncLocalStorage}=require('node:async_hooks'),{Client}=require('pg')
@@ -46,6 +47,8 @@ before(async()=>{
  await root.query('INSERT INTO "ServiceCategory" (id,"tenantId",name,"updatedAt") VALUES ($1,$2,\'Test\',now())',[`cat_${suffix}`,a])
  await root.query('INSERT INTO "Service" (id,"tenantId","categoryId",name,"durationMinutes","priceCents","updatedAt") VALUES ($1,$2,$3,\'Consultation\',60,12000,now())',[service,a,`cat_${suffix}`])
  await root.query('INSERT INTO "Appointment" (id,"tenantId","staffProfileId","customerId","serviceId","startAt","endAt","updatedAt") VALUES ($1,$2,$3,$4,$5,\'2030-10-07T10:00:00Z\',\'2030-10-07T11:00:00Z\',now())',[appt,a,`staff_${suffix}`,a+'_customer',service])
+
+ await grantPgFixtureUsers(root,[a,b])
 })
 after(async()=>{
  for(const tenant of [a,b]){

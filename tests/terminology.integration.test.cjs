@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
+const {fixtureUser}=require("./helpers/access-fixtures.cjs")
 const { test, before, after } = require("node:test")
 const assert = require("node:assert/strict")
 const { randomUUID } = require("node:crypto")
@@ -28,7 +29,7 @@ const forUser = (user, connection = db) => createTerminologyService(connection, 
 before(async () => {
   process.env.PLATFORM_ADMIN_TENANT_SLUG = platform
   await root.tenant.createMany({ data: [tenant, otherTenant, platform].map(id => ({ id, slug: id, name: id })) })
-  const user = (tenantId, role) => root.user.create({ data: { tenantId, role, name: role, email: `${randomUUID()}@example.test` } })
+  const user = (tenantId, role) => fixtureUser(root,{ data: { tenantId, role, name: role, email: `${randomUUID()}@example.test` } })
   admin = await user(tenant, "ADMIN"); manager = await user(tenant, "MANAGER"); staff = await user(tenant, "STAFF"); customer = await user(tenant, "CUSTOMER")
   otherAdmin = await user(otherTenant, "ADMIN"); platformAdmin = await user(platform, "ADMIN")
   await root.tenantModule.createMany({ data: [tenant, otherTenant].flatMap(tenantId => ["crm", "realEstate", "salesDocuments", "paymentPlans"].map(key => ({ tenantId, key, allowed: true, enabled: true }))) })

@@ -16,7 +16,7 @@
     "test:browser:report": "playwright show-report",
     "test:crm:existing": "playwright test --config playwright.crm-existing.config.ts baseline.spec.ts",
     "test:crm:release": "playwright test --config playwright.crm-existing.config.ts release.spec.ts --output test-results/crm-release-gates --reporter=list",
-    "test:crm": "node --require ./tests/register.cjs --test tests/crm.test.cjs tests/work-history-format.test.cjs tests/crm-extensions.test.cjs tests/module-navigation.test.cjs tests/platform-proxy.test.cjs tests/access-policy.test.cjs",
+    "test:crm": "node --require ./tests/register.cjs --test tests/crm.test.cjs tests/work-history-format.test.cjs tests/crm-extensions.test.cjs tests/module-navigation.test.cjs tests/platform-proxy.test.cjs tests/access-policy.test.cjs tests/access-profiles.test.cjs",
     "test:crm:integration": "node --require ./tests/register.cjs --test tests/crm.integration.test.cjs",
     "test:crm:scopes:integration": "node --require ./tests/register.cjs --test --test-force-exit tests/crm-record-scopes.integration.test.cjs tests/crm-record-scope-migration.test.cjs",
     "test:crm:teams:integration": "node --require ./tests/register.cjs --test tests/crm-teams.integration.test.cjs",
@@ -56,6 +56,7 @@
     "test:access:integration": "node --require ./tests/register.cjs --test --test-force-exit tests/access-roles.integration.test.cjs tests/access-role-migration.test.cjs",
     "test:access:e2e": "playwright test --config playwright.local-access.config.ts access.spec.ts",
     "test:access:all": "node scripts/test-sales-orders.cjs --access",
+    "test:access:profiles": "node scripts/test-sales-orders.cjs --profiles",
     "test:access:all:browser": "node scripts/test-sales-orders.cjs --access --browser",
     "test:workflows:e2e": "playwright test --config playwright.local-access.config.ts",
     "test:dates": "node --require ./tests/register.cjs --test tests/date-display.test.cjs tests/work-history-format.test.cjs"

@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
+const {fixtureUser,assignProfiles}=require("./helpers/access-fixtures.cjs")
 const {test,before,after}=require('node:test'),assert=require('node:assert/strict'),{randomUUID}=require('node:crypto'),{Pool}=require('pg'),{PrismaClient}=require('@prisma/client')
 const {TenantPgAdapter}=require('../lib/tenant-pg-adapter.ts')
 const {createBusinessTeamService}=require('../platform/teams/business-service.ts'),{createAccessRoleService}=require('../platform/access/service.ts'),{allPermissions}=require('../platform/access/catalog.ts')
@@ -13,18 +14,18 @@ function client(tenantId,bypass=false){const u=new URL(url);if(!bypass){u.userna
 const root=client(undefined,true),db=client(tenant),otherDb=client(foreign),unscoped=client(undefined),identity=u=>({tenantId:u.tenantId,userId:u.id,requestId:'business-team-test'}),denied=code=>e=>e.status===code
 let admin,manager,peer,a,b,c,foreignAdmin,teams,roles,role,teamA,teamB,foreignTeam,projects,scoped,staff,crm,limited,pA,pB,child,own,leadA,leadB,workA,workB
 const edit=(p,patch={})=>({name:p.name,code:p.code,parentId:p.parentId||'',lifecycle:p.lifecycle,categories:p.categories,version:p.version,...patch})
-async function scopes(salesRecordScope='OWN',projectRecordScope='MANAGED_TEAMS',permissions=allPermissions){role=await roles.save({name:role.name,permissions,salesRecordScope,projectRecordScope,version:role.version},role.id)}
+async function scopes(salesRecordScope='OWN',projectRecordScope='MANAGED_TEAMS',permissions=allPermissions){role=await roles.save({name:role.name,permissions,version:role.version},role.id);await assignProfiles(roles,manager.id,[role.id],{salesRecordScope,projectRecordScope})}
 async function member(team,user,patch={}){const row=await teams.getTeam(team.id);return teams.changeTeamMember(team.id,{userId:user.id,version:row.version,...patch})}
 before(async()=>{
  await root.tenant.createMany({data:[tenant,foreign].map(id=>({id,slug:id,name:id}))})
- const user=(tenantId,role)=>root.user.create({data:{tenantId,role,name:role,email:`${randomUUID()}@example.test`}})
+ const user=(tenantId,role)=>fixtureUser(root,{data:{tenantId,role,name:role,email:`${randomUUID()}@example.test`}})
  admin=await user(tenant,'ADMIN');manager=await user(tenant,'MANAGER');peer=await user(tenant,'MANAGER');a=await user(tenant,'STAFF');b=await user(tenant,'STAFF');c=await user(tenant,'STAFF');foreignAdmin=await user(foreign,'ADMIN')
  teams=createBusinessTeamService(db,identity(admin));roles=createAccessRoleService(db,identity(admin))
  teamA=await teams.saveTeam({name:'Shared A'});teamB=await teams.saveTeam({name:'Shared B'})
  for(const u of [manager,peer,a,c])await member(teamA,u,{isManager:u.role==='MANAGER'})
  for(const u of [manager,a,b])await member(teamB,u)
  foreignTeam=await createBusinessTeamService(otherDb,identity(foreignAdmin)).saveTeam({name:'Foreign team'})
- role=await roles.save({name:'Scoped manager',permissions:allPermissions,salesRecordScope:'OWN',projectRecordScope:'MANAGED_TEAMS'});await roles.assign(manager.id,{roleId:role.id,previousRoleId:null})
+ role=await roles.save({name:'Scoped manager',permissions:allPermissions});await assignProfiles(roles,manager.id,[role.id],{salesRecordScope:'OWN',projectRecordScope:'MANAGED_TEAMS'})
  projects=createRealEstateService(db,identity(admin));scoped=createRealEstateService(db,identity(manager));staff=createRealEstateService(db,identity(a))
 })
 after(async()=>{await Promise.all(clients.map(c=>c.$disconnect()));await Promise.all(pools.map(p=>p.end()))})

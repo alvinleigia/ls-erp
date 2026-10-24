@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
+const {fixtureUser,fixtureRole,fixtureProfile,resetFixtureRoles}=require("./helpers/access-fixtures.cjs")
 const {test,before,after}=require('node:test'),assert=require('node:assert/strict'),{randomUUID}=require('node:crypto'),{Pool}=require('pg'),{PrismaClient}=require('@prisma/client')
 const {TenantPgAdapter}=require('../lib/tenant-pg-adapter.ts'),{applicationCatalog}=require('../application/catalog/service.ts'),{applicationReservations}=require('../application/catalog/reservations.ts'),{applicationSalesOrders}=require('../application/sales-orders/service.ts'),{createApplicationCrmService}=require('../application/crm/service.ts'),{emptyQuotationContent}=require('../modules/sales-documents/quotation-validation.ts')
 const {createAuditReportService}=require('../platform/audit/service.ts')
@@ -17,7 +18,7 @@ async function fixture(extra={}){const item=await catalog.save(itemInput(extra))
 const hold=(f,expiresAt=future())=>reservations.create(f.order.id,{itemId:f.item.id,expiresAt})
 before(async()=>{
  await root.tenant.createMany({data:[tenant,otherTenant].map(id=>({id,slug:id,name:id}))})
- const user=(tenantId,role)=>root.user.create({data:{tenantId,role,name:role,email:randomUUID()+'@example.test'}})
+ const user=(tenantId,role)=>fixtureUser(root,{data:{tenantId,role,name:role,email:randomUUID()+'@example.test'}})
  manager=await user(tenant,'MANAGER');staff=await user(tenant,'STAFF');outsider=await user(tenant,'STAFF');other=await user(otherTenant,'ADMIN')
  await root.tenantModule.createMany({data:[tenant,otherTenant].flatMap(tenantId=>['crm','salesDocuments','salesOrders','catalog','realEstate'].map(key=>({tenantId,key,allowed:true,enabled:true})))})
  catalog=applicationCatalog(db,identity(manager));reservations=applicationReservations(db,identity(manager));orders=applicationSalesOrders(db,identity(manager));crm=createApplicationCrmService(db,identity(manager))
@@ -128,15 +129,15 @@ test('current custom permissions, staff/order scope, user status and module gate
  const f=await fixture(),held=await hold(f),staffService=applicationReservations(db,identity(staff)),outside=applicationReservations(db,identity(outsider))
  assert.equal((await staffService.history(f.order.id)).total,1);await assert.rejects(staffService.create(f.order.id,{itemId:f.item.id,expiresAt:future()}),status(403));await assert.rejects(outside.history(f.order.id),status(404))
  const permissions=['salesOrders.read','catalogItems.read','unitReservations.read']
- const role=await root.tenantAccessRole.create({data:{tenantId:tenant,name:'Unit reviewer',nameKey:'unit reviewer',permissions}})
- await root.tenantRoleAssignment.create({data:{tenantId:tenant,userId:manager.id,roleId:role.id}})
+ const role=await fixtureProfile(root,{data:{tenantId:tenant,name:'Unit reviewer',nameKey:'unit reviewer',permissions}})
+ await fixtureRole(root,{data:{tenantId:tenant,userId:manager.id,roleId:role.id}})
  try{
   assert.equal((await reservations.list(f.order.id)).canRelease,false)
   await assert.rejects(hold(f),status(403));await assert.rejects(reservations.transition(f.order.id,held.id,{action:'release',version:1,reason:'Denied'}),status(403))
   await root.tenantAccessRole.update({where:{tenantId_id:{tenantId:tenant,id:role.id}},data:{permissions:[...permissions,'unitReservations.cancel']}})
   await reservations.transition(f.order.id,held.id,{action:'release',version:1,reason:'Granted separately'})
-  await root.tenantAccessRole.update({where:{tenantId_id:{tenantId:tenant,id:role.id}},data:{salesRecordScope:'OWN'}});await assert.rejects(reservations.list(f.order.id),status(404))
- }finally{await root.tenantRoleAssignment.deleteMany({where:{tenantId:tenant,userId:manager.id}})}
+  await root.tenantUserAccess.update({where:{tenantId_userId:{tenantId:tenant,userId:manager.id}},data:{salesRecordScope:'OWN'}});await assert.rejects(reservations.list(f.order.id),status(404))
+ }finally{await resetFixtureRoles(root,{where:{tenantId:tenant,userId:manager.id}})}
  for(const key of ['salesOrders','catalog','crm','salesDocuments']){
   await root.tenantModule.update({where:{tenantId_key:{tenantId:tenant,key}},data:{enabled:false}})
   try{await assert.rejects(reservations.list(f.order.id),status(403));await assert.rejects(hold(f),status(403))}finally{await root.tenantModule.update({where:{tenantId_key:{tenantId:tenant,key}},data:{enabled:true}})}

@@ -56,8 +56,3 @@ export type Requirement = Permission | { any: readonly Permission[] } | readonly
 export const resourceKeys = Object.keys(accessResources) as Resource[]
 export const allPermissions = resourceKeys.flatMap(resource => accessResources[resource].actions.map(action => `${resource}.${action}` as Permission))
 export const workspaceRead: Requirement = { any: resourceKeys.filter(resource => (["crm", "realEstate", "salesDocuments", "paymentPlans"] as readonly string[]).includes(accessResources[resource].module)).map(resource => `${resource}.read` as Permission) }
-export const roleTemplates = [
-  { key: "manager", name: "Manager", permissions: allPermissions },
-  { key: "salesperson", name: "Salesperson", permissions: allPermissions.filter(p => p.endsWith(".read") || p === "salesOrders.create" || ["contacts", "accounts", "enquiries", "opportunities", "activities", "quotations"].some(r => p.startsWith(`${r}.`) && !p.endsWith(".assign"))) },
-  { key: "readonly", name: "Read-only", permissions: allPermissions.filter(p => p.endsWith(".read")) },
-] as const

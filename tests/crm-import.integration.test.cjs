@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
+const {fixtureUser,fixtureRole,fixtureProfile}=require("./helpers/access-fixtures.cjs")
 const { test, before, after } = require("node:test")
 const assert = require("node:assert/strict")
 const { randomUUID } = require("node:crypto")
@@ -36,9 +37,9 @@ async function finish(job, svc = service) {
 }
 before(async () => {
   await root.tenant.createMany({ data: [{ id: a, slug: a, name: a }, { id: b, slug: b, name: b }] })
-  admin = await root.user.create({ data: { tenantId: a, name: "Import admin", email: `${a}@test.example`, role: "ADMIN" } })
-  staff = await root.user.create({ data: { tenantId: a, name: "Import staff", email: `${a}s@test.example`, role: "STAFF" } })
-  other = await root.user.create({ data: { tenantId: b, name: "Other admin", email: `${b}@test.example`, role: "ADMIN" } })
+  admin = await fixtureUser(root,{ data: { tenantId: a, name: "Import admin", email: `${a}@test.example`, role: "ADMIN" } })
+  staff = await fixtureUser(root,{ data: { tenantId: a, name: "Import staff", email: `${a}s@test.example`, role: "STAFF" } })
+  other = await fixtureUser(root,{ data: { tenantId: b, name: "Other admin", email: `${b}@test.example`, role: "ADMIN" } })
   await root.tenantModule.createMany({ data: [a, b].flatMap(tenantId => ["crm", "realEstate"].map(key => ({ tenantId, key, allowed: true, enabled: true }))) })
   service = createApplicationCrmService(dbA, { tenantId: a, userId: admin.id })
   restricted = createApplicationCrmService(dbA, { tenantId: a, userId: staff.id })
@@ -203,18 +204,18 @@ test("a disabled extension after review cannot silently discard mapped project f
   await root.tenantModule.update({ where: { tenantId_key: { tenantId: a, key: "realEstate" } }, data: { enabled: true } })
 })
 test("role without contacts.create cannot upload or inspect import history", async () => {
-  const role = await root.tenantAccessRole.create({ data: { tenantId: a, name: "No contacts", nameKey: "no contacts", permissions: ["enquiries.read", "enquiries.create", "contacts.read"] } })
-  await root.tenantRoleAssignment.create({ data: { tenantId: a, userId: staff.id, roleId: role.id } })
+  const role = await fixtureProfile(root,{ data: { tenantId: a, name: "No contacts", nameKey: "no contacts", permissions: ["enquiries.read", "enquiries.create", "contacts.read"] } })
+  await fixtureRole(root,{ data: { tenantId: a, userId: staff.id, roleId: role.id } })
   await assert.rejects(upload('Name,Email\nDenied,denied@example.com', restricted), e => e.status === 403)
   await assert.rejects(restricted.listEnquiryImports({}), e => e.status === 403)
   await assert.rejects(restricted.downloadEnquiryImportTemplate(), e => e.status === 403)
 })
 
 test("custom roles cannot browse or assign projects through import or direct writes", async () => {
-  const user = await root.user.create({ data: { tenantId: a, role: "MANAGER", name: "Restricted importer", email: `${prefix}-restricted@test.example` } })
+  const user = await fixtureUser(root,{ data: { tenantId: a, role: "MANAGER", name: "Restricted importer", email: `${prefix}-restricted@test.example` } })
   const permissions = ["contacts.read", "contacts.create", "enquiries.read", "enquiries.create", "enquiries.edit"]
-  const role = await root.tenantAccessRole.create({ data: { tenantId: a, name: "Import without projects", nameKey: "import without projects", permissions } })
-  await root.tenantRoleAssignment.create({ data: { tenantId: a, userId: user.id, roleId: role.id } })
+  const role = await fixtureProfile(root,{ data: { tenantId: a, name: "Import without projects", nameKey: "import without projects", permissions } })
+  await fixtureRole(root,{ data: { tenantId: a, userId: user.id, roleId: role.id } })
   const scoped = createApplicationCrmService(dbA, { tenantId: a, userId: user.id })
   const headers = parse(await scoped.downloadEnquiryImportTemplate(), { bom: true })[0]
   assert.equal(headers.includes("Project"), false)

@@ -8,12 +8,12 @@ import { DropdownSelect } from "@/components/ui/dropdown-select"
 import { PageHeader, Surface, pageClass } from "@/components/erp/page"
 import { DraftPanel } from "@/components/erp/record-detail"
 import { Pagination } from "@/components/erp/pagination"
-import { RecordSelect } from "@/components/erp/record-select"
-import { recordScopes, type RecordScope } from "./record-scope"
+import { ProfileAssignmentEditor } from "./profile-assignment"
+import { profileModules, profileModuleName, profileResources, moduleProfileTemplates } from "./profiles"
 import { resourceRecordPolicies, recordPolicyDescriptions } from "./resource-policy"
-import { accessResources, resourceKeys, permissionActions, roleTemplates, type Permission, type Resource } from "./catalog"
+import { accessResources, permissionActions, type Permission, type Resource } from "./catalog"
 
-type AccessRole = { id?: string; name: string; permissions: Permission[]; archived: boolean; salesRecordScope?: RecordScope; projectRecordScope?: RecordScope; version?: number }
+type AccessRole = { id?: string; name: string; permissions: Permission[]; archived: boolean; moduleKey?: string; version?: number }
 type RoleRow = AccessRole & { id: string; _count: { assignments: number } }
 async function request<T>(url: string, body?: unknown, method = "PATCH"): Promise<T> {
   const response = await fetch(url, body === undefined ? { cache: "no-store" } : { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
@@ -44,15 +44,15 @@ export function AccessRoles() {
   }, [q, page, pageSize, archived, revision])
   async function edit(id: string) { try { setDraft(await request<AccessRole>(`/api/access/roles/${id}`)) } catch (e) { setError((e as Error).message) } }
   return <div className={pageClass}>
-    <PageHeader title="Access roles" description="Control access to business modules and administration views. Account roles still determine which records a user can manage." actions={<><Button variant="outline" disabled={loading || !!error} onClick={() => setAssign(true)}>Assign role</Button><Button disabled={loading || !!error} onClick={() => setDraft({ name: "", permissions: [], archived: false })}>New role</Button></>} />
-    <Surface><p className="text-sm text-muted-foreground">Tenant administrators retain full access. Users without a custom role keep their existing permissions. These roles restrict the user&apos;s Staff or Manager account role. Modules also require platform allowance and tenant activation. User creation, invitations and role assignments remain administrator-only.</p></Surface>
+    <PageHeader title="Access profiles" description="Create reusable module permissions and combine several profiles for each user." actions={<><Button variant="outline" disabled={loading || !!error} onClick={() => setAssign(true)}>Assign profiles</Button><Button disabled={loading || !!error} onClick={() => setDraft({ name: "", permissions: [], archived: false })}>New profile</Button></>} />
+    <Surface><p className="text-sm text-muted-foreground">Tenant administrators retain full access. Profiles combine allowed actions. Record visibility is configured per user. Users with no profiles have no business access. Modules also require platform allowance and tenant activation. User creation, invitations and role assignments remain administrator-only.</p></Surface>
     <Surface>
-      <div className="flex flex-wrap gap-2"><Input className="min-w-0 flex-1" aria-label="Search access roles" placeholder="Search roles..." value={q} onChange={e => { setQ(e.target.value); setPage(1) }} /><DropdownSelect label="Role status" value={archived} options={[{ value: "false", label: "Active roles" }, { value: "true", label: "Archived roles" }]} onValueChange={value => { setArchived(value); setPage(1) }} /><Button variant="outline" onClick={refresh}>Refresh</Button></div>
-      {error ? <p role="alert" className="text-destructive">{error}</p> : loading ? <p>Loading roles...</p> : rows.length ? <div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead><tr className="border-b"><th className="p-3">Role</th><th className="p-3">Assigned users</th></tr></thead><tbody>{rows.map(row => <tr key={row.id} className="border-b"><td className="p-3"><button className="font-medium underline" onClick={() => edit(row.id)}>{row.name}</button></td><td className="p-3">{row._count.assignments}</td></tr>)}</tbody></table></div> : <p className="py-6 text-center text-muted-foreground">No access roles found. Create a role from a template to start.</p>}
+      <div className="flex flex-wrap gap-2"><Input className="min-w-0 flex-1" aria-label="Search access profiles" placeholder="Search profiles..." value={q} onChange={e => { setQ(e.target.value); setPage(1) }} /><DropdownSelect label="Role status" value={archived} options={[{ value: "false", label: "Active roles" }, { value: "true", label: "Archived roles" }]} onValueChange={value => { setArchived(value); setPage(1) }} /><Button variant="outline" onClick={refresh}>Refresh</Button></div>
+      {error ? <p role="alert" className="text-destructive">{error}</p> : loading ? <p>Loading roles...</p> : rows.length ? <div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead><tr className="border-b"><th className="p-3">Role</th><th className="p-3">Module</th><th className="p-3">Assigned users</th></tr></thead><tbody>{rows.map(row => <tr key={row.id} className="border-b"><td className="p-3"><button className="font-medium underline" onClick={() => edit(row.id)}>{row.name}</button></td><td className="p-3">{profileModuleName(row.moduleKey ?? "all")}</td><td className="p-3">{row._count.assignments}</td></tr>)}</tbody></table></div> : <p className="py-6 text-center text-muted-foreground">No access profiles found. Create a profile from a module template to start.</p>}
       <Pagination page={page} pageSize={pageSize} total={total} loading={loading} onPageChange={setPage} onPageSizeChange={size => { setPageSize(size); setPage(1) }} />
     </Surface>
     {draft && <RoleEditor initial={draft} onClose={() => setDraft(null)} onSaved={() => { setDraft(null); refresh() }} />}
-    {assign && <AssignmentEditor onClose={() => setAssign(false)} onSaved={() => { setAssign(false); refresh() }} />}
+    {assign && <ProfileAssignmentEditor onClose={() => setAssign(false)} onSaved={() => { setAssign(false); refresh() }} />}
   </div>
 }
 
@@ -67,36 +67,17 @@ function RoleEditor({ initial, onClose, onSaved }: { initial: AccessRole; onClos
   async function save() {
     setSaving(true); setError("")
     try {
-      const { id, name, permissions, archived, version, salesRecordScope } = value
-      await request(`/api/access/roles${id ? `/${id}` : ""}`, { name, permissions, archived, version, salesRecordScope }, id ? "PATCH" : "POST")
-      toast.success("Access role saved."); onSaved()
+      const { id, name, permissions, archived, version, moduleKey } = value
+      await request(`/api/access/roles${id ? `/${id}` : ""}`, { name, permissions, archived, version, moduleKey }, id ? "PATCH" : "POST")
+      toast.success("Access profile saved."); onSaved()
     } catch (e) { setError((e as Error).message) } finally { setSaving(false) }
   }
-  return <DraftPanel title={initial.id ? "Edit access role" : "New access role"} description="Read allows the view. Other actions require Read. Clearing Read removes all actions for that entity." fingerprint={value} saving={saving} error={error} onClose={onClose} onSubmit={save}>
-    <div className="space-y-2"><Label htmlFor="role-name">Role name</Label><Input id="role-name" required minLength={2} maxLength={80} value={value.name} onChange={e => setValue({ ...value, name: e.target.value })} /></div>
-    {!initial.id && <DropdownSelect label="Copy template" value="choose" options={[{ value: "choose", label: "Copy permissions from a template", disabled: true }, ...roleTemplates.map(template => ({ value: template.key, label: template.name }))]} onValueChange={key => { const template = roleTemplates.find(item => item.key === key)!; setValue({ ...value, name: value.name || template.name, permissions: [...template.permissions] }) }} />}
-    {([{ field: "salesRecordScope", label: "Sales record scope", help: "Enquiries, opportunities and related contacts, activities, quotations, orders and receivables. Staff retain assigned sales access." }, { field: "projectRecordScope", label: "Project record scope", help: "Projects, subprojects and property catalog items. Staff can read projects assigned to them or their teams. Leave approval follows the reporting manager." }] as const).map(({ field, label, help }) => <div key={field} className="space-y-2"><Label htmlFor={field}>{label}</Label><DropdownSelect id={field} label={label} value={value[field] ?? "ACCOUNT_ROLE"} options={recordScopes.map(scope => ({ value: scope, label: { ACCOUNT_ROLE: "Existing account access", OWN: "Own / assigned records", MANAGED_TEAMS: "Own and managed teams", ALL: "All tenant records" }[scope] }))} onValueChange={scope => setValue({ ...value, [field]: scope as RecordScope })} /><p className="text-sm text-muted-foreground">{help} Manager scopes narrow account authority; action permissions remain required.</p></div>)}
-    <div className="overflow-x-auto rounded-lg border"><table className="w-full text-sm"><thead><tr className="border-b"><th className="p-2 text-left">Entity</th>{permissionActions.map(action => <th className="p-2 capitalize" key={action}>{action}</th>)}</tr></thead><tbody>{resourceKeys.map(resource => <tr key={resource} className="border-b"><th className="p-2 text-left font-normal">{accessResources[resource].name}<p className="mt-1 max-w-64 text-xs text-muted-foreground">{recordPolicyDescriptions[resourceRecordPolicies[resource]]}</p></th>{permissionActions.map(action => { const permission = `${resource}.${action}` as Permission; return <td key={action} className="p-2 text-center">{(accessResources[resource].actions as readonly string[]).includes(action) ? <input type="checkbox" className="size-4 accent-primary" aria-label={`${accessResources[resource].name}: ${action}`} checked={value.permissions.includes(permission)} onChange={e => toggle(resource, permission, e.target.checked)} /> : <span aria-label="Not applicable">—</span>}</td> })}</tr>)}</tbody></table></div>
+  return <DraftPanel title={initial.id ? "Edit access profile" : "New access profile"} description="Read allows the view. Other actions require Read. Clearing Read removes all actions for that entity." fingerprint={value} saving={saving} error={error} onClose={onClose} onSubmit={save}>
+    <div className="space-y-2"><Label htmlFor="role-name">Profile name</Label><Input id="role-name" required minLength={2} maxLength={80} value={value.name} onChange={e => setValue({ ...value, name: e.target.value })} /></div>
+    <DropdownSelect label="Profile module" value={value.moduleKey ?? "all"} options={profileModules.map(key => ({ value: key, label: profileModuleName(key) }))} onValueChange={moduleKey => setValue({ ...value, moduleKey, permissions: value.permissions.filter(p => profileResources(moduleKey).includes(p.split(".")[0] as Resource)) })} />
+    {!initial.id && <DropdownSelect label="Copy template" value="choose" options={[{ value: "choose", label: "Choose module permissions", disabled: true }, ...moduleProfileTemplates.filter(template => !value.moduleKey || value.moduleKey === "all" || template.moduleKey === value.moduleKey).map(template => ({ value: template.key, label: template.name }))]} onValueChange={key => { const template = moduleProfileTemplates.find(item => item.key === key)!; setValue({ ...value, name: value.name || template.name, moduleKey: template.moduleKey, permissions: [...template.permissions] }) }} />}
+    <p className="text-sm text-muted-foreground">Changes apply to every user with this profile. Templates include dashboard access. Record visibility is set when assigning profiles to a user.</p>
+    <div className="overflow-x-auto rounded-lg border"><table className="w-full text-sm"><thead><tr className="border-b"><th className="p-2 text-left">Entity</th>{permissionActions.map(action => <th className="p-2 capitalize" key={action}>{action}</th>)}</tr></thead><tbody>{profileResources(value.moduleKey ?? "all").map(resource => <tr key={resource} className="border-b"><th className="p-2 text-left font-normal">{accessResources[resource].name}<p className="mt-1 max-w-64 text-xs text-muted-foreground">{recordPolicyDescriptions[resourceRecordPolicies[resource]]}</p></th>{permissionActions.map(action => { const permission = `${resource}.${action}` as Permission; return <td key={action} className="p-2 text-center">{(accessResources[resource].actions as readonly string[]).includes(action) ? <input type="checkbox" className="size-4 accent-primary" aria-label={`${accessResources[resource].name}: ${action}`} checked={value.permissions.includes(permission)} onChange={e => toggle(resource, permission, e.target.checked)} /> : <span aria-label="Not applicable">—</span>}</td> })}</tr>)}</tbody></table></div>
     {initial.id && <label className="flex items-center gap-2"><input type="checkbox" checked={value.archived} onChange={e => setValue({ ...value, archived: e.target.checked })} />Archived (reassign users first)</label>}
-  </DraftPanel>
-}
-
-function AssignmentEditor({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
-  const [userId, setUserId] = React.useState(""), [roleId, setRoleId] = React.useState("")
-  const [current, setCurrent] = React.useState<{ role: string; accessAssignment: { roleId: string; role: { name: string } } | null } | null>(null)
-  const [saving, setSaving] = React.useState(false), [error, setError] = React.useState("")
-  React.useEffect(() => {
-    let cancelled = false; setCurrent(null); setRoleId(""); setError("")
-    if (userId) request<NonNullable<typeof current>>(`/api/access/users/${userId}`).then(data => { if (!cancelled) { setCurrent(data); setRoleId(data.accessAssignment?.roleId || "") } }).catch(e => { if (!cancelled) setError(e.message) })
-    return () => { cancelled = true }
-  }, [userId])
-  const eligible = current && ["STAFF", "MANAGER"].includes(current.role)
-  return <DraftPanel title="Assign access role" description="Choose a staff member or manager. Existing record ownership and team access remain in force." fingerprint={{ userId, roleId }} saving={saving} disabled={!eligible} error={error} onClose={onClose} onSubmit={async () => {
-    setSaving(true); setError("")
-    try { await request(`/api/access/users/${userId}`, { roleId: roleId || null, previousRoleId: current?.accessAssignment?.roleId ?? null }); toast.success("Access role assigned."); window.dispatchEvent(new Event("business-modules-changed")); onSaved() } catch (e) { setError((e as Error).message) } finally { setSaving(false) }
-  }}>
-    <div className="space-y-2"><Label htmlFor="access-user">User</Label><RecordSelect id="access-user" endpoint="/api/users" value={userId} onChange={setUserId} /></div>
-    {current && !eligible && <p role="alert">Choose a Staff or Manager account. Tenant administrators retain full access.</p>}
-    {eligible && <><div className="space-y-2"><Label htmlFor="assigned-role">Access role</Label><RecordSelect id="assigned-role" endpoint="/api/access/roles" value={roleId} selected={current.accessAssignment ? { value: current.accessAssignment.roleId, label: current.accessAssignment.role.name } : undefined} onChange={setRoleId} placeholder="Existing account permissions" /></div><Button type="button" variant="outline" onClick={() => setRoleId("")}>Use existing account permissions</Button><p className="text-sm text-muted-foreground">{roleId ? "The selected role will restrict this user's access." : "No custom restrictions: use this user's existing account permissions."}</p></>}
   </DraftPanel>
 }

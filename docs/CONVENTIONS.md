@@ -13,6 +13,7 @@ This is the baseline for new modules (API + UI) in this codebase.
   - List endpoints may optionally accept `status` filters when applicable.
 
 ## Permissions
+- Every module uses composable access profiles from the shared access resolver. Active profiles add action permissions; per-user record scopes, account authority, module activation and tenant isolation remain mandatory bounds. Staff/Manager accounts without profiles have no business permissions. See `docs/ACCESS_PROFILES_R9.md` for the contract, migration and module checklist.
 - Teams are shared business data under `/users/teams`; CRM owns the sales workflow setting. See `docs/ACCESS_MODEL_R9.md` for module record policies and migration rules.
 - Register each permission resource in both `platform/access/catalog.ts` and the exhaustive `platform/access/resource-policy.ts`. Offer record scope choices only where every query path can enforce them.
 - Use `accessContext(findAccessUser(...))` when refreshing an actor inside a transaction; keep permissions, sales/project scopes and current team memberships together. Module/action checks and record predicates remain mandatory for lists, details, writes, selectors, reports and exports.

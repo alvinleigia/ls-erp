@@ -1,5 +1,5 @@
 import { test, expect, type Page } from "@playwright/test"
-import { seed, login, json } from "./fixtures"
+import { seed, login, json, assignProfiles } from "./fixtures"
 
 async function select(page: Page, label: string, option: string) {
   await page.getByLabel(label, { exact: true }).click()
@@ -52,12 +52,12 @@ test("shared exports enforce record and report permissions across module screens
   const manager = await login(browser, fixture.origin, fixture.users.manager.email)
   try {
     const reads = ["dashboard.read", "contacts.read", "enquiries.read", "opportunities.read", "pipelines.read", "activities.read", "reports.read", "projects.read"]
-    let role = await json(admin.context, "/api/access/roles", 201, "POST", { name: "Export checks", permissions: reads, salesRecordScope: "ALL" })
-    await json(admin.context, `/api/access/users/${fixture.users.manager.id}`, 200, "PATCH", { roleId: role.id, previousRoleId: null })
+    let role = await json(admin.context, "/api/access/roles", 201, "POST", { name: "Export checks", permissions: reads })
+    await assignProfiles(admin.context, fixture.users.manager.id, [role.id], { salesRecordScope: "ALL" })
     const page = manager.page
     const button = page.getByRole("button", { name: "Export CSV", exact: true })
     async function permissions(extra: string[]) {
-      role = await json(admin.context, `/api/access/roles/${role.id}`, 200, "PATCH", { name: role.name, version: role.version, permissions: [...reads, ...extra], salesRecordScope: "ALL" })
+      role = await json(admin.context, `/api/access/roles/${role.id}`, 200, "PATCH", { name: role.name, version: role.version, permissions: [...reads, ...extra] })
       const refreshed = page.waitForResponse(r => new URL(r.url()).pathname === "/api/modules")
       await page.evaluate(() => window.dispatchEvent(new Event("business-modules-changed")))
       await refreshed

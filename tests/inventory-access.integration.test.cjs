@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
+const {grantPgFixtureUsers}=require("./helpers/access-fixtures.cjs")
 const { test, before, after } = require("node:test")
 const assert = require("node:assert/strict")
 const path = require("node:path")
@@ -59,6 +60,8 @@ before(async () => {
   }
   await root.query('INSERT INTO "TenantAccessRole" (id,"tenantId",name,"nameKey",permissions,"updatedAt") VALUES ($1,$2,\'Inventory test\',\'inventory test\',$3,NOW())', [roleId, tenantA, []])
   await root.query('INSERT INTO "TenantRoleAssignment" ("tenantId","userId","roleId","updatedAt") VALUES ($1,$2,$3,NOW())', [tenantA, `${tenantA}_manager`, roleId])
+
+ await grantPgFixtureUsers(root,[tenantA,tenantB])
 })
 after(async () => {
   for (const table of ["PurchaseOrder", "InventoryStockMovement", "InventoryProduct", "InventoryCategory", "Supplier"]) await root.query(`DELETE FROM "${table}" WHERE "tenantId" IN ($1,$2)`, [tenantA, tenantB])
