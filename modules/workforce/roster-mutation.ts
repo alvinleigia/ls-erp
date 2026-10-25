@@ -15,15 +15,23 @@ export async function rosterMutation<T>(actor: BusinessActor, action: "edit" | "
     if (!(error instanceof PlanBookingConflict)) throw error
     const conflicts: { id: string; startAt: string; endAt: string; customerName: string | null; customerEmail: string | null; serviceName: string | null }[] = []
     if (await canReadAppointmentDetails(actor.tenantId, actor.userId)) {
-      for (let i = 0; i < error.appointmentIds.length; i += 200) {
-        const rows = await prisma.appointment.findMany({ where: { tenantId: actor.tenantId,
-          id: { in: error.appointmentIds.slice(i, i + 200) } }, orderBy: { id: "asc" },
-          select: { id: true, startAt: true, endAt: true, customer: { select: { name: true, email: true } }, service: { select: { name: true } } },
-        })
-        conflicts.push(...rows.map(row => ({ id: row.id, startAt: row.startAt.toISOString(), endAt: row.endAt.toISOString(),
-          customerName: row.customer?.name ?? null, customerEmail: row.customer?.email ?? null, serviceName: row.service?.name ?? null })))
+      for (let i = 0; i < error.blockedSlots.length; i += 200) {
+        let cursor: string | undefined
+        while (true) {
+          const rows = await prisma.appointment.findMany({ where: { tenantId: actor.tenantId,
+            status: { in: ["SCHEDULED", "CONFIRMED", "IN_PROGRESS"] },
+            ...(cursor ? { id: { gt: cursor } } : {}),
+            OR: error.blockedSlots.slice(i, i + 200).map(slot => ({ staffProfileId: slot.staffProfileId, startAt: slot.startAt, endAt: slot.endAt })) }, orderBy: { id: "asc" },
+            take: 200,
+            select: { id: true, startAt: true, endAt: true, customer: { select: { name: true, email: true } }, service: { select: { name: true } } },
+          })
+          conflicts.push(...rows.map(row => ({ id: row.id, startAt: row.startAt.toISOString(), endAt: row.endAt.toISOString(),
+            customerName: row.customer?.name ?? null, customerEmail: row.customer?.email ?? null, serviceName: row.service?.name ?? null })))
+          if (rows.length < 200) break
+          cursor = rows[rows.length - 1].id
+        }
       }
     }
-    return { error: error.message, conflicts, conflictCount: error.appointmentIds.length }
+    return { error: error.message, conflicts, conflictCount: error.blockedSlots.length }
   }
 }

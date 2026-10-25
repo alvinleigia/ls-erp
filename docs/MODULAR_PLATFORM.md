@@ -1,3 +1,23 @@
+## R10 - Private booking integrity (phase 2D2, local)
+
+Appointment creation, edits, bulk moves, order suggestions, leave approval,
+plan previews and scheduling-mode/plan guards use shared private booking
+projections. Hidden appointments still block incompatible changes; conflict
+flags/counts and paged busy intervals disclose no appointment/customer IDs or
+service details. Exclusions require source resolution through ordinary access.
+Resolution details retain current Read checks and RLS, after mutation rollback.
+Current identity, profiles, Read limits and activation are rechecked. Existing
+scheduling locks, action authorization, assignments and audit/history remain.
+
+Pending migration 117 adds functions only. Rollback and exact comparison preserve
+all 125 preceding tables. All 176 regression checks and real Chrome source-denial,
+double-booking and plan-rollback checks passed against the final build. The suite
+also verifies paging all 201 visible resolution records for one busy interval.
+Build, TypeScript, targeted lint and whitespace passed. No visual UI verification
+is claimed. No push, hosted migration, deployment or client-data change. Native
+operational office ownership, personal/history rules, stock boundaries and office
+controls remain release prerequisites. See [scheduling integrity](SCHEDULING_PRIVACY_R10.md).
+
 ## R10 - Private scheduling availability (phase 2D1, local)
 
 Shared appointment and shift-plan integrity checks use a tenant-bound date-only

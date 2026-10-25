@@ -1,14 +1,7 @@
-import { AppointmentStatus } from "@prisma/client"
-
 import { checkStaffAppointmentAvailability } from "@/modules/workforce/availability"
 import { prisma } from "@/lib/prisma"
 import type { ResolvedOrderLine } from "@/modules/appointments/order-resolution"
-
-const ACTIVE_APPOINTMENT_STATUSES: AppointmentStatus[] = [
-  AppointmentStatus.SCHEDULED,
-  AppointmentStatus.CONFIRMED,
-  AppointmentStatus.IN_PROGRESS,
-]
+import { appointmentConflictSummary } from "./booking-integrity"
 
 export class AvailabilityConflictError extends Error {
   suggestedStartAt?: string
@@ -39,30 +32,7 @@ const getLineConflictReason = async (
     return availability.reason || "Staff is unavailable for one of the selected slots."
   }
 
-  const [staffConflict, customerConflict] = await Promise.all([
-    prisma.appointment.findFirst({
-      where: {
-        tenantId,
-        id: excludedAppointmentIds.length ? { notIn: excludedAppointmentIds } : undefined,
-        staffProfileId: line.staffProfileId,
-        status: { in: ACTIVE_APPOINTMENT_STATUSES },
-        startAt: { lt: line.endAt },
-        endAt: { gt: line.startAt },
-      },
-      select: { id: true },
-    }),
-    prisma.appointment.findFirst({
-      where: {
-        tenantId,
-        id: excludedAppointmentIds.length ? { notIn: excludedAppointmentIds } : undefined,
-        customerId,
-        status: { in: ACTIVE_APPOINTMENT_STATUSES },
-        startAt: { lt: line.endAt },
-        endAt: { gt: line.startAt },
-      },
-      select: { id: true },
-    }),
-  ])
+  const [{ staffConflict, customerConflict }] = await appointmentConflictSummary(prisma, tenantId, [{ ...line, customerId }], excludedAppointmentIds)
 
   if (staffConflict) {
     return "A staff member has a conflicting appointment."

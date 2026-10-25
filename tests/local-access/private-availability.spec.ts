@@ -1,7 +1,7 @@
 import { test, expect } from "@playwright/test"
 import { seed, login, json, assignProfiles } from "./fixtures"
 
-test("hidden leave blocks real authenticated booking flows without revealing private details", async ({ browser }) => {
+test("hidden leave and bookings block authenticated scheduling without revealing private details", async ({ browser }) => {
   const fixture = await seed(), admin = await login(browser, fixture.origin, fixture.users.admin.email)
   let staff: Awaited<ReturnType<typeof login>> | undefined
   const profile = `${fixture.slug}_busy_profile`, definition = `${fixture.slug}_private_definition`, leave = `availability_hidden_${fixture.slug}`, service = `${fixture.slug}_busy_service`, customer = `${fixture.slug}_busy_customer`
@@ -31,11 +31,24 @@ test("hidden leave blocks real authenticated booking flows without revealing pri
     expect(await json(staff.context, "/api/appointments/availability", 200, "POST", free)).toEqual({ available: true })
     const created = await json(staff.context, "/api/appointments", 201, "POST", free)
     expect(created.appointment.id).toBeTruthy()
+    const policy = await fixture.db.query("SELECT format('CREATE POLICY test_browser_booking_privacy ON \"Appointment\" AS RESTRICTIVE FOR SELECT USING (id<>%L)', $1::text) statement", [created.appointment.id])
+    await fixture.db.query(policy.rows[0].statement)
+    await json(staff.context, `/api/appointments/${created.appointment.id}`, 404)
+    const occupied = await json(staff.context, "/api/appointments/availability", 200, "POST", free)
+    expect(occupied).toEqual({ available: false, reason: "Staff member already has an appointment in this time range." })
+    const duplicate = await json(staff.context, "/api/appointments", 409, "POST", free)
+    expect(duplicate.error).toBe(occupied.reason)
+    expect(JSON.stringify({ occupied, duplicate })).not.toContain(created.appointment.id)
+    const plan = await json(admin.context, "/api/shifts/flexible-slots", 409, "POST", { staffId: fixture.users.staff.id, date: "2035-01-12", slots: [{ startTime: "09:00", endTime: "10:00" }] })
+    expect(plan.conflicts).toEqual([])
+    expect(plan.conflictCount).toBe(1)
+    expect((await fixture.db.query('SELECT "endTime" FROM "StaffFlexibleAvailability" WHERE id=$1', [profile + "2035-01-12"])).rows[0].endTime).toBe("17:00")
     expect((await fixture.db.query('SELECT count(*)::int n FROM "Appointment" WHERE "tenantId"=$1', [fixture.slug])).rows[0].n).toBe(1)
     expect((await fixture.db.query('SELECT reason FROM "LeaveRequest" WHERE id=$1', [leave])).rows[0].reason).toBe("Private medical reason")
     await json(admin.context, `/api/users/${fixture.users.staff.id}`, 200, "PATCH", { status: "SUSPENDED" })
     await json(staff.context, "/api/appointments/availability", 403, "POST", free)
   } finally {
+    await fixture.db.query('DROP POLICY IF EXISTS test_browser_booking_privacy ON "Appointment"')
     await fixture.db.query('DROP POLICY IF EXISTS test_browser_leave_privacy ON "LeaveRequest"')
     await staff?.context.close(); await admin.context.close(); await fixture.db.end()
   }

@@ -7,6 +7,7 @@ import { findPattern } from "./flexible-plan-service"
 import { planStaffScope, patternOverlap, weekdayOrder } from "./flexible-plan-record"
 import { dateKey, dateKeyInTimeZone, enumerateDates, timeMinutes } from "./roster-dates"
 import type { impactPreviewSchema } from "./flexible-plan-validation"
+import { appointmentConflictSummary } from "@/modules/appointments/booking-integrity"
 
 const DAY_MS = 86400000
 const PREVIEW_HORIZON_DAYS = 90
@@ -55,14 +56,15 @@ export async function previewPatternImpact(actor: BusinessActor, data: z.infer<t
       - slot.breaks.reduce((sum, pause) => sum + Math.max(0, timeMinutes(pause.endTime) - timeMinutes(pause.startTime)), 0))
   }
   const nextDay = dateKey(new Date(effectiveEnd.getTime() + DAY_MS))
-  const [affectedAppointmentsCount, overlappingActivePatternsCount] = await Promise.all([
-    prisma.appointment.count({ where: { tenantId, staffProfileId: target.id, status: { in: ["SCHEDULED", "CONFIRMED", "IN_PROGRESS"] },
-      startAt: { lt: startOfBusinessDate(nextDay, timeZone) }, endAt: { gt: startOfBusinessDate(start, timeZone) } } }),
+  const [summary, overlappingActivePatternsCount] = await Promise.all([
+    appointmentConflictSummary(prisma, tenantId, [{ staffProfileId: target.id,
+      startAt: startOfBusinessDate(start, timeZone), endAt: startOfBusinessDate(nextDay, timeZone) }]),
     data.mode !== "DEACTIVATE" && data.activate ? prisma.staffFlexiblePattern.count({ where: {
       staffProfileId: target.id, staffProfile: planStaffScope(tenantId), isActive: true, ...patternOverlap(start, end),
       ...(data.mode === "UPDATE" ? { id: { not: source.id } } : {}),
     } }) : 0,
   ])
+  const affectedAppointmentsCount = summary[0].conflictCount
   const notes: string[] = []
   if (truncated) notes.push(`Preview is limited to ${PREVIEW_HORIZON_DAYS} days.`)
   if (overlappingActivePatternsCount) notes.push(`${overlappingActivePatternsCount} active pattern(s) will be deactivated due to overlap.`)

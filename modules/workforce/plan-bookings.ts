@@ -5,14 +5,14 @@ import { loadFlexibleAvailability } from "./flexible-availability"
 import { loadStandardAvailability } from "./standard-availability"
 import { workingSegments } from "./working-segments"
 import { approvedLeaveBlocks } from "./availability-blocks"
+import { activeStaffBookingSlots, type BusySlot } from "@/modules/appointments/booking-integrity"
 
 const PAGE_SIZE = 200
-type Booking = { id: string; staffProfileId: string; staffProfile: { schedulingMode: StaffSchedulingMode }; startAt: Date; endAt: Date }
-type ProtectedBooking = { id: string; profileId: string; mode: StaffSchedulingMode; day: string; start: number; end: number }
-// Carries identifiers internally so authorized roster callers can offer resolution
-// after the transaction has rolled back. Other APIs expose only BusinessError.message.
+type ProtectedBooking = BusySlot & { profileId: string; mode: StaffSchedulingMode; day: string; start: number; end: number }
+// Carries busy intervals only. Resolution details are fetched after rollback
+// through ordinary appointment RLS, never through the integrity projection.
 export class PlanBookingConflict extends BusinessError {
-  constructor(readonly appointmentIds: string[]) {
+  constructor(readonly blockedSlots: BusySlot[]) {
     super(409, "This plan change conflicts with existing appointments. Reassign or cancel those appointments through Appointments before changing the plan.")
   }
 }
@@ -52,39 +52,46 @@ export async function protectPlanBookings(tx: Prisma.TransactionClient, tenantId
   const selectedDays = days ? new Set(days) : null
   const sortedDays = days ? [...days].sort() : []
   // UTC padding bounds the query; exact tenant calendar dates filter candidates.
-  const dayRange = days ? { startAt: { gte: new Date(new Date(sortedDays[0]).getTime() - 86400000),
-    lt: new Date(new Date(sortedDays[sortedDays.length - 1]).getTime() + 2 * 86400000) } } : {}
+  const dayRange = days ? { start: new Date(new Date(sortedDays[0]).getTime() - 86400000),
+    end: new Date(new Date(sortedDays[sortedDays.length - 1]).getTime() + 2 * 86400000) } : undefined
   const setting = await tx.appSetting.findUnique({ where: { tenantId }, select: { timeZone: true } })
   const timeZone = setting?.timeZone || "America/New_York"
   const now = new Date(), batches: ProtectedBooking[][] = []
-  let cursor: string | undefined
+  let profileCursor: string | undefined
   while (true) {
-    const rows: Booking[] = await tx.appointment.findMany({ where: { tenantId, ...dayRange,
-      staffProfile: { AND: [staffScope, { user: { tenantId } }] }, ...(cursor ? { id: { gt: cursor } } : {}),
-      OR: [{ status: "IN_PROGRESS" }, { status: { in: ["SCHEDULED", "CONFIRMED"] }, endAt: { gt: now } }],
-    }, orderBy: { id: "asc" }, take: PAGE_SIZE,
-    select: { id: true, staffProfileId: true, staffProfile: { select: { schedulingMode: true } }, startAt: true, endAt: true } })
-    if (!rows.length) break
-    const bookings = rows.flatMap(row => {
-      const day = dateKeyInTimeZone(row.startAt, timeZone)
-      if (selectedDays && !selectedDays.has(day)) return []
-      if (dateKeyInTimeZone(row.endAt, timeZone) !== day) return []
-      const range = appointmentRangeOnDate(row.startAt, row.endAt, day, timeZone)
-      return range ? [{ id: row.id, profileId: row.staffProfileId, mode: row.staffProfile.schedulingMode, day, ...range }] : []
+    const profiles: { id: string; schedulingMode: StaffSchedulingMode }[] = await tx.staffProfile.findMany({
+      where: { AND: [staffScope, { user: { tenantId } }, ...(profileCursor ? [{ id: { gt: profileCursor } }] : [])] },
+      orderBy: { id: "asc" }, take: PAGE_SIZE, select: { id: true, schedulingMode: true },
     })
-    if (bookings.length) {
-      const resolve = await availability(tx, tenantId, bookings)
-      const protectedBookings = bookings.filter(booking => contains(resolve(booking), booking))
-      if (protectedBookings.length) batches.push(protectedBookings)
+    if (!profiles.length) break
+    const modes = new Map(profiles.map(profile => [profile.id, profile.schedulingMode]))
+    let cursor: BusySlot | undefined
+    while (true) {
+      const rows: BusySlot[] = await activeStaffBookingSlots(tx, tenantId, profiles.map(profile => profile.id), now, cursor, dayRange)
+      if (!rows.length) break
+      const bookings = rows.flatMap(row => {
+        const day = dateKeyInTimeZone(row.startAt, timeZone)
+        if (selectedDays && !selectedDays.has(day)) return []
+        if (dateKeyInTimeZone(row.endAt, timeZone) !== day) return []
+        const range = appointmentRangeOnDate(row.startAt, row.endAt, day, timeZone)
+        return range ? [{ ...row, profileId: row.staffProfileId, mode: modes.get(row.staffProfileId)!, day, ...range }] : []
+      })
+      if (bookings.length) {
+        const resolve = await availability(tx, tenantId, bookings)
+        const protectedBookings = bookings.filter(booking => contains(resolve(booking), booking))
+        if (protectedBookings.length) batches.push(protectedBookings)
+      }
+      if (rows.length < PAGE_SIZE) break
+      cursor = rows[rows.length - 1]
     }
-    if (rows.length < PAGE_SIZE) break
-    cursor = rows[rows.length - 1].id
+    if (profiles.length < PAGE_SIZE) break
+    profileCursor = profiles[profiles.length - 1].id
   }
   return async () => {
-    const conflicts: string[] = []
+    const conflicts: BusySlot[] = []
     for (const bookings of batches) {
       const resolve = await availability(tx, tenantId, bookings)
-      conflicts.push(...bookings.filter(booking => !contains(resolve(booking), booking)).map(booking => booking.id))
+      conflicts.push(...bookings.filter(booking => !contains(resolve(booking), booking)).map(({ staffProfileId, startAt, endAt }) => ({ staffProfileId, startAt, endAt })))
     }
     if (conflicts.length) throw new PlanBookingConflict(conflicts)
   }

@@ -1,23 +1,16 @@
 import { AppointmentStatus, type Prisma } from "@prisma/client"
 import { checkStaffAppointmentAvailability } from "@/modules/workforce/availability"
 import { BusinessError } from "@/platform/policy"
+import { appointmentConflictSummary } from "./booking-integrity"
 
 export const activeAppointmentStatuses: AppointmentStatus[] = ["SCHEDULED", "CONFIRMED", "IN_PROGRESS"]
 export type AppointmentSlot = { staffProfileId: string; customerId?: string; startAt: Date; endAt: Date }
-const overlaps = (a: AppointmentSlot, b: AppointmentSlot) => a.startAt < b.endAt && a.endAt > b.startAt
 
 export async function appointmentConflictReason(db: Prisma.TransactionClient, tenantId: string,
   slot: AppointmentSlot & { appointmentId?: string }) {
   const availability = await checkStaffAppointmentAvailability(slot.staffProfileId, slot.startAt, slot.endAt, tenantId, db)
   if (!availability.ok) return availability.reason
-  const where: Prisma.AppointmentWhereInput = {
-    tenantId, id: slot.appointmentId ? { not: slot.appointmentId } : undefined,
-    status: { in: activeAppointmentStatuses }, startAt: { lt: slot.endAt }, endAt: { gt: slot.startAt },
-  }
-  const [staffConflict, customerConflict] = await Promise.all([
-    db.appointment.findFirst({ where: { ...where, staffProfileId: slot.staffProfileId }, select: { id: true } }),
-    slot.customerId ? db.appointment.findFirst({ where: { ...where, customerId: slot.customerId }, select: { id: true } }) : null,
-  ])
+  const [{ staffConflict, customerConflict }] = await appointmentConflictSummary(db, tenantId, [slot], slot.appointmentId ? [slot.appointmentId] : [])
   if (staffConflict) return "Staff member already has an appointment in this time range."
   if (customerConflict) return "Customer already has an appointment in this time range."
   return null
@@ -40,16 +33,9 @@ export async function assertAppointmentMovesAvailable(db: Prisma.TransactionClie
     staffEnds.set(move.staffProfileId, move.endAt)
     if (move.customerId) customerEnds.set(move.customerId, move.endAt)
   }
-  const conflict = await db.appointment.findFirst({
-    where: { tenantId, id: { notIn: excludedIds }, status: { in: activeAppointmentStatuses },
-      OR: active.map(move => ({ startAt: { lt: move.endAt }, endAt: { gt: move.startAt },
-        OR: [{ staffProfileId: move.staffProfileId }, ...(move.customerId ? [{ customerId: move.customerId }] : [])] })),
-    },
-    select: { staffProfileId: true, customerId: true, startAt: true, endAt: true },
-  })
+  const conflict = (await appointmentConflictSummary(db, tenantId, active, excludedIds)).find(row => row.staffConflict || row.customerConflict)
   if (conflict) {
-    const staffConflict = active.some(move => move.staffProfileId === conflict.staffProfileId && overlaps(move, conflict))
-    throw new BusinessError(409, staffConflict ? "Staff member already has an appointment in this time range." : "Customer already has an appointment in this time range.")
+    throw new BusinessError(409, conflict.staffConflict ? "Staff member already has an appointment in this time range." : "Customer already has an appointment in this time range.")
   }
   for (const move of active) {
     const availability = await checkStaffAppointmentAvailability(move.staffProfileId, move.startAt, move.endAt, tenantId, db)

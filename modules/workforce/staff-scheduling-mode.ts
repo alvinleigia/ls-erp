@@ -5,6 +5,7 @@ import { findAccessUser, assignedPermissions } from "@/platform/access/server"
 import { requirePermission } from "@/platform/access/policy"
 import { requireBusinessModule } from "@/platform/module-server"
 import { BusinessError, type BusinessActor } from "@/platform/policy"
+import { activeStaffBookingSlots } from "@/modules/appointments/booking-integrity"
 
 export function schedulingModeDates(now: Date, timeZone: string) {
   const today = new Date(businessDate(now, timeZone))
@@ -49,8 +50,7 @@ export async function setStaffSchedulingMode(tx: Prisma.TransactionClient,
       }
       // An explicit mode switch is not a command to cancel or move bookings.
       // Do not disclose customer details to users without Appointments access.
-      if (await tx.appointment.findFirst({ where: { tenantId, staffProfileId,
-        OR: [{ status: "IN_PROGRESS" }, { status: { in: ["SCHEDULED", "CONFIRMED"] }, endAt: { gt: now } }] }, select: { id: true } })) {
+      if ((await activeStaffBookingSlots(tx, tenantId, [staffProfileId], now)).length) {
         throw new BusinessError(409, "Resolve active/future appointments before changing scheduling mode. Reassign or cancel them through Appointments.")
       }
     }

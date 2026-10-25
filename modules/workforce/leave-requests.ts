@@ -2,6 +2,9 @@ import { startOfBusinessDate } from "@/lib/business-time"
 import { BusinessError } from "@/platform/policy"
 import { Prisma, Weekday, type PrismaClient } from "@prisma/client"
 import type { LeaveRequestRow, LeaveRequestRuleCheck, LeaveRequestTimelineEvent } from "@/types/leaves"
+import { appointmentConflictSummary } from "@/modules/appointments/booking-integrity"
+import { canReadAppointmentDetails } from "@/modules/appointments/conflict-access"
+import { databaseActorId } from "@/lib/database-actor"
 
 type DbClient = PrismaClient | Prisma.TransactionClient
 
@@ -456,20 +459,18 @@ export const findLeaveApprovalConflicts = async (
   const conflicts: LeaveApprovalConflict[] = []
   const settings = await tx.appSetting.findUnique({ where: { tenantId }, select: { timeZone: true } })
   const timeZone = settings?.timeZone ?? "UTC"
-  for (const request of requests) {
+  const summaries = await appointmentConflictSummary(tx, tenantId, requests.map(request => ({
+    staffProfileId: request.staffProfileId,
+    startAt: startOfBusinessDate(request.startDate.toISOString().slice(0, 10), timeZone),
+    endAt: startOfBusinessDate(addDaysUtc(request.endDate, 1).toISOString().slice(0, 10), timeZone),
+  })))
+  const canReadDetails = summaries.some(item => item.staffConflict) && await canReadAppointmentDetails(tenantId, databaseActorId(), tx)
+  for (const [index, request] of requests.entries()) {
+    const conflictCount = summaries[index].conflictCount
+    if (conflictCount === 0) continue
     const rangeStart = startOfBusinessDate(request.startDate.toISOString().slice(0, 10), timeZone)
     const rangeEndExclusive = startOfBusinessDate(addDaysUtc(request.endDate, 1).toISOString().slice(0, 10), timeZone)
-    const [conflictCount, conflictingAppointments] = await Promise.all([
-      tx.appointment.count({
-        where: {
-          tenantId,
-          staffProfileId: request.staffProfileId,
-          status: { in: [...ACTIVE_APPOINTMENT_STATUSES] },
-          startAt: { lt: rangeEndExclusive },
-          endAt: { gt: rangeStart },
-        },
-      }),
-      tx.appointment.findMany({
+    const conflictingAppointments = canReadDetails ? await tx.appointment.findMany({
         where: {
           tenantId,
           staffProfileId: request.staffProfileId,
@@ -486,9 +487,7 @@ export const findLeaveApprovalConflicts = async (
         },
         orderBy: { startAt: "asc" },
         take: 5,
-      }),
-    ])
-    if (conflictCount === 0) continue
+      }) : []
     conflicts.push({
       requestId: request.id,
       conflictCount,
