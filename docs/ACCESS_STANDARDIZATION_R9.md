@@ -1,6 +1,9 @@
 # R9: resource/action access standardization
 
-Work target: local staging branch. Hosted/production data is unchanged.
+Current release: hosted staging, verified on 2026-10-25. Production is unchanged.
+See [the hosted verification report](STAGING_ACCESS_VERIFICATION_R9.md) for the
+deployed revision, migration preservation and wider results. Local evidence below
+describes the preceding implementation milestone.
 
 The final contract is tenant isolation + module activation + composed profile
 permissions + per-user resource/action record limits + selected sharing/privacy

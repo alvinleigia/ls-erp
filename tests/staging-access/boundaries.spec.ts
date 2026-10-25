@@ -92,7 +92,9 @@ test("cross-tenant reads, writes and sharing administration are denied", async (
   await json(admin.context, `/api/access/records/enquiries/${lead.id}`, 409, "PATCH", { version: 0, restricted: false, grants: [] })
   await json(staff.context, `/api/access/records/enquiries/${lead.id}`, 403)
   await json(manager.context, "/api/tenants", 403)
-  const hidden = await fixture.db.query('SELECT count(*)::int n FROM "CrmEnquiry" WHERE "tenantId"=$1', [fixture.otherSlug])
+  // The foreign tenant necessarily contains its administrator; this is not an
+  // empty-table check.
+  const hidden = await fixture.db.query('SELECT count(*)::int n FROM "User" WHERE "tenantId"=$1', [fixture.otherSlug])
   expect(hidden.rows[0].n).toBe(0)
 })
 

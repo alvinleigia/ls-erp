@@ -1,3 +1,22 @@
+## R9 - Access controls verified on hosted staging (2026-10-25)
+
+Application c2d0a9e is live on ls-erp-staging.vercel.app with migrations 108-111.
+An encrypted staging backup was restore-tested and all four migrations rehearsed
+before cutover. Existing record IDs, owners, memberships and financial data were
+preserved; four existing QA accounts retained identical source visibility.
+
+40 distinct hosted scenarios passed across access/sharing, CRM, projects, catalog,
+orders/finance, bookings, inventory/services, leaves/shifts, import, custom fields,
+branding and PDF storage. Twenty-six page/mobile checks passed. An admin personal-
+leave redirect was corrected and its regression plus eight operational workflows
+passed on the final deployment. A populated-source runtime RLS probe also passed.
+42 temporary QA tenants were archived and their temporary hosts removed. Original
+staging tenant statuses/aliases were preserved. Production remains unchanged.
+
+Deployment used isolated local commit archives; no GitHub branch was pushed.
+See [the hosted verification report](STAGING_ACCESS_VERIFICATION_R9.md) for scope,
+results and release evidence. Earlier local entries below are historical.
+
 ## R9 - Selected sharing and Restricted visibility (local staging)
 
 Tenant administrators can share supported records with selected users/teams as

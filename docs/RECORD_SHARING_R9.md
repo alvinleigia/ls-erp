@@ -1,7 +1,9 @@
 # R9: selected record sharing and restricted visibility
 
-Target: local `staging`. No hosted migration, push, deployment or pilot data
-change has been performed for this work.
+Current target: hosted `staging`. Migrations 108–111 and matching application code
+were deployed and tested there on 2026-10-25. Production remains unchanged. See
+[the hosted verification report](STAGING_ACCESS_VERIFICATION_R9.md). Local milestone
+evidence below records the implementation checks preceding that hosted release.
 
 ## Using sharing
 
@@ -87,7 +89,8 @@ these helpers as public RPCs.
 
 ## Migration and release boundary
 
-Pending local migrations 108–111 must be released with matching code. Migration
+Migrations 108–111 must be released with matching code. They are applied on staging;
+production still requires its separate release. Migration
 111 is transactional and fails closed on unsupported migration-owner authority.
 The local rehearsal injects failure before commit and verifies complete rollback;
 successful replay compares all 117 prior business tables, excluding the new null

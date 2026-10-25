@@ -63,6 +63,7 @@ attribution. They are not attributed to every team their assignee belongs to.
 Migrations 108–110 preserve IDs, team/project memberships and record owners.
 Migration 110 translates prior account ceilings and visibility into ordinary
 per-action rules, then drops the old two-scope columns. Frozen historical test
-fixtures are not imported by runtime code. No hosted migration has been run for
-this local implementation. Release requires a verified backup, pilot visibility
-comparison and matching code/schema cutover.
+fixtures are not imported by runtime code. Migrations 108–111 are applied on
+hosted staging; its backup, visibility comparison and code/schema cutover passed.
+See [hosted verification](STAGING_ACCESS_VERIFICATION_R9.md). Production requires
+its separate verified backup, visibility comparison and matching release.
