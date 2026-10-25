@@ -1,3 +1,4 @@
+import type { WorkforceOffice } from "@/types/shifts"
 import type { Prisma, Weekday } from "@prisma/client"
 import { dateKey } from "./roster-dates"
 import { BusinessError } from "@/platform/policy"
@@ -24,11 +25,11 @@ export function mapPlanDays(days: Array<Pick<StoredDay, "id" | "day" | "isOff" |
     })),
   }))
 }
-export function mapWeekPlan(row: Prisma.StaffFlexibleWeekPlanGetPayload<{ include: typeof weekPlanInclude }>) {
-  return { id: row.id, staffId: row.staffProfile.userId, staffProfileId: row.staffProfileId, weekStartDate: dateKey(row.weekStartDate), days: mapPlanDays(row.days) }
+export function mapWeekPlan(row: Prisma.StaffFlexibleWeekPlanGetPayload<{ include: typeof weekPlanInclude }> & { office?: WorkforceOffice | null }) {
+  return { id: row.id, officeId: row.officeId, office: row.office ?? null, staffId: row.staffProfile.userId, staffProfileId: row.staffProfileId, weekStartDate: dateKey(row.weekStartDate), days: mapPlanDays(row.days) }
 }
-export function mapPattern(row: PatternRecord) {
-  return { id: row.id, staffId: row.staffProfile.userId, staffProfileId: row.staffProfileId, name: row.name,
+export function mapPattern(row: PatternRecord & { office?: WorkforceOffice | null }) {
+  return { id: row.id, officeId: row.officeId, office: row.office ?? null, staffId: row.staffProfile.userId, staffProfileId: row.staffProfileId, name: row.name,
     cycleLengthWeeks: row.cycleLengthWeeks, validFrom: dateKey(row.validFrom), validTo: row.validTo ? dateKey(row.validTo) : null, isActive: row.isActive,
     weeks: [...row.weeks].sort((a, b) => a.weekIndex - b.weekIndex).map(week => ({ id: week.id, weekIndex: week.weekIndex, days: mapPlanDays(week.days) })),
   }

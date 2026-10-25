@@ -948,6 +948,8 @@ model BusinessCompany {
 }
 
 model BusinessOffice {
+  flexibleWeekPlans StaffFlexibleWeekPlan[]
+  flexiblePatterns StaffFlexiblePattern[]
   shiftSchedules ShiftSchedule[]
   rosterHistoryDays StaffRosterHistoryDay[]
   workplaceAssignments StaffWorkplaceAssignment[]
@@ -1830,6 +1832,10 @@ model StaffFlexibleAvailability {
 }
 
 model StaffFlexibleWeekPlan {
+  tenantId String
+  officeId String @default(dbgenerated("app.creation_office_id()"))
+  office BusinessOffice @relation(fields: [tenantId, officeId], references: [tenantId, id], onDelete: NoAction)
+  @@index([tenantId, officeId])
   id             String                 @id @default(cuid())
   staffProfileId String
   weekStartDate  DateTime               @db.Date
@@ -1889,6 +1895,10 @@ model StaffFlexibleWeekBreak {
 }
 
 model StaffFlexiblePattern {
+  tenantId String
+  officeId String @default(dbgenerated("app.creation_office_id()"))
+  office BusinessOffice @relation(fields: [tenantId, officeId], references: [tenantId, id], onDelete: NoAction)
+  @@index([tenantId, officeId])
   id               String                    @id @default(cuid())
   staffProfileId   String
   name             String?

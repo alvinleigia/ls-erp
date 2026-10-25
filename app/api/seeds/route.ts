@@ -1618,7 +1618,7 @@ const seedShifts = async (tenantId: string, tenantSlug: string) => {
 
       const weeklyPlan = await prisma.staffFlexibleWeekPlan.create({
         data: {
-          staffProfileId: flexibleStaffProfile.id,
+          tenantId, staffProfileId: flexibleStaffProfile.id,
           weekStartDate: startDate,
         },
       })
@@ -1703,7 +1703,7 @@ const seedShifts = async (tenantId: string, tenantSlug: string) => {
 
       const recurringPattern = await prisma.staffFlexiblePattern.create({
         data: {
-          staffProfileId: flexibleStaffProfile.id,
+          tenantId, staffProfileId: flexibleStaffProfile.id,
           name: "Seed Flexible Recurring Plan",
           cycleLengthWeeks: 2,
           validFrom: startDate,

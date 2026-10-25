@@ -1,3 +1,27 @@
+## R10 - Flexible weekly/recurring plan offices (phase 2D4B3B1, local)
+
+Weekly plans and recurring patterns now have immutable tenant/office ownership,
+with inherited child and audit boundaries. Creation and clone forms capture the
+workspace office/version; edits retain their source. New/expanded/activated windows
+require complete dated-workplace coverage. Hidden cross-office overlaps fail
+without silently retiring records. Read, actions, activation and office grants are
+independent; closed offices retain Read and reject changes. Clone audit identities
+stay within each office. Protected effective-time/history selection follows dated
+workplaces without exposing hidden sources. Existing frozen history is unchanged.
+
+Migration 123 backfills roots/audit ownership once, without a runtime initial-office
+fallback or tenant exception. Forced rollback and exact preservation of 128 prior
+tables, excluding only explicit ownership metadata, are rehearsed locally.
+Daily slots and daily overrides are the next slice (2D4B3B2); bulk week-off
+selection, selectors, appointments and operational release checks remain pending.
+Seven nested tenant policies use bounded ancestry to avoid recursive parent-policy
+expansion; tenant and office enforcement remain separate. All 91 focused and 176
+broader regression checks pass without skips. The real Chrome workflow passed;
+form/list screenshots were inspected. Build, TypeScript and changed-file lint
+passed. No push, hosted migration, deployment
+or client-data change. See the
+[Flexible plan office contract](FLEXIBLE_PLAN_OFFICES_R10.md) for current bounds.
+
 ## R10 - Protected effective working time (phase 2D4B3A, local)
 
 Booking and before/after plan checks now use one protected timing adapter for

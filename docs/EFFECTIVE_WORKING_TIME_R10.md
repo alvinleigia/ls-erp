@@ -70,9 +70,10 @@ policy exactly, including schedules, plans, grants, snapshots and private leave
 evidence. Existing canonical source functions are also unchanged. A forced final
 failure proves rollback removes the new function and preserves the baseline.
 
-Next, add native immutable tenant/office ownership to Flexible weekly/recurring
-plans, daily slots and daily overrides, with inherited child boundaries and
-office-aware audits, selectors and captured creation context. Bulk override
+Flexible weekly/recurring ownership is now implemented locally in phase
+2D4B3B1; see `FLEXIBLE_PLAN_OFFICES_R10.md`. Next, add native immutable
+tenant/office ownership to daily slots and daily overrides, with inherited
+boundaries, office-aware audits, selectors and captured creation context. Bulk override
 week-off selection must also use the correct dated-workplace source instead of
 an ordinary tenant-wide default lookup. Preserve weekly/recurring anchors and
 frozen history, and validate full workplace coverage for assignment windows.

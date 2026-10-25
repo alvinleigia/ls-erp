@@ -1,4 +1,5 @@
 import type { Weekday } from "@/types/scheduling"
+export type WorkforceOffice = { id: string; name: string; companyName: string; active: boolean }
 export type { AppointmentConflict } from "@/types/appointments"
 
 export type StaffOption = {
@@ -142,6 +143,8 @@ export type StaffFlexibleWeekDay = {
 }
 
 export type StaffFlexibleWeekPlan = {
+  officeId: string
+  office?: WorkforceOffice | null
   id: string
   staffId: string | null
   staffProfileId: string
@@ -179,6 +182,8 @@ export type StaffFlexiblePatternWeek = {
 }
 
 export type StaffFlexiblePattern = {
+  officeId: string
+  office?: WorkforceOffice | null
   id: string
   staffId: string | null
   staffProfileId: string
@@ -191,6 +196,8 @@ export type StaffFlexiblePattern = {
 }
 
 export type StaffFlexiblePatternListItem = {
+  officeId: string
+  office?: WorkforceOffice | null
   id: string
   staffId: string | null
   staffProfileId: string

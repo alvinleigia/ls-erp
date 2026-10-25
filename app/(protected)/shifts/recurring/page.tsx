@@ -1,6 +1,7 @@
 "use client"
 import { useBusinessModules } from "@/platform/module-provider"
 import { useCurrentResourceAction } from "@/platform/access/view-guard"
+import { useCreationOfficeSnapshot } from "@/platform/companies/creation-snapshot"
 import { DraftPanel, RecordPanel, ReadOnlyFields } from "@/components/erp/record-detail"
 import { RecurringPlanSummary } from "./recurring-plan-summary"
 import { Section } from "@/components/erp/section"
@@ -158,6 +159,7 @@ export default function ShiftRecurringPlansPage() {
   const [assignPreview, setAssignPreview] = React.useState<ImpactPreview | null>(null)
   const [previewLoading, setPreviewLoading] = React.useState(false)
   const [createOpen, setCreateOpen] = React.useState(false)
+  const creationHeaders = useCreationOfficeSnapshot(createOpen || Boolean(cloneTarget) || Boolean(assignTarget))
   const [createStaffId, setCreateStaffId] = React.useState("")
   const [createName, setCreateName] = React.useState("")
   const [createValidFrom, setCreateValidFrom] = React.useState("")
@@ -710,7 +712,7 @@ export default function ShiftRecurringPlansPage() {
       try {
         const response = await fetch("/api/shifts/flexible-patterns/impact-preview", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", ...(input.mode === "CLONE" ? await creationHeaders() : {}) },
           body: JSON.stringify(input),
         })
         if (!response.ok) {
@@ -723,7 +725,7 @@ export default function ShiftRecurringPlansPage() {
         setPreviewLoading(false)
       }
     },
-    []
+    [creationHeaders]
   )
 
   const previewDeactivateImpact = React.useCallback(async () => {
@@ -920,7 +922,7 @@ export default function ShiftRecurringPlansPage() {
     try {
       const response = await fetch(`/api/shifts/flexible-patterns/${cloneTarget.id}/clone`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...await creationHeaders() },
         body: JSON.stringify({
           name: cloneName,
           validFrom: cloneValidFrom,
@@ -942,7 +944,7 @@ export default function ShiftRecurringPlansPage() {
     } finally {
       setActionLoading(false)
     }
-  }, [cloneActivate, cloneName, cloneTarget, cloneValidFrom, cloneValidTo, loadPlans])
+  }, [cloneActivate, cloneName, cloneTarget, cloneValidFrom, cloneValidTo, loadPlans, creationHeaders])
 
   const assignPattern = React.useCallback(async () => {
     if (!assignTarget) return
@@ -962,7 +964,7 @@ export default function ShiftRecurringPlansPage() {
     try {
       const response = await fetch(`/api/shifts/flexible-patterns/${assignTarget.id}/clone`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...await creationHeaders() },
         body: JSON.stringify({
           name: assignName,
           targetStaffId: assignStaffId,
@@ -985,7 +987,7 @@ export default function ShiftRecurringPlansPage() {
     } finally {
       setActionLoading(false)
     }
-  }, [assignActivate, assignName, assignStaffId, assignTarget, assignValidFrom, assignValidTo, loadPlans])
+  }, [assignActivate, assignName, assignStaffId, assignTarget, assignValidFrom, assignValidTo, loadPlans, creationHeaders])
 
   const saveEditPattern = React.useCallback(async () => {
     if (!editPatternId || !editStaffId) {
@@ -1080,7 +1082,7 @@ export default function ShiftRecurringPlansPage() {
     try {
       const response = await fetch("/api/shifts/flexible-patterns", {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...await creationHeaders() },
         body: JSON.stringify({
           staffId: createStaffId,
           name: createName,
@@ -1130,6 +1132,7 @@ export default function ShiftRecurringPlansPage() {
     createValidFrom,
     createValidTo,
     loadPlans,
+    creationHeaders,
   ])
 
   const columns = React.useMemo<ColumnDef<StaffFlexiblePatternListItem>[]>(
@@ -1139,7 +1142,7 @@ export default function ShiftRecurringPlansPage() {
         header: () => <div>Pattern</div>,
         cell: ({ row }) => (
           <div className="space-y-0.5">
-            <button type="button" className="font-medium underline underline-offset-4" onClick={() => setViewing(row.original)}>{row.original.name?.trim() || "Untitled pattern"}</button>
+            {row.original.office && <p className="text-xs text-muted-foreground">{row.original.office.companyName} / {row.original.office.name}</p>}<button type="button" className="font-medium underline underline-offset-4" onClick={() => setViewing(row.original)}>{row.original.name?.trim() || "Untitled pattern"}</button>
             <div className="text-xs text-muted-foreground">{row.original.id.slice(-8)}</div>
           </div>
         ),
@@ -1208,7 +1211,7 @@ export default function ShiftRecurringPlansPage() {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-44">
-              <DropdownMenuItem disabled={!canEdit} onClick={() => void openEditDialog(row.original)}>
+              <DropdownMenuItem disabled={!canEdit || row.original.office?.active === false} onClick={() => void openEditDialog(row.original)}>
                 Edit
               </DropdownMenuItem>
               <DropdownMenuItem disabled={!can("shiftRoster.read")} asChild>
@@ -1223,7 +1226,7 @@ export default function ShiftRecurringPlansPage() {
               <DropdownMenuItem
                 className="text-destructive focus:text-destructive"
                 onClick={() => setDeactivateTarget(row.original)}
-                disabled={!canArchive || !row.original.isActive}
+                disabled={!canArchive || !row.original.isActive || row.original.office?.active === false}
               >
                 Deactivate
               </DropdownMenuItem>
@@ -1256,7 +1259,7 @@ export default function ShiftRecurringPlansPage() {
     <div className={pageClass}>
       <PageHeader title={<> Recurring Plans </>} description={<> Manage flexible recurring availability patterns across staff. </>} actions={<> <Button disabled={!canCreate} type="button" onClick={openCreateDialog}>New recurring plan</Button> </>} />
 
-      {viewing && <RecordPanel title={viewing.name || "Recurring plan"} description="Saved recurring availability." onClose={() => setViewing(null)} actions={<Button disabled={!canEdit} type="button" onClick={() => { void openEditDialog(viewing); setViewing(null) }}>Edit details</Button>}><Section title="Pattern details"><ReadOnlyFields fields={[{label:"Staff",value:viewing.staffName || viewing.staffEmail},{label:"Cycle weeks",value:viewing.cycleLengthWeeks},{label:"Valid from",value:formatDate(viewing.validFrom)},{label:"Valid to",value:viewing.validTo?formatDate(viewing.validTo):"Open ended"},{label:"Status",value:viewing.isActive?"Active":"Inactive"},{label:"Effective now",value:viewing.isCurrentlyEffective?"Yes":"No"}]} /></Section><RecurringPlanSummary key={viewing.id} id={viewing.id} /></RecordPanel>}
+      {viewing && <RecordPanel title={viewing.name || "Recurring plan"} description="Saved recurring availability." onClose={() => setViewing(null)} actions={<Button disabled={!canEdit || viewing.office?.active === false} type="button" onClick={() => { void openEditDialog(viewing); setViewing(null) }}>Edit details</Button>}><Section title="Pattern details"><ReadOnlyFields fields={[{label:"Office",value:viewing.office ? `${viewing.office.companyName} / ${viewing.office.name}` : viewing.officeId},{label:"Staff",value:viewing.staffName || viewing.staffEmail},{label:"Cycle weeks",value:viewing.cycleLengthWeeks},{label:"Valid from",value:formatDate(viewing.validFrom)},{label:"Valid to",value:viewing.validTo?formatDate(viewing.validTo):"Open ended"},{label:"Status",value:viewing.isActive?"Active":"Inactive"},{label:"Effective now",value:viewing.isCurrentlyEffective?"Yes":"No"}]} /></Section><RecurringPlanSummary key={viewing.id} id={viewing.id} /></RecordPanel>}
       <Surface>
       <TableToolbar table={table} showSearch={false}>
         <Input
@@ -1300,7 +1303,7 @@ export default function ShiftRecurringPlansPage() {
       <TablePagination table={table} totalRows={totalRows} />
       </Surface>
 
-      {canCreate && createOpen && <DraftPanel title="New recurring plan" description="Configure repeating availability, then review the impact before saving." fingerprint={{staffId:createStaffId,name:createName,validFrom:createValidFrom,validTo:createValidTo,cycle:createCycleLength,weeks:createDraftWeeks}} saving={actionLoading || previewLoading} error={formError} saveLabel="Create pattern" onClose={() => setCreateOpen(false)} onSubmit={() => void createPattern()} ><div className="space-y-5"><Section title="Pattern details"><div className="space-y-1">
+      {canCreate && createOpen && <DraftPanel title="New recurring plan" description="Create in the selected workspace office. Staff need workplace coverage for the full plan window." fingerprint={{staffId:createStaffId,name:createName,validFrom:createValidFrom,validTo:createValidTo,cycle:createCycleLength,weeks:createDraftWeeks}} saving={actionLoading || previewLoading} error={formError} saveLabel="Create pattern" onClose={() => setCreateOpen(false)} onSubmit={() => void createPattern()} ><div className="space-y-5"><Section title="Pattern details"><div className="space-y-1">
               <Label className="text-xs text-muted-foreground">Staff</Label>
               <Select aria-label="Staff"
                 className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"

@@ -31,23 +31,12 @@ export async function setStaffSchedulingMode(tx: Prisma.TransactionClient,
     await requireBusinessModule(tx, tenantId, "shifts")
     requirePermission({ ...identity, role: accessUser.role, permissions: assignedPermissions(accessUser) }, "shiftRoster.edit")
     const now = new Date()
-    const setting = await tx.appSetting.findUnique({ where: { tenantId }, select: { timeZone: true } })
-    const { today, weekStart } = schedulingModeDates(now, setting?.timeZone ?? "UTC")
     if (existing) {
       const staffProfileId = existing.id
-      if (schedulingMode === "FLEXIBLE") {
-        if (await tx.staffScheduleAssignment.findFirst({ where: { staffProfileId,
-          OR: [{ endDate: null }, { endDate: { gte: today } }] }, select: { id: true } })) {
-          throw new BusinessError(409, "Cannot switch to Flexible while active/future shift schedule assignments exist. Remove schedule assignments first.")
-        }
-      } else {
-        const [pattern, week, slot] = await Promise.all([
-          tx.staffFlexiblePattern.findFirst({ where: { staffProfileId, isActive: true, OR: [{ validTo: null }, { validTo: { gte: today } }] }, select: { id: true } }),
-          tx.staffFlexibleWeekPlan.findFirst({ where: { staffProfileId, weekStartDate: { gte: weekStart } }, select: { id: true } }),
-          tx.staffFlexibleAvailability.findFirst({ where: { staffProfileId, date: { gte: today } }, select: { id: true } }),
-        ])
-        if (pattern || week || slot) throw new BusinessError(409, "Cannot switch to Standard while active/future flexible availability exists. Clear flexible plans/slots first.")
-      }
+      const [plan] = await tx.$queryRaw<{ blocked: boolean }[]>`SELECT app.scheduling_mode_plan_conflict(${tenantId},${staffProfileId},${schedulingMode}) AS blocked`
+      if (plan.blocked) throw new BusinessError(409, schedulingMode === "FLEXIBLE"
+        ? "Cannot switch to Flexible while active/future shift schedule assignments exist. Remove schedule assignments first."
+        : "Cannot switch to Standard while active/future flexible availability exists. Clear flexible plans/slots first.")
       // An explicit mode switch is not a command to cancel or move bookings.
       // Do not disclose customer details to users without Appointments access.
       if ((await activeStaffBookingSlots(tx, tenantId, [staffProfileId], now)).length) {

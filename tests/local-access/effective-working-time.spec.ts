@@ -20,7 +20,7 @@ test("hidden Flexible hours and daily overrides still protect bookings and templ
     await fixture.db.query('INSERT INTO "Service"(id,"tenantId","categoryId",name,"durationMinutes","priceCents","updatedAt") VALUES($1,$2,$1,\'Effective hours consultation\',60,1000,now())', [service, fixture.slug])
     await fixture.db.query('INSERT INTO "ShiftTemplate"(id,"tenantId",name,"startTime","endTime","updatedAt") VALUES($1,$2,\'Booked override\',\'12:00\',\'20:00\',now())', [template, fixture.slug])
     await fixture.db.query('INSERT INTO "ShiftTemplateBreak"(id,"templateId","startTime","endTime") VALUES($1,$2,\'15:00\',\'15:30\')', [hidden + "_template_break", template])
-    await fixture.db.query('INSERT INTO "StaffFlexibleWeekPlan"(id,"staffProfileId","weekStartDate","updatedAt") VALUES($1,$2,\'2036-02-04\',now())', [hidden, profile])
+    await fixture.db.query('INSERT INTO "StaffFlexibleWeekPlan"(id,"tenantId","officeId","staffProfileId","weekStartDate","updatedAt") VALUES($1,(SELECT u."tenantId" FROM "StaffProfile" p JOIN "User" u ON u.id=p."userId" WHERE p.id=$2),(SELECT o.id FROM "StaffProfile" p JOIN "User" u ON u.id=p."userId" JOIN "BusinessOffice" o ON o."tenantId"=u."tenantId" AND o."isInitial" WHERE p.id=$2),$2,\'2036-02-04\',now())', [hidden, profile])
     await fixture.db.query('INSERT INTO "StaffFlexibleWeekDay"(id,"planId",day,"updatedAt") VALUES($1,$1,\'MONDAY\',now())', [hidden])
     await fixture.db.query('INSERT INTO "StaffFlexibleWeekSlot"(id,"dayId","startTime","endTime","updatedAt") VALUES($1,$1,\'14:00\',\'22:00\',now())', [hidden])
     await fixture.db.query('INSERT INTO "StaffFlexibleWeekBreak"(id,"slotId","startTime","endTime","updatedAt") VALUES($1,$1,\'18:00\',\'19:00\',now())', [hidden])

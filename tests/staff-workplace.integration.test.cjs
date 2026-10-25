@@ -115,8 +115,8 @@ test('all current/future shift sources block transfer while ended work does not'
   ['StaffScheduleAssignment','INSERT INTO "StaffScheduleAssignment"(id,"staffProfileId","scheduleId","startDate","updatedAt") VALUES($1,$1,$2,\'2036-01-01\',now())',[staff,schedule]],
   ['StaffShiftOverride','INSERT INTO "StaffShiftOverride"(id,"staffProfileId",date,"templateId","updatedAt") VALUES($1,$1,\'2036-01-07\',$2,now())',[staff,template]],
   ['StaffFlexibleAvailability','INSERT INTO "StaffFlexibleAvailability"(id,"staffProfileId",date,"startTime","endTime","updatedAt") VALUES($1,$1,\'2036-01-07\',\'09:00\',\'17:00\',now())',[staff]],
-  ['StaffFlexibleWeekPlan','INSERT INTO "StaffFlexibleWeekPlan"(id,"staffProfileId","weekStartDate","updatedAt") VALUES($1,$1,\'2036-01-07\',now())',[staff]],
-  ['StaffFlexiblePattern','INSERT INTO "StaffFlexiblePattern"(id,"staffProfileId",name,"cycleLengthWeeks","validFrom","isActive","updatedAt") VALUES($1,$1,\'Private pattern\',1,\'2036-01-01\',true,now())',[staff]],
+  ['StaffFlexibleWeekPlan','INSERT INTO "StaffFlexibleWeekPlan"(id,"tenantId","officeId","staffProfileId","weekStartDate","updatedAt") VALUES($1,(SELECT u."tenantId" FROM "StaffProfile" p JOIN "User" u ON u.id=p."userId" WHERE p.id=$1),(SELECT o.id FROM "StaffProfile" p JOIN "User" u ON u.id=p."userId" JOIN "BusinessOffice" o ON o."tenantId"=u."tenantId" AND o."isInitial" WHERE p.id=$1),$1,\'2036-01-07\',now())',[staff]],
+  ['StaffFlexiblePattern','INSERT INTO "StaffFlexiblePattern"(id,"tenantId","officeId","staffProfileId",name,"cycleLengthWeeks","validFrom","isActive","updatedAt") VALUES($1,(SELECT u."tenantId" FROM "StaffProfile" p JOIN "User" u ON u.id=p."userId" WHERE p.id=$1),(SELECT o.id FROM "StaffProfile" p JOIN "User" u ON u.id=p."userId" JOIN "BusinessOffice" o ON o."tenantId"=u."tenantId" AND o."isInitial" WHERE p.id=$1),$1,\'Private pattern\',1,\'2036-01-01\',true,now())',[staff]],
  ]
  for(const [table,sql,args]of sources){await root.query(sql,args);await post(staff,assign(b,1,v.latest.id,'2036-01-07'),admin,409);assert.deepEqual(await state(staff),{placements:1,version:1,audits:1});await root.query(`DELETE FROM "${table}" WHERE "staffProfileId"=$1`,[staff])}
  await root.query('INSERT INTO "StaffShiftOverride"(id,"staffProfileId",date,"templateId","updatedAt") VALUES($1,$1,\'2020-01-01\',$2,now())',[staff,template]);await post(staff,assign(b,1,v.latest.id,'2036-01-07'))
@@ -155,7 +155,7 @@ test('canceling future placement needs archive even when edit is allowed and can
  const staff=await placed(),v=await view(staff);await post(staff,assign(b,1,v.latest.id,'2036-01-07'));const next=await view(staff)
  await root.query('UPDATE "TenantUserAccess" SET rules=jsonb_set(rules,\'{shiftRoster.archive}\',\'"NONE"\') WHERE "userId"=$1',[both])
  try{await post(staff,{action:'cancel',version:2,assignmentId:next.latest.id},both,403)}finally{await grant(both)}
- await root.query('INSERT INTO "StaffFlexibleWeekPlan"(id,"staffProfileId","weekStartDate","updatedAt") VALUES($1,$1,\'2036-01-07\',now())',[staff])
+ await root.query('INSERT INTO "StaffFlexibleWeekPlan"(id,"tenantId","officeId","staffProfileId","weekStartDate","updatedAt") VALUES($1,(SELECT u."tenantId" FROM "StaffProfile" p JOIN "User" u ON u.id=p."userId" WHERE p.id=$1),(SELECT o.id FROM "StaffProfile" p JOIN "User" u ON u.id=p."userId" JOIN "BusinessOffice" o ON o."tenantId"=u."tenantId" AND o."isInitial" WHERE p.id=$1),$1,\'2036-01-07\',now())',[staff])
  await post(staff,{action:'cancel',version:2,assignmentId:next.latest.id},admin,409);assert.equal((await view(staff)).version,2)
 })
 test('historical source access permits moving out of a closed office, without changing history',async()=>{

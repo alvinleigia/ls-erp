@@ -25,7 +25,7 @@ export async function auditPlan(tx: Prisma.TransactionClient, actor: BusinessAct
   await recordDomainAuditEvent(tx, {
     tenantId: actor.tenantId, actorUserId: actor.userId, actorRole: actor.role, requestId: actor.requestId,
     event: `workforce.${resource}.${action}`, entityType: resource, entityId: id,
-    ...(resource === "shiftSchedules" ? { metadata: { officeId: (before as { officeId?: string } | null)?.officeId ?? (after as { officeId?: string } | null)?.officeId ?? "" } } : {}),
+    ...((after as { officeId?: string } | null)?.officeId || (before as { officeId?: string } | null)?.officeId ? { metadata: { officeId: (after as { officeId?: string } | null)?.officeId ?? (before as { officeId?: string } | null)?.officeId, ...(resource === "shiftPlans" || resource === "shiftRoster" ? { officeFamily: "flexiblePlans" } : {}) } } : {}),
     ...(before ? { before: JSON.parse(JSON.stringify(before)) } : {}),
     after: JSON.parse(JSON.stringify(after)),
   })

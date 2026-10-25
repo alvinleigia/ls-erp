@@ -686,7 +686,9 @@ test('recurring lists, details and clone preserve structure and audit the new de
  const structure=row=>row.weeks.map(w=>({weekIndex:w.weekIndex,days:w.days.map(d=>({day:d.day,isOff:d.isOff,sortOrder:d.sortOrder,slots:d.slots.map(s=>({startTime:s.startTime,endTime:s.endTime,sortOrder:s.sortOrder,breaks:s.breaks.map(b=>({startTime:b.startTime,endTime:b.endTime,sortOrder:b.sortOrder}))}))}))}))
  assert.deepEqual(structure(cloned),structure(batchPattern))
  const audit=(await root.query(`SELECT "entityId","before","after" FROM "AuditLog" WHERE "entityId"=$1 AND event='workforce.shiftPlans.create'`,[inactive])).rows[0]
- assert.equal(audit.entityId,inactive);assert.equal(audit.before.id,batchPattern.id);assert.equal(audit.after.id,inactive);assert.equal(audit.after.isActive,false)
+ assert.equal(audit.entityId,inactive);assert.equal(audit.before,null);assert.equal(audit.after.id,inactive);assert.equal(audit.after.isActive,false)
+ const sourceAudit=(await root.query(`SELECT "requestId",metadata FROM "AuditLog" WHERE "entityId"=$1 AND event='workforce.shiftPlans.clone_source' ORDER BY "createdAt" DESC LIMIT 1`,[batchPattern.id])).rows[0]
+ assert.ok(sourceAudit);assert.equal(sourceAudit.metadata.officeFamily,'flexiblePlans')
  await perms(['shiftPlans.read','shiftPlans.create','shiftPlans.archive'])
  const active=(await ok(await call('shifts/flexible-patterns/[id]/clone','POST',clone,batchPattern.id,'MANAGER'))).id
  assert.equal((await root.query('SELECT "isActive" FROM "StaffFlexiblePattern" WHERE id=$1',[batchPattern.id])).rows[0].isActive,false)

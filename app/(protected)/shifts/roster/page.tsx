@@ -1,4 +1,5 @@
 "use client"
+import { useCreationOfficeSnapshot } from "@/platform/companies/creation-snapshot"
 import { useBusinessModules } from "@/platform/module-provider"
 
 import { ActionDialogContent } from "@/components/erp/action-dialog"
@@ -183,6 +184,7 @@ export default function RosterPage() {
   const [historyDays, setHistoryDays] = React.useState<RosterHistoryDay[]>([])
   const approvedLeavesRequestVersionRef = React.useRef(0)
   const [overrideOpen, setOverrideOpen] = React.useState(false)
+  const creationHeaders = useCreationOfficeSnapshot(overrideOpen)
   const [saveAsNewConfirmOpen, setSaveAsNewConfirmOpen] = React.useState(false)
   const [overrideStaffId, setOverrideStaffId] = React.useState<string>("")
   const [overrideStartDate, setOverrideStartDate] = React.useState<string>("")
@@ -1207,6 +1209,10 @@ export default function RosterPage() {
     return Boolean(flexibleWeekPlanMap[overrideStaffId]?.[overrideStartDate])
   }, [flexibleWeekPlanMap, overrideStaffId, overrideStartDate])
 
+  const flexibleSourceOffice = flexibleEditorMode === "WEEK_OVERRIDE"
+    ? flexibleWeekPlanMap[overrideStaffId]?.[overrideStartDate]?.office
+    : flexiblePatterns.find(pattern => pattern.id === recurringPatternId)?.office
+
   const isOverrideStaffFlexible = React.useMemo(
     () => (overrideStaffId ? (staffSchedulingModeMap[overrideStaffId] ?? "STANDARD") === "FLEXIBLE" : false),
     [overrideStaffId, staffSchedulingModeMap]
@@ -1537,7 +1543,7 @@ export default function RosterPage() {
         if (flexibleEditorMode === "WEEK_OVERRIDE") {
           const response = await fetch("/api/shifts/flexible-week-plans", {
             method: "PUT",
-            headers: { "Content-Type": "application/json" },
+            headers: { "Content-Type": "application/json", ...await creationHeaders() },
             body: JSON.stringify({
               staffId: overrideStaffId,
               weekStartDate: overrideStartDate,
@@ -1566,7 +1572,7 @@ export default function RosterPage() {
         } else {
           const response = await fetch("/api/shifts/flexible-patterns", {
             method: "PUT",
-            headers: { "Content-Type": "application/json" },
+            headers: { "Content-Type": "application/json", ...await creationHeaders() },
             body: JSON.stringify({
               patternId: saveAsNewPattern ? undefined : recurringPatternId || undefined,
               staffId: overrideStaffId,
@@ -1618,7 +1624,7 @@ export default function RosterPage() {
 
       const response = await fetch("/api/shifts/overrides", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...await creationHeaders() },
         body: JSON.stringify({
           staffId: overrideStaffId,
           templateId: overrideUnavailable ? "" : overrideTemplateId,
@@ -1673,6 +1679,7 @@ export default function RosterPage() {
     recurringValidFrom,
     recurringValidTo,
     useFlexibleSlot,
+    creationHeaders,
   ])
 
   const previewRecurringImpact = React.useCallback(async () => {
@@ -1693,7 +1700,7 @@ export default function RosterPage() {
     try {
       const response = await fetch("/api/shifts/flexible-patterns/impact-preview", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...(recurringImpactMode === "CLONE" ? await creationHeaders() : {}) },
         body: JSON.stringify({
           mode: recurringImpactMode,
           patternId: recurringPatternId,
@@ -1737,6 +1744,7 @@ export default function RosterPage() {
     recurringPatternId,
     recurringValidFrom,
     recurringValidTo,
+    creationHeaders,
   ])
 
   React.useEffect(() => {
@@ -1750,6 +1758,7 @@ export default function RosterPage() {
     recurringCycleLength,
     recurringDraftWeeks,
     recurringImpactMode,
+    creationHeaders,
   ])
 
   const clearOverride = React.useCallback(async () => {
@@ -2502,6 +2511,11 @@ export default function RosterPage() {
             ) : null}
             {useFlexibleSlot ? (
               <div className="space-y-3 rounded-md border p-3">
+                <p className="text-sm text-muted-foreground">
+                  {flexibleSourceOffice
+                    ? `Office: ${flexibleSourceOffice.companyName} / ${flexibleSourceOffice.name}${flexibleSourceOffice.active ? "" : " (closed; read only)"}`
+                    : "New plans use the selected workspace office. Staff must be placed there for the entire plan."}
+                </p>
                 <div className="space-y-1">
                   <Label className="text-xs text-muted-foreground">Flexible plan type</Label>
                   <Select aria-label="Flexible plan type"
