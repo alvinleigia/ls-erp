@@ -6,7 +6,7 @@ const { NextRequest } = require('next/server')
 process.env.APP_ROOT_DOMAIN = 'leiwissen.leigia.com'
 process.env.PLATFORM_ADMIN_TENANT_SLUG = 'platform'
 // Keep the real routing guard; authentication itself is covered by login tests.
-const authPath = require.resolve('../auth.ts')
+const authPath = require.resolve('../auth-proxy.ts')
 require.cache[authPath] = { id: authPath, filename: authPath, loaded: true, exports: { auth: handler => handler } }
 const guard = require('../proxy.ts').default
 

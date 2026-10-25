@@ -45,7 +45,17 @@ export async function login(browser: Browser, origin: string, email: string, tim
   return { context, page }
 }
 export async function json(context: BrowserContext, path: string, status = 200, method = "GET", data?: unknown) {
-  const result = await context.request.fetch(path, { method, ...(data === undefined ? {} : { data }) })
+  // Each API fixture creation captures its explicit persisted office. Actual UI
+  // forms independently capture at mount and have stale-context browser tests.
+  let headers: Record<string, string> = {}
+  if (method === "POST" && (/^\/api\/(?:crm\/(?:enquiries|opportunities|work|enquiry-imports)|real-estate\/projects)(?:\?|$)/.test(path) || /^\/api\/crm\/activity-plans\/[^/]+\/apply$/.test(path))) {
+    const response = await context.request.get("/api/workspace/office")
+    if (response.ok()) {
+      const office = await response.json()
+      if (office.creationOffice) headers = { "x-office-id": office.creationOffice.id, "x-office-version": String(office.version) }
+    }
+  }
+  const result = await context.request.fetch(path, { method, headers, ...(data === undefined ? {} : { data }) })
   expect(result.status(), `${method} ${path}: ${await result.text()}`).toBe(status)
   return result.json()
 }

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 
-import { auth } from "@/auth"
+import { auth } from "@/auth-proxy"
 
 const PLATFORM_TENANT_SLUG = (
   process.env.PLATFORM_ADMIN_TENANT_SLUG?.trim().toLowerCase() || "platform"

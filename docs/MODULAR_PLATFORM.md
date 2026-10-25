@@ -1,3 +1,20 @@
+## R10 - Hosting storage optimization (2026-10-25)
+
+37 obsolete Vercel deployments were removed while active aliases, current
+targets and rollback candidates were preserved. Project build filters now keep
+main in production and staging in staging. The database-free routing proxy and
+PostgreSQL-only Prisma packaging reduce retained function size substantially.
+Eight targeted checks, isolated packaged-client PostgreSQL queries, real Chrome
+authentication/isolation/status checks, build, TypeScript and lint passed.
+
+The hosting-only staging deployment is dpl_EHNXg5BRZVXQft9paiVbkSbR2JQt,
+from its existing hosted baseline c2d0a9e. The hosting-only production release
+is dpl_FdMekGVQcdDYNqegF8cy58rAJq2a from baseline 160becb. Production login
+and tenant administration, plus staging login and CRM/project reads passed. No
+GitHub push or database migration ran. Both deployed proxies are 0.36 MiB. Pending R10 features and migrations remain local. Retention changes
+still require saving in the Vercel dashboard; deletion does not erase accrued
+usage. See [hosting controls and release evidence](HOSTING_STORAGE.md).
+
 ## R10 - Sales office ownership (phase 2B, local)
 
 CRM enquiries/opportunities/activities, projects, import batches and plan launches

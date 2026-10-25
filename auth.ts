@@ -1,4 +1,5 @@
 import NextAuth from "next-auth"
+import authConfig from "./auth.config"
 import bcrypt from "bcryptjs"
 import Credentials from "next-auth/providers/credentials"
 
@@ -7,6 +8,7 @@ import { resolvePlatformConsoleAccess } from "@/lib/platform-console"
 import { resolveTenantFromHostHeader } from "@/lib/tenancy"
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
+  ...authConfig,
   providers: [
     Credentials({
       credentials: {
@@ -61,9 +63,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       },
     }),
   ],
-  session: { strategy: "jwt" },
-  pages: { signIn: "/auth/signin" },
   callbacks: {
+    ...authConfig.callbacks,
     async jwt({ token, user }) {
       if (user) {
         token.role = (user as { role?: string }).role
@@ -92,25 +93,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       }
       return token
     },
-    async session({ session, token }) {
-      if (session.user) {
-        session.user.id = token.sub ?? session.user.id
-        ;(session.user as { role?: string }).role = token.role as string | undefined
-        ;(session.user as { tenantId?: string }).tenantId = token.tenantId as
-          | string
-          | undefined
-        ;(session.user as { tenantSlug?: string }).tenantSlug = token.tenantSlug as
-          | string
-          | undefined
-        ;(session.user as { platformAccessMode?: string | null }).platformAccessMode =
-          (token.platformAccessMode as string | null | undefined) ?? null
-        ;(session.user as { organizationIds?: string[] }).organizationIds =
-          (token.organizationIds as string[] | undefined) ?? []
-        ;(session.user as { organizationRolesById?: Record<string, string> }).organizationRolesById =
-          (token.organizationRolesById as Record<string, string> | undefined) ?? {}
-      }
-      return session
-    },
     async signIn({ user }) {
       const tenantId = (user as { tenantId?: string | null })?.tenantId ?? null
       if (user?.id && tenantId) {
@@ -122,36 +104,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         })
       }
       return true
-    },
-    async redirect({ url, baseUrl }) {
-      if (url.startsWith("/")) return `${baseUrl}${url}`
-
-      try {
-        const target = new URL(url)
-        const base = new URL(baseUrl)
-        if (target.origin === base.origin) return url
-
-        const targetHost = target.hostname.toLowerCase()
-        const baseHost = base.hostname.toLowerCase()
-        if (
-          baseHost === "localhost" &&
-          (targetHost === "localhost" || targetHost.endsWith(".localhost"))
-        ) {
-          return url
-        }
-
-        const rootDomain = process.env.APP_ROOT_DOMAIN?.trim().toLowerCase()
-        if (rootDomain) {
-          const sameRootDomain =
-            (targetHost === rootDomain || targetHost.endsWith(`.${rootDomain}`)) &&
-            (baseHost === rootDomain || baseHost.endsWith(`.${rootDomain}`))
-          if (sameRootDomain) return url
-        }
-      } catch {
-        return baseUrl
-      }
-
-      return baseUrl
     },
   },
 })

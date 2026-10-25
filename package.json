@@ -51,6 +51,7 @@
     "test:catalog:browser": "node scripts/test-catalog.cjs --browser",
     "test:sales-orders": "node scripts/test-sales-orders.cjs",
     "test:branding": "node scripts/test-branding.cjs",
+    "test:hosting": "node scripts/test-sales-orders.cjs --hosting --browser",
     "test:storage-recovery": "node --test tests/storage-recovery.test.cjs",
     "test:crm:quotations:integration": "node --require ./tests/register.cjs --test --test-force-exit tests/quotations.integration.test.cjs",
     "test:access:integration": "node --require ./tests/register.cjs --test --test-force-exit tests/access-roles.integration.test.cjs tests/access-role-migration.test.cjs",
