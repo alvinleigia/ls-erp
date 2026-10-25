@@ -1,3 +1,24 @@
+## R10 - Office membership and context backend (phase 2A, local)
+
+The shared backend supports exact-office and company grants, explicit subsidiary
+coverage, versioned creation-office preference, fresh revocation and audit.
+Closed offices leave creation choices while retained historical eligibility is
+separate. Membership grants no profile action or business-record access by itself.
+Tenant Admin retains security oversight; Manager labels confer no office scope.
+
+Pending migration 113 backfills existing accounts into their initial office as
+ordinary grant data, preserving all 122 preceding tables exactly. Rollback,
+forced RLS, cross-tenant foreign-key failures and maintenance cleanup passed.
+Twenty-two integration tests and the authenticated real-Chrome API flow passed;
+258 existing ERP access checks passed with two historical-only skips. Build,
+TypeScript, schema validation and changed-source lint passed.
+
+Phase 2B still must bind native office ownership, source rules, every module/API,
+reports and restrictive RLS before exposing office controls or releasing office
+isolation. Existing business access remains R9; this is not that release. No
+push, hosted migration, deployment or client-data changes.
+See [membership backend and release boundary](OFFICE_MEMBERSHIP_R10.md).
+
 ## R10 - Company and office directory foundation (local staging branch)
 
 Tenant administrators can manage industry-neutral companies, subsidiaries and

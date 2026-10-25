@@ -59,6 +59,8 @@
     "test:access:profiles": "node scripts/test-sales-orders.cjs --profiles",
     "test:companies": "node scripts/test-sales-orders.cjs --companies",
     "test:companies:browser": "node scripts/test-sales-orders.cjs --companies --browser",
+    "test:office-access": "node scripts/test-sales-orders.cjs --office-access",
+    "test:office-access:browser": "node scripts/test-sales-orders.cjs --office-access --browser",
     "test:access:all:browser": "node scripts/test-sales-orders.cjs --access --browser",
     "test:workflows:e2e": "playwright test --config playwright.local-access.config.ts",
     "test:dates": "node --require ./tests/register.cjs --test tests/date-display.test.cjs tests/work-history-format.test.cjs"

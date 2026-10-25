@@ -9,8 +9,8 @@ type Identity = Pick<BusinessActor, "tenantId" | "userId" | "requestId">
 const companySelect = { id: true, code: true, name: true, parentId: true, isInitial: true, archived: true, version: true, parent: { select: { id: true, code: true, name: true } } } satisfies Prisma.BusinessCompanySelect
 const officeSelect = { id: true, code: true, name: true, companyId: true, isInitial: true, archived: true, version: true, company: { select: { id: true, code: true, name: true } } } satisfies Prisma.BusinessOfficeSelect
 
-// Directory administration only. Company membership and record ownership are
-// introduced together in the next migration, before any office access controls.
+// Directory administration only. Office membership and native record scope are
+// separate layers; directory placement never grants business-record access.
 export function createCompanyService(db: PrismaClient, identity: Identity) {
   async function run<T>(write: boolean, operation: (tx: Prisma.TransactionClient, actor: BusinessActor) => Promise<T>) {
     try {

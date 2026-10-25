@@ -726,6 +726,7 @@ enum StockMovementType {
 }
 
 model User {
+  officePolicy BusinessOfficePolicy?
   recordSharingGrants RecordSharingGrant[]
   accessAssignments TenantRoleAssignment[]
   accessPolicy TenantUserAccess?
@@ -909,6 +910,7 @@ model Tenant {
 
 // Operating structure within a tenant. Platform Organization remains separate.
 model BusinessCompany {
+  officeGrants BusinessCompanyGrant[]
   id String @id @default(cuid())
   tenantId String
   code String
@@ -930,6 +932,8 @@ model BusinessCompany {
 }
 
 model BusinessOffice {
+  creationPolicies BusinessOfficePolicy[]
+  grants BusinessOfficeGrant[]
   id String @id @default(cuid())
   tenantId String
   companyId String
@@ -946,6 +950,41 @@ model BusinessOffice {
   @@unique([tenantId, id])
   @@unique([tenantId, companyId, code])
   @@index([tenantId, companyId, archived])
+}
+
+model BusinessOfficePolicy {
+  tenantId String
+  userId String
+  creationOfficeId String?
+  version Int @default(1)
+  updatedAt DateTime @updatedAt
+  user User @relation(fields: [tenantId, userId], references: [tenantId, id], onDelete: Cascade)
+  creationOffice BusinessOffice? @relation(fields: [tenantId, creationOfficeId], references: [tenantId, id], onDelete: NoAction)
+  offices BusinessOfficeGrant[]
+  companies BusinessCompanyGrant[]
+  @@id([tenantId, userId])
+  @@index([tenantId, creationOfficeId])
+}
+
+model BusinessOfficeGrant {
+  tenantId String
+  userId String
+  officeId String
+  policy BusinessOfficePolicy @relation(fields: [tenantId, userId], references: [tenantId, userId], onDelete: Cascade)
+  office BusinessOffice @relation(fields: [tenantId, officeId], references: [tenantId, id], onDelete: NoAction)
+  @@id([tenantId, userId, officeId])
+  @@index([tenantId, officeId])
+}
+
+model BusinessCompanyGrant {
+  tenantId String
+  userId String
+  companyId String
+  includeSubsidiaries Boolean @default(false)
+  policy BusinessOfficePolicy @relation(fields: [tenantId, userId], references: [tenantId, userId], onDelete: Cascade)
+  company BusinessCompany @relation(fields: [tenantId, companyId], references: [tenantId, id], onDelete: NoAction)
+  @@id([tenantId, userId, companyId])
+  @@index([tenantId, companyId])
 }
 
 model CrmEnquiryImport {

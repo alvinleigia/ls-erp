@@ -4,7 +4,7 @@ import { moduleEnabled } from "../modules"
 import { permits, satisfies } from "../access/policy"
 import { recordLimits, recordScope } from "../access/rules"
 
-export const securityEvents: Prisma.AuditLogWhereInput = { OR: ["structure.", "access.", "module.", "tenant.", "core.invitations.", "crm.team.", "team."].map(prefix => ({ event: { startsWith: prefix } })) }
+export const securityEvents: Prisma.AuditLogWhereInput = { OR: ["workspace.", "structure.", "access.", "module.", "tenant.", "core.invitations.", "crm.team.", "team."].map(prefix => ({ event: { startsWith: prefix } })) }
 
 export async function auditScope(tx: Prisma.TransactionClient, actor: BusinessActor): Promise<Prisma.AuditLogWhereInput> {
  const tenantId = actor.tenantId

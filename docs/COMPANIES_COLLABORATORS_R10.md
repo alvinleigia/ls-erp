@@ -43,6 +43,11 @@ membership together. Do not treat a company/office name as an access grant.
 
 ## Phase 2: shared organizational record scope
 
+Phase 2A now has the local [membership and context backend](OFFICE_MEMBERSHIP_R10.md).
+Its grants do not yet restrict existing business records. Phase 2B must connect
+native ownership, source adapters and RLS before exposing office controls in the UI
+or deploying the office-isolation release.
+
 Add explicit company/office membership and permitted head-office oversight;
 intersect organizational scope with existing action profiles, record rules,
 selected sharing, source privacy and module activation. Parent placement alone
