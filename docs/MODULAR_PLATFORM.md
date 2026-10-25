@@ -1,3 +1,24 @@
+## R10 - Company and office directory foundation (local staging branch)
+
+Tenant administrators can manage industry-neutral companies, subsidiaries and
+offices under Settings. Fresh authority, tenant isolation, hierarchy/cycle guards,
+immutable identities, archival constraints, optimistic concurrency and mandatory
+audit are enforced by the shared platform service and forced RLS. Platform
+Organization remains separate. Company/office business-record scope and external
+collaborator logins are subsequent phases; existing module access stays in effect.
+
+Pending migration 112 creates the initial company/office pair and bootstraps new
+tenants atomically. Its rollback and exact preservation of all 120 preceding
+business tables passed on synthetic local data. Fifteen foundation tests passed;
+258 ERP access regressions passed with two historical-only skips. The real-Chrome
+flow passed and desktop/mobile screenshots were inspected. Build, TypeScript,
+schema validation, changed-source lint and whitespace checks passed. Maintenance
+tenant cleanup was corrected and verified without relaxing normal deletion rules.
+
+Changes remain local on staging: no push, hosted migration, deployment or client
+data changes. See [R10 phases and contract](COMPANIES_COLLABORATORS_R10.md).
+Earlier entries below describe the preceding releases.
+
 ## R9 - Access controls verified on hosted staging (2026-10-25)
 
 Application c2d0a9e is live on ls-erp-staging.vercel.app with migrations 108-111.

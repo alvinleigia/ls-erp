@@ -4,7 +4,7 @@ import { moduleEnabled } from "../modules"
 import { permits, satisfies } from "../access/policy"
 import { recordLimits, recordScope } from "../access/rules"
 
-export const securityEvents: Prisma.AuditLogWhereInput = { OR: ["access.", "module.", "tenant.", "core.invitations.", "crm.team.", "team."].map(prefix => ({ event: { startsWith: prefix } })) }
+export const securityEvents: Prisma.AuditLogWhereInput = { OR: ["structure.", "access.", "module.", "tenant.", "core.invitations.", "crm.team.", "team."].map(prefix => ({ event: { startsWith: prefix } })) }
 
 export async function auditScope(tx: Prisma.TransactionClient, actor: BusinessActor): Promise<Prisma.AuditLogWhereInput> {
  const tenantId = actor.tenantId
@@ -15,6 +15,7 @@ export async function auditScope(tx: Prisma.TransactionClient, actor: BusinessAc
     return {
       // Apply access before pagination/counting; the same predicate guards detail reads.
       AND: [
+        ...(actor.role !== "ADMIN" ? [{ NOT: { event: { startsWith: "structure." } } }] : []),
         ...(!permits(actor, "restrictedFields.read") ? [{ NOT: { event: { startsWith: "crm.customField" } } }] : []),
         // Polymorphic historical snapshots have no record FK. Restricted managers
         // use scoped record timelines; never expose a hidden record via its audit copy.

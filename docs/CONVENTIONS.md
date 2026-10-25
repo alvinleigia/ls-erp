@@ -28,6 +28,7 @@ This is the baseline for new modules (API + UI) in this codebase.
 - Tenant provisioning/lifecycle actions must use `canManageTenants` and remain restricted to platform admin users.
 
 ## Multi-tenant SaaS
+- Operating companies/offices belong to the shared `platform/companies` directory, separate from control-plane `Organization`. Directory management is tenant-admin-only. R10 phase 1 does not yet scope existing business records by office; do not use directory placement as an access grant. See `docs/COMPANIES_COLLABORATORS_R10.md` for the phased migration and enforcement contract.
 - Tenant context is derived from host/subdomain (`lib/tenancy.ts`); API routes should use `requireTenantSession` (`lib/tenant-auth.ts`) for tenant-safe authorization.
 - All tenant-domain reads/writes must filter by `tenantId`; avoid cross-tenant lookups even for internal helper queries.
 - Database isolation is also enforced with Postgres row-level security (RLS) for tenant-owned tables.

@@ -823,6 +823,8 @@ model Organization {
 }
 
 model Tenant {
+  companies BusinessCompany[]
+  offices BusinessOffice[]
   catalogReservationAvailability CatalogReservationAvailability[]
   recordSharingPolicies RecordSharingPolicy[]
   recordSharingGrants RecordSharingGrant[]
@@ -903,6 +905,47 @@ model Tenant {
 
   @@index([status])
   @@index([organizationId])
+}
+
+// Operating structure within a tenant. Platform Organization remains separate.
+model BusinessCompany {
+  id String @id @default(cuid())
+  tenantId String
+  code String
+  name String
+  parentId String?
+  isInitial Boolean @default(false)
+  archived Boolean @default(false)
+  version Int @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  parent BusinessCompany? @relation("CompanyHierarchy", fields: [tenantId, parentId], references: [tenantId, id], onDelete: NoAction)
+  children BusinessCompany[] @relation("CompanyHierarchy")
+  offices BusinessOffice[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, code])
+  @@index([tenantId, parentId, archived])
+}
+
+model BusinessOffice {
+  id String @id @default(cuid())
+  tenantId String
+  companyId String
+  code String
+  name String
+  isInitial Boolean @default(false)
+  archived Boolean @default(false)
+  version Int @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  company BusinessCompany @relation(fields: [tenantId, companyId], references: [tenantId, id], onDelete: NoAction)
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, companyId, code])
+  @@index([tenantId, companyId, archived])
 }
 
 model CrmEnquiryImport {

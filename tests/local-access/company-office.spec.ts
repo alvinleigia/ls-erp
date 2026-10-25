@@ -1,0 +1,52 @@
+import { test, expect } from "@playwright/test"
+import { seed, login, json } from "./fixtures"
+
+test("tenant admin manages companies and offices; staff cannot inspect structure", async ({ browser }, info) => {
+  test.setTimeout(150_000)
+  const fixture = await seed(), admin = await login(browser, fixture.origin, fixture.users.admin.email)
+  let staff: Awaited<ReturnType<typeof login>> | undefined
+  try {
+    await admin.page.goto("/settings/companies")
+    await expect(admin.page.getByRole("heading", { name: "Companies and offices", exact: true })).toBeVisible()
+    await expect(admin.page.getByRole("cell", { name: "Active · Initial", exact: true })).toBeVisible()
+    await admin.page.getByRole("link", { name: "New company", exact: true }).click()
+    await admin.page.getByLabel("Company name", { exact: true }).fill("Northern subsidiary")
+    await admin.page.getByLabel("Code", { exact: true }).fill("north")
+    await admin.page.getByLabel("Parent company", { exact: true }).click()
+    await admin.page.getByRole("option", { name: new RegExp(fixture.slug) }).click()
+    await admin.page.getByRole("button", { name: "Create company", exact: true }).click()
+    await expect(admin.page.getByRole("link", { name: "Northern subsidiary", exact: true })).toBeVisible()
+    const company = (await json(admin.context, "/api/companies?q=NORTH")).items[0]
+    expect(company.code).toBe("NORTH"); expect(company.parentId).toBe(`company_${fixture.slug}`)
+    await admin.page.getByRole("link", { name: "Offices", exact: true }).click()
+    await admin.page.getByRole("link", { name: "New office", exact: true }).click()
+    await admin.page.getByLabel("Office name", { exact: true }).fill("West regional office")
+    await admin.page.getByLabel("Code", { exact: true }).fill("west")
+    await admin.page.getByLabel("Company", { exact: true }).click()
+    await admin.page.getByRole("option", { name: /Northern subsidiary/ }).click()
+    await admin.page.getByRole("button", { name: "Create office", exact: true }).click()
+    await expect(admin.page.getByRole("link", { name: "West regional office", exact: true })).toBeVisible()
+    await admin.page.screenshot({ path: info.outputPath("company-offices-desktop.png"), fullPage: true, animations: "disabled" })
+    await admin.page.getByRole("link", { name: "Companies", exact: true }).click()
+    await admin.page.getByRole("link", { name: "Northern subsidiary", exact: true }).click()
+    await admin.page.getByLabel("Archived", { exact: true }).check()
+    await admin.page.getByRole("button", { name: "Save changes", exact: true }).click()
+    await expect(admin.page.getByText("Archive active subsidiaries and offices first.", { exact: true })).toBeVisible()
+    await admin.page.getByLabel("Archived", { exact: true }).uncheck()
+    // A concurrent edit must remain a conflict, rather than overwrite another admin.
+    await json(admin.context, `/api/companies/${company.id}`, 200, "PATCH", { name: "Northern subsidiary revised", version: company.version })
+    await admin.page.getByRole("button", { name: "Save changes", exact: true }).click()
+    await expect(admin.page.getByText("Company changed. Reload before saving.", { exact: true })).toBeVisible()
+    await admin.page.reload()
+    await expect(admin.page.getByLabel("Company name", { exact: true })).toHaveValue("Northern subsidiary revised")
+    await admin.page.setViewportSize({ width: 390, height: 844 })
+    await admin.page.screenshot({ path: info.outputPath("company-editor-mobile.png"), fullPage: true, animations: "disabled" })
+    expect(await admin.page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+    await json(admin.context, "/api/companies", 400, "POST", { name: "Invalid", code: "?" })
+    staff = await login(browser, fixture.origin, fixture.users.staff.email)
+    await json(staff.context, "/api/companies", 403)
+    await staff.page.goto("/settings/companies")
+    await expect(staff.page.getByRole("heading", { name: "Access unavailable", exact: true })).toBeVisible()
+    await expect(staff.page.getByRole("link", { name: "Companies and offices", exact: true })).toHaveCount(0)
+  } finally { await staff?.context.close(); await admin.context.close(); await fixture.db.end() }
+})

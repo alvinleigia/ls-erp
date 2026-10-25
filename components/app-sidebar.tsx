@@ -203,6 +203,7 @@ export function AppSidebar({ brandingLogo, brandingName }: { brandingLogo?: stri
           : [
               { title: "General", href: "/settings", icon: SettingsIcon, isActive: (current) => current === "/settings" },
               { title: "Branding", href: "/settings/branding", icon: Building2Icon, isActive: (current) => current === "/settings/branding" },
+              { title: "Companies and offices", href: "/settings/companies", icon: Building2Icon, isActive: (current) => current.startsWith("/settings/companies") || current.startsWith("/settings/offices") },
               { title: "Access profiles", href: "/settings/roles", icon: UsersIcon, isActive: (current) => current.startsWith("/settings/roles") },
               { title: "Modules", href: "/settings/modules", icon: PackageIcon, isActive: (current) => current === "/settings/modules" },
               { title: "Terminology", href: "/settings/terminology", icon: TagIcon, isActive: (current) => current === "/settings/terminology" },
@@ -215,7 +216,7 @@ export function AppSidebar({ brandingLogo, brandingName }: { brandingLogo?: stri
     return list.flatMap(section => {
       if (isPlatformConsoleUser) return [section]
       const items = section.items.filter(item => {
-        if (["/settings/roles", "/settings/modules", "/settings/terminology", "/settings/seeds", "/users/invites"].includes(item.href)) return role === "ADMIN"
+        if (["/settings/companies", "/settings/roles", "/settings/modules", "/settings/terminology", "/settings/seeds", "/users/invites"].includes(item.href)) return role === "ADMIN"
         if (item.href === "/reports/audit-logs") return can("auditLogs.read")
         if (item.href === "/users") return can("users.read")
         if (item.href === "/settings") return can("businessSettings.read")
