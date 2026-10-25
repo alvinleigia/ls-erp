@@ -1,0 +1,58 @@
+import { test, expect } from "@playwright/test"
+import { seed, login, json, assignProfiles } from "./fixtures"
+
+test("hidden Flexible hours and daily overrides still protect bookings and template edits", async ({ browser }) => {
+  test.setTimeout(150_000)
+  const fixture = await seed(), admin = await login(browser, fixture.origin, fixture.users.admin.email)
+  let scheduler: typeof admin | undefined
+  const profile = fixture.slug + "_effective", hidden = "hidden_effective_browser_" + fixture.slug, template = fixture.slug + "_late", service = fixture.slug + "_service", customer = fixture.slug + "_customer"
+  const tables = ["StaffFlexibleWeekPlan", "StaffFlexibleWeekDay", "StaffFlexibleWeekSlot", "StaffFlexibleWeekBreak", "StaffFlexibleAvailability", "StaffShiftOverride", "ShiftTemplateBreak"]
+  try {
+    const access = await json(admin.context, `/api/access/users/${fixture.users.staff.id}`)
+    const roles = (await fixture.db.query('SELECT "roleId" FROM "TenantRoleAssignment" WHERE "userId"=$1', [fixture.users.staff.id])).rows.map(row => row.roleId)
+    await assignProfiles(admin.context, fixture.users.staff.id, roles, { rules: { ...access.accessPolicy.rules, "appointments.read": "ALL", "appointments.create": "ALL", "services.read": "ALL", "shiftPlans.read": "NONE", "shiftRoster.read": "NONE", "shiftTemplates.read": "NONE", "shiftSchedules.read": "NONE" } })
+    await fixture.db.query('UPDATE "AppSetting" SET "timeZone"=\'UTC\' WHERE "tenantId"=$1', [fixture.slug])
+    await fixture.db.query('INSERT INTO "StaffProfile"(id,"userId","schedulingMode","updatedAt") VALUES($1,$2,\'FLEXIBLE\',now())', [profile, fixture.users.staff.id])
+    await fixture.db.query('INSERT INTO "StaffWorkplacePolicy"("tenantId","staffProfileId",version,"updatedAt") VALUES($1,$2,1,now())', [fixture.slug, profile])
+    await fixture.db.query('INSERT INTO "StaffWorkplaceAssignment"(id,"tenantId","staffProfileId","officeId","updatedAt") SELECT $2,$1,$2,id,now() FROM "BusinessOffice" WHERE "tenantId"=$1 AND "isInitial"', [fixture.slug, profile])
+    await fixture.db.query('INSERT INTO "User"(id,"tenantId",email,role,"updatedAt") VALUES($1,$2,$3,\'CUSTOMER\',now())', [customer, fixture.slug, customer + "@example.test"])
+    await fixture.db.query('INSERT INTO "ServiceCategory"(id,"tenantId",name,"updatedAt") VALUES($1,$2,$1,now())', [service, fixture.slug])
+    await fixture.db.query('INSERT INTO "Service"(id,"tenantId","categoryId",name,"durationMinutes","priceCents","updatedAt") VALUES($1,$2,$1,\'Effective hours consultation\',60,1000,now())', [service, fixture.slug])
+    await fixture.db.query('INSERT INTO "ShiftTemplate"(id,"tenantId",name,"startTime","endTime","updatedAt") VALUES($1,$2,\'Booked override\',\'12:00\',\'20:00\',now())', [template, fixture.slug])
+    await fixture.db.query('INSERT INTO "ShiftTemplateBreak"(id,"templateId","startTime","endTime") VALUES($1,$2,\'15:00\',\'15:30\')', [hidden + "_template_break", template])
+    await fixture.db.query('INSERT INTO "StaffFlexibleWeekPlan"(id,"staffProfileId","weekStartDate","updatedAt") VALUES($1,$2,\'2036-02-04\',now())', [hidden, profile])
+    await fixture.db.query('INSERT INTO "StaffFlexibleWeekDay"(id,"planId",day,"updatedAt") VALUES($1,$1,\'MONDAY\',now())', [hidden])
+    await fixture.db.query('INSERT INTO "StaffFlexibleWeekSlot"(id,"dayId","startTime","endTime","updatedAt") VALUES($1,$1,\'14:00\',\'22:00\',now())', [hidden])
+    await fixture.db.query('INSERT INTO "StaffFlexibleWeekBreak"(id,"slotId","startTime","endTime","updatedAt") VALUES($1,$1,\'18:00\',\'19:00\',now())', [hidden])
+    for (const date of ["2036-02-04", "2036-02-05"]) await fixture.db.query('INSERT INTO "StaffFlexibleAvailability"(id,"staffProfileId",date,"startTime","endTime","updatedAt") VALUES($1,$2,$3,\'09:00\',\'11:00\',now())', [hidden + date, profile, date])
+    for (const table of tables) await fixture.db.query(`CREATE POLICY test_effective_browser ON "${table}" AS RESTRICTIVE FOR SELECT USING(id NOT LIKE 'hidden_effective_browser_%')`)
+    scheduler = await login(browser, fixture.origin, fixture.users.staff.email)
+    await json(scheduler.context, "/api/shifts/flexible-week-plans?startDate=2036-02-04&endDate=2036-02-05", 403)
+    const input = (date: string, hour: string) => ({ staffId: fixture.users.staff.id, customerId: customer, serviceId: service, startAt: `${date}T${hour}:00:00Z` })
+    const availability = (date: string, hour: string) => json(scheduler!.context, "/api/appointments/availability", 200, "POST", input(date, hour))
+    expect((await availability("2036-02-04", "10")).available).toBe(false)
+    expect((await availability("2036-02-04", "18")).available).toBe(false)
+    expect(await availability("2036-02-04", "20")).toEqual({ available: true })
+    await fixture.db.query('INSERT INTO "StaffShiftOverride"(id,"staffProfileId",date,"templateId","updatedAt") VALUES($1,$2,\'2036-02-04\',$3,now()),($4,$2,\'2036-02-05\',NULL,now())', [hidden + "_override", profile, template, hidden + "_unavailable"])
+    await json(scheduler.context, "/api/shifts/overrides?startDate=2036-02-04&endDate=2036-02-05", 403)
+    expect((await availability("2036-02-04", "20")).available).toBe(false)
+    expect((await availability("2036-02-04", "15")).available).toBe(false)
+    expect(await availability("2036-02-04", "18")).toEqual({ available: true })
+    const unavailable = await availability("2036-02-05", "10")
+    expect(unavailable).toEqual({ available: false, reason: "Staff is unavailable on this date." })
+    expect(JSON.stringify(unavailable)).not.toContain(hidden)
+    await json(scheduler.context, "/api/appointments", 201, "POST", input("2036-02-04", "18"))
+    const conflict = await json(admin.context, `/api/shifts/templates/${template}`, 409, "PATCH", { name: "Booked override", startTime: "12:00", endTime: "17:00", breaks: [] })
+    expect(conflict.error).toContain("conflicts with existing appointments")
+    expect((await fixture.db.query('SELECT "endTime" FROM "ShiftTemplate" WHERE id=$1', [template])).rows[0].endTime).toBe("20:00")
+    expect((await fixture.db.query('SELECT count(*)::int n FROM "AuditLog" WHERE "entityId"=$1', [template])).rows[0].n).toBe(0)
+    await json(admin.context, "/api/modules", 200, "PATCH", { key: "shifts", enabled: false })
+    expect(await availability("2036-02-04", "19")).toEqual({ available: true })
+    await json(scheduler.context, "/api/appointments", 201, "POST", input("2036-02-04", "19"))
+    await json(admin.context, `/api/users/${fixture.users.staff.id}`, 200, "PATCH", { status: "SUSPENDED" })
+    await json(scheduler.context, "/api/appointments/availability", 403, "POST", input("2036-02-04", "19"))
+  } finally {
+    for (const table of tables) await fixture.db.query(`DROP POLICY IF EXISTS test_effective_browser ON "${table}"`)
+    await scheduler?.context.close(); await admin.context.close(); await fixture.db.end()
+  }
+})

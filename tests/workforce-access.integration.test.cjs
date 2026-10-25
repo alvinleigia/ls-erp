@@ -997,24 +997,23 @@ test('capturing missing history preserves saved snapshots while explicit correct
  assert.deepEqual(others,before.slice(1))
 })
 
-test('flexible range reads are batched, tenant scoped and resolve additional dates without more queries',async()=>{
- const {loadFlexibleAvailability:load}=require('../modules/workforce/flexible-availability.ts'),{runWithTenantDbContext:scope}=require('../lib/prisma.ts')
- const pg=require('pg'),original=pg.Client.prototype.query;let count=0
- pg.Client.prototype.query=function(...args){const sql=typeof args[0]==='string'?args[0]:args[0]?.text;if(sql?.startsWith('SELECT ')&&sql.includes('FROM "public"."StaffFlexible'))count++;return original.apply(this,args)}
- try{
-  await assert.rejects(()=>load(prisma,'',[historyStaff.profile],new Date('2020-01-06'),new Date('2020-01-06')),e=>e.status===403)
-  const first=await scope(a,()=>load(prisma,a,[historyStaff.profile],new Date('2020-01-06'),new Date('2020-01-06'))),single=count
-  assert.ok(single>0&&single<=12,single)
-  assert.equal(first(historyStaff.profile,new Date('2020-01-06')).segments.length,2)
-  count=0
-  const range=await scope(a,()=>load(prisma,a,[historyStaff.profile,b+'_profile'],new Date('2020-01-06'),new Date('2020-01-31')))
-  assert.equal(count,single)
-  for(let day=6;day<=31;day++)range(historyStaff.profile,new Date('2020-01-'+String(day).padStart(2,'0')))
-  assert.equal(count,single)
-  assert.deepEqual(range(b+'_profile',new Date('2020-01-06')).segments,[])
-  const foreign=await scope(b,()=>load(prisma,b,[historyStaff.profile],new Date('2020-01-06'),new Date('2020-01-31')))
-  assert.deepEqual(foreign(historyStaff.profile,new Date('2020-01-06')).segments,[])
- }finally{pg.Client.prototype.query=original}
+test('flexible working-time batches reject foreign staff and resolve dates without source reads',async()=>{
+ const {loadWorkingTime:load}=require('../modules/workforce/working-time.ts'),{runWithTenantDbContext}=require('../lib/prisma.ts'),{runWithDatabaseActor}=require('../lib/database-actor.ts')
+ const scope=(tenant,fn)=>runWithTenantDbContext(tenant,()=>runWithDatabaseActor(tenant+'_admin',fn))
+ let count=0;const db={$queryRaw:(...args)=>{count++;return prisma.$queryRaw(...args)}}
+ await assert.rejects(()=>load(db,'',[historyStaff.profile],new Date('2020-01-06'),new Date('2020-01-06')),e=>e.status===403)
+ const first=await scope(a,()=>load(db,a,[historyStaff.profile],new Date('2020-01-06'),new Date('2020-01-06')));assert.equal(count,1)
+ // The prior test installed an explicit unavailable override on this date.
+ // Effective timings must retain it, rather than return the lower Flexible plan.
+ assert.deepEqual(first(historyStaff.profile,new Date('2020-01-06')).segments,[])
+ count=0
+ const range=await scope(a,()=>load(db,a,[historyStaff.profile],new Date('2020-01-06'),new Date('2020-01-31')))
+ assert.equal(count,1)
+ assert.equal(range(historyStaff.profile,new Date('2020-01-08')).segments.length,2)
+ for(let day=6;day<=31;day++)range(historyStaff.profile,new Date('2020-01-'+String(day).padStart(2,'0')))
+ assert.equal(count,1);assert.deepEqual(range(b+'_profile',new Date('2020-01-06')).segments,[])
+ await assert.rejects(scope(a,()=>load(db,a,[historyStaff.profile,b+'_profile'],new Date('2020-01-06'),new Date('2020-01-31'))),e=>e.status===403)
+ await assert.rejects(scope(b,()=>load(db,b,[historyStaff.profile],new Date('2020-01-06'),new Date('2020-01-31'))),e=>e.status===403)
 })
 
 test('weekly history keeps its calendar date when a booking falls on the previous UTC day',async()=>{
@@ -1072,12 +1071,12 @@ test('standard history and live availability share schedule-anchored rotation, a
 })
 
 test('standard range loading stays bounded and excludes foreign staff even with a tenant default',async()=>{
- const {loadStandardWorkingTime:load}=require('../modules/workforce/standard-working-time.ts'),{runWithTenantDbContext}=require('../lib/prisma.ts'),{runWithDatabaseActor}=require('../lib/database-actor.ts')
+ const {loadWorkingTime:load}=require('../modules/workforce/working-time.ts'),{runWithTenantDbContext}=require('../lib/prisma.ts'),{runWithDatabaseActor}=require('../lib/database-actor.ts')
  const scope=(tenant,fn)=>runWithTenantDbContext(tenant,()=>runWithDatabaseActor(tenant+'_admin',fn))
  const pg=require('pg'),original=pg.Client.prototype.query;let count=0
- pg.Client.prototype.query=function(...args){const sql=typeof args[0]==='string'?args[0]:args[0]?.text;if(sql?.includes('SELECT * FROM app.standard_working_time('))count++;return original.apply(this,args)}
+ pg.Client.prototype.query=function(...args){const sql=typeof args[0]==='string'?args[0]:args[0]?.text;if(sql?.includes('SELECT * FROM app.effective_working_time('))count++;return original.apply(this,args)}
  try{
-  const ids=[standardHistory.profile,a+'_profile']
+  const ids=[standardHistory.profile]
   await assert.rejects(()=>load(prisma,'',ids,new Date('2020-01-08'),new Date('2020-01-08')),e=>e.status===403)
   await assert.rejects(scope(a,()=>load(prisma,a,[...ids,b+'_managerprofile'],new Date('2020-01-08'),new Date('2020-01-08'))),e=>e.status===403);count=0
   await scope(a,()=>load(prisma,a,ids,new Date('2020-01-08'),new Date('2020-01-08')));const single=count
@@ -1086,7 +1085,7 @@ test('standard range loading stays bounded and excludes foreign staff even with 
   assert.equal(count,single)
   for(let day=5;day<=31;day++)resolve(standardHistory.profile,new Date('2020-01-'+String(day).padStart(2,'0')))
   assert.equal(count,single)
-  for(const id of [b+'_managerprofile',a+'_profile','unrequested'])assert.deepEqual(resolve(id,new Date('2020-01-08')).segments,[])
+  for(const id of [b+'_managerprofile','unrequested'])assert.deepEqual(resolve(id,new Date('2020-01-08')).segments,[])
  }finally{pg.Client.prototype.query=original}
 })
 

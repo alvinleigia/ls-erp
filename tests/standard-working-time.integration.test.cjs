@@ -6,12 +6,12 @@ const root=new Client({connectionString:raw}),sessions=new AsyncLocalStorage();u
 const authPath=require.resolve('../auth.ts');require.cache[authPath]={id:authPath,filename:authPath,loaded:true,exports:{auth:async()=>{await Promise.resolve();return sessions.getStore()||null}}}
 require('../lib/logger.ts').logger.info=()=>{};require('../lib/logger.ts').logger.error=()=>{}
 const {prisma,runWithTenantDbContext}=require('../lib/prisma.ts'),{runWithDatabaseActor}=require('../lib/database-actor.ts'),{defaultRecordRules,supportedScopes}=require('../platform/access/rules.ts')
-const {loadStandardWorkingTime}=require('../modules/workforce/standard-working-time.ts'),{buildStandardScheduleMap}=require('../modules/workforce/standard-schedule.ts')
+const {loadWorkingTime}=require('../modules/workforce/working-time.ts'),{buildStandardScheduleMap}=require('../modules/workforce/standard-schedule.ts')
 const availability=require('../app/api/appointments/availability/route.ts'),book=require('../app/api/appointments/route.ts'),templateRoute=require('../app/api/shifts/templates/[id]/route.ts')
 const tenant='standard_time_'+randomUUID().replaceAll('-',''),foreign=tenant+'_foreign',admin=tenant+'_admin',scheduler=tenant+'_scheduler',plain=tenant+'_plain',employee=tenant+'_employee',profile=tenant+'_profile',foreignProfile=tenant+'_foreign_profile',role=tenant+'_role',customer=tenant+'_customer',service=tenant+'_service',visibleTemplate=tenant+'_visible_template',privateTemplate='standard_hidden_template_'+tenant,earlyTemplate=tenant+'_early',defaultSchedule=tenant+'_default',assigned='standard_hidden_schedule_'+tenant,assignment='standard_hidden_assignment_'+tenant
 const scope=(user,fn)=>runWithTenantDbContext(tenant,()=>runWithDatabaseActor(user,async()=>await fn()))
 const query=(user,ids=[profile],start='2036-02-04',end=start)=>scope(user,()=>prisma.$queryRaw`SELECT * FROM app.standard_working_time(${tenant},${ids}::text[],${start}::date,${end}::date)`)
-const load=(user,start,end,ids=[profile],db=prisma)=>scope(user,()=>loadStandardWorkingTime(db,tenant,ids,new Date(start),new Date(end||start)))
+const load=(user,start,end,ids=[profile],db=prisma)=>scope(user,()=>loadWorkingTime(db,tenant,ids,new Date(start),new Date(end||start)))
 async function call(handler,user=scheduler,data,record,method='POST'){return sessions.run({user:{id:user,tenantId:tenant,role:user===admin?'ADMIN':user===plain?'MANAGER':'STAFF'}},()=>handler(new Request(`http://${tenant}.localhost/api/appointments`,{method,headers:{host:tenant+'.localhost','content-type':'application/json'},body:JSON.stringify(data)}),{params:Promise.resolve({id:record})}))}
 async function body(response,status=200){const value=await response.json();assert.equal(response.status,status,JSON.stringify(value));return value}
 const input=hour=>({staffId:employee,customerId:customer,serviceId:service,startAt:`2036-02-04T${hour}:00:00Z`})

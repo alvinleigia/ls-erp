@@ -1,14 +1,12 @@
-import type { Prisma, StaffSchedulingMode } from "@prisma/client"
+import type { Prisma } from "@prisma/client"
 import { BusinessError } from "@/platform/policy"
-import { dateKeyInTimeZone, appointmentRangeOnDate, dateKey } from "./roster-dates"
-import { loadFlexibleAvailability } from "./flexible-availability"
-import { loadStandardWorkingTime } from "./standard-working-time"
-import { workingSegments } from "./working-segments"
+import { dateKeyInTimeZone, appointmentRangeOnDate } from "./roster-dates"
+import { loadWorkingTime } from "./working-time"
 import { approvedLeaveBlocks } from "./availability-blocks"
 import { activeStaffBookingSlots, type BusySlot } from "@/modules/appointments/booking-integrity"
 
 const PAGE_SIZE = 200
-type ProtectedBooking = BusySlot & { profileId: string; mode: StaffSchedulingMode; day: string; start: number; end: number }
+type ProtectedBooking = BusySlot & { profileId: string; day: string; start: number; end: number }
 // Carries busy intervals only. Resolution details are fetched after rollback
 // through ordinary appointment RLS, never through the integrity projection.
 export class PlanBookingConflict extends BusinessError {
@@ -22,23 +20,16 @@ const contains = (segments: { start: number; end: number }[], booking: { start: 
 async function availability(tx: Prisma.TransactionClient, tenantId: string, bookings: ProtectedBooking[]) {
   const days = bookings.map(booking => booking.day).sort(), start = new Date(days[0]), end = new Date(days[days.length - 1])
   const ids = [...new Set(bookings.map(booking => booking.profileId))]
-  const scope = { staffProfileId: { in: ids }, staffProfile: { user: { tenantId } } }
-  const [standard, flexible, overrides, leaves] = await Promise.all([
-    loadStandardWorkingTime(tx, tenantId, [...new Set(bookings.filter(b => b.mode === "STANDARD").map(b => b.profileId))], start, end),
-    loadFlexibleAvailability(tx, tenantId, [...new Set(bookings.filter(b => b.mode === "FLEXIBLE").map(b => b.profileId))], start, end),
-    tx.staffShiftOverride.findMany({ where: { ...scope, date: { gte: start, lte: end } },
-      select: { staffProfileId: true, date: true, template: { select: { startTime: true, endTime: true, breaks: { select: { startTime: true, endTime: true } } } } } }),
+  const [resolve, leaves] = await Promise.all([
+    loadWorkingTime(tx, tenantId, ids, start, end),
     approvedLeaveBlocks(tx, tenantId, ids, start, end),
   ])
-  const overrideMap = new Map(overrides.map(row => [row.staffProfileId + ":" + dateKey(row.date), row]))
   const leavesByStaff = new Map<string, typeof leaves>()
   for (const leave of leaves) { const group = leavesByStaff.get(leave.staffProfileId) ?? []; group.push(leave); leavesByStaff.set(leave.staffProfileId, group) }
   return (booking: ProtectedBooking) => {
     const day = new Date(booking.day)
     if (leavesByStaff.get(booking.profileId)?.some(leave => leave.startDate <= day && leave.endDate >= day)) return []
-    const override = overrideMap.get(booking.profileId + ":" + booking.day)
-    if (override) return override.template ? workingSegments(override.template) : []
-    return (booking.mode === "STANDARD" ? standard : flexible)(booking.profileId, day).segments
+    return resolve(booking.profileId, day).segments
   }
 }
 
@@ -59,12 +50,11 @@ export async function protectPlanBookings(tx: Prisma.TransactionClient, tenantId
   const now = new Date(), batches: ProtectedBooking[][] = []
   let profileCursor: string | undefined
   while (true) {
-    const profiles: { id: string; schedulingMode: StaffSchedulingMode }[] = await tx.staffProfile.findMany({
+    const profiles: { id: string }[] = await tx.staffProfile.findMany({
       where: { AND: [staffScope, { user: { tenantId } }, ...(profileCursor ? [{ id: { gt: profileCursor } }] : [])] },
-      orderBy: { id: "asc" }, take: PAGE_SIZE, select: { id: true, schedulingMode: true },
+      orderBy: { id: "asc" }, take: PAGE_SIZE, select: { id: true },
     })
     if (!profiles.length) break
-    const modes = new Map(profiles.map(profile => [profile.id, profile.schedulingMode]))
     let cursor: BusySlot | undefined
     while (true) {
       const rows: BusySlot[] = await activeStaffBookingSlots(tx, tenantId, profiles.map(profile => profile.id), now, cursor, dayRange)
@@ -74,7 +64,7 @@ export async function protectPlanBookings(tx: Prisma.TransactionClient, tenantId
         if (selectedDays && !selectedDays.has(day)) return []
         if (dateKeyInTimeZone(row.endAt, timeZone) !== day) return []
         const range = appointmentRangeOnDate(row.startAt, row.endAt, day, timeZone)
-        return range ? [{ ...row, profileId: row.staffProfileId, mode: modes.get(row.staffProfileId)!, day, ...range }] : []
+        return range ? [{ ...row, profileId: row.staffProfileId, day, ...range }] : []
       })
       if (bookings.length) {
         const resolve = await availability(tx, tenantId, bookings)

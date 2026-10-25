@@ -1,3 +1,21 @@
+## R10 - Protected effective working time (phase 2D4B3A, local)
+
+Booking and before/after plan checks now use one protected timing adapter for
+Standard, Flexible and daily-override precedence. Hidden source plans, breaks and
+unavailable overrides remain effective; disabled Shifts cannot erase hours for an
+independently authorized active booking consumer. Returned slots contain timings
+only, without source IDs, labels, office identities or off-day causes. Approved
+leave remains a separate protected check. Existing Standard rotation and dated
+workplaces remain effective, and Flexible selection reuses history's canonical
+helper. Separate ordinary-source timing adapters are removed without aliases.
+
+Migration 122 adds a function only; forced rollback and exact preservation of all
+128 preceding tables, policies and canonical source functions are verified. Native
+Flexible/override office ownership, bulk week-off selection, selectors and audits
+remain next; operational isolation is not complete. Nothing pushed, migrated on a
+hosted database or deployed. See the [effective working-time contract](EFFECTIVE_WORKING_TIME_R10.md)
+for behavior, bounds and verification evidence.
+
 ## R10 - Standard schedule offices (phase 2D4B2, local)
 
 Standard schedules now have immutable office ownership, inherited by their blocks

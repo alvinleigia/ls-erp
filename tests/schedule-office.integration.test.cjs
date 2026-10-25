@@ -7,7 +7,7 @@ const authPath=require.resolve('../auth.ts');require.cache[authPath]={id:authPat
 const errors=[];require('../lib/logger.ts').logger.info=()=>{};require('../lib/logger.ts').logger.error=(_,c)=>errors.push(c.error?.message)
 const {prisma,runWithTenantDbContext}=require('../lib/prisma.ts'),{runWithDatabaseActor}=require('../lib/database-actor.ts'),{createOfficeAccessService}=require('../platform/companies/office-access.ts'),{defaultRecordRules,supportedScopes}=require('../platform/access/rules.ts'),{allPermissions}=require('../platform/access/catalog.ts')
 const list=require('../app/api/shifts/schedules/route.ts'),record=require('../app/api/shifts/schedules/[id]/route.ts'),assignments=require('../app/api/shifts/assignments/route.ts'),history=require('../app/api/shifts/history/route.ts'),workplaces=require('../app/api/shifts/workplaces/route.ts'),templates=require('../app/api/shifts/templates/[id]/route.ts')
-const {loadStandardWorkingTime}=require('../modules/workforce/standard-working-time.ts')
+const {loadWorkingTime}=require('../modules/workforce/working-time.ts')
 const t='schedule_offices_'+randomUUID().replaceAll('-',''),admin=t+'_admin',ma=t+'_ma',mb=t+'_mb',staff=t+'_staff',unplaced=t+'_unplaced',p=t+'_profile',pu=t+'_unplaced_profile',role=t+'_role',ta=t+'_template_a',tb=t+'_template_b'
 const scoped=(u,fn)=>runWithTenantDbContext(t,()=>runWithDatabaseActor(u,async()=>await fn()))
 const access=u=>createOfficeAccessService(prisma,{tenantId:t,userId:u})
@@ -42,8 +42,8 @@ test('office defaults coexist and changing the creation office cannot change wor
  da=(await body(await call(list,admin,'POST',schedule('East default',ta)))).schedule
  await select(admin,b);db=(await body(await call(list,admin,'POST',schedule('West default',tb)))).schedule
  assert.equal(da.officeId,a);assert.equal(db.officeId,b);assert.equal((await root.query('SELECT count(*)::int n FROM "ShiftSchedule" WHERE "tenantId"=$1 AND "isDefault"',[t])).rows[0].n,2)
- const resolve=await scoped(mb,()=>loadStandardWorkingTime(prisma,t,[p],new Date('2036-02-04'),new Date('2036-02-04')));assert.deepEqual(resolve(p,new Date('2036-02-04')).segments,[{start:540,end:1020}])
- const empty=await scoped(admin,()=>loadStandardWorkingTime(prisma,t,[pu],new Date('2036-02-04'),new Date('2036-02-04')));assert.deepEqual(empty(pu,new Date('2036-02-04')).segments,[])
+ const resolve=await scoped(mb,()=>loadWorkingTime(prisma,t,[p],new Date('2036-02-04'),new Date('2036-02-04')));assert.deepEqual(resolve(p,new Date('2036-02-04')).segments,[{start:540,end:1020}])
+ const empty=await scoped(admin,()=>loadWorkingTime(prisma,t,[pu],new Date('2036-02-04'),new Date('2036-02-04')));assert.deepEqual(empty(pu,new Date('2036-02-04')).segments,[])
 })
 test('source lists, children, labels and audit copies obey office scope',async()=>{
  const east=await body(await call(list,ma));assert.deepEqual(east.items.map(r=>r.id),[da.id]);assert.equal(east.items[0].office.id,a)
@@ -64,7 +64,7 @@ test('default replacement is confined to the selected office',async()=>{
 })
 test('dated workplaces determine both default hours and roster default choices',async()=>{
  await body(await call(workplaces,admin,'POST',{action:'assign',staffId:staff,version:1,fromId:p,officeId:b,startsOn:'2036-03-01'}))
- const hours=await scoped(ma,()=>loadStandardWorkingTime(prisma,t,[p],new Date('2036-02-28'),new Date('2036-03-03')))
+ const hours=await scoped(ma,()=>loadWorkingTime(prisma,t,[p],new Date('2036-02-28'),new Date('2036-03-03')))
  assert.deepEqual(hours(p,new Date('2036-02-28')).segments,[{start:540,end:1020}]);assert.deepEqual(hours(p,new Date('2036-03-03')).segments,[{start:720,end:1200}])
  const all=await body(await call(assignments,admin,'GET',undefined,undefined,`?staffIds=${staff}&startDate=2036-02-28&endDate=2036-03-03`));assert.equal(all.defaults.find(d=>d.date==='2036-03-03').scheduleId,db.id)
  const limited=await body(await call(assignments,ma,'GET',undefined,undefined,`?staffIds=${staff}&startDate=2036-03-03&endDate=2036-03-03`));assert.deepEqual(limited.defaults,[]);assert.deepEqual(limited.defaultSchedules,[])

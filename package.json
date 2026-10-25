@@ -70,6 +70,8 @@
     "test:invitations:browser": "node scripts/test-sales-orders.cjs --invitations --browser",
     "test:availability-boundary": "node scripts/test-sales-orders.cjs --availability-boundary",
     "test:availability-boundary:browser": "node scripts/test-sales-orders.cjs --availability-boundary --browser",
+    "test:effective-working-time": "node scripts/test-sales-orders.cjs --effective-working-time",
+    "test:effective-working-time:browser": "node scripts/test-sales-orders.cjs --effective-working-time --browser-only",
     "test:working-time": "node scripts/test-sales-orders.cjs --working-time",
     "test:working-time:browser": "node scripts/test-sales-orders.cjs --working-time --browser-only",
     "test:schedule-offices": "node scripts/test-sales-orders.cjs --schedule-offices",

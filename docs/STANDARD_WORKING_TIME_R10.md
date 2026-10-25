@@ -8,6 +8,10 @@ Follow-up: [phase 2D4B2](STANDARD_SCHEDULE_OFFICES_R10.md) adds native Standard
 schedule offices, dated-workplace defaults and independent canonical history.
 The sections below retain the phase 2D4B1 timing/privacy contract and its evidence.
 
+Follow-up: [phase 2D4B3A](EFFECTIVE_WORKING_TIME_R10.md) replaces the separate
+application timing adapters with `working-time.ts`, composing protected Standard,
+Flexible and override timings. The Standard SQL contract below remains in use.
+
 ## Completed behavior
 
 Appointment availability, appointment create/edit/bulk moves, order scheduling and

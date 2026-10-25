@@ -5,6 +5,9 @@ schedule ownership and office-specific defaults. Flexible plans, daily overrides
 appointments and the remaining operational selectors still need their own native
 office boundaries before R10 can be released.
 
+Follow-up: [phase 2D4B3A](EFFECTIVE_WORKING_TIME_R10.md) protects Flexible and
+override timing integrity before their native office ownership is introduced.
+
 ## Ownership and access
 
 Every Standard schedule has an immutable tenant and office. Blocks and staff

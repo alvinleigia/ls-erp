@@ -1,7 +1,5 @@
-import { loadFlexibleAvailability } from "./flexible-availability"
 import { prisma } from "@/lib/prisma"
-import { loadStandardWorkingTime } from "./standard-working-time"
-import { workingSegments } from "./working-segments"
+import { loadWorkingTime } from "./working-time"
 import { approvedLeaveBlocks } from "./availability-blocks"
 import { type Prisma } from "@prisma/client"
 
@@ -16,11 +14,6 @@ type ZonedDateParts = {
 type AvailabilityCheckResult =
   | { ok: true }
   | { ok: false; reason: string }
-
-type WorkingSegment = {
-  start: number
-  end: number
-}
 
 const getZonedDateParts = (value: Date, timeZone: string): ZonedDateParts => {
   const formatter = new Intl.DateTimeFormat("en-CA", {
@@ -53,47 +46,7 @@ const resolveWorkingAvailabilityForDate = async (
 ) => {
   const dateValue = new Date(`${dateKey}T00:00:00.000Z`)
 
-  const override = await db.staffShiftOverride.findUnique({
-    where: { staffProfileId_date: { staffProfileId, date: dateValue }, staffProfile: { user: { tenantId } } },
-    select: {
-      template: {
-        select: { startTime: true, endTime: true, breaks: { select: { startTime: true, endTime: true } } },
-      },
-    },
-  })
-  if (override) {
-    if (!override.template) {
-      return {
-        segments: [] as WorkingSegment[],
-        reason: "Staff is unavailable on this date.",
-      }
-    }
-    return {
-      segments: workingSegments(override.template),
-      reason: "",
-    }
-  }
-
-  const staffProfile = await db.staffProfile.findFirst({
-    where: {
-      id: staffProfileId,
-      user: { tenantId },
-    },
-    select: { schedulingMode: true },
-  })
-  if (!staffProfile) {
-    return {
-      segments: [] as WorkingSegment[],
-      reason: "Staff profile not found.",
-    }
-  }
-
-  if (staffProfile.schedulingMode === "FLEXIBLE") {
-    const resolve = await loadFlexibleAvailability(db, tenantId, [staffProfileId], dateValue, dateValue)
-    return resolve(staffProfileId, dateValue)
-  }
-
-  const resolve = await loadStandardWorkingTime(db, tenantId, [staffProfileId], dateValue, dateValue)
+  const resolve = await loadWorkingTime(db, tenantId, [staffProfileId], dateValue, dateValue)
   return resolve(staffProfileId, dateValue)
 }
 

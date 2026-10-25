@@ -185,19 +185,21 @@ test('flexible plan booking protection checks later pages with bounded scoped qu
  await assert.rejects(()=>protect(noDatabase,'',{id:'staff'}),e=>e.status===403)
  let appointmentReads=0,planReads=0,changed=false
  const rows=Array.from({length:201},(_,i)=>({id:String(i).padStart(3,'0'),staffProfileId:'staff',staffProfile:{schedulingMode:'FLEXIBLE'},startAt:new Date(new Date('2038-01-'+(i===200?'05':'04')+'T10:00:00Z').getTime()+(i===200?0:i)*60000),endAt:new Date(new Date('2038-01-'+(i===200?'05':'04')+'T11:00:00Z').getTime()+(i===200?0:i)*60000)}))
- const scoped=({where})=>{assert.equal(where.staffProfile.user.tenantId,'a');return []}
  const db={
   appSetting:{findUnique:async({where})=>{assert.equal(where.tenantId,'a');return {timeZone:'UTC'}}},
-  staffProfile:{findMany:async({where,take,select})=>{assert.deepEqual(where.AND,[{id:'staff',schedulingMode:'FLEXIBLE'},{user:{tenantId:'a'}}]);assert.equal(take,200);assert.deepEqual(select,{id:true,schedulingMode:true});return [{id:'staff',schedulingMode:'FLEXIBLE'}]}},
+  staffProfile:{findMany:async({where,take,select})=>{assert.deepEqual(where.AND,[{id:'staff',schedulingMode:'FLEXIBLE'},{user:{tenantId:'a'}}]);assert.equal(take,200);assert.deepEqual(select,{id:true});return [{id:'staff',schedulingMode:'FLEXIBLE'}]}},
   appointment:{findMany:async()=>{throw Error('Private booking records must not be read by the guard.')}},
-  $queryRaw:async(sql,tenant,ids,_now,cursor)=>{assert.equal(tenant,'a');assert.deepEqual(ids,['staff']);if(sql.join('').includes('approved_leave_blocks'))return [];appointmentReads++;const after=JSON.parse(cursor);return rows.filter(row=>!after||row.startAt>new Date(after.startAt)).slice(0,200).map(({staffProfileId,startAt,endAt})=>({staffProfileId,startAt,endAt}))},
-  staffShiftOverride:{findMany:async input=>scoped(input)},leaveRequest:{findMany:async()=>{throw Error('Private leave details must not be read by the guard.')}},
-  staffFlexibleWeekPlan:{findMany:async input=>{scoped(input);planReads++;return [{staffProfileId:'staff',weekStartDate:new Date('2038-01-04'),days:['MONDAY','TUESDAY'].map(day=>({day,isOff:changed&&day==='TUESDAY',slots:[{startTime:'09:00',endTime:'17:00',breaks:[]}]}))}]}},
-  staffFlexiblePattern:{findMany:async input=>{planReads++;return scoped(input)}},staffFlexibleAvailability:{findMany:async input=>{planReads++;return scoped(input)}},
+  $queryRaw:async(sql,tenant,ids,first,last)=>{
+   assert.equal(tenant,'a');assert.deepEqual(ids,['staff']);const query=sql.join('')
+   if(query.includes('approved_leave_blocks'))return []
+   if(query.includes('effective_working_time')){planReads++;return ['2038-01-04','2038-01-05'].filter(d=>d>=first&&d<=last).map(d=>({staffProfileId:'staff',date:new Date(d),slots:changed&&d==='2038-01-05'?[]:[{startTime:'09:00',endTime:'17:00',breaks:[]}]}))}
+   appointmentReads++;const after=JSON.parse(last);return rows.filter(row=>!after||row.startAt>new Date(after.startAt)).slice(0,200).map(({staffProfileId,startAt,endAt})=>({staffProfileId,startAt,endAt}))
+  },
+
  }
- const check=await protect(db,'a',{id:'staff',schedulingMode:'FLEXIBLE'});assert.equal(appointmentReads,2);assert.equal(planReads,6)
+ const check=await protect(db,'a',{id:'staff',schedulingMode:'FLEXIBLE'});assert.equal(appointmentReads,2);assert.equal(planReads,2)
  changed=true;await assert.rejects(check,e=>e.status===409&&/existing appointments/.test(e.message))
- assert.equal(appointmentReads,2);assert.equal(planReads,12)
+ assert.equal(appointmentReads,2);assert.equal(planReads,4)
 })
 test('daily plan guards bound candidates by UTC padding and use exact tenant dates before checking effective overrides',async()=>{
  const {protectPlanBookings:protect,PlanBookingConflict}=require('../modules/workforce/plan-bookings.ts')
@@ -207,14 +209,17 @@ test('daily plan guards bound candidates by UTC padding and use exact tenant dat
   appSetting:{findUnique:async()=>({timeZone:'America/Los_Angeles'})},
   staffProfile:{findMany:async()=>[{id:'staff',schedulingMode:'FLEXIBLE'}]},
   appointment:{findMany:async()=>{throw Error('Private booking records must not be read by the guard.')}},
-  staffShiftOverride:{findMany:async({where})=>{
-   assert.equal(where.date.gte.toISOString(),'2038-01-07T00:00:00.000Z');assert.equal(where.date.lte.toISOString(),'2038-01-07T00:00:00.000Z')
-   return [{staffProfileId:'staff',date:new Date('2038-01-07'),template:{startTime:'09:00',endTime:changed?'17:00':'22:00',breaks:[]}}]
-  }},
-  $queryRaw:async(sql,tenant,ids,_now,_cursor,from,to)=>{assert.equal(tenant,'a');assert.deepEqual(ids,['staff']);if(sql.join('').includes('approved_leave_blocks'))return [];
-   reads++;assert.equal(from,'2038-01-06T00:00:00.000Z');assert.equal(to,'2038-01-09T00:00:00.000Z');
-   return ['07','08','09'].map(day=>({staffProfileId:'staff',startAt:new Date('2038-01-'+day+'T04:00Z'),endAt:new Date('2038-01-'+day+'T05:00Z')}))},
-  leaveRequest:{findMany:async()=>{throw Error('Private leave details must not be read by the guard.')}},staffFlexibleWeekPlan:{findMany:async()=>[]},staffFlexiblePattern:{findMany:async()=>[]},staffFlexibleAvailability:{findMany:async()=>[]},
+  $queryRaw:async(sql,tenant,ids,first,last,from,to)=>{
+   assert.equal(tenant,'a');assert.deepEqual(ids,['staff']);const query=sql.join('')
+   if(query.includes('approved_leave_blocks'))return []
+   if(query.includes('effective_working_time')){
+    assert.equal(first,'2038-01-07');assert.equal(last,'2038-01-07')
+    return [{staffProfileId:'staff',date:new Date(first),slots:[{startTime:'09:00',endTime:changed?'17:00':'22:00',breaks:[]}]}]
+   }
+   reads++;assert.equal(from,'2038-01-06T00:00:00.000Z');assert.equal(to,'2038-01-09T00:00:00.000Z')
+   return ['07','08','09'].map(day=>({staffProfileId:'staff',startAt:new Date('2038-01-'+day+'T04:00Z'),endAt:new Date('2038-01-'+day+'T05:00Z')}))
+  },
+
  }
  const check=await protect(db,'a',{id:'staff'},['2038-01-07']);changed=true
  await assert.rejects(check,e=>e instanceof PlanBookingConflict&&e.status===409&&e.blockedSlots.length===1&&e.blockedSlots[0].startAt.toISOString()==='2038-01-08T04:00:00.000Z')
