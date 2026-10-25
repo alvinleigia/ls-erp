@@ -8,7 +8,7 @@ const authPath=require.resolve('../auth.ts');require.cache[authPath]={id:authPat
 const logger=require('../lib/logger.ts').logger;logger.info=()=>{};logger.error=()=>{}
 const {prisma,runWithTenantDbContext}=require('../lib/prisma.ts'),{runWithDatabaseActor}=require('../lib/database-actor.ts')
 const {appointmentConflictSummary:summary,activeStaffBookingSlots:busy}=require('../modules/appointments/booking-integrity.ts'),{defaultRecordRules}=require('../platform/access/rules.ts')
-const {scheduleTransaction}=require('../modules/workforce/schedule-transaction.ts')
+const {planTransaction}=require('../modules/workforce/plan-transaction.ts')
 const {protectPlanBookings}=require('../modules/workforce/plan-bookings.ts'),{scheduleConfirmedOrderLines,AvailabilityConflictError}=require('../modules/appointments/order-scheduling.ts')
 const {POST:saveSlots}=require('../app/api/shifts/flexible-slots/route.ts')
 const {POST:availability}=require('../app/api/appointments/availability/route.ts'),book=require('../app/api/appointments/route.ts'),detail=require('../app/api/appointments/[id]/route.ts'),{POST:resolve}=require('../app/api/appointments/resolve/route.ts'),{PATCH:review}=require('../app/api/leaves/requests/[id]/review/route.ts')
@@ -69,7 +69,7 @@ test('leave approval blocks hidden bookings even when Appointments is disabled, 
  assert.equal((await root.query('SELECT status FROM "LeaveRequest" WHERE id=$1',[leave])).rows[0].status,'PENDING')
 })
 test('a hidden booking protects a plan change and the tentative change rolls back',async()=>{
- await assert.rejects(scoped(scheduler,()=>scheduleTransaction(id,async tx=>{
+ await assert.rejects(scoped(scheduler,()=>planTransaction({tenantId:id,userId:scheduler,role:'STAFF',requestId:randomUUID()},'shiftRoster','edit',async tx=>{
   const check=await protectPlanBookings(tx,id,{id:profile},['2035-01-10'])
   await tx.staffFlexibleAvailability.updateMany({where:{staffProfileId:profile,date:instant('2035-01-10')},data:{endTime:'10:00'}})
   await check()

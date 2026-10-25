@@ -1,7 +1,8 @@
 # Flexible weekly and recurring plan offices — R10 phase 2D4B3B1
 
-Local, unreleased. This slice covers weekly plans and recurring patterns, not
-daily flexible slots or daily overrides. Those follow in phase 2D4B3B2.
+Local, unreleased. This slice covers weekly plans and recurring patterns.
+Daily Flexible slots and daily overrides are now implemented locally in phase
+2D4B3B2; see `DAILY_ROSTER_OFFICES_R10.md`.
 
 ## Ownership and authorization
 
@@ -51,10 +52,9 @@ hours when ordinary source Read is denied. Their timing-only output does not
 reveal source IDs, offices or labels. A protected mode-change conflict check sees
 hidden active/future plans; source RLS cannot make those plans disappear.
 
-Existing frozen history is unchanged. Daily-slot fallback and daily overrides
-retain their preceding contract until the next slice; this is not a claim that
-all operational ownership is complete. Bulk skip-weekoff selection, remaining
-selectors, appointments and operational release checks remain prerequisites.
+Existing frozen history is unchanged. Daily source ownership and dated-workplace
+skip-weekoff selection now follow the daily roster contract. Remaining selectors,
+roster alignment, appointments and operational release checks remain prerequisites.
 
 ## Migration and verification
 

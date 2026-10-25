@@ -948,6 +948,8 @@ model BusinessCompany {
 }
 
 model BusinessOffice {
+  dailyOverrides StaffShiftOverride[]
+  dailySlots StaffFlexibleAvailability[]
   flexibleWeekPlans StaffFlexibleWeekPlan[]
   flexiblePatterns StaffFlexiblePattern[]
   shiftSchedules ShiftSchedule[]
@@ -1800,6 +1802,10 @@ model StaffScheduleAssignment {
 }
 
 model StaffShiftOverride {
+  tenantId String
+  officeId String @default(dbgenerated("app.creation_office_id()"))
+  office BusinessOffice @relation(fields: [tenantId, officeId], references: [tenantId, id], onDelete: NoAction)
+  @@index([tenantId, officeId])
   id             String         @id @default(cuid())
   staffProfileId String
   date           DateTime       @db.Date
@@ -1816,6 +1822,10 @@ model StaffShiftOverride {
 }
 
 model StaffFlexibleAvailability {
+  tenantId String
+  officeId String @default(dbgenerated("app.creation_office_id()"))
+  office BusinessOffice @relation(fields: [tenantId, officeId], references: [tenantId, id], onDelete: NoAction)
+  @@index([tenantId, officeId])
   id             String       @id @default(cuid())
   staffProfileId String
   date           DateTime     @db.Date

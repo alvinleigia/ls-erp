@@ -717,6 +717,7 @@ export const shiftOverrideSchema = z
   })
   .superRefine((values, ctx) => {
     if (values.startDate > values.endDate) ctx.addIssue({ code: "custom", message: "Start date cannot be after end date.", path: ["endDate"] })
+    if (new Date(values.endDate).getTime() - new Date(values.startDate).getTime() > 365 * 86400000) ctx.addIssue({ code: "custom", message: "Select at most 366 dates.", path: ["endDate"] })
     if (!values.isUnavailable && !values.templateId) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
@@ -750,6 +751,9 @@ export const flexibleSlotSchema = z
         end: toMinutes(slot.endTime),
       }))
       .sort((a, b) => a.start - b.start)
+
+    const orders = [...values.slots].sort((a, b) => toMinutes(a.startTime) - toMinutes(b.startTime)).map((slot, index) => slot.sortOrder ?? index)
+    if (new Set(orders).size !== orders.length) ctx.addIssue({ code: "custom", message: "Slot positions must be unique.", path: ["slots"] })
 
     withMinutes.forEach((slot) => {
       if (slot.start >= slot.end) {

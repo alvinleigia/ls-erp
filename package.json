@@ -72,6 +72,8 @@
     "test:availability-boundary:browser": "node scripts/test-sales-orders.cjs --availability-boundary --browser",
     "test:effective-working-time": "node scripts/test-sales-orders.cjs --effective-working-time",
     "test:flexible-plan-offices": "node scripts/test-sales-orders.cjs --flexible-plan-offices",
+    "test:daily-roster-offices": "node scripts/test-sales-orders.cjs --daily-roster-offices",
+    "test:daily-roster-offices:browser": "node scripts/test-sales-orders.cjs --daily-roster-offices --browser-only",
     "test:flexible-plan-offices:browser": "node scripts/test-sales-orders.cjs --flexible-plan-offices --browser-only",
     "test:effective-working-time:browser": "node scripts/test-sales-orders.cjs --effective-working-time --browser-only",
     "test:working-time": "node scripts/test-sales-orders.cjs --working-time",

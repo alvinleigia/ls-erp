@@ -54,9 +54,15 @@ Phase 2D2 extends that integrity boundary to hidden bookings, keeping collision
 checks separate from access to appointment/customer details.
 Phase 2D3 adds [native leave ownership and private roster snapshots](WORKFORCE_OFFICE_OWNERSHIP_R10.md), including personal history after office transfer.
 Phase 2D4A adds [dated staff workplaces](STAFF_WORKPLACES_R10.md), separately from
-office grants and CRM creation preferences. Native plan/default ownership follows.
+office grants and CRM creation preferences.
 Phase 2D4B1 adds [protected Standard working time](STANDARD_WORKING_TIME_R10.md)
 so hidden assignments/defaults remain effective in booking and plan integrity.
+Phase 2D4B2 adds [Standard schedule offices](STANDARD_SCHEDULE_OFFICES_R10.md).
+Phase 2D4B3A adds [protected effective working time](EFFECTIVE_WORKING_TIME_R10.md);
+2D4B3B1 adds [weekly/recurring offices](FLEXIBLE_PLAN_OFFICES_R10.md), and
+2D4B3B2 adds [daily slots/override offices](DAILY_ROSTER_OFFICES_R10.md), including
+dated-workplace week-off selection. These are local and unreleased. The next
+workforce slice aligns assignment selectors and roster presentation.
 Operational families, assignment selectors and workspace
 controls remain prerequisites before exposing office controls or deploying the
 office-isolation release.

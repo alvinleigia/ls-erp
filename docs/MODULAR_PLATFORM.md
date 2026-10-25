@@ -1,3 +1,30 @@
+## R10 - Daily roster offices (phase 2D4B3B2, local)
+
+Daily Flexible slots and daily overrides now have immutable tenant/office
+ownership and office-scoped Read, writes and audits. New dates use captured
+workspace office/version; edits retain source offices and matching slot IDs.
+New staff/date selections require dated workplace coverage. Closed offices keep
+Read and reject writes. Edit can shorten a slot list; clearing its final slot
+requires Archive. Bulk override audits separate each office's rows.
+
+Protected bulk week-off selection follows dated workplaces, explicit assignments
+and office-local defaults without revealing hidden source identities. Effective
+time and history match daily source offices to dated workplaces, preserving
+precedence, booking checks and frozen evidence. Explicit past daily corrections
+retain replace-only-affected-dates behavior. Migration 124 adds root/audit ownership
+once, with no runtime initial-office fallback or tenant-specific adapter. Rollback
+and preservation of all 128 preceding tables/policies are rehearsed locally.
+
+All 18 native daily checks, 91 preceding workforce boundary checks and 176 broader
+regressions pass without skips, including the full historical 366-date correction.
+Build, TypeScript, changed-file lint and whitespace checks passed. The real Chrome
+workflow passed; override editor and roster screenshots were inspected.
+
+Workforce selectors and roster alignment are next; appointment ownership and
+remaining operational/release gates still follow. Nothing pushed, migrated on a
+hosted database or deployed; client data is unchanged. See the
+[daily roster office contract](DAILY_ROSTER_OFFICES_R10.md).
+
 ## R10 - Flexible weekly/recurring plan offices (phase 2D4B3B1, local)
 
 Weekly plans and recurring patterns now have immutable tenant/office ownership,

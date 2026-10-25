@@ -102,6 +102,8 @@ export type StaffScheduleAssignment = {
 }
 
 export type ShiftOverride = {
+  officeId: string
+  office?: WorkforceOffice | null
   id: string
   staffId: string | null
   staffProfileId: string
@@ -110,6 +112,8 @@ export type ShiftOverride = {
 }
 
 export type StaffFlexibleSlot = {
+  officeId: string
+  office?: WorkforceOffice | null
   id: string
   staffId: string | null
   staffProfileId: string

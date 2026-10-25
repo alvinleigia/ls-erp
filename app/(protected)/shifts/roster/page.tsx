@@ -1213,6 +1213,8 @@ export default function RosterPage() {
     ? flexibleWeekPlanMap[overrideStaffId]?.[overrideStartDate]?.office
     : flexiblePatterns.find(pattern => pattern.id === recurringPatternId)?.office
 
+  const dailySourceOffice = overrides.find(row => row.staffId === overrideStaffId && toISODate(row.date) === overrideStartDate)?.office
+
   const isOverrideStaffFlexible = React.useMemo(
     () => (overrideStaffId ? (staffSchedulingModeMap[overrideStaffId] ?? "STANDARD") === "FLEXIBLE" : false),
     [overrideStaffId, staffSchedulingModeMap]
@@ -2376,6 +2378,7 @@ export default function RosterPage() {
               onClick={clearOverride}
               disabled={
                 !(useFlexibleSlot && flexibleEditorMode === "RECURRING_PATTERN" ? canArchivePlan : canArchiveRoster) ||
+                (useFlexibleSlot ? flexibleSourceOffice : dailySourceOffice)?.active === false ||
                 useFlexibleSlot &&
                 flexibleEditorMode === "WEEK_OVERRIDE" &&
                 !hasWeeklyOverrideInContext
@@ -2392,7 +2395,7 @@ export default function RosterPage() {
               <Button disabled={!canCreatePlan} variant="outline" onClick={() => setSaveAsNewConfirmOpen(true)}>
                 Save as new pattern
               </Button>
-            ) : null}<Button disabled={useFlexibleSlot && flexibleEditorMode === "RECURRING_PATTERN" ? !(recurringPatternId ? canEditPlan : canCreatePlan) : !canEditRoster} onClick={() => submitOverride(false)}>
+            ) : null}<Button disabled={(useFlexibleSlot && flexibleEditorMode === "RECURRING_PATTERN" ? !(recurringPatternId ? canEditPlan : canCreatePlan) : !canEditRoster) || (useFlexibleSlot ? flexibleSourceOffice : dailySourceOffice)?.active === false} onClick={() => submitOverride(false)}>
               {useFlexibleSlot
                 ? flexibleEditorMode === "WEEK_OVERRIDE"
                   ? "Save weekly override"
@@ -2492,6 +2495,11 @@ export default function RosterPage() {
             </div>
             {!useFlexibleSlot ? (
             <div className="space-y-1">
+              <p className="text-sm text-muted-foreground">
+                {dailySourceOffice
+                  ? `Office: ${dailySourceOffice.companyName} / ${dailySourceOffice.name}${dailySourceOffice.active ? "" : " (closed; read only)"}`
+                  : "New overrides use the selected workspace office. Staff must be placed there on each date."}
+              </p>
               <Label className="text-xs text-muted-foreground">Shift template</Label>
               <SearchableSelect
                 value={overrideTemplateId}
@@ -2732,6 +2740,7 @@ export default function RosterPage() {
                 </Label>
                 <Input
                   type="date"
+                  aria-label={useFlexibleSlot ? flexibleEditorMode === "WEEK_OVERRIDE" ? "Week start date" : "Pattern start date" : "Start date"}
                   value={
                     useFlexibleSlot
                       ? flexibleEditorMode === "WEEK_OVERRIDE"
@@ -2760,6 +2769,7 @@ export default function RosterPage() {
                 </Label>
                 <Input
                   type="date"
+                  aria-label={useFlexibleSlot ? flexibleEditorMode === "WEEK_OVERRIDE" ? "Week end date" : "Pattern end date" : "End date"}
                   value={
                     useFlexibleSlot
                       ? flexibleEditorMode === "WEEK_OVERRIDE"

@@ -1099,7 +1099,7 @@ test('standard history retains saved snapshots and explicit corrections preserve
  try{
   await root.query('UPDATE "ShiftSchedule" SET "startDate"=$1 WHERE id=$2',['2020-01-07',rotation.id])
   assert.equal(await scope(a,()=>sync(prisma,params)),0);assert.deepEqual(await read(),before)
-  await scope(a,()=>prisma.staffShiftOverride.create({data:{staffProfileId:profile,date:new Date('2020-01-08'),templateId:late.id}}))
+  await root.query('INSERT INTO "StaffShiftOverride"(id,"staffProfileId",date,"templateId","updatedAt") VALUES($1,$2,\'2020-01-08\',$3,now())',[profile+'_history_override',profile,late.id])
   const correct=()=>scope(a,()=>sync(prisma,{...params,startDate:'2020-01-08',endDate:'2020-01-08',mode:'replace'}))
   await correct();let row=(await read())[3];assert.equal(row.source,'OVERRIDE');assert.equal(row.paidMinutes,420)
   await requestFixture('standard_leave',{profile,date:'2020-01-08',status:'APPROVED'})
@@ -1312,8 +1312,7 @@ test('template changes protect both standard assignments and flexible overrides,
 test('template edits preserve saved history, capture missing old hours and refuse deletion of historical references',async()=>{
  const {profile}=await modeStaff('template_history','FLEXIBLE'),body=templateBody(),t=(await ok(await call('shifts/templates','POST',body))).template
  const yesterday=new Date();yesterday.setUTCDate(yesterday.getUTCDate()-1);const date=yesterday.toISOString().slice(0,10)
- const {runWithTenantDbContext:scope}=require('../lib/prisma.ts')
- await scope(a,()=>prisma.staffShiftOverride.create({data:{staffProfileId:profile,date:new Date(date),templateId:t.id}}))
+ await root.query('INSERT INTO "StaffShiftOverride"(id,"staffProfileId",date,"templateId","updatedAt") VALUES($1,$2,$3,$4,now())',[profile+'_history_override',profile,date,t.id])
  await ok(await call('shifts/templates/[id]','PATCH',{...body,startTime:'08:00'},t.id))
  const read=async()=>(await root.query('SELECT * FROM "StaffRosterHistoryDay" WHERE "staffProfileId"=$1',[profile])).rows
  const history=await read();assert.equal(history.length,1);assert.equal(history[0].startTime,'09:00')
