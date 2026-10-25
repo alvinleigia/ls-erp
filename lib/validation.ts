@@ -1,4 +1,5 @@
 import { recordRulesSchema } from "@/platform/access/rules"
+import { initialOfficeMembershipSchema } from "@/platform/companies/membership-validation"
 import { z } from "zod"
 export const brandingUpdateSchema = z.object({
   name: z.string().trim().max(200),
@@ -132,6 +133,7 @@ export const signUpSchema = addCountryStateValidation(z.object({
 }))
 
 export const createUserSchema = addCountryStateValidation(z.object({
+  officeAccess: initialOfficeMembershipSchema.optional(),
   accessRoleIds: z.array(z.string().trim().min(1).max(100)).max(50).optional(),
   recordRules: recordRulesSchema.optional(),
   name: z.string().trim().min(1).max(100).optional().or(z.literal("")),

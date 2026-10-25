@@ -1,7 +1,7 @@
 # R10 phase 2B: native office ownership for sales records
 
 This is a local milestone on `staging`, not the office-isolation release.
-Operations/workforce ownership, workspace controls, provisioning, assignment
+Operations/workforce ownership, workspace controls, invitation onboarding, assignment
 selectors and hosted verification remain prerequisites. External collaborators
 follow in phase 3. No hosted database or deployment was changed for this work.
 
@@ -102,9 +102,10 @@ workload. Evidence is retained in ignored `tmp/industry-release` logs.
 
 1. Complete workforce, scheduling, bookings, purchasing and other operational
    ownership, including personal access and privacy-safe conflict checks.
-2. Expose office membership and creation controls, initialize membership in
-   user/tenant provisioning and constrain assignment/reference selectors. Newly
-   created unassigned users currently have no office access by design.
+2. Expose office membership and creation controls, complete invitation onboarding
+   and constrain assignment/reference selectors. The direct user/tenant account
+   provisioning backend is implemented in [phase 2C](OFFICE_PROVISIONING_R10.md).
+   Newly created unassigned users have no office access by design.
 3. Complete reporting and security-path review, rehearse against a backup copy,
    compare pilot visibility, then deploy and verify on hosted staging.
 

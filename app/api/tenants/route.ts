@@ -17,6 +17,7 @@ import { createTenantSchema } from "@/lib/validation"
 import { recordDomainAuditEventSafe } from "@/lib/domain-audit"
 import type { ListResponse } from "@/types/api"
 import { provisionTenantModules } from "@/platform/module-service"
+import { provisionTenantAdminOffice } from "@/platform/companies/provisioning"
 import { BusinessError } from "@/platform/policy"
 
 const PLATFORM_TENANT_SLUG = (
@@ -279,6 +280,7 @@ export async function POST(request: Request) {
         })
 
         await provisionTenantModules(tx, { tenantId: actorTenantId, userId: sessionUserId, requestId: logContext.requestId }, tenant.id, data.modules)
+        await provisionTenantAdminOffice(tx, { tenantId: actorTenantId, userId: sessionUserId, requestId: logContext.requestId }, tenant.id, admin.id)
 
         // Ensure baseline settings exist for the new tenant.
         await tx.appSetting.create({

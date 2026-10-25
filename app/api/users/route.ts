@@ -2,6 +2,7 @@ import { hasBusinessAccess } from "@/platform/policy"
 import { requireBusinessModule } from "@/platform/module-server"
 import { recordDomainAuditEvent } from "@/lib/domain-audit"
 import { guardUserWrite, auditUserSecurity, assignInitialProfiles } from "@/platform/access/user-security"
+import { saveOfficeMemberships } from "@/platform/companies/office-membership"
 import { BusinessError } from "@/platform/policy"
 import { NextResponse } from "next/server"
 import bcrypt from "bcryptjs"
@@ -295,6 +296,7 @@ async function handlePOST(request: Request, actor: BusinessActor) {
       })
 
       await assignInitialProfiles(tx, identity, created, parsed.data.accessRoleIds, parsed.data.recordRules)
+      if (parsed.data.officeAccess) await saveOfficeMemberships(tx, identity, created.id, { ...parsed.data.officeAccess, version: 0 })
         if (normalizedEligibleServiceIds.length) await recordDomainAuditEvent(tx, { tenantId, actorUserId: sessionUserId, actorRole: "ADMIN", requestId: logContext.requestId, event: "services.eligibility.updated", entityType: "User", entityId: created.id, after: { serviceIds: normalizedEligibleServiceIds } })
         await auditUserSecurity(tx, identity, created.id, null, created)
         return created

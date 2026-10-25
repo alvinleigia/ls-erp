@@ -1,3 +1,20 @@
+## R10 - Account provisioning backend (phase 2C, local)
+
+Direct user creation accepts explicit office/company memberships through the
+same fresh, versioned transaction writer as membership administration. Account,
+profiles, grants and mandatory audit commit together; omitted office access gives
+no membership or preference. New tenant administrators receive their new initial
+office as explicit bootstrap data, without company/descendant grants. Bootstrap
+rechecks current platform/organization authority and cannot replace a policy.
+
+52 provisioning, membership, user and tenant integration checks and the real
+Chrome flow passed. New staff and tenant admins created enquiries in their
+persisted offices; an invalid switch was rejected and revocation hid records.
+Build, TypeScript and changed-file lint passed. No new migration, GitHub push,
+hosted deployment or client-data change. Invitations, operational ownership,
+selectors and office controls remain release prerequisites before collaborators.
+See [the account provisioning contract](OFFICE_PROVISIONING_R10.md).
+
 ## R10 - Hosting storage optimization (2026-10-25)
 
 37 obsolete Vercel deployments were removed while active aliases, current

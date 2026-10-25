@@ -58,10 +58,16 @@ test("platform admin provisions a tenant with admin, settings and audit under en
   assert.equal(response.status, 201, JSON.stringify({ body: await response.clone().json(), errors }))
   const { tenant, admin } = await response.json()
   const flags = (await root.query('SELECT key, allowed, enabled FROM "TenantModule" WHERE "tenantId"=$1', [tenant.id])).rows
-  assert.deepEqual(flags.map(row => row.key).sort(), ["appointments", "catalog", "crm", "inventory", "leaves", "paymentPlans", "realEstate", "salesDocuments", "services", "shifts"])
+  assert.deepEqual(flags.map(row => row.key).sort(), ["appointments", "catalog", "crm", "inventory", "leaves", "paymentPlans", "realEstate", "receivables", "salesDocuments", "salesOrders", "services", "shifts"])
   assert.deepEqual(flags.filter(row => row.allowed), [{ key: "crm", allowed: true, enabled: true }])
   assert.ok(flags.filter(row => row.key !== "crm").every(row => !row.allowed && !row.enabled))
   assert.equal((await root.query('SELECT id FROM "User" WHERE id=$1 AND "tenantId"=$2 AND role=$3', [admin.id, tenant.id, "ADMIN"])).rowCount, 1)
+  const office = (await root.query('SELECT id FROM "BusinessOffice" WHERE "tenantId"=$1 AND "isInitial"', [tenant.id])).rows[0]
+  const officePolicy = (await root.query('SELECT "creationOfficeId",version FROM "BusinessOfficePolicy" WHERE "tenantId"=$1 AND "userId"=$2', [tenant.id, admin.id])).rows[0]
+  assert.deepEqual(officePolicy, { creationOfficeId: office.id, version: 1 })
+  assert.equal((await root.query('SELECT * FROM "BusinessOfficeGrant" WHERE "tenantId"=$1 AND "userId"=$2 AND "officeId"=$3', [tenant.id, admin.id, office.id])).rowCount, 1)
+  assert.equal((await root.query('SELECT * FROM "BusinessCompanyGrant" WHERE "tenantId"=$1 AND "userId"=$2', [tenant.id, admin.id])).rowCount, 0)
+  assert.equal((await root.query('SELECT id FROM "AuditLog" WHERE "tenantId"=$1 AND "entityId"=$2 AND event=\'structure.officeMembership.updated\'', [tenant.id, admin.id])).rowCount, 1)
   assert.equal((await root.query('SELECT id FROM "AppSetting" WHERE "tenantId"=$1', [tenant.id])).rowCount, 1)
   assert.equal((await root.query('SELECT id FROM "AuditLog" WHERE event=$1 AND "entityId"=$2 AND "tenantId"=$3', ["tenant.created", tenant.id, "provision_platform"])).rowCount, 1)
   const listed = await sessions.run(platformSession, () => GET(request("GET")))
@@ -77,6 +83,29 @@ test("duplicate admin detection works across tenants without partial provisionin
   assert.equal(response.status, 409)
   assert.equal((await response.json()).error, "Admin email already exists.")
   assert.equal((await root.query('SELECT id FROM "Tenant" WHERE slug=$1', ["provision-duplicate"])).rowCount, 0)
+})
+
+test("initial-office audit failure rolls back the tenant, administrator and membership together", async () => {
+  await root.query('ALTER TABLE "AuditLog" ADD CONSTRAINT provision_office_audit_failure CHECK(event <> \'structure.officeMembership.updated\') NOT VALID')
+  try {
+    const response = await sessions.run(platformSession, () => POST(request("POST", input("provision-office-audit-failure"))))
+    assert.equal(response.status, 500)
+    assert.equal((await root.query('SELECT id FROM "Tenant" WHERE slug=$1', ["provision-office-audit-failure"])).rowCount, 0)
+    assert.equal((await root.query('SELECT id FROM "User" WHERE email=$1', ["provision-office-audit-failure@example.test"])).rowCount, 0)
+  } finally { await root.query('ALTER TABLE "AuditLog" DROP CONSTRAINT provision_office_audit_failure') }
+})
+
+test("office bootstrap rechecks platform authority and never replaces an existing membership policy", async () => {
+  const { prisma, runWithRlsBypassDbContext } = require("../lib/prisma.ts")
+  const { provisionTenantAdminOffice } = require("../platform/companies/provisioning.ts")
+  const target = (await root.query('SELECT t.id AS "tenantId",u.id FROM "Tenant" t JOIN "User" u ON u."tenantId"=t.id WHERE t.slug=$1', ["provision-business"])).rows[0]
+  const before = (await root.query('SELECT to_jsonb(p) AS value FROM "BusinessOfficePolicy" p WHERE "tenantId"=$1 AND "userId"=$2', [target.tenantId, target.id])).rows[0].value
+  const initialize = () => runWithRlsBypassDbContext(() => prisma.$transaction(tx => provisionTenantAdminOffice(tx, { tenantId: "provision_platform", userId: platformSession.user.id }, target.tenantId, target.id)))
+  await assert.rejects(initialize(), error => error.status === 409)
+  await root.query('UPDATE "User" SET status=\'SUSPENDED\' WHERE id=$1', [platformSession.user.id])
+  try { await assert.rejects(initialize(), error => error.status === 403) }
+  finally { await root.query('UPDATE "User" SET status=\'ACTIVE\' WHERE id=$1', [platformSession.user.id]) }
+  assert.deepEqual((await root.query('SELECT to_jsonb(p) AS value FROM "BusinessOfficePolicy" p WHERE "tenantId"=$1 AND "userId"=$2', [target.tenantId, target.id])).rows[0].value, before)
 })
 
 test("platform admin can read and edit the tenant administrator under RLS with an audit trail", async () => {

@@ -42,8 +42,9 @@ Existing tenant-owned users receive their initial office as ordinary persisted
 grant data. No company/descendant grant is created. All 122 preceding tables,
 including IDs, owners, profiles, teams, sharing, values and financial snapshots,
 remain unchanged. New unassigned users have no policy/grants and no implicit
-office. User provisioning must supply office membership before the native office
-record-enforcement release is deployed.
+office. The [direct user/tenant provisioning backend](OFFICE_PROVISIONING_R10.md)
+now accepts explicit memberships. Invitation onboarding and user-form controls
+remain required before the native office record-enforcement release is deployed.
 
 Composite foreign keys enforce tenant identity. Office/company references are
 checked at transaction commit so privileged whole-tenant maintenance cleanup can

@@ -31,12 +31,10 @@ settings were set and read back on 2026-10-25.
 node -e "process.exit(!process.env.VERCEL_GIT_COMMIT_REF || process.env.VERCEL_GIT_COMMIT_REF === 'main' ? 1 : 0)"
 ```
 
-Recommended dashboard retention: canceled/errored 1 day, previews 1 week,
-production 30 days in `ls-erp` and 1 week in `ls-erp-staging`. These require saving
-under Settings > Security > Deployment Retention Policy. At the last API check
-on 2026-10-25 the settings still read 30 days in every category; the recommendation
-must not be treated as applied. Vercel also preserves protected deployments under
-its retention rules.
+Dashboard retention was saved by the user and verified through the project API
+on 2026-10-25: canceled/errored 1 day, pre-production 1 week, production 30 days
+in `ls-erp` and 1 week in `ls-erp-staging`. Both projects retain the provider's
+protected-deployment exceptions (`deploymentsToKeep` still reports 10).
 
 Before deleting a deployment, inspect authoritative current aliases and project
 targets, preserve active destinations and tested production rollback candidates,

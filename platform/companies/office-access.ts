@@ -1,6 +1,8 @@
 import { Prisma, type PrismaClient } from "@prisma/client"
 import { z } from "zod"
-import { recordDomainAuditEvent } from "@/lib/domain-audit"
+import { officeMembershipSchema } from "./membership-validation"
+export { officeMembershipSchema } from "./membership-validation"
+import { loadOfficeMemberships, saveOfficeMemberships } from "./office-membership"
 import { guardUserWrite } from "@/platform/access/user-security"
 import { accessContext, findAccessUser } from "@/platform/access/server"
 import { BusinessError, hasBusinessAccess, type BusinessActor } from "@/platform/policy"
@@ -10,21 +12,8 @@ type Identity = Pick<BusinessActor, "tenantId" | "userId" | "requestId">
 type Tx = Prisma.TransactionClient
 export type OfficeChoice = { id: string; code: string; name: string; companyId: string; companyCode: string; companyName: string }
 const id = z.string().trim().min(1).max(200)
-export const officeMembershipSchema = z.object({
-  version: z.number().int().nonnegative(), creationOfficeId: id.nullable(),
-  officeIds: z.array(id).max(200),
-  companies: z.array(z.object({ companyId: id, includeSubsidiaries: z.boolean() }).strict()).max(100),
-}).strict().superRefine((value, ctx) => {
-  if (new Set(value.officeIds).size !== value.officeIds.length) ctx.addIssue({ code: "custom", path: ["officeIds"], message: "Choose each office only once." })
-  if (new Set(value.companies.map(row => row.companyId)).size !== value.companies.length) ctx.addIssue({ code: "custom", path: ["companies"], message: "Choose each company only once." })
-})
 const selectionSchema = z.object({ version: z.number().int().nonnegative(), officeId: id.nullable() }).strict()
 const listSchema = z.object({ page: z.coerce.number().int().min(1).max(100000).default(1), pageSize: z.coerce.number().int().min(1).max(100).default(20), q: z.string().trim().max(160).default(""), sort: z.enum(["name", "code"]).default("name"), order: z.enum(["asc", "desc"]).default("asc") }).strict()
-const policyInclude = {
-  offices: { include: { office: { select: { id: true, name: true, code: true, archived: true } } }, orderBy: { officeId: "asc" } },
-  companies: { include: { company: { select: { id: true, name: true, code: true, archived: true } } }, orderBy: { companyId: "asc" } },
-} satisfies Prisma.BusinessOfficePolicyInclude
-
 // These checks grant no profile action or record access by themselves. Native
 // record policies must intersect office eligibility with their own source rules.
 export async function officeAccessible(tx: Tx, actor: Pick<BusinessActor, "tenantId" | "userId">, officeId: string, userId = actor.userId) {
@@ -52,7 +41,7 @@ export function createOfficeAccessService(db: PrismaClient, identity: Identity) 
       throw error
     }
   }
-  const policy = (tx: Tx, userId: string) => tx.businessOfficePolicy.findUnique({ where: { tenantId_userId: { tenantId: identity.tenantId, userId } }, include: policyInclude })
+  const policy = (tx: Tx, userId: string) => loadOfficeMemberships(tx, identity.tenantId, userId)
   async function targetUser(tx: Tx, userId: string) {
     const user = await tx.user.findFirst({ where: { tenantId: identity.tenantId, id: userId }, select: { id: true, role: true, status: true } })
     if (!user) throw new BusinessError(404, "User not found.")
@@ -71,27 +60,7 @@ export function createOfficeAccessService(db: PrismaClient, identity: Identity) 
       id.parse(userId)
       const data = officeMembershipSchema.parse(input)
       return run(true, async (tx, actor) => {
-        const target = await targetUser(tx, userId)
-        if (!hasBusinessAccess(target.role) && (data.creationOfficeId || data.officeIds.length || data.companies.length)) throw new BusinessError(400, "Choose a business user for office memberships.")
-        if (target.status !== "ACTIVE" && (data.creationOfficeId || data.officeIds.length || data.companies.length)) throw new BusinessError(400, "Activate the user before assigning office memberships.")
-        const before = await policy(tx, userId)
-        if ((before?.version ?? 0) !== data.version) throw new BusinessError(409, "Office memberships changed. Reload before saving.")
-        const [offices, companies] = await Promise.all([
-          tx.businessOffice.count({ where: { tenantId: actor.tenantId, id: { in: data.officeIds } } }),
-          tx.businessCompany.count({ where: { tenantId: actor.tenantId, id: { in: data.companies.map(row => row.companyId) } } }),
-        ])
-        if (offices !== data.officeIds.length || companies !== data.companies.length) throw new BusinessError(400, "Choose offices and companies from this workspace.")
-        if (data.creationOfficeId && !await tx.businessOffice.count({ where: { tenantId: actor.tenantId, id: data.creationOfficeId, archived: false, company: { archived: false } } })) throw new BusinessError(400, "Choose an active creation office from this workspace.")
-        const saved = before ? await tx.businessOfficePolicy.update({ where: { tenantId_userId: { tenantId: actor.tenantId, userId }, version: data.version }, data: { creationOfficeId: data.creationOfficeId, version: { increment: 1 } } })
-          : await tx.businessOfficePolicy.create({ data: { tenantId: actor.tenantId, userId, creationOfficeId: data.creationOfficeId } })
-        await tx.businessOfficeGrant.deleteMany({ where: { tenantId: actor.tenantId, userId } })
-        await tx.businessCompanyGrant.deleteMany({ where: { tenantId: actor.tenantId, userId } })
-        if (data.officeIds.length) await tx.businessOfficeGrant.createMany({ data: data.officeIds.map(officeId => ({ tenantId: actor.tenantId, userId, officeId })) })
-        if (data.companies.length) await tx.businessCompanyGrant.createMany({ data: data.companies.map(row => ({ tenantId: actor.tenantId, userId, ...row })) })
-        if (data.creationOfficeId && !await officeAllowed(tx, actor, data.creationOfficeId, userId)) throw new BusinessError(400, "The creation office must be included in this user's effective office memberships.")
-        const snapshot = (row: typeof before): Prisma.InputJsonValue | undefined => row ? { creationOfficeId: row.creationOfficeId, version: row.version, officeIds: row.offices.map(g => g.officeId), companies: row.companies.map(g => ({ companyId: g.companyId, includeSubsidiaries: g.includeSubsidiaries })) } : undefined
-        await recordDomainAuditEvent(tx, { ...identity, actorUserId: actor.userId, actorRole: actor.role, event: "structure.officeMembership.updated", entityType: "BusinessOfficePolicy", entityId: userId, before: snapshot(before), after: { ...data, version: saved.version } })
-        return (await policy(tx, userId))!
+        return saveOfficeMemberships(tx, actor, userId, data)
       })
     },
     listOwnOffices(input: unknown) {

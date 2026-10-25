@@ -45,9 +45,11 @@ membership together. Do not treat a company/office name as an access grant.
 
 Phase 2A has the local [membership and context backend](OFFICE_MEMBERSHIP_R10.md).
 Phase 2B connects [native office ownership for sales records](SALES_OFFICE_OWNERSHIP_R10.md)
-to CRM, projects, quotations, orders and financial children. Operational families,
-user/tenant provisioning and workspace controls remain prerequisites before
-exposing office controls or deploying the office-isolation release.
+to CRM, projects, quotations, orders and financial children. Phase 2C adds the
+[user and tenant account provisioning backend](OFFICE_PROVISIONING_R10.md).
+Operational families, invitation onboarding, assignment selectors and workspace
+controls remain prerequisites before exposing office controls or deploying the
+office-isolation release.
 
 Add explicit company/office membership and permitted head-office oversight;
 intersect organizational scope with existing action profiles, record rules,
