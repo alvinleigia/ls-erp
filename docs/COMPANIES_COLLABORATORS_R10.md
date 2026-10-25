@@ -52,6 +52,7 @@ Phase 2D1 adds the [private scheduling availability foundation](SCHEDULING_PRIVA
 so hidden leave cannot become a free booking slot when office filters are added.
 Phase 2D2 extends that integrity boundary to hidden bookings, keeping collision
 checks separate from access to appointment/customer details.
+Phase 2D3 adds [native leave ownership and private roster snapshots](WORKFORCE_OFFICE_OWNERSHIP_R10.md), including personal history after office transfer.
 Operational families, assignment selectors and workspace
 controls remain prerequisites before exposing office controls or deploying the
 office-isolation release.

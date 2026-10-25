@@ -24,6 +24,7 @@ type ValidateCreateLeaveRequestRulesResult = {
 }
 
 type LeaveRequestWithRelations = {
+  officeId: string
   id: string
   staffProfileId: string
   leaveDefinitionId: string
@@ -75,11 +76,11 @@ const ACTIVE_APPOINTMENT_STATUSES = ["SCHEDULED", "CONFIRMED", "IN_PROGRESS"] as
 const parseDateOnly = (value: string) => {
   const [year, month, day] = value.split("-").map(Number)
   if (!year || !month || !day) {
-    throw new Error("Invalid date format. Use YYYY-MM-DD.")
+    throw new BusinessError(400, "Invalid date format. Use YYYY-MM-DD.")
   }
   const parsed = new Date(Date.UTC(year, month - 1, day))
   if (Number.isNaN(parsed.getTime())) {
-    throw new Error("Invalid date supplied.")
+    throw new BusinessError(400, "Invalid date supplied.")
   }
   return parsed
 }
@@ -191,7 +192,7 @@ export const validateCreateLeaveRequestRules = async ({
   const parsedStart = parseDateOnly(startDate)
   const parsedEnd = parseDateOnly(endDate)
   if (parsedStart > parsedEnd) {
-    throw new Error("Start date cannot be after end date.")
+    throw new BusinessError(400, "Start date cannot be after end date.")
   }
 
   const daysCount = getInclusiveDays(parsedStart, parsedEnd)
@@ -211,10 +212,10 @@ export const validateCreateLeaveRequestRules = async ({
     },
   })
   if (!staff || staff.user.status !== "ACTIVE") {
-    throw new Error("Only active staff or managers can request leave.")
+    throw new BusinessError(400, "Only active staff or managers can request leave.")
   }
   if (staff.user.role !== "STAFF" && staff.user.role !== "MANAGER") {
-    throw new Error("Only active staff or managers can request leave.")
+    throw new BusinessError(400, "Only active staff or managers can request leave.")
   }
 
   const eligibleGroup = await tx.leaveGroup.findFirst({
@@ -241,7 +242,7 @@ export const validateCreateLeaveRequestRules = async ({
     select: { id: true },
   })
   if (!eligibleGroup) {
-    throw new Error("Selected leave type is not assigned to this employee.")
+    throw new BusinessError(400, "Selected leave type is not assigned to this employee.")
   }
 
   const leaveDefinition = await tx.leaveDefinition.findUnique({
@@ -273,37 +274,37 @@ export const validateCreateLeaveRequestRules = async ({
     },
   })
   if (!leaveDefinition || leaveDefinition.status !== "ACTIVE") {
-    throw new Error("Selected leave definition is not active.")
+    throw new BusinessError(400, "Selected leave definition is not active.")
   }
 
   if (
     leaveDefinition.allowedUsers !== "ALL" &&
     !staff.user.gender
   ) {
-    throw new Error("User gender is required for this leave type.")
+    throw new BusinessError(400, "User gender is required for this leave type.")
   }
 
   if (leaveDefinition.allowedUsers === "MALE" && staff.user.gender !== "MALE") {
-    throw new Error("This leave type is only allowed for male staff.")
+    throw new BusinessError(400, "This leave type is only allowed for male staff.")
   }
   if (leaveDefinition.allowedUsers === "FEMALE" && staff.user.gender !== "FEMALE") {
-    throw new Error("This leave type is only allowed for female staff.")
+    throw new BusinessError(400, "This leave type is only allowed for female staff.")
   }
 
   if (daysCount < leaveDefinition.minDaysPerRequest) {
-    throw new Error("Requested days are below the minimum allowed per request.")
+    throw new BusinessError(400, "Requested days are below the minimum allowed per request.")
   }
   if (daysCount > leaveDefinition.maxDaysPerRequest) {
-    throw new Error("Requested days exceed the maximum allowed per request.")
+    throw new BusinessError(400, "Requested days exceed the maximum allowed per request.")
   }
 
   const today = getTodayDateOnlyUtc()
   if (!leaveDefinition.priorEntryAllowed && parsedStart < today) {
-    throw new Error("Past leave entry is not allowed for this leave type.")
+    throw new BusinessError(400, "Past leave entry is not allowed for this leave type.")
   }
   const minimumAllowedStart = addDays(today, leaveDefinition.noticeDays)
   if (parsedStart < minimumAllowedStart) {
-    throw new Error(`At least ${leaveDefinition.noticeDays} day(s) notice is required.`)
+    throw new BusinessError(400, `At least ${leaveDefinition.noticeDays} day(s) notice is required.`)
   }
 
   const pendingCount = await tx.leaveRequest.count({
@@ -315,7 +316,7 @@ export const validateCreateLeaveRequestRules = async ({
     },
   })
   if (pendingCount >= leaveDefinition.maxPendingRequests) {
-    throw new Error("Maximum pending requests reached for this leave type.")
+    throw new BusinessError(400, "Maximum pending requests reached for this leave type.")
   }
 
   const overlappingRequests = await tx.leaveRequest.findMany({
@@ -333,7 +334,7 @@ export const validateCreateLeaveRequestRules = async ({
   })
 
   if (!leaveDefinition.allowWithOtherLeaves && overlappingRequests.length > 0) {
-    throw new Error("This leave cannot be combined with overlapping leave requests.")
+    throw new BusinessError(400, "This leave cannot be combined with overlapping leave requests.")
   }
 
   const nonClubbableIds = new Set<string>([
@@ -353,7 +354,7 @@ export const validateCreateLeaveRequestRules = async ({
       select: { id: true },
     })
     if (adjacentOrOverlapping) {
-      throw new Error("This leave cannot be clubbed with the selected adjacent leave type.")
+      throw new BusinessError(400, "This leave cannot be clubbed with the selected adjacent leave type.")
     }
   }
 
@@ -376,28 +377,28 @@ export const validateCreateLeaveRequestRules = async ({
   const weekOffBefore = isWeekOffForSchedule(beforeDate, beforeSchedule)
   const weekOffAfter = isWeekOffForSchedule(afterDate, afterSchedule)
   if (weekOffBefore && weekOffAfter && !leaveDefinition.weekOffBothSideAllowed) {
-    throw new Error("Week off is not allowed on both sides for this leave type.")
+    throw new BusinessError(400, "Week off is not allowed on both sides for this leave type.")
   }
   if (
     (weekOffBefore || weekOffAfter) &&
     !(weekOffBefore && weekOffAfter) &&
     !leaveDefinition.weekOffSingleSideAllowed
   ) {
-    throw new Error("Week off is not allowed on a single side for this leave type.")
+    throw new BusinessError(400, "Week off is not allowed on a single side for this leave type.")
   }
 
   const holidaySet = new Set(holidayOverrides.map((item) => toIsoDate(item.date)))
   const holidayBefore = holidaySet.has(toIsoDate(beforeDate))
   const holidayAfter = holidaySet.has(toIsoDate(afterDate))
   if (holidayBefore && holidayAfter && !leaveDefinition.holidayBothSideAllowed) {
-    throw new Error("Holiday is not allowed on both sides for this leave type.")
+    throw new BusinessError(400, "Holiday is not allowed on both sides for this leave type.")
   }
   if (
     (holidayBefore || holidayAfter) &&
     !(holidayBefore && holidayAfter) &&
     !leaveDefinition.holidaySingleSideAllowed
   ) {
-    throw new Error("Holiday is not allowed on a single side for this leave type.")
+    throw new BusinessError(400, "Holiday is not allowed on a single side for this leave type.")
   }
 
   return {
@@ -504,6 +505,7 @@ export const findLeaveApprovalConflicts = async (
 }
 
 export const leaveRequestSelect = {
+  officeId: true,
   id: true,
   staffProfileId: true,
   leaveDefinitionId: true,
@@ -561,6 +563,7 @@ export const leaveRequestSelect = {
 
 export const serializeLeaveRequest = (item: LeaveRequestWithRelations): LeaveRequestRow => ({
   id: item.id,
+  officeId: item.officeId,
   staffProfileId: item.staffProfileId,
   leaveDefinitionId: item.leaveDefinitionId,
   startDate: item.startDate.toISOString(),

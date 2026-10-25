@@ -175,8 +175,8 @@ export async function listRosterHistory(tenantId: string, query: WorkforceDateRa
     const rows = await tx.staffRosterHistoryDay.findMany({ where: { staffProfile: where, date: { gte: new Date(query.startDate), lte: new Date(query.endDate) } },
       orderBy: [{ date: "asc" }, { createdAt: "asc" }],
       select: { staffProfile: { select: { userId: true } }, date: true, source: true, templateId: true, templateName: true,
-        startTime: true, endTime: true, paidMinutes: true, leaveDefinitionCode: true, leaveDefinitionName: true, leaveReason: true },
+        startTime: true, endTime: true, paidMinutes: true, privateLeave: { select: { source: true, leaveDefinitionCode: true, leaveDefinitionName: true, leaveReason: true } } },
     })
-    return { items: rows.map(({ staffProfile, ...row }) => ({ ...row, staffId: staffProfile.userId, date: dateKey(row.date) })) }
+    return { items: rows.map(({ staffProfile, privateLeave, ...row }) => ({ ...row, source: privateLeave?.source ?? row.source, leaveDefinitionCode: privateLeave?.leaveDefinitionCode ?? null, leaveDefinitionName: privateLeave?.leaveDefinitionName ?? null, leaveReason: privateLeave?.leaveReason ?? null, staffId: staffProfile.userId, date: dateKey(row.date) })) }
   })
 }

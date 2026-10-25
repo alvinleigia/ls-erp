@@ -70,12 +70,12 @@ test('leave lifecycle guards retain valid transitions and reject repeated or ter
 })
 
 test('notification settings and every recipient lookup stay within the supplied tenant', async () => {
-  const payload = { tenantId: 'tenant-a', staffUserId: 'staff-a', leaveCode: 'AL', leaveName: 'Annual leave', startDateIso: '2030-10-07', endDateIso: '2030-10-07', daysCount: 1 }
+  const payload = { tenantId: 'tenant-a', leaveRequestId: 'request-a', staffUserId: 'staff-a', leaveCode: 'AL', leaveName: 'Annual leave', startDateIso: '2030-10-07', endDateIso: '2030-10-07', daysCount: 1 }
   const tx = {
     staffProfile: { findFirst: async ({ where }) => { assert.equal(where.user.tenantId, payload.tenantId); assert.equal(where.userId, payload.staffUserId); return { managerUserId: 'manager-a', leaveApprovalMode: 'REPORTING_MANAGER' } } },
-    $queryRaw: async (_sql, ...values) => { assert(values.includes(payload.tenantId)); assert(values.includes('manager-a')); return [{ role: 'MANAGER', slug: payload.tenantId, status: 'ACTIVE', rules: { 'leaveApprovals.read': 'REPORTS', 'leaveApprovals.approve': 'REPORTS' }, managedTeamIds: [], memberTeamIds: [], accessAssignments: [{ roleId: 'reviewer', role: { archived: false, permissions: ['leaveApprovals.read', 'leaveApprovals.approve'] } }] }] },
+    $queryRaw: async (_sql, ...values) => { assert.equal(values[0], payload.tenantId); assert.equal(values[1], 'request-a'); assert(['manager-a','admin-a','staff-a'].includes(values[2])); return [{ allowed: true }] },
     user: {
-    findFirst: async ({ where }) => { assert.equal(where.tenantId, payload.tenantId); assert.equal(where.id, 'manager-a'); assert.equal(where.status, 'ACTIVE'); return { email: 'manager@example.test' } },
+    findFirst: async ({ where }) => { assert.equal(where.tenantId, payload.tenantId); assert.equal(where.id, 'manager-a'); assert.equal(where.status, 'ACTIVE'); return { id: 'manager-a', email: 'manager@example.test' } },
     findUnique: async ({ where }) => {
       assert.equal(where.tenantId, payload.tenantId)
       if (where.id === 'manager-a') return { email: 'manager@example.test', status: 'ACTIVE', role: 'MANAGER' }
@@ -84,7 +84,7 @@ test('notification settings and every recipient lookup stay within the supplied 
     },
     findMany: async ({ where }) => {
       assert.equal(where.tenantId, payload.tenantId)
-      return [{ email: 'admin@example.test' }]
+      return [{ id: 'admin-a', email: 'admin@example.test' }]
     },
   } }
   await notifications.notifyLeaveSubmitted(tx, payload)

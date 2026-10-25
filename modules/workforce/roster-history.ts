@@ -64,7 +64,7 @@ const buildRosterHistoryRows = async (
   }
 
   const dates = enumerateDates(parsedStart, parsedEnd)
-  const [overrides, leaves, staffProfiles] = await Promise.all([
+  const [overrides, staffProfiles] = await Promise.all([
     tx.staffShiftOverride.findMany({
       where: {
         staffProfileId: { in: uniqueStaffIds },
@@ -77,20 +77,6 @@ const buildRosterHistoryRows = async (
         },
       },
     }),
-    tx.leaveRequest.findMany({
-      where: {
-        staffProfileId: { in: uniqueStaffIds },
-        staffProfile: { user: { tenantId: params.tenantId } },
-        tenantId: params.tenantId,
-        status: "APPROVED",
-        startDate: { lte: parsedEnd },
-        endDate: { gte: parsedStart },
-      },
-      include: {
-        leaveDefinition: { select: { code: true, name: true } },
-      },
-      orderBy: [{ startDate: "asc" }, { createdAt: "asc" }],
-    }),
     tx.staffProfile.findMany({
       where: { id: { in: uniqueStaffIds }, user: { tenantId: params.tenantId } },
       select: { id: true, schedulingMode: true },
@@ -100,22 +86,6 @@ const buildRosterHistoryRows = async (
   const overrideMap = new Map<string, typeof overrides[number]>()
   for (const override of overrides) {
     overrideMap.set(`${override.staffProfileId}:${toDateKey(override.date)}`, override)
-  }
-
-  const leaveMap = new Map<string, typeof leaves[number]>()
-  for (const leave of leaves) {
-    const start = new Date(leave.startDate)
-    start.setUTCHours(0, 0, 0, 0)
-    const end = new Date(leave.endDate)
-    end.setUTCHours(0, 0, 0, 0)
-    const cursor = new Date(start)
-    while (cursor <= end) {
-      const key = `${leave.staffProfileId}:${toDateKey(cursor)}`
-      if (!leaveMap.has(key)) {
-        leaveMap.set(key, leave)
-      }
-      cursor.setUTCDate(cursor.getUTCDate() + 1)
-    }
   }
 
   const schedulingModeByStaff = new Map(staffProfiles.map((item) => [item.id, item.schedulingMode]))
@@ -136,34 +106,11 @@ const buildRosterHistoryRows = async (
     startTime: string | null
     endTime: string | null
     paidMinutes: number
-    leaveRequestId: string | null
-    leaveDefinitionCode: string | null
-    leaveDefinitionName: string | null
-    leaveReason: string | null
   }[] = []
 
   for (const { id: staffProfileId } of staffProfiles) {
     for (const day of dates) {
       const dateKey = toDateKey(day)
-      const leave = leaveMap.get(`${staffProfileId}:${dateKey}`)
-      if (leave) {
-        rows.push({
-          staffProfileId,
-          date: new Date(day),
-          source: "LEAVE",
-          templateId: null,
-          templateName: null,
-          startTime: null,
-          endTime: null,
-          paidMinutes: 0,
-          leaveRequestId: leave.id,
-          leaveDefinitionCode: leave.leaveDefinition.code,
-          leaveDefinitionName: leave.leaveDefinition.name,
-          leaveReason: leave.reason ?? null,
-        })
-        continue
-      }
-
       const override = overrideMap.get(`${staffProfileId}:${dateKey}`)
       if (override) {
         if (!override.template) {
@@ -176,10 +123,6 @@ const buildRosterHistoryRows = async (
             startTime: null,
             endTime: null,
             paidMinutes: 0,
-            leaveRequestId: null,
-            leaveDefinitionCode: null,
-            leaveDefinitionName: null,
-            leaveReason: null,
           })
           continue
         }
@@ -192,10 +135,6 @@ const buildRosterHistoryRows = async (
           startTime: override.template.startTime,
           endTime: override.template.endTime,
           paidMinutes: getPaidMinutes(override.template),
-          leaveRequestId: null,
-          leaveDefinitionCode: null,
-          leaveDefinitionName: null,
-          leaveReason: null,
         })
         continue
       }
@@ -212,10 +151,6 @@ const buildRosterHistoryRows = async (
             startTime: null,
             endTime: null,
             paidMinutes: 0,
-            leaveRequestId: null,
-            leaveDefinitionCode: null,
-            leaveDefinitionName: null,
-            leaveReason: null,
           })
           continue
         }
@@ -229,10 +164,6 @@ const buildRosterHistoryRows = async (
           startTime: flexible.startTime,
           endTime: flexible.endTime,
           paidMinutes,
-          leaveRequestId: null,
-          leaveDefinitionCode: null,
-          leaveDefinitionName: null,
-          leaveReason: null,
         })
         continue
       }
@@ -247,10 +178,6 @@ const buildRosterHistoryRows = async (
           startTime: null,
           endTime: null,
           paidMinutes: 0,
-          leaveRequestId: null,
-          leaveDefinitionCode: null,
-          leaveDefinitionName: null,
-          leaveReason: null,
         })
         continue
       }
@@ -264,10 +191,6 @@ const buildRosterHistoryRows = async (
         startTime: template.startTime,
         endTime: template.endTime,
         paidMinutes: getPaidMinutes(template),
-        leaveRequestId: null,
-        leaveDefinitionCode: null,
-        leaveDefinitionName: null,
-        leaveReason: null,
       })
     }
   }
@@ -282,6 +205,8 @@ export const syncRosterHistoryRange = async (
   if (!params.tenantId) throw new BusinessError(403, "Tenant context is required.")
   const rosterHistoryDelegate = tx.staffRosterHistoryDay
   const mode = params.mode ?? "insert-missing"
+// The database hydrates private leave evidence atomically without returning it
+  // to the working-time writer, including when the leave source is hidden.
   const rows = await buildRosterHistoryRows(tx, params)
   if (!rows.length) return 0
 
@@ -302,10 +227,6 @@ export const syncRosterHistoryRange = async (
             startTime: row.startTime,
             endTime: row.endTime,
             paidMinutes: row.paidMinutes,
-            leaveRequestId: row.leaveRequestId,
-            leaveDefinitionCode: row.leaveDefinitionCode,
-            leaveDefinitionName: row.leaveDefinitionName,
-            leaveReason: row.leaveReason,
           },
           create: row,
         })

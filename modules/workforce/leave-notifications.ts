@@ -1,6 +1,3 @@
-import { accessContext, findAccessUser } from "@/platform/access/server"
-import { permits } from "@/platform/access/policy"
-import { recordLimits } from "@/platform/access/rules"
 import { BusinessError } from "@/platform/policy"
 import { Prisma, Role, type PrismaClient } from "@prisma/client"
 
@@ -17,6 +14,7 @@ type DbClient = PrismaClient | Prisma.TransactionClient
 
 type LeaveRequestNotificationPayload = {
   tenantId: string
+  leaveRequestId: string
   leaveCode: string
   leaveName: string
   startDateIso: string
@@ -34,21 +32,20 @@ const sendEmail = async (to: string, template: { subject: string; text: string; 
   })
 }
 
-async function reviewerEmails(tx: DbClient, tenantId: string, staffUserId: string, action: "read" | "approve") {
-  const admins = await tx.user.findMany({ where: { tenantId, role: Role.ADMIN, status: "ACTIVE" }, select: { email: true } })
-  const recipients = new Set(admins.map(user => user.email))
+async function mayNotify(tx: DbClient, tenantId: string, leaveRequestId: string, target: string, action: "read" | "approve") {
+  if (!leaveRequestId) throw new BusinessError(403, "Leave request context is required.")
+  const [row] = await tx.$queryRaw<{ allowed: boolean }[]>`SELECT app.leave_notice_recipient(${tenantId},${leaveRequestId},${target},${action}) AS allowed`
+  return row?.allowed === true
+}
+async function reviewerEmails(tx: DbClient, tenantId: string, leaveRequestId: string, staffUserId: string, action: "read" | "approve") {
+  const candidates = await tx.user.findMany({ where: { tenantId, role: Role.ADMIN, status: "ACTIVE" }, select: { id: true, email: true } })
   const employee = await tx.staffProfile.findFirst({ where: { userId: staffUserId, user: { tenantId } }, select: { managerUserId: true, leaveApprovalMode: true } })
   if (employee?.leaveApprovalMode === "REPORTING_MANAGER" && employee.managerUserId && employee.managerUserId !== staffUserId) {
-    const user = await findAccessUser(tx, tenantId, employee.managerUserId)
-    if (user) {
-      const actor = { tenantId, userId: employee.managerUserId, ...accessContext(user) }
-      if (permits(actor, `leaveApprovals.${action}`) && !recordLimits(actor, "leaveApprovals", action).includes("NONE")) {
-        const manager = await tx.user.findFirst({ where: { tenantId, id: employee.managerUserId, status: "ACTIVE" }, select: { email: true } })
-        if (manager) recipients.add(manager.email)
-      }
-    }
+    const manager = await tx.user.findFirst({ where: { tenantId, id: employee.managerUserId, status: "ACTIVE" }, select: { id: true, email: true } })
+    if (manager) candidates.push(manager)
   }
-  return [...recipients]
+  const permitted = await Promise.all(candidates.map(async user => await mayNotify(tx, tenantId, leaveRequestId, user.id, action) ? user.email : null))
+  return [...new Set(permitted.filter((email): email is string => email !== null))]
 }
 
 export const notifyLeaveSubmitted = async (
@@ -57,7 +54,7 @@ export const notifyLeaveSubmitted = async (
 ) => {
   if (!payload.tenantId) throw new BusinessError(403, "Tenant context is required.")
   if (!(await canSendConfiguredEmail(tx, payload.tenantId))) return
-  const recipients = await reviewerEmails(tx, payload.tenantId, payload.staffUserId, "approve")
+  const recipients = await reviewerEmails(tx, payload.tenantId, payload.leaveRequestId, payload.staffUserId, "approve")
 
   const template = leaveRequestSubmittedEmail({
     leaveCode: payload.leaveCode,
@@ -80,6 +77,7 @@ export const notifyLeaveReviewed = async (
 ) => {
   if (!params.tenantId) throw new BusinessError(403, "Tenant context is required.")
   if (!(await canSendConfiguredEmail(tx, params.tenantId))) return
+  if (!await mayNotify(tx, params.tenantId, params.leaveRequestId, params.staffUserId, "read")) return
   const staffUser = await tx.user.findUnique({
     where: { id: params.staffUserId, tenantId: params.tenantId },
     select: { email: true, name: true },
@@ -126,7 +124,7 @@ export const notifyLeaveCanceled = async (
 
   const isSelfCancel = params.staffUserId === params.canceledByUserId
   if (isSelfCancel) {
-    const reviewers = await reviewerEmails(tx, params.tenantId, params.staffUserId, "read")
+    const reviewers = await reviewerEmails(tx, params.tenantId, params.leaveRequestId, params.staffUserId, "read")
     const template = leaveRequestCanceledEmail({
       leaveCode: params.leaveCode,
       leaveName: params.leaveName,
@@ -140,6 +138,7 @@ export const notifyLeaveCanceled = async (
     return
   }
 
+  if (!await mayNotify(tx, params.tenantId, params.leaveRequestId, params.staffUserId, "read")) return
   const staffUser = await tx.user.findUnique({
     where: { id: params.staffUserId, tenantId: params.tenantId },
     select: { email: true },
@@ -167,6 +166,7 @@ export const notifyLeaveRevoked = async (
 ) => {
   if (!params.tenantId) throw new BusinessError(403, "Tenant context is required.")
   if (!(await canSendConfiguredEmail(tx, params.tenantId))) return
+  if (!await mayNotify(tx, params.tenantId, params.leaveRequestId, params.staffUserId, "read")) return
   const staffUser = await tx.user.findUnique({
     where: { id: params.staffUserId, tenantId: params.tenantId },
     select: { email: true, name: true },

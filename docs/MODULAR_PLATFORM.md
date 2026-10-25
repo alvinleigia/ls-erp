@@ -1,3 +1,29 @@
+## R10 - Leave office ownership (phase 2D3, local)
+
+Leave requests persist immutable office identity. New forms capture the shared
+creation-office version; submission, staff-profile creation and mandatory audit
+commit under the scheduling lock. Personal Read survives office transfer, while
+reviewers need their existing configured relationship, profile and source office.
+Closed-office reviewer writes fail without removing historical reads. Audit copies
+and notification eligibility follow current source access.
+
+Private leave IDs, labels and reasons moved out of generic roster history into
+StaffRosterLeaveSnapshot. Forced RLS protects the private child. Canonical database
+hydration keeps hidden approved leave unavailable without returning private fields
+to the scheduling writer. Authorized history responses reconstruct saved evidence;
+others receive generic unavailable time. The native office registry includes leave.
+
+Pending migration 118 has tested rollback, policy restoration and exact history
+reconstruction across all 125 preceding tables, including frozen labels/reasons.
+Only documented ownership metadata, missing-tenant normalization and private-field
+storage change; IDs, timestamps and grants remain. All 14 office checks, 176
+regressions, notification unit checks and the real Chrome stale-form/save/transfer
+flow passed. Its completed screenshot was inspected. Schema validation, build,
+TypeScript, targeted lint and whitespace passed. No push, hosted migration,
+deployment or client-data change. Native Shifts/bookings/purchasing ownership,
+stock boundaries, selectors and workspace controls remain release prerequisites.
+See [the leave ownership contract](WORKFORCE_OFFICE_OWNERSHIP_R10.md).
+
 ## R10 - Private booking integrity (phase 2D2, local)
 
 Appointment creation, edits, bulk moves, order suggestions, leave approval,

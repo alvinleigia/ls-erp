@@ -1,4 +1,5 @@
 "use client"
+import { useCreationOfficeSnapshot } from "@/platform/companies/creation-snapshot"
 import { useDateFormatter } from "@/hooks/use-date-formatter"
 import { useBusinessModules } from "@/platform/module-provider"
 import { useCurrentResourceAction } from "@/platform/access/view-guard"
@@ -121,6 +122,7 @@ export default function LeaveRequestsPage() {
   })
   const [pagination, setPagination] = React.useState<PaginationState>({ pageIndex: 0, pageSize: 10 })
   const [createOpen, setCreateOpen] = React.useState(false)
+  const creationOfficeHeaders = useCreationOfficeSnapshot(createOpen)
   const [creating, setCreating] = React.useState(false)
   const [formValues, setFormValues] = React.useState<LeaveRequestFormValues>(defaultFormValues)
   const [leaveOptions, setLeaveOptions] = React.useState<Array<{ value: string; label: string }>>([])
@@ -222,7 +224,7 @@ export default function LeaveRequestsPage() {
       clearErrors()
       const response = await fetch("/api/leaves/requests", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...await creationOfficeHeaders() },
         body: JSON.stringify(formValues),
       })
       if (!response.ok) {

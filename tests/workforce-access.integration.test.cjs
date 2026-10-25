@@ -25,7 +25,7 @@ for(const moduleKey of ['leaves','shifts'])for(const file of fs.readdirSync(path
 const get=key=>endpoints.find(e=>e.key===key).route
 const suffix=require('node:crypto').randomUUID().replaceAll('-',''),a=`wf_a_${suffix}`,b=`wf_b_${suffix}`,rid=`role_${suffix}`
 const session=(tenant=a,role='ADMIN')=>({user:{id:`${tenant}_${role.toLowerCase()}`,tenantId:tenant,role}})
-const call=(key,method='GET',body,id,role='ADMIN',tenant=a,query='')=>sessions.run(session(tenant,role),()=>get(key)[method](new Request(`http://${tenant}.localhost/api/${key}${query}`,{method,headers:{host:`${tenant}.localhost`,'content-type':'application/json'},...(body===undefined?{}:{body:JSON.stringify(body)})}),{params:Promise.resolve({id})}))
+const call=async(key,method='GET',body,id,role='ADMIN',tenant=a,query='')=>{const p=(await root.query('SELECT \"creationOfficeId\",version FROM \"BusinessOfficePolicy\" WHERE \"tenantId\"=$1 AND \"userId\"=$2',[tenant,tenant+'_'+role.toLowerCase()])).rows[0];const office=p?.creationOfficeId?{'x-office-id':p.creationOfficeId,'x-office-version':String(p.version)}:{};return sessions.run(session(tenant,role),()=>get(key)[method](new Request(`http://${tenant}.localhost/api/${key}${query}`,{method,headers:{host:`${tenant}.localhost`,'content-type':'application/json',...office},...(body===undefined?{}:{body:JSON.stringify(body)})}),{params:Promise.resolve({id})}))}
 const perms=p=>root.query('UPDATE "TenantAccessRole" SET permissions=$1 WHERE id=$2',[p,rid])
 const flag=(key,enabled,allowed=true)=>root.query('UPDATE "TenantModule" SET enabled=$1,allowed=$2 WHERE "tenantId"=$3 AND key=$4',[enabled,allowed,a,key])
 async function ok(res,status=200){const body=await res.json();assert.equal(res.status,status,JSON.stringify({body,errors:errors.slice(-2)}));return body}
@@ -304,7 +304,7 @@ test('past approval/revocation synchronizes roster history and rolls back when h
  assert.equal((await root.query('SELECT count(*)::int n FROM "AuditLog" WHERE "entityId"=$1',[id])).rows[0].n,0)
  stub.mock.restore()
  await ok(await call('leaves/requests/[id]/review','PATCH',{status:'APPROVED'},id))
- const roster=()=>root.query('SELECT source,"leaveRequestId" FROM "StaffRosterHistoryDay" WHERE "staffProfileId"=$1 AND date=\'2020-01-06\'',[a+'_profile'])
+ const roster=()=>root.query('SELECT h.source,s."leaveRequestId" FROM "StaffRosterHistoryDay" h LEFT JOIN "StaffRosterLeaveSnapshot" s ON s."historyId"=h.id WHERE h."staffProfileId"=$1 AND h.date=\'2020-01-06\'',[a+'_profile'])
  assert.equal((await roster()).rows[0].leaveRequestId,id)
  await ok(await call('leaves/requests/[id]/revoke','PATCH',{revokeReason:''},id),400)
  await ok(await call('leaves/requests/[id]/revoke','PATCH',{revokeReason:'Correction'},id))
@@ -328,7 +328,7 @@ test('bulk review skips foreign, missing, completed and out-of-scope requests an
  await root.query('UPDATE "StaffProfile" SET "managerUserId"=NULL WHERE id=$1',[a+'_profile'])
  await perms(['leaveApprovals.read','leaveApprovals.archive'])
  const approved=await requestFixture('unassigned_approved',{status:'APPROVED'})
- await ok(await call('leaves/requests/[id]/revoke','PATCH',{revokeReason:'No access'},approved,'MANAGER'),403)
+ await ok(await call('leaves/requests/[id]/revoke','PATCH',{revokeReason:'No access'},approved,'MANAGER'),404)
  await root.query('UPDATE "StaffProfile" SET "managerUserId"=$1 WHERE id=$2',[a+'_manager',a+'_profile'])
 })
 
@@ -962,7 +962,7 @@ test('flexible history and live availability share weekly, recurring and daily p
  days[2]={...days[2],isOff:false,slots:[]}
  await ok(await call('shifts/flexible-week-plans','PUT',{...weekBody(),staffId:id,weekStartDate:'2020-01-06',days}))
  for(const date of ['2020-01-06','2020-01-07','2020-01-18','2020-01-27'])await root.query('INSERT INTO "StaffFlexibleAvailability" (id,"staffProfileId",date,"startTime","endTime","sortOrder","updatedAt") VALUES ($1,$2,$3,$4,$5,0,now())',[id+'_'+date,profile,date,'09:00','11:00'])
- const {runWithTenantDbContext:scope}=require('../lib/prisma.ts'),{syncRosterHistoryRange:sync}=require('../modules/workforce/roster-history.ts')
+ const {runWithTenantDbContext:scope}=require('../lib/prisma.ts'),{syncHistoryAsAdministrator:sync}=require('./helpers/availability-fixtures.cjs')
  const foreignBefore=(await root.query('SELECT * FROM "StaffRosterHistoryDay" WHERE "staffProfileId"=$1 ORDER BY date',[b+'_profile'])).rows
  assert.equal(await scope(a,()=>sync(prisma,{tenantId:a,staffProfileIds:[profile,b+'_profile'],startDate:'2020-01-06',endDate:'2020-01-27'})),22)
  const rows=(await root.query('SELECT * FROM "StaffRosterHistoryDay" WHERE "staffProfileId"=$1 ORDER BY date',[profile])).rows
@@ -978,7 +978,7 @@ test('flexible history and live availability share weekly, recurring and daily p
 })
 
 test('capturing missing history preserves saved snapshots while explicit corrections retain leave and override precedence',async()=>{
- const {profile}=historyStaff,{runWithTenantDbContext:scope}=require('../lib/prisma.ts'),{syncRosterHistoryRange:sync}=require('../modules/workforce/roster-history.ts')
+ const {profile}=historyStaff,{runWithTenantDbContext:scope}=require('../lib/prisma.ts'),{syncHistoryAsAdministrator:sync}=require('./helpers/availability-fixtures.cjs')
  const params={tenantId:a,staffProfileIds:[profile],startDate:'2020-01-06',endDate:'2020-01-27'}
  const before=(await root.query('SELECT * FROM "StaffRosterHistoryDay" WHERE "staffProfileId"=$1 ORDER BY date',[profile])).rows
  await root.query('UPDATE "StaffFlexiblePattern" SET "isActive"=false WHERE id=$1',[historyPattern.id])
@@ -988,10 +988,10 @@ test('capturing missing history preserves saved snapshots while explicit correct
  await root.query('INSERT INTO "StaffShiftOverride" (id,"staffProfileId",date,"templateId","updatedAt") VALUES ($1,$2,$3,NULL,now())',[profile+'_off',profile,'2020-01-06'])
  await requestFixture('history_parity',{profile,date:'2020-01-06',status:'APPROVED'})
  await scope(a,()=>sync(prisma,{...params,startDate:'2020-01-06',endDate:'2020-01-06',mode:'replace'}))
- assert.equal((await root.query('SELECT source FROM "StaffRosterHistoryDay" WHERE "staffProfileId"=$1 AND date=$2',[profile,'2020-01-06'])).rows[0].source,'LEAVE')
+ assert.equal((await root.query('SELECT COALESCE(s.source,h.source) source FROM "StaffRosterHistoryDay" h LEFT JOIN "StaffRosterLeaveSnapshot" s ON s."historyId"=h.id WHERE h."staffProfileId"=$1 AND date=$2',[profile,'2020-01-06'])).rows[0].source,'LEAVE')
  await root.query('UPDATE "LeaveRequest" SET status=$1 WHERE "staffProfileId"=$2',['REVOKED',profile])
  await scope(a,()=>sync(prisma,{...params,startDate:'2020-01-06',endDate:'2020-01-06',mode:'replace'}))
- assert.equal((await root.query('SELECT source FROM "StaffRosterHistoryDay" WHERE "staffProfileId"=$1 AND date=$2',[profile,'2020-01-06'])).rows[0].source,'UNAVAILABLE')
+ assert.equal((await root.query('SELECT COALESCE(s.source,h.source) source FROM "StaffRosterHistoryDay" h LEFT JOIN "StaffRosterLeaveSnapshot" s ON s."historyId"=h.id WHERE h."staffProfileId"=$1 AND date=$2',[profile,'2020-01-06'])).rows[0].source,'UNAVAILABLE')
  const others=(await root.query('SELECT * FROM "StaffRosterHistoryDay" WHERE "staffProfileId"=$1 AND date>$2 ORDER BY date',[profile,'2020-01-06'])).rows
  assert.deepEqual(others,before.slice(1))
 })
@@ -1021,7 +1021,7 @@ test('weekly history keeps its calendar date when a booking falls on the previou
  const days=planDays().map(day=>({...day,isOff:true,slots:[]}))
  days[0]={...days[0],isOff:false,slots:[{startTime:'00:15',endTime:'01:15',breaks:[{startTime:'00:30',endTime:'00:45'}]}]}
  await ok(await call('shifts/flexible-week-plans','PUT',{staffId:id,weekStartDate:'2020-01-06',days}))
- const {runWithTenantDbContext:scope}=require('../lib/prisma.ts'),{syncRosterHistoryRange:sync}=require('../modules/workforce/roster-history.ts'),{checkAsAdministrator:check}=require('./helpers/availability-fixtures.cjs')
+ const {runWithTenantDbContext:scope}=require('../lib/prisma.ts'),{syncHistoryAsAdministrator:sync}=require('./helpers/availability-fixtures.cjs'),{checkAsAdministrator:check}=require('./helpers/availability-fixtures.cjs')
  await root.query('UPDATE "AppSetting" SET "timeZone"=$1 WHERE "tenantId"=$2',['Asia/Kolkata',a])
  try{
   await scope(a,()=>sync(prisma,{tenantId:a,staffProfileIds:[profile],startDate:'2020-01-06',endDate:'2020-01-06'}))
@@ -1050,7 +1050,7 @@ async function standardHistoryFixture(){
 
 test('standard history and live availability share schedule-anchored rotation, assignment gaps, breaks and off days',async()=>{
  standardHistory=await standardHistoryFixture()
- const {profile,early,late}=standardHistory,{runWithTenantDbContext:scope}=require('../lib/prisma.ts'),{syncRosterHistoryRange:sync}=require('../modules/workforce/roster-history.ts'),{checkAsAdministrator:check}=require('./helpers/availability-fixtures.cjs')
+ const {profile,early,late}=standardHistory,{runWithTenantDbContext:scope}=require('../lib/prisma.ts'),{syncHistoryAsAdministrator:sync}=require('./helpers/availability-fixtures.cjs'),{checkAsAdministrator:check}=require('./helpers/availability-fixtures.cjs')
  await scope(a,()=>sync(prisma,{tenantId:a,staffProfileIds:[profile,b+'_managerprofile'],startDate:'2020-01-05',endDate:'2020-01-14'}))
  const rows=(await root.query('SELECT * FROM "StaffRosterHistoryDay" WHERE "staffProfileId"=$1 ORDER BY date',[profile])).rows
  const expected=[null,null,early.id,late.id,early.id,early.id,null,null,null,early.id]
@@ -1085,9 +1085,9 @@ test('standard range loading stays bounded and excludes foreign staff even with 
 })
 
 test('standard history retains saved snapshots and explicit corrections preserve higher-priority leave and overrides',async()=>{
- const {profile,rotation,base,savedDefault,late}=standardHistory,{runWithTenantDbContext:scope}=require('../lib/prisma.ts'),{syncRosterHistoryRange:sync}=require('../modules/workforce/roster-history.ts'),{checkAsAdministrator:check}=require('./helpers/availability-fixtures.cjs')
+ const {profile,rotation,base,savedDefault,late}=standardHistory,{runWithTenantDbContext:scope}=require('../lib/prisma.ts'),{syncHistoryAsAdministrator:sync}=require('./helpers/availability-fixtures.cjs'),{checkAsAdministrator:check}=require('./helpers/availability-fixtures.cjs')
  const params={tenantId:a,staffProfileIds:[profile],startDate:'2020-01-05',endDate:'2020-01-14'}
- const read=async()=>(await root.query('SELECT * FROM "StaffRosterHistoryDay" WHERE "staffProfileId"=$1 ORDER BY date',[profile])).rows
+ const read=async()=>(await root.query('SELECT h.*,COALESCE(s.source,h.source) source FROM "StaffRosterHistoryDay" h LEFT JOIN "StaffRosterLeaveSnapshot" s ON s."historyId"=h.id WHERE h."staffProfileId"=$1 ORDER BY h.date',[profile])).rows
  const before=await read()
  try{
   await root.query('UPDATE "ShiftSchedule" SET "startDate"=$1 WHERE id=$2',['2020-01-07',rotation.id])
@@ -1167,7 +1167,7 @@ test('plan checks use tenant calendar dates and protect overdue in-progress work
  const {id,profile}=await modeStaff('guard_midnight','FLEXIBLE'),days=planDays().map(day=>({...day,isOff:false,slots:[{startTime:'00:15',endTime:'01:15',breaks:[]}]}))
  const body={staffId:id,weekStartDate:'2020-01-06',days}
  await ok(await call('shifts/flexible-week-plans','PUT',body))
- const {runWithTenantDbContext:scope}=require('../lib/prisma.ts'),{syncRosterHistoryRange:sync}=require('../modules/workforce/roster-history.ts')
+ const {runWithTenantDbContext:scope}=require('../lib/prisma.ts'),{syncHistoryAsAdministrator:sync}=require('./helpers/availability-fixtures.cjs')
  await scope(a,()=>sync(prisma,{tenantId:a,staffProfileIds:[profile],startDate:'2020-01-06',endDate:'2020-01-06'}))
  const history=(await root.query('SELECT * FROM "StaffRosterHistoryDay" WHERE "staffProfileId"=$1',[profile])).rows
  await root.query('UPDATE "AppSetting" SET "timeZone"=$1 WHERE "tenantId"=$2',['Asia/Kolkata',a])

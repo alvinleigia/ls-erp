@@ -96,6 +96,7 @@ export type LeaveGroupFormValues = {
 }
 
 export type LeaveRequestRow = {
+  officeId: string
   id: string
   staffProfileId: string
   leaveDefinitionId: string

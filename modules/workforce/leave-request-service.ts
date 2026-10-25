@@ -4,7 +4,7 @@ import { permits, requirePermission } from "@/platform/access/policy"
 import { Prisma } from "@prisma/client"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
-import { recordDomainAuditEvent, recordDomainAuditEventSafe } from "@/lib/domain-audit"
+import { recordDomainAuditEvent } from "@/lib/domain-audit"
 import { normalizeHistoryRangeToPast, syncRosterHistoryRange } from "@/modules/workforce/roster-history"
 import { BusinessError, type BusinessActor } from "@/platform/policy"
 import { canReadAppointmentDetails } from "@/modules/appointments/conflict-access"
@@ -171,22 +171,13 @@ export async function listLeaveRequests(actor: BusinessActor, input: z.infer<typ
 }
 
 export async function submitLeaveRequest(actor: BusinessActor, input: CreateLeaveRequestInput) {
-  const { tenantId, sessionUserId, role } = leaveActor(actor)
+  const { tenantId, sessionUserId } = leaveActor(actor)
   if (!["STAFF", "MANAGER"].includes(actor.role)) throw new BusinessError(401, "Unauthorized")
-  const staffProfile = await prisma.staffProfile.findFirst({
-    where: { userId: sessionUserId, user: { tenantId } },
-    select: { id: true },
-  })
-  const resolvedStaffProfile =
-    staffProfile ??
-    (await prisma.staffProfile.create({
-      data: { userId: sessionUserId },
-      select: { id: true },
-    }))
-  if (!resolvedStaffProfile) {
-    throw new BusinessError(400, "Staff profile not found.")
-  }
-  const item = await prisma.$transaction(async (tx) => {
+  const item = await scheduleTransaction(tenantId, async (tx) => {
+    const currentActor = await authorizeBusinessOperation(tx, actor, "leaveRequests.create", ["leaves"])
+    if (!["STAFF", "MANAGER"].includes(currentActor.role)) throw new BusinessError(403, "Only staff or managers can request leave.")
+    const resolvedStaffProfile = await tx.staffProfile.findFirst({ where: { userId: sessionUserId, user: { tenantId } }, select: { id: true } })
+      ?? await tx.staffProfile.create({ data: { userId: sessionUserId }, select: { id: true } })
     const validated = await validateCreateLeaveRequestRules({
       tx,
       tenantId,
@@ -209,41 +200,20 @@ export async function submitLeaveRequest(actor: BusinessActor, input: CreateLeav
       },
     })
 
-    return tx.leaveRequest.findFirstOrThrow({
-      where: { id: created.id, tenantId },
-      select: leaveRequestSelect,
+    const saved = await tx.leaveRequest.findFirstOrThrow({ where: { id: created.id, tenantId }, select: leaveRequestSelect })
+    await recordDomainAuditEvent(tx, {
+      tenantId, event: "leave.request.submitted", entityType: "LeaveRequest", entityId: saved.id,
+      actorUserId: sessionUserId, actorRole: currentActor.role, requestId: actor.requestId,
+      metadata: { leaveDefinitionId: saved.leaveDefinitionId, leaveDefinitionCode: saved.leaveDefinition.code, daysCount: saved.daysCount },
+      after: { status: saved.status, startDate: saved.startDate, endDate: saved.endDate, reason: saved.reason },
     })
+    return saved
   })
-
   const serialized = serializeLeaveRequest(item)
   void notifyLeaveSubmitted(prisma, {
-    tenantId,
-    staffUserId: serialized.staff.userId,
-    leaveCode: serialized.leaveDefinition.code,
-    leaveName: serialized.leaveDefinition.name,
-    startDateIso: serialized.startDate.slice(0, 10),
-    endDateIso: serialized.endDate.slice(0, 10),
-    daysCount: serialized.daysCount,
-  })
-  await recordDomainAuditEventSafe(prisma, {
-    tenantId,
-    event: "leave.request.submitted",
-    entityType: "LeaveRequest",
-    entityId: serialized.id,
-    actorUserId: sessionUserId,
-    actorRole: role ?? null,
-    requestId: actor.requestId,
-    metadata: {
-      leaveDefinitionId: serialized.leaveDefinition.id,
-      leaveDefinitionCode: serialized.leaveDefinition.code,
-      daysCount: serialized.daysCount,
-    },
-    after: {
-      status: serialized.status,
-      startDate: serialized.startDate,
-      endDate: serialized.endDate,
-      reason: serialized.reason,
-    },
+    tenantId, leaveRequestId: serialized.id, staffUserId: serialized.staff.userId,
+    leaveCode: serialized.leaveDefinition.code, leaveName: serialized.leaveDefinition.name,
+    startDateIso: serialized.startDate.slice(0, 10), endDateIso: serialized.endDate.slice(0, 10), daysCount: serialized.daysCount,
   })
   return { item: serialized }
 }
@@ -354,7 +324,7 @@ export async function reviewLeaveRequest(actor: BusinessActor, id: string, input
       reviewerComment: input.reviewerComment?.trim() || null,
     }, leaveApprovalScope(actor, "approve"))
   void notifyLeaveReviewed(prisma, {
-    tenantId,
+    tenantId, leaveRequestId: serialized.id,
     staffUserId: serialized.staff.userId,
     status: input.status,
     reviewerName: serialized.reviewedBy?.name ?? null,
@@ -412,7 +382,7 @@ export async function cancelLeaveRequest(actor: BusinessActor, id: string, input
     select: { name: true },
   })
   void notifyLeaveCanceled(prisma, {
-    tenantId,
+    tenantId, leaveRequestId: serialized.id,
     staffUserId: serialized.staff.userId,
     canceledByUserId: sessionUserId,
     canceledByName: canceledBy?.name ?? null,
@@ -462,7 +432,7 @@ export async function revokeLeaveRequest(actor: BusinessActor, id: string, input
     }, leaveApprovalScope(actor, "archive"))
 
   void notifyLeaveRevoked(prisma, {
-    tenantId,
+    tenantId, leaveRequestId: serialized.id,
     staffUserId: serialized.staff.userId,
     revokedByName: null,
     revokeReason: serialized.revokeReason,
@@ -525,7 +495,7 @@ export async function bulkReviewLeaveRequests(actor: BusinessActor, input: BulkR
   const skippedIds = requestIds.filter(id => !changedIds.has(id))
   for (const item of items) {
     void notifyLeaveReviewed(prisma, {
-      tenantId, staffUserId: item.staff.userId, status,
+      tenantId, leaveRequestId: item.id, staffUserId: item.staff.userId, status,
       reviewerName: item.reviewedBy?.name ?? null, reviewerComment: item.reviewerComment,
       leaveCode: item.leaveDefinition.code, leaveName: item.leaveDefinition.name,
       startDateIso: item.startDate.slice(0, 10), endDateIso: item.endDate.slice(0, 10), daysCount: item.daysCount,

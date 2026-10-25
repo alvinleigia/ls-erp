@@ -3,9 +3,10 @@ const {test}=require('node:test'),assert=require('node:assert/strict'),path=requ
 const messages=[],mailerPath=path.resolve(__dirname,'../lib/mailer.ts')
 require.cache[mailerPath]={id:mailerPath,filename:mailerPath,loaded:true,exports:{canSendConfiguredEmail:async()=>true,mailFrom:'qa@example.test',mailer:{sendMail:async message=>messages.push(message)}}}
 const {notifyLeaveSubmitted,notifyLeaveCanceled}=require('../modules/workforce/leave-notifications.ts')
-const payload={tenantId:'tenant',staffUserId:'employee',leaveCode:'AL',leaveName:'Annual',startDateIso:'2030-10-07',endDateIso:'2030-10-07',daysCount:1}
+const payload={tenantId:'tenant',leaveRequestId:'request',staffUserId:'employee',leaveCode:'AL',leaveName:'Annual',startDateIso:'2030-10-07',endDateIso:'2030-10-07',daysCount:1}
 function db({mode='REPORTING_MANAGER',managerId='manager',permissions=['leaveApprovals.read','leaveApprovals.approve'],read='REPORTS',approve='REPORTS'}={}){
- return {staffProfile:{findFirst:async()=>({managerUserId:managerId,leaveApprovalMode:mode})},user:{findMany:async args=>{assert.equal(args.where.role,'ADMIN');return[{email:'admin@example.test'}]},findFirst:async()=>({email:'manager@example.test'})},$queryRaw:async()=>[{role:'STAFF',slug:'tenant',status:'ACTIVE',rules:{'leaveApprovals.read':read,'leaveApprovals.approve':approve},managedTeamIds:[],memberTeamIds:[],accessAssignments:[{roleId:'approval',role:{archived:false,permissions}}]}]}
+ return {staffProfile:{findFirst:async()=>({managerUserId:managerId,leaveApprovalMode:mode})},user:{findMany:async args=>{assert.equal(args.where.role,'ADMIN');return[{id:'admin',email:'admin@example.test'}]},findFirst:async()=>({id:'manager',email:'manager@example.test'})},$queryRaw:async(_sql,tenant,request,target,action)=>{assert.equal(tenant,'tenant');assert.equal(request,'request');return [{allowed:target==='admin'||(read!=='NONE'&&permissions.includes('leaveApprovals.read')&&(action==='read'||(approve!=='NONE'&&permissions.includes('leaveApprovals.approve'))))}]}}
+
 }
 const recipients=()=>messages.map(message=>message.to).sort()
 test('a designated Staff reporting manager receives submissions only with current approval permission',async()=>{

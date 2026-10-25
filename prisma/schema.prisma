@@ -947,6 +947,8 @@ model BusinessCompany {
 }
 
 model BusinessOffice {
+  leaveRequests LeaveRequest[]
+  rosterLeaveSnapshots StaffRosterLeaveSnapshot[]
   enquiries CrmEnquiry[]
   opportunities CrmOpportunity[]
   tasks CrmTask[]
@@ -1190,7 +1192,9 @@ model LeaveDefinitionNonClubbable {
 
 model LeaveRequest {
   id                String                  @id @default(cuid())
-  tenantId          String?
+  tenantId          String
+  officeId          String                  @default(dbgenerated("app.creation_office_id()"))
+  office            BusinessOffice          @relation(fields: [tenantId, officeId], references: [tenantId, id], onDelete: NoAction)
   staffProfileId    String
   leaveDefinitionId String
   startDate         DateTime                @db.Date
@@ -1212,9 +1216,10 @@ model LeaveRequest {
   leaveDefinition   LeaveDefinition         @relation(fields: [leaveDefinitionId], references: [id], onDelete: Restrict)
   reviewedByUser    User?                   @relation("LeaveRequestReviewedBy", fields: [reviewedByUserId], references: [id], onDelete: SetNull)
   revokedByUser     User?                   @relation("LeaveRequestRevokedBy", fields: [revokedByUserId], references: [id], onDelete: SetNull)
-  rosterHistoryDays StaffRosterHistoryDay[]
-  tenant            Tenant?                 @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  rosterLeaveSnapshots StaffRosterLeaveSnapshot[]
+  tenant            Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
+  @@index([tenantId, officeId])
   @@index([tenantId])
   @@index([staffProfileId])
   @@index([leaveDefinitionId])
@@ -1574,6 +1579,7 @@ model StaffServiceEligibility {
 }
 
 model StaffProfile {
+  rosterLeaveSnapshots StaffRosterLeaveSnapshot[]
   leaveApprovalMode     String                      @default("REPORTING_MANAGER")
   id                    String                      @id @default(cuid())
   userId                String                      @unique
@@ -1609,20 +1615,36 @@ model StaffRosterHistoryDay {
   startTime           String?
   endTime             String?
   paidMinutes         Int                  @default(0)
-  leaveRequestId      String?
-  leaveDefinitionCode String?
-  leaveDefinitionName String?
-  leaveReason         String?
   createdAt           DateTime             @default(now())
   updatedAt           DateTime             @updatedAt
   staffProfile        StaffProfile         @relation(fields: [staffProfileId], references: [id], onDelete: Cascade)
   template            ShiftTemplate?       @relation(fields: [templateId], references: [id], onDelete: SetNull)
-  leaveRequest        LeaveRequest?        @relation(fields: [leaveRequestId], references: [id], onDelete: SetNull)
+  privateLeave        StaffRosterLeaveSnapshot?
 
   @@unique([staffProfileId, date])
   @@index([date])
   @@index([staffProfileId])
   @@index([source])
+}
+
+// Private historical evidence is separate from ordinary working-time snapshots.
+model StaffRosterLeaveSnapshot {
+  historyId String @id
+  tenantId String
+  officeId String
+  staffProfileId String
+  source StaffRosterDaySource
+  leaveRequestId String?
+  leaveDefinitionCode String?
+  leaveDefinitionName String?
+  leaveReason String?
+  history StaffRosterHistoryDay @relation(fields: [historyId], references: [id], onDelete: Cascade)
+  staffProfile StaffProfile @relation(fields: [staffProfileId], references: [id], onDelete: Cascade)
+  office BusinessOffice @relation(fields: [tenantId, officeId], references: [tenantId, id], onDelete: NoAction)
+  leaveRequest LeaveRequest? @relation(fields: [leaveRequestId], references: [id], onDelete: SetNull)
+  @@index([tenantId, officeId])
+  @@index([staffProfileId])
+  @@index([leaveRequestId])
 }
 
 model StaffCertification {

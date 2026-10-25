@@ -10,6 +10,8 @@ export function officeBoundaryError(error: unknown): BusinessError | null {
     ["Select an office and reload the creation form", 403],
     ["Office creation access is not permitted", 403],
     ["Record office access is not permitted", 403],
+    ["Leave ownership access is not permitted", 403],
+    ["Roster history access is not permitted", 403],
     ["Choose an assignee with access to this office", 400],
     ["Linked records must belong to the same office", 400],
     ["A linked source cannot change the record office", 400],
