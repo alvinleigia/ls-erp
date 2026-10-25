@@ -21,6 +21,7 @@ import {
   weekdayToSchedulerFirstDay,
 } from "@/lib/formatting"
 import { Button } from "@/components/ui/button"
+import { StaffWorkplacePanel } from "@/components/workforce/staff-workplace-panel"
 import { SearchableSelect } from "@/components/searchable-select"
 import { Dialog } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
@@ -2072,6 +2073,7 @@ export default function RosterPage() {
     <div className={pageClass}>
       {(!readTemplates || !readSchedules || !readPlans || !readLeaves) && <p role="status" className="text-sm text-muted-foreground">This roster shows only the schedules, plans and leaves your role can access. Hidden records still apply to booking availability.</p>}
       <PageHeader title={<> Roster </>} description={<> View staff schedules in a monthly roster. </>} />
+      {staffFilter !== "all" && <StaffWorkplacePanel key={staffFilter} staffId={staffFilter} />}
 
       <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
         <div className="flex flex-col gap-2">

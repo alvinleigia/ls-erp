@@ -1,0 +1,62 @@
+import { test, expect } from "@playwright/test"
+import { seed, login, json } from "./fixtures"
+
+test("workplace forms keep captured versions, preserve transfer history and do not follow CRM office selection", async ({ browser }) => {
+  test.setTimeout(150_000)
+  const fixture = await seed(), admin = await login(browser, fixture.origin, fixture.users.admin.email)
+  let manager: typeof admin | undefined
+  try {
+    const company = await json(admin.context, "/api/companies", 201, "POST", { name: "Workplace browser", code: "WORK" })
+    const a = await json(admin.context, "/api/offices", 201, "POST", { companyId: company.id, name: "East", code: "EAST" })
+    const b = await json(admin.context, "/api/offices", 201, "POST", { companyId: company.id, name: "West", code: "WEST" })
+    await json(admin.context, `/api/access/users/${fixture.users.staff.id}/offices`, 200, "PATCH", { version: 0, officeIds: [a.id, b.id], companies: [], creationOfficeId: a.id })
+    await json(admin.context, `/api/access/users/${fixture.users.manager.id}/offices`, 200, "PATCH", { version: 0, officeIds: [a.id], companies: [], creationOfficeId: a.id })
+    await fixture.db.query('INSERT INTO "StaffProfile"(id,"userId","updatedAt") VALUES($1,$2,now())', [fixture.slug + "_workplace", fixture.users.staff.id])
+    const path = `/api/shifts/workplaces?staffId=${fixture.users.staff.id}`
+    const initial = await json(admin.context, path)
+    expect(initial.version).toBe(0)
+    await admin.page.goto(`/users/${fixture.users.staff.id}/staff`)
+    const panel = admin.page.getByRole("region", { name: "Staff workplace" })
+    await expect(panel.getByRole("button", { name: "Assign workplace", exact: true })).toBeVisible()
+    await panel.getByLabel("Working office", { exact: true }).click()
+    await admin.page.getByRole("option", { name: "Workplace browser / East", exact: true }).click()
+    await panel.getByLabel("Effective date", { exact: true }).fill(initial.today)
+    const saved = admin.page.waitForResponse(response => new URL(response.url()).pathname === "/api/shifts/workplaces" && response.request().method() === "POST")
+    await panel.getByRole("button", { name: "Assign workplace", exact: true }).click()
+    expect((await saved).status()).toBe(200)
+    await expect(panel.getByText("Workplace browser / East", { exact: true }).first()).toBeVisible()
+    const assigned = await json(admin.context, path)
+    expect(assigned.current.officeId).toBe(a.id)
+    const selection = await json(admin.context, "/api/workspace/office")
+    await json(admin.context, "/api/workspace/office", 200, "PATCH", { version: selection.version, officeId: b.id })
+    expect((await json(admin.context, path)).current.id).toBe(assigned.current.id)
+    // The displayed form remains version 1 even if another authorized session
+    // schedules a transfer. Saving must not silently fetch and use version 2.
+    await panel.getByLabel("Working office", { exact: true }).click()
+    await admin.page.getByRole("option", { name: "Workplace browser / West", exact: true }).click()
+    await panel.getByLabel("Effective date", { exact: true }).fill("2037-01-07")
+    await json(admin.context, "/api/shifts/workplaces", 200, "POST", { action: "assign", staffId: fixture.users.staff.id, version: 1, fromId: assigned.latest.id, officeId: b.id, startsOn: "2036-01-07" })
+    const stale = admin.page.waitForResponse(response => new URL(response.url()).pathname === "/api/shifts/workplaces" && response.request().method() === "POST")
+    await panel.getByRole("button", { name: "Schedule workplace transfer", exact: true }).click()
+    expect((await stale).status()).toBe(409)
+    await expect(panel.getByRole("alert")).toHaveText("Workplace record changed; refresh before saving.")
+    await expect(panel.getByLabel("Effective date", { exact: true })).toHaveValue("2037-01-07")
+    await panel.getByRole("button", { name: "Refresh workplace", exact: true }).click()
+    await expect(panel.getByRole("button", { name: "Cancel future transfer", exact: true })).toBeVisible()
+    await expect(panel.getByRole("cell", { name: "Scheduled", exact: true })).toBeVisible()
+    await panel.getByRole("button", { name: "Cancel future transfer", exact: true }).click()
+    const canceled = admin.page.waitForResponse(response => new URL(response.url()).pathname === "/api/shifts/workplaces" && response.request().method() === "POST")
+    await admin.page.getByRole("dialog").getByRole("button", { name: "Cancel transfer", exact: true }).click()
+    expect((await canceled).status()).toBe(200)
+    await expect(panel.getByRole("cell", { name: "Canceled", exact: true })).toBeVisible()
+    await expect(panel.getByRole("row").filter({ hasText: "Workplace browser / West" }).getByRole("cell", { name: "-", exact: true })).toBeVisible()
+    const result = await json(admin.context, path)
+    expect(result.version).toBe(3); expect(result.current.id).toBe(assigned.current.id); expect(result.latest.endDate).toBeNull()
+    manager = await login(browser, fixture.origin, fixture.users.manager.email)
+    const scoped = await json(manager.context, path)
+    expect(scoped.total).toBe(1); expect(scoped.items[0].officeId).toBe(a.id)
+    const audits = (await fixture.db.query('SELECT count(*)::int n FROM "AuditLog" WHERE "tenantId"=$1 AND "entityType"=\'StaffWorkplaceAssignment\'', [fixture.slug])).rows[0].n
+    expect(audits).toBe(3)
+    await panel.screenshot({ path: "test-results/local-access/staff-workplace.png" })
+  } finally { await manager?.context.close(); await admin.context.close(); await fixture.db.end() }
+})

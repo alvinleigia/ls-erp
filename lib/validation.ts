@@ -1592,3 +1592,9 @@ export const unitReservationTransitionSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("allocate"), version: z.number().int().positive() }).strict(),
   z.object({ action: z.literal("release"), version: z.number().int().positive(), reason: z.string().trim().min(1).max(2000) }).strict(),
 ])
+
+const workplaceId = z.string().trim().min(1).max(200)
+export const staffWorkplaceSchema = z.discriminatedUnion("action", [
+  z.object({ action: z.literal("assign"), staffId: workplaceId, version: z.number().int().min(0).max(2147483647), officeId: workplaceId, startsOn: z.iso.date(), fromId: workplaceId.optional() }).strict(),
+  z.object({ action: z.literal("cancel"), staffId: workplaceId, version: z.number().int().min(0).max(2147483647), assignmentId: workplaceId }).strict(),
+])

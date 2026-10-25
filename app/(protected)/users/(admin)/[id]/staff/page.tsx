@@ -7,6 +7,7 @@ import { useSession } from "next-auth/react"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
+import { StaffWorkplacePanel } from "@/components/workforce/staff-workplace-panel"
 import { type Role } from "@/lib/permissions"
 import type { ServiceOption } from "@/types/services"
 import type { StaffProfileForm, StaffUser } from "@/types/users"
@@ -196,6 +197,7 @@ export default function StaffProfilePage() {
         setQuery={setQuery}
       />
       </fieldset>
+      <StaffWorkplacePanel key={user.id} staffId={user.id} />
     </div>
   )
 }

@@ -70,6 +70,8 @@
     "test:invitations:browser": "node scripts/test-sales-orders.cjs --invitations --browser",
     "test:availability-boundary": "node scripts/test-sales-orders.cjs --availability-boundary",
     "test:availability-boundary:browser": "node scripts/test-sales-orders.cjs --availability-boundary --browser",
+    "test:workplaces": "node scripts/test-sales-orders.cjs --workplaces",
+    "test:workplaces:browser": "node scripts/test-sales-orders.cjs --workplaces --browser-only",
     "test:workforce-offices": "node scripts/test-sales-orders.cjs --workforce-offices",
     "test:workforce-offices:browser": "node scripts/test-sales-orders.cjs --workforce-offices --browser",
     "test:access:all:browser": "node scripts/test-sales-orders.cjs --access --browser",

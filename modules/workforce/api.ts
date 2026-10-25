@@ -37,7 +37,7 @@ export function withWorkforceApi(request: Request, module: "leaves" | "shifts", 
     const recordId = id ?? (typeof input?.patternId === "string" ? input.patternId : undefined)
     // These services read snapshots and recheck transitions after acquiring the
     // scheduling lock; the wrapper must not duplicate stale reads or their audit.
-    const serviceAudit = key === "flexible-week-plans" || key.startsWith("flexible-patterns") || ["templates", "schedules", "assignments", "overrides", "flexible-slots"].includes(key.split("/")[0])
+    const serviceAudit = key === "flexible-week-plans" || key.startsWith("flexible-patterns") || ["templates", "schedules", "assignments", "overrides", "flexible-slots", "workplaces"].includes(key.split("/")[0])
     const before = action !== "read" && !serviceAudit ? await snapshot(key.split('/')[0], actor.tenantId, recordId) : null
     if (recordId && action !== "read" && !key.startsWith("requests") && !serviceAudit && !before) throw new BusinessError(404, "Record not found.")
     if (!key.startsWith("requests") && (action === "create" || action === "edit")) {

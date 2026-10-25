@@ -839,6 +839,7 @@ model Organization {
 }
 
 model Tenant {
+  workplacePolicies StaffWorkplacePolicy[]
   companies BusinessCompany[]
   offices BusinessOffice[]
   catalogReservationAvailability CatalogReservationAvailability[]
@@ -947,6 +948,7 @@ model BusinessCompany {
 }
 
 model BusinessOffice {
+  workplaceAssignments StaffWorkplaceAssignment[]
   leaveRequests LeaveRequest[]
   rosterLeaveSnapshots StaffRosterLeaveSnapshot[]
   enquiries CrmEnquiry[]
@@ -1579,6 +1581,7 @@ model StaffServiceEligibility {
 }
 
 model StaffProfile {
+  workplacePolicy StaffWorkplacePolicy?
   rosterLeaveSnapshots StaffRosterLeaveSnapshot[]
   leaveApprovalMode     String                      @default("REPORTING_MANAGER")
   id                    String                      @id @default(cuid())
@@ -1603,6 +1606,35 @@ model StaffProfile {
   updatedAt             DateTime                    @updatedAt
 
   @@index([managerUserId])
+}
+
+// Dated employment location. This does not grant office or record access.
+model StaffWorkplacePolicy {
+  tenantId String
+  staffProfileId String @unique
+  version Int @default(0)
+  updatedAt DateTime @updatedAt
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  staffProfile StaffProfile @relation(fields: [staffProfileId], references: [id], onDelete: Cascade)
+  assignments StaffWorkplaceAssignment[]
+  @@id([tenantId, staffProfileId])
+}
+
+model StaffWorkplaceAssignment {
+  id String @id @default(cuid())
+  tenantId String
+  staffProfileId String
+  officeId String
+  // Null start represents the original placement whose beginning was not recorded.
+  startDate DateTime? @db.Date
+  endDate DateTime? @db.Date
+  canceledAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  policy StaffWorkplacePolicy @relation(fields: [tenantId, staffProfileId], references: [tenantId, staffProfileId], onDelete: Cascade)
+  office BusinessOffice @relation(fields: [tenantId, officeId], references: [tenantId, id], onDelete: NoAction)
+  @@index([tenantId, officeId])
+  @@index([staffProfileId, startDate])
 }
 
 model StaffRosterHistoryDay {

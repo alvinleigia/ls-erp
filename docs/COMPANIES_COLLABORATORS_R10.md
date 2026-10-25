@@ -53,6 +53,8 @@ so hidden leave cannot become a free booking slot when office filters are added.
 Phase 2D2 extends that integrity boundary to hidden bookings, keeping collision
 checks separate from access to appointment/customer details.
 Phase 2D3 adds [native leave ownership and private roster snapshots](WORKFORCE_OFFICE_OWNERSHIP_R10.md), including personal history after office transfer.
+Phase 2D4A adds [dated staff workplaces](STAFF_WORKPLACES_R10.md), separately from
+office grants and CRM creation preferences. Native plan/default ownership follows.
 Operational families, assignment selectors and workspace
 controls remain prerequisites before exposing office controls or deploying the
 office-isolation release.

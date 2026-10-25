@@ -1,3 +1,28 @@
+## R10 - Dated staff workplaces (phase 2D4A, local)
+
+Staff scheduling profiles now have explicit dated workplace assignments, separate
+from office grants and CRM creation preferences. Transfers preserve prior windows;
+future cancellation retains its row and restores the predecessor. Captured policy
+versions reject stale forms. Source/destination authority and current Shifts
+profiles are checked under scheduling and tenant security locks. Active/future
+explicit plans and bookings block changes, including work hidden from the caller.
+Changes and required before/after audit commit atomically; audit failure rolls back.
+
+Forced RLS and bounded projections protect placement history and audit copies.
+Personal history survives office-grant revocation; other readers need source-office
+access. Workplace controls appear on Staff eligibility and individual-staff roster
+views. They grant no access and do not yet select an office-specific schedule default.
+
+Pending migration 119 preserves all 126 preceding tables exactly, including existing
+assignments, private history, IDs, timestamps and grants. Existing profiles receive
+one initial-office placement with an unknown historic start; new profiles require
+explicit assignment. There is no runtime initial-office or CRM preference fallback.
+19 focused checks and 176 scheduling/appointment regressions passed locally. Final
+browser and build evidence is recorded in [the workplace contract](STAFF_WORKPLACES_R10.md).
+Native Shifts plan/default ownership and office-aware working-time integrity remain
+next; operational office isolation is incomplete. No push, hosted migration,
+deployment or client-data change.
+
 ## R10 - Leave office ownership (phase 2D3, local)
 
 Leave requests persist immutable office identity. New forms capture the shared
