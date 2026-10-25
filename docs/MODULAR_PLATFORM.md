@@ -1,3 +1,22 @@
+## R10 - Invitation onboarding (phase 2C, local)
+
+Tenant-admin invitations carry explicit profile/rule/office proposals and offer
+email or link delivery. Acceptance creates a new account only, rechecks the
+current inviter and proposal, and commits account/grants/audit/token use together.
+Existing credentials and memberships are never overwritten. Revocation is
+confirmed and shares the tenant lock with acceptance; replay and racing requests
+are rejected. Forced RLS protects invitations and their security audit copies.
+Links retain the forwarded tenant origin rather than the internal listening host.
+
+Pending migration 115 preserves all 125 preceding tables after excluding only
+the new proposal column, including populated pending and accepted invitations.
+Rollback, 76 integration checks, real Chrome onboarding/sign-in/CRM creation and
+replay denial passed. Desktop/mobile screenshots were inspected. Build,
+TypeScript, whitespace and targeted lint passed (one existing inline warning).
+No push, hosted migration, deployment or client-data change. Operational office
+ownership, selectors and user/workspace controls remain release prerequisites.
+See [the invitation contract and verification](INVITATION_ONBOARDING_R10.md).
+
 ## R10 - Account provisioning backend (phase 2C, local)
 
 Direct user creation accepts explicit office/company memberships through the

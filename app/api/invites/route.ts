@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import crypto from "crypto"
+import { createInvitationService } from "@/platform/invitations/service"
 import { z } from "zod"
 
 import {
@@ -10,7 +10,7 @@ import {
   withRequestId,
 } from "@/lib/api-logging"
 import { Prisma } from "@prisma/client"
-import { recordDomainAuditEventSafe } from "@/lib/domain-audit"
+import { BusinessError } from "@/platform/policy"
 import { prisma } from "@/lib/prisma"
 import { inviteUserSchema } from "@/lib/validation"
 import { canSendConfiguredEmail, mailer, mailFrom } from "@/lib/mailer"
@@ -39,7 +39,7 @@ async function handlePOST(request: Request, actor: BusinessActor) {
     logApiRequestSuccess(logContext, tenantSession.error.status, { reason: "tenant_or_auth_failed" })
     return withRequestId(tenantSession.error, logContext.requestId)
   }
-  const { tenantId, role, sessionUserId } = tenantSession.context
+  const { tenantId, role } = tenantSession.context
 
   if (!canInvite(role as Role)) {
     const response = NextResponse.json({ error: "Unauthorized" }, { status: 401 })
@@ -64,56 +64,36 @@ async function handlePOST(request: Request, actor: BusinessActor) {
   }
 
   try {
-    const { email, role: inviteRole } = parsed.data
-    const token = crypto.randomUUID()
-    const expiresAt = new Date(Date.now() + 1000 * 60 * 60 * 24 * 7)
+    const { email, delivery } = parsed.data
+    if (delivery === "EMAIL" && (!mailFrom || !await canSendConfiguredEmail(prisma, tenantId))) throw new BusinessError(400, "Email delivery is not configured or enabled. Choose Create link instead.")
+    // Match authentication's tenant host. Next's internal request URL can use
+    // the listening host instead, especially behind a proxy or in local tests.
+    const internalUrl = new URL(request.url)
+    const host = request.headers.get("x-forwarded-host") || request.headers.get("host") || internalUrl.host
+    const protocol = request.headers.get("x-forwarded-proto") || internalUrl.protocol.replace(":", "")
+    if (!["http", "https"].includes(protocol)) throw new BusinessError(400, "Invalid invitation origin.")
+    const inviteUrl = new URL("/auth/invite", `${protocol}://${host}`)
+    const invitation = await createInvitationService(prisma, actor).create(parsed.data)
+    inviteUrl.searchParams.set('token', invitation.token)
+    if (delivery === "LINK") return withRequestId(NextResponse.json({ ok: true, emailSent: false, inviteUrl: inviteUrl.toString() }, { status: 201, headers: { "Cache-Control": "no-store" } }), logContext.requestId)
 
-    const invitation = await prisma.invitation.create({
-      data: {
-        email,
-        tenantId,
-        token,
-        role: inviteRole ?? "CUSTOMER",
-        expiresAt,
-        invitedById: sessionUserId,
-      },
-    })
+    const emailTemplate = inviteEmail({ inviteUrl: inviteUrl.toString(), businessName: (await prisma.tenant.findUnique({ where: { id: tenantId }, select: { name: true } }))?.name })
 
-    await recordDomainAuditEventSafe(prisma, { tenantId, actorUserId: actor.userId, actorRole: actor.role, requestId: actor.requestId, event: "core.invitations.create", entityType: "Invitation", entityId: invitation.id, after: { email, role: invitation.role, expiresAt: expiresAt.toISOString() } })
-
-    const inviteUrl = new URL(`/auth/invite?token=${token}`, request.url).toString()
-
-    if (!mailer || !mailFrom) {
-      const response = NextResponse.json(
-        { error: "Email is not configured." },
-        { status: 500 }
-      )
-      logApiRequestSuccess(logContext, 500, { reason: "mailer_not_configured" })
-      return withRequestId(response, logContext.requestId)
-    }
-    if (!(await canSendConfiguredEmail(prisma, tenantId))) {
-      const response = NextResponse.json(
-        { error: "Email notifications are disabled in settings." },
-        { status: 400 }
-      )
-      logApiRequestSuccess(logContext, 400, { reason: "email_notifications_disabled" })
-      return withRequestId(response, logContext.requestId)
-    }
-
-    const emailTemplate = inviteEmail({ inviteUrl, businessName: (await prisma.tenant.findUnique({ where: { id: tenantId }, select: { name: true } }))?.name })
-
-    await mailer.sendMail({
+    try { await mailer.sendMail({
       from: mailFrom,
       to: email,
       subject: emailTemplate.subject,
       text: emailTemplate.text,
       html: emailTemplate.html,
-    })
+    }) } catch {
+      return withRequestId(NextResponse.json({ ok: true, emailSent: false, warning: "Invitation saved, but email delivery failed. Use Copy invite link from the invitation list." }, { status: 201, headers: { "Cache-Control": "no-store" } }), logContext.requestId)
+    }
 
-    const response = NextResponse.json({ ok: true })
+    const response = NextResponse.json({ ok: true, emailSent: true }, { headers: { "Cache-Control": "no-store" } })
     logApiRequestSuccess(logContext, 200, { result: "invite_sent" })
     return withRequestId(response, logContext.requestId)
   } catch (error) {
+    if (error instanceof BusinessError) return withRequestId(NextResponse.json({ error: error.message }, { status: error.status }), logContext.requestId)
     logApiRequestError(logContext, error, 500)
     const response = NextResponse.json({ error: "Unable to send invite." }, { status: 500 })
     return withRequestId(response, logContext.requestId)
@@ -190,7 +170,7 @@ async function handleGET(request: Request, actor: BusinessActor) {
 
     const totalPages = Math.max(1, Math.ceil(total / pageSize))
 
-    const response = NextResponse.json({ items: invites, page, pageSize, total, totalPages })
+    const response = NextResponse.json({ items: invites, page, pageSize, total, totalPages }, { headers: { "Cache-Control": "no-store" } })
     logApiRequestSuccess(logContext, 200, { page, pageSize, total })
     return withRequestId(response, logContext.requestId)
   } catch (error) {

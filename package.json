@@ -66,6 +66,8 @@
     "test:office-records:browser": "node scripts/test-sales-orders.cjs --office-records --browser",
     "test:office-provisioning": "node scripts/test-sales-orders.cjs --office-provisioning",
     "test:office-provisioning:browser": "node scripts/test-sales-orders.cjs --office-provisioning --browser",
+    "test:invitations": "node scripts/test-sales-orders.cjs --invitations",
+    "test:invitations:browser": "node scripts/test-sales-orders.cjs --invitations --browser",
     "test:access:all:browser": "node scripts/test-sales-orders.cjs --access --browser",
     "test:workflows:e2e": "playwright test --config playwright.local-access.config.ts",
     "test:dates": "node --require ./tests/register.cjs --test tests/date-display.test.cjs tests/work-history-format.test.cjs"

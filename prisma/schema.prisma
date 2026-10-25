@@ -1944,6 +1944,7 @@ model Invitation {
   role        Role      @default(CUSTOMER)
   expiresAt   DateTime
   acceptedAt  DateTime?
+  accessConfiguration Json @default("{}")
   invitedById String?
   invitedBy   User?     @relation("UserInvitations", fields: [invitedById], references: [id], onDelete: SetNull)
   tenant      Tenant?   @relation(fields: [tenantId], references: [id], onDelete: Cascade)

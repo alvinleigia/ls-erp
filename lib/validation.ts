@@ -205,16 +205,7 @@ export const updateUserSchema = addCountryStateValidation(z.object({
     .optional(),
 }))
 
-export const inviteUserSchema = z.object({
-  email: z.string().trim().email(),
-  role: roleSchema.optional(),
-})
-
-export const acceptInviteSchema = z.object({
-  token: z.string().trim().min(10),
-  name: z.string().trim().min(1).max(100).optional().or(z.literal("")),
-  password: z.string().trim().min(6).max(100),
-})
+export { inviteUserSchema, acceptInviteSchema } from "@/platform/invitations/validation"
 
 export const forgotPasswordSchema = z.object({
   email: z.string().trim().email(),

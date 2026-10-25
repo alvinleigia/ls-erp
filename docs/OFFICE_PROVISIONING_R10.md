@@ -1,7 +1,7 @@
 # R10 phase 2C: account provisioning backend
 
 This is a local milestone on `staging`, not the completed office-isolation
-release. Invitations, operational ownership, assignment selectors and office UI
+release. Operational ownership, assignment selectors and office UI
 controls remain release prerequisites. No hosted database or deployment changed.
 
 ## New users
@@ -75,8 +75,9 @@ migration, deployment or client-data change was performed.
 
 ## Remaining release work
 
-- Add invitation onboarding with explicit, current, auditable office/profile
-  decisions. Invitation acceptance must not infer memberships from its sender.
+- Invitation onboarding now has [explicit office/profile proposals and atomic
+  acceptance](INVITATION_ONBOARDING_R10.md). Office controls remain part of the
+  pending user/workspace UI work; no memberships are inferred from the sender.
 - Complete operational/workforce source ownership and privacy-safe scheduling
   conflicts, preserving personal leave and configured approval relationships.
 - Expose user memberships and workspace creation choices, constrain selectors,

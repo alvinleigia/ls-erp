@@ -22,14 +22,19 @@ export async function auditUserSecurity(tx: Prisma.TransactionClient, identity: 
   if (before?.role === after.role && before?.status === after.status) return
   await recordDomainAuditEvent(tx, { ...identity, actorUserId: identity.userId, actorRole: "ADMIN", event: "access.user.updated", entityType: "User", entityId: userId, before: before ?? undefined, after: { role: after.role, status: after.status } })
 }
-export async function assignInitialProfiles(tx: Prisma.TransactionClient, identity: Identity, user: { id: string; role: string }, roleIds: string[] = [], rules: RecordRules = defaultRecordRules()) {
-  if (!["STAFF", "MANAGER"].includes(user.role)) {
+// Proposal validation grants no authority; callers must establish administration.
+export async function validateInitialProfiles(tx: Prisma.TransactionClient, tenantId: string, role: string, roleIds: string[]) {
+  if (!["STAFF", "MANAGER"].includes(role)) {
     if (roleIds.length) throw new BusinessError(400, "Access profiles apply only to Staff and Manager accounts.")
     return
   }
-  await guardUserWrite(tx, identity)
-  const profiles = await tx.tenantAccessRole.findMany({ where: { tenantId: identity.tenantId, id: { in: roleIds }, archived: false }, select: { id: true } })
+  const profiles = await tx.tenantAccessRole.findMany({ where: { tenantId, id: { in: roleIds }, archived: false }, select: { id: true } })
   if (new Set(roleIds).size !== roleIds.length || profiles.length !== roleIds.length) throw new BusinessError(400, "Choose active access profiles from this business.")
+}
+export async function assignInitialProfiles(tx: Prisma.TransactionClient, identity: Identity, user: { id: string; role: string }, roleIds: string[] = [], rules: RecordRules = defaultRecordRules()) {
+  await validateInitialProfiles(tx, identity.tenantId, user.role, roleIds)
+  if (!["STAFF", "MANAGER"].includes(user.role)) return
+  await guardUserWrite(tx, identity)
   const policy = await tx.tenantUserAccess.create({ data: { tenantId: identity.tenantId, userId: user.id, rules } })
   if (roleIds.length) await tx.tenantRoleAssignment.createMany({ data: roleIds.map(roleId => ({ tenantId: identity.tenantId, userId: user.id, roleId })) })
   await recordDomainAuditEvent(tx, { ...identity, actorUserId: identity.userId, actorRole: "ADMIN", event: "access.assignment.updated", entityType: "User", entityId: user.id, after: { roleIds, policy } })

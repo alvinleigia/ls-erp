@@ -36,6 +36,7 @@ import { useDateFormatter } from "@/hooks/use-date-formatter"
 import type { ListResponse } from "@/types/api"
 import type { InviteRow, InviteStatusFilter } from "@/types/invites"
 import { InviteFormFields } from "./invite-form-fields"
+import { ConfirmAction } from "@/components/erp/confirm-action"
 import {
   defaultInviteFormValues,
   type InviteFormValues,
@@ -59,6 +60,8 @@ export default function InvitesPage() {
     clearErrors: clearInviteErrors,
   } = useFormErrors()
   const [inviting, setInviting] = React.useState(false)
+  const [revokeTarget, setRevokeTarget] = React.useState<string | null>(null)
+  const [revoking, setRevoking] = React.useState(false)
   const [loading, setLoading] = React.useState(true)
   const [totalRows, setTotalRows] = React.useState(0)
 
@@ -144,7 +147,9 @@ export default function InvitesPage() {
       return
     }
 
-    toast.success("Invite sent.")
+    const result = await response.json() as { emailSent: boolean; warning?: string }
+    if (result.warning) toast.warning(result.warning)
+    else toast.success(result.emailSent ? "Invite sent." : "Invitation link created. Use Copy invite link from the list.")
     setInviteValues(defaultInviteFormValues)
     setInviting(false)
     setInviteOpen(false)
@@ -159,13 +164,15 @@ export default function InvitesPage() {
   }, [])
 
   const revokeInvite = React.useCallback(async (inviteId: string) => {
-    const response = await fetch(`/api/invites/${inviteId}`, { method: "DELETE" })
-    if (!response.ok) {
-      toast.error("Unable to revoke invite.")
-      return
-    }
-    toast.success("Invite revoked.")
-    setInvites((prev) => prev.filter((invite) => invite.id !== inviteId))
+    setRevoking(true)
+    try {
+      const response = await fetch(`/api/invites/${inviteId}`, { method: "DELETE" })
+      if (!response.ok) { toast.error((await response.json()).error || "Unable to revoke invite."); return }
+      toast.success("Invite revoked.")
+      setInvites((prev) => prev.filter((invite) => invite.id !== inviteId))
+      setTotalRows(prev => Math.max(0, prev - 1))
+      setRevokeTarget(null)
+    } finally { setRevoking(false) }
   }, [])
 
   const columns = React.useMemo<ColumnDef<InviteRow>[]>(
@@ -257,7 +264,7 @@ export default function InvitesPage() {
               </DropdownMenuItem>
               <DropdownMenuItem
                 className="text-destructive"
-                onSelect={() => void revokeInvite(row.original.id)}
+                onSelect={() => setRevokeTarget(row.original.id)}
               >
                 Revoke invite
               </DropdownMenuItem>
@@ -266,7 +273,7 @@ export default function InvitesPage() {
         ),
       },
     ],
-    [copyInviteLink, formatDate, revokeInvite]
+    [copyInviteLink, formatDate]
   )
 
   // eslint-disable-next-line react-hooks/incompatible-library
@@ -318,6 +325,7 @@ export default function InvitesPage() {
 
       <DataTablePagination table={table} totalRows={totalRows} />
 
+      {revokeTarget && <ConfirmAction title="Revoke invitation?" description="This link will stop working. You can create a new invitation later." label="Revoke invitation" busy={revoking} destructive onCancel={() => setRevokeTarget(null)} onConfirm={() => void revokeInvite(revokeTarget)} />}
       <Dialog open={inviteOpen} onOpenChange={setInviteOpen}>
         <DialogContent className="max-h-[90vh] flex flex-col">
           <DialogHeader>
@@ -337,8 +345,8 @@ export default function InvitesPage() {
             <Button variant="outline" onClick={() => setInviteOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={sendInvite} loading={inviting} loadingText="Sending...">
-              Send invite
+            <Button onClick={sendInvite} loading={inviting} loadingText={inviteValues.delivery === "EMAIL" ? "Sending..." : "Creating..."}>
+              {inviteValues.delivery === "EMAIL" ? "Send invite" : "Create invite link"}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input"
 import type { Role } from "@/lib/permissions"
 import type { InviteFormValues } from "./invite-form-model"
 import { inviteRoleOptions } from "./invite-form-model"
+import { ProfilePicker } from "@/platform/access/profile-picker"
 
 type InviteFormFieldsProps = {
   values: InviteFormValues
@@ -32,13 +33,20 @@ export function InviteFormFields({ values, errors, onChange }: InviteFormFieldsP
           id="invite-role"
           className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
           value={values.role}
-          onChange={(event) => update("role", event.target.value as Role)}
+          onChange={(event) => onChange({ ...values, role: event.target.value as Role, accessRoleIds: [] })}
         >
           {inviteRoleOptions.map((role) => (
             <option key={role} value={role}>
               {role}
             </option>
           ))}
+        </select>
+      </FormField>
+      {["STAFF", "MANAGER"].includes(values.role) && <ProfilePicker id="invite-profiles" value={values.accessRoleIds} onChange={ids => update("accessRoleIds", ids)} />}
+      <FormField id="invite-delivery" label="Delivery" error={errors.delivery}>
+        <select id="invite-delivery" className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm" value={values.delivery} onChange={event => update("delivery", event.target.value as InviteFormValues["delivery"])}>
+          <option value="EMAIL">Send email</option>
+          <option value="LINK">Create link</option>
         </select>
       </FormField>
     </div>
