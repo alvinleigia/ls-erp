@@ -94,7 +94,7 @@ export function ScheduleFormFields({
 <FormField id={fieldId("schedule-staff")} label="Staff" error={errors.staffIds}>
         {form.isDefault ? (
           <div className="rounded-md border border-dashed border-input bg-background p-3 text-xs text-muted-foreground">
-            Default schedules apply to all staff without an explicit schedule.
+            Applies to staff placed in this office on each day, unless they have an explicit schedule.
           </div>
         ) : allowMultiStaff ? (
           <div className="space-y-2 rounded-md border border-input bg-background p-3">
@@ -144,7 +144,7 @@ export function ScheduleFormFields({
         )}
         {!form.isDefault ? (
           <p className="mt-2 text-xs text-muted-foreground">
-            Flexible-mode staff are managed in flexible weekly/recurring plans, not shift schedules.
+            Staff need a Standard profile and workplace coverage in this office for the entire assignment.
           </p>
         ) : null}
       </FormField>
@@ -159,7 +159,7 @@ export function ScheduleFormFields({
               id={fieldId("schedule-assign-start")}
               type="date"
               value={form.assignmentStartDate}
-              min={today}
+              min={mode === "create" ? today : undefined}
               onChange={(event) =>
                 setForm((prev) => ({ ...prev, assignmentStartDate: event.target.value }))
               }
@@ -187,7 +187,7 @@ export function ScheduleFormFields({
           id={fieldId("schedule-start")}
           type="date"
           value={form.startDate}
-          min={today}
+          min={mode === "create" ? today : undefined}
           onChange={(event) =>
             setForm((prev) => {
               const next = event.target.value

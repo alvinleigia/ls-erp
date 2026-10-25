@@ -1,4 +1,5 @@
 "use client"
+import { useCreationOfficeSnapshot } from "@/platform/companies/creation-snapshot"
 import { useCurrentResourceAction } from "@/platform/access/view-guard"
 
 import { DraftPanel, RecordPanel, ReadOnlyFields } from "@/components/erp/record-detail"
@@ -85,7 +86,7 @@ const summarizeWeekOff = (schedule: ShiftSchedule) => {
 }
 
 const summarizeAssignments = (schedule: ShiftSchedule) => {
-  if (schedule.isDefault) return "All staff"
+  if (schedule.isDefault) return "Staff placed in this office"
   const assignments = schedule.assignments ?? []
   const names = assignments
     .map((assignment) => assignment.staffProfile?.user?.name || assignment.staffProfile?.user?.email)
@@ -142,6 +143,7 @@ export default function ShiftSchedulesPage() {
 
   const [viewing, setViewing] = React.useState<ShiftSchedule | null>(null)
   const [createOpen, setCreateOpen] = React.useState(false)
+  const creationHeaders = useCreationOfficeSnapshot(createOpen)
   const [editOpen, setEditOpen] = React.useState(false)
   const [deleteOpen, setDeleteOpen] = React.useState(false)
   const [saving, setSaving] = React.useState(false)
@@ -166,10 +168,14 @@ export default function ShiftSchedulesPage() {
       ),
     [staffOptions]
   )
-  const standardStaffIdSet = React.useMemo(
-    () => new Set(standardStaffOptions.map((staff) => staff.id)),
-    [standardStaffOptions]
-  )
+  const editStaffOptions = React.useMemo(() => {
+    const options = new Map(standardStaffOptions.map(staff => [staff.id, staff]))
+    for (const assignment of editingSchedule?.assignments ?? []) {
+      const staff = assignment.staffProfile?.user
+      if (staff && !options.has(staff.id)) options.set(staff.id, staff)
+    }
+    return [...options.values()]
+  }, [standardStaffOptions, editingSchedule])
 
   const {
     errors: createErrors,
@@ -272,7 +278,7 @@ export default function ShiftSchedulesPage() {
   )
 
   const createSchedule = async () => {
-    const normalizedStaffIds = newSchedule.staffIds.filter((staffId) => standardStaffIdSet.has(staffId))
+    const normalizedStaffIds = newSchedule.staffIds
     if (!newSchedule.isDefault && !normalizedStaffIds.length) {
       toast.error("Select at least one staff member.")
       return
@@ -282,7 +288,7 @@ export default function ShiftSchedulesPage() {
       clearCreateErrors()
       const response = await fetch("/api/shifts/schedules", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...await creationHeaders() },
         body: JSON.stringify({
           ...newSchedule,
           staffIds: normalizedStaffIds,
@@ -326,10 +332,7 @@ export default function ShiftSchedulesPage() {
       setEditingSchedule(schedule)
       const editableStaffIds = assignments
         .map((assignment) => assignment.staffProfile?.user?.id)
-        .filter((staffId): staffId is string => Boolean(staffId && standardStaffIdSet.has(staffId)))
-      if (assignments.length && !editableStaffIds.length && !schedule.isDefault) {
-        toast.warning("This schedule had flexible staff assignments. Flexible staff are excluded from shift schedules.")
-      }
+        .filter((staffId): staffId is string => Boolean(staffId))
       setEditSchedule({
         name: schedule.name ?? "",
         staffIds: editableStaffIds,
@@ -352,12 +355,12 @@ export default function ShiftSchedulesPage() {
       })
       setEditOpen(true)
     },
-    [clearEditErrors, standardStaffIdSet]
+    [clearEditErrors]
   )
 
   const saveEdit = async () => {
     if (!editingSchedule) return
-    const normalizedStaffIds = editSchedule.staffIds.filter((staffId) => standardStaffIdSet.has(staffId))
+    const normalizedStaffIds = editSchedule.staffIds
     if (!editSchedule.isDefault && !normalizedStaffIds.length) {
       toast.error("Select a staff member.")
       return
@@ -492,6 +495,7 @@ export default function ShiftSchedulesPage() {
         ),
         cell: ({ row }) => (
           <div className="flex flex-col">
+            {row.original.office && <p className="text-xs text-muted-foreground">{row.original.office.companyName} / {row.original.office.name}</p>}
             <div className="flex items-center gap-2">
               <span className="font-medium">
                 {row.original.name || "Shift schedule"}
@@ -625,16 +629,16 @@ export default function ShiftSchedulesPage() {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end"><DropdownMenuItem onSelect={() => setViewing(row.original)}>View details</DropdownMenuItem>
-              <DropdownMenuItem disabled={!canEdit} onSelect={() => startEdit(row.original)}>
+              <DropdownMenuItem disabled={!canEdit || row.original.office?.active === false} onSelect={() => startEdit(row.original)}>
                 Edit
               </DropdownMenuItem>
               {!row.original.isDefault && (row.original.assignments?.length ?? 0) > 0 ? (
-                <DropdownMenuItem disabled={!canArchive} onSelect={() => requestUnassign(row.original)}>
+                <DropdownMenuItem disabled={!canArchive || row.original.office?.active === false} onSelect={() => requestUnassign(row.original)}>
                   End staff assignment
                 </DropdownMenuItem>
               ) : null}
               <DropdownMenuItem
-                disabled={!canArchive} onSelect={() => requestDelete(row.original)}
+                disabled={!canArchive || row.original.office?.active === false} onSelect={() => requestDelete(row.original)}
                 className="text-destructive"
               >
                 Delete
@@ -668,7 +672,7 @@ export default function ShiftSchedulesPage() {
     <div className={pageClass}>
       <PageHeader title={<> Shift schedules </>} description={<> Assign shift templates in repeating blocks with week off rules. </>} actions={<> <Button disabled={!canCreate} onClick={() => { setFormError(""); setCreateOpen(true) }}>New schedule</Button> </>} />
 
-      {viewing && <RecordPanel title={viewing.name || "Shift schedule"} description="Saved scheduling details." onClose={() => setViewing(null)} actions={<Button disabled={!canEdit} onClick={() => { startEdit(viewing); setViewing(null) }}>Edit details</Button>}><Section title="Schedule details"><ReadOnlyFields fields={[{label:"Start date",value:formatDate(viewing.startDate)},{label:"Default schedule",value:viewing.isDefault?"Yes":"No"},{label:"Week off day 1",value:viewing.weekOffDay1},{label:"Week off day 2",value:viewing.weekOffDay2},{label:"Second day weeks",value:viewing.weekOff2Weeks.join(", ")}]} /></Section><Section title="Repeating blocks">{viewing.blocks.map((block,index)=><p key={block.id||index}>{block.template?.name || templates.find(item=>item.id===block.templateId)?.name || "Shift template"}: {block.repeatDays} working days</p>)}</Section><Section title="Staff assignments">{viewing.assignments?.length?viewing.assignments.map(item=><p key={item.id}>{item.staffProfile?.user?.name || item.staffProfile?.user?.email}: {formatDate(item.startDate)} - {item.endDate?formatDate(item.endDate):"Open ended"}</p>):<p>No explicit assignments.</p>}</Section></RecordPanel>}
+      {viewing && <RecordPanel title={viewing.name || "Shift schedule"} description="Saved scheduling details." onClose={() => setViewing(null)} actions={<Button disabled={!canEdit || viewing.office?.active === false} onClick={() => { startEdit(viewing); setViewing(null) }}>Edit details</Button>}><Section title="Schedule details"><ReadOnlyFields fields={[{label:"Office",value:viewing.office ? `${viewing.office.companyName} / ${viewing.office.name}` : viewing.officeId},{label:"Start date",value:formatDate(viewing.startDate)},{label:"Default schedule",value:viewing.isDefault?"Yes":"No"},{label:"Week off day 1",value:viewing.weekOffDay1},{label:"Week off day 2",value:viewing.weekOffDay2},{label:"Second day weeks",value:viewing.weekOff2Weeks.join(", ")}]} /></Section><Section title="Repeating blocks">{viewing.blocks.map((block,index)=><p key={block.id||index}>{block.template?.name || templates.find(item=>item.id===block.templateId)?.name || "Shift template"}: {block.repeatDays} working days</p>)}</Section><Section title="Staff assignments">{viewing.assignments?.length?viewing.assignments.map(item=><p key={item.id}>{item.staffProfile?.user?.name || item.staffProfile?.user?.email}: {formatDate(item.startDate)} - {item.endDate?formatDate(item.endDate):"Open ended"}</p>):<p>No explicit assignments.</p>}</Section></RecordPanel>}
       <Surface>
       <TableToolbar table={table} showSearch={false}>
         <div className="flex flex-wrap items-center gap-3">
@@ -787,7 +791,7 @@ export default function ShiftSchedulesPage() {
           </div></ActionDialogContent>
       </Dialog>
 
-      {canCreate && createOpen && <DraftPanel title="New shift schedule" description="Update the details and scheduling rules below." fingerprint={newSchedule} saving={saving} error={formError} saveLabel="Create schedule" onClose={() => { setCreateOpen(false); setNewSchedule(defaultForm); clearCreateErrors(); setFormError("") }} onSubmit={() => void createSchedule()}><ScheduleFormFields
+      {canCreate && createOpen && <DraftPanel title="New shift schedule" description="Create in the selected workspace office. Defaults apply only to staff placed in that office." fingerprint={newSchedule} saving={saving} error={formError} saveLabel="Create schedule" onClose={() => { setCreateOpen(false); setNewSchedule(defaultForm); clearCreateErrors(); setFormError("") }} onSubmit={() => void createSchedule()}><ScheduleFormFields
               mode="create"
               form={newSchedule}
               setForm={setNewSchedule}
@@ -805,7 +809,7 @@ export default function ShiftSchedulesPage() {
               errors={editErrors}
               allowMultiStaff
               today={today}
-              staffOptions={standardStaffOptions}
+              staffOptions={editStaffOptions}
               templates={templates}
             /></DraftPanel>}
     </div>

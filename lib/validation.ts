@@ -600,7 +600,7 @@ export const shiftTemplateSchema = z
 
 export type ShiftTemplateInput = z.infer<typeof shiftTemplateSchema>
 
-export const shiftScheduleSchema = z
+const buildShiftScheduleSchema = (allowPastDates = false) => z
   .object({
     name: z.string().trim().max(120).optional().or(z.literal("")),
     staffIds: z.array(z.string().trim().min(1)),
@@ -625,7 +625,7 @@ export const shiftScheduleSchema = z
   })
   .superRefine((values, ctx) => {
     const today = new Date().toISOString().slice(0, 10)
-    if (values.startDate < today) {
+    if (!allowPastDates && values.startDate < today) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         message: "Schedule start date cannot be in the past.",
@@ -639,7 +639,7 @@ export const shiftScheduleSchema = z
         path: ["assignmentStartDate"],
       })
     }
-    if (values.assignmentStartDate && values.assignmentStartDate < today) {
+    if (!allowPastDates && values.assignmentStartDate && values.assignmentStartDate < today) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         message: "Assignment start date cannot be in the past.",
@@ -700,6 +700,9 @@ export const shiftScheduleSchema = z
     }
   })
 
+export const shiftScheduleSchema = buildShiftScheduleSchema()
+// Edits compare past dates with the saved anchor under the scheduling lock.
+export const shiftScheduleEditSchema = buildShiftScheduleSchema(true)
 export type ShiftScheduleInput = z.infer<typeof shiftScheduleSchema>
 
 export const shiftOverrideSchema = z

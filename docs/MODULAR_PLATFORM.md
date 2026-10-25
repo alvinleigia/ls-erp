@@ -1,3 +1,30 @@
+## R10 - Standard schedule offices (phase 2D4B2, local)
+
+Standard schedules now have immutable office ownership, inherited by their blocks
+and staff assignments. Defaults are unique per office and follow each employee's
+dated workplace; changing the CRM creation preference never moves working hours.
+Unplaced profiles receive no invented default. Assignment intervals require whole-
+window workplace coverage; unchanged edits preserve IDs and existing participants.
+Source Read, write actions, Shifts activation and office grants remain independent.
+Closed offices retain historical Read and reject changes. Captured creation context
+rejects stale forms rather than silently rerouting them. Audit copies share the
+source office boundary.
+
+Office-owned roster history is written only through a bounded canonical database
+writer, independently of ordinary source schedule Read. Shared-template edits
+preserve hidden-office history; private leave evidence remains separate. Existing
+anchors and frozen values are retained. Migration 121 verifies forced rollback and
+exact preservation of all 128 preceding tables except explicit ownership/audit
+metadata. No runtime initial-office fallback, tenant override or legacy adapter.
+
+All 63 native schedule/workplace/leave/working-time checks, all 176 broader
+regressions and the real Chrome workflow pass without skips. Form and scoped-list
+screenshots were inspected. Final build, TypeScript, changed-file lint and
+whitespace checks passed. Evidence is recorded in the linked contract. No push, hosted migration,
+deployment or client-data change. Flexible plans, overrides, appointments and the
+remaining operational selectors are still release prerequisites. See the
+[Standard schedule office contract](STANDARD_SCHEDULE_OFFICES_R10.md).
+
 ## R10 - Protected Standard working time (phase 2D4B1, local)
 
 Standard booking and plan integrity now use a protected timing projection instead

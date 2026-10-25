@@ -62,6 +62,8 @@ export type ScheduleAssignment = {
 }
 
 export type ShiftSchedule = {
+  officeId: string
+  office?: { id: string; name: string; companyName: string; active: boolean } | null
   id: string
   name: string | null
   isDefault?: boolean

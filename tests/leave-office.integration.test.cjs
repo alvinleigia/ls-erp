@@ -34,6 +34,7 @@ before(async()=>{
  for(const key of ['leaves','shifts','appointments'])await root.query('INSERT INTO "TenantModule"("tenantId",key,allowed,enabled,"updatedAt") VALUES($1,$2,true,true,now())',[id,key])
  await root.query('INSERT INTO "AppSetting"(id,"tenantId","timeZone","updatedAt") VALUES($1,$1,\'UTC\',now())',[id])
  await root.query('INSERT INTO "StaffProfile"(id,"userId","managerUserId","schedulingMode","updatedAt") VALUES($1,$2,$3,\'FLEXIBLE\',now())',[profile,employee,manager])
+ await root.query('INSERT INTO "StaffWorkplacePolicy"("tenantId","staffProfileId",version,"updatedAt") VALUES($1,$2,1,now())',[id,profile]);await root.query('INSERT INTO "StaffWorkplaceAssignment"(id,"tenantId","staffProfileId","officeId","updatedAt") VALUES($2,$1,$2,$3,now())',[id,profile,a])
  await root.query('INSERT INTO "LeaveDefinition"(id,"tenantId",code,name,"leaveType","maxPendingRequests","allowWithOtherLeaves","updatedAt") VALUES($1,$2,\'PRIVATE\',\'Private classification\',\'PAID\',100,false,now())',[definition,id])
  await root.query('INSERT INTO "LeaveGroup"(id,"tenantId",code,name,"assignmentMode","updatedAt") VALUES($1,$2,\'ALL\',\'All staff\',\'ALL_STAFF\',now())',[definition,id])
  await root.query('INSERT INTO "LeaveGroupLeave"(id,"leaveGroupId","leaveDefinitionId") VALUES($1,$1,$1)',[definition])

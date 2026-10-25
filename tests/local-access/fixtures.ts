@@ -48,7 +48,7 @@ export async function json(context: BrowserContext, path: string, status = 200, 
   // Each API fixture creation captures its explicit persisted office. Actual UI
   // forms independently capture at mount and have stale-context browser tests.
   let headers: Record<string, string> = {}
-  if (method === "POST" && (/^\/api\/(?:crm\/(?:enquiries|opportunities|work|enquiry-imports)|real-estate\/projects|leaves\/requests)(?:\?|$)/.test(path) || /^\/api\/crm\/activity-plans\/[^/]+\/apply$/.test(path))) {
+  if (method === "POST" && (/^\/api\/(?:crm\/(?:enquiries|opportunities|work|enquiry-imports)|real-estate\/projects|leaves\/requests|shifts\/schedules)(?:\?|$)/.test(path) || /^\/api\/crm\/activity-plans\/[^/]+\/apply$/.test(path))) {
     const response = await context.request.get("/api/workspace/office")
     if (response.ok()) {
       const office = await response.json()

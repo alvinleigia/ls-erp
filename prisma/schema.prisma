@@ -948,6 +948,8 @@ model BusinessCompany {
 }
 
 model BusinessOffice {
+  shiftSchedules ShiftSchedule[]
+  rosterHistoryDays StaffRosterHistoryDay[]
   workplaceAssignments StaffWorkplaceAssignment[]
   leaveRequests LeaveRequest[]
   rosterLeaveSnapshots StaffRosterLeaveSnapshot[]
@@ -1638,6 +1640,9 @@ model StaffWorkplaceAssignment {
 }
 
 model StaffRosterHistoryDay {
+  tenantId String
+  officeId String
+  office BusinessOffice @relation(fields: [tenantId, officeId], references: [tenantId, id], onDelete: NoAction)
   id                  String               @id @default(cuid())
   staffProfileId      String
   date                DateTime             @db.Date
@@ -1657,6 +1662,7 @@ model StaffRosterHistoryDay {
   @@index([date])
   @@index([staffProfileId])
   @@index([source])
+  @@index([tenantId, officeId])
 }
 
 // Private historical evidence is separate from ordinary working-time snapshots.
@@ -1740,8 +1746,10 @@ model ShiftTemplateBreak {
 }
 
 model ShiftSchedule {
+  officeId String @default(dbgenerated("app.creation_office_id()"))
+  office BusinessOffice @relation(fields: [tenantId, officeId], references: [tenantId, id], onDelete: NoAction)
   id            String                    @id @default(cuid())
-  tenantId      String?
+  tenantId      String
   name          String?
   isDefault     Boolean                   @default(false)
   startDate     DateTime                  @db.Date
@@ -1752,10 +1760,11 @@ model ShiftSchedule {
   assignments   StaffScheduleAssignment[]
   createdAt     DateTime                  @default(now())
   updatedAt     DateTime                  @updatedAt
-  tenant        Tenant?                   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant        Tenant                    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@index([tenantId])
   @@index([startDate])
+  @@index([tenantId, officeId])
 }
 
 model ShiftScheduleBlock {

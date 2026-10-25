@@ -11,5 +11,5 @@ export function scheduleTransaction<T>(tenantId: string, action: (tx: Prisma.Tra
   return prisma.$transaction(async tx => {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`workforce-schedules:${tenantId}`}, 0))`
     return action(tx)
-  })
+  }, { timeout: 30_000 })
 }

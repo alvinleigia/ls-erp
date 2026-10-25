@@ -964,7 +964,8 @@ test('flexible history and live availability share weekly, recurring and daily p
  for(const date of ['2020-01-06','2020-01-07','2020-01-18','2020-01-27'])await root.query('INSERT INTO "StaffFlexibleAvailability" (id,"staffProfileId",date,"startTime","endTime","sortOrder","updatedAt") VALUES ($1,$2,$3,$4,$5,0,now())',[id+'_'+date,profile,date,'09:00','11:00'])
  const {runWithTenantDbContext:scope}=require('../lib/prisma.ts'),{syncHistoryAsAdministrator:sync}=require('./helpers/availability-fixtures.cjs')
  const foreignBefore=(await root.query('SELECT * FROM "StaffRosterHistoryDay" WHERE "staffProfileId"=$1 ORDER BY date',[b+'_profile'])).rows
- assert.equal(await scope(a,()=>sync(prisma,{tenantId:a,staffProfileIds:[profile,b+'_profile'],startDate:'2020-01-06',endDate:'2020-01-27'})),22)
+ await assert.rejects(scope(a,()=>sync(prisma,{tenantId:a,staffProfileIds:[profile,b+'_profile'],startDate:'2020-01-06',endDate:'2020-01-27'})))
+ assert.equal(await scope(a,()=>sync(prisma,{tenantId:a,staffProfileIds:[profile],startDate:'2020-01-06',endDate:'2020-01-27'})),22)
  const rows=(await root.query('SELECT * FROM "StaffRosterHistoryDay" WHERE "staffProfileId"=$1 ORDER BY date',[profile])).rows
  const byDate=new Map(rows.map(row=>[row.date.toISOString().slice(0,10),row]))
  for(const [date,start,end,minutes] of [['2020-01-06','10:00','18:00',420],['2020-01-07',null,null,0],['2020-01-08','09:00','17:00',420],['2020-01-13','10:00','18:00',420],['2020-01-18',null,null,0],['2020-01-20','09:00','17:00',420],['2020-01-27','09:00','11:00',120]]){
@@ -1040,9 +1041,11 @@ async function standardHistoryFixture(){
  const data=await scope(a,async()=>{
   const early=await prisma.shiftTemplate.create({data:{tenantId:a,name:'History early',startTime:'09:00',endTime:'17:00',breaks:{create:{startTime:'12:00',endTime:'13:00'}}}})
   const late=await prisma.shiftTemplate.create({data:{tenantId:a,name:'History late',startTime:'10:00',endTime:'18:00',breaks:{create:{startTime:'12:00',endTime:'13:00'}}}})
-  const base=await prisma.shiftSchedule.create({data:{tenantId:a,isDefault:true,startDate:new Date('2020-01-06'),weekOffDay1:'MONDAY',weekOff2Weeks:[],blocks:{create:{templateId:early.id,repeatDays:1}}}})
-  const rotation=await prisma.shiftSchedule.create({data:{tenantId:a,startDate:new Date('2020-01-06'),weekOffDay1:'SUNDAY',weekOffDay2:'SATURDAY',weekOff2Weeks:[],blocks:{create:[{templateId:early.id,repeatDays:2,sortOrder:0},{templateId:late.id,repeatDays:1,sortOrder:1}]}}})
-  await prisma.staffScheduleAssignment.create({data:{staffProfileId:staff.profile,scheduleId:rotation.id,startDate:new Date('2020-01-08'),endDate:new Date('2020-01-12')}})
+  const office=(await root.query('SELECT id FROM "BusinessOffice" WHERE "tenantId"=$1 AND "isInitial"',[a])).rows[0].id
+  const base=(await root.query('INSERT INTO "ShiftSchedule"(id,"tenantId","officeId","isDefault","startDate","weekOffDay1","weekOff2Weeks","updatedAt") VALUES($1,$2,$3,true,\'2020-01-06\',\'MONDAY\',ARRAY[]::integer[],now()) RETURNING *',[staff.id+'_base',a,office])).rows[0]
+  const rotation=(await root.query('INSERT INTO "ShiftSchedule"(id,"tenantId","officeId","startDate","weekOffDay1","weekOffDay2","weekOff2Weeks","updatedAt") VALUES($1,$2,$3,\'2020-01-06\',\'SUNDAY\',\'SATURDAY\',ARRAY[]::integer[],now()) RETURNING *',[staff.id+'_rotation',a,office])).rows[0]
+  for(const [id,source,template,repeat,order]of[[base.id+'_block',base.id,early.id,1,0],[rotation.id+'_early',rotation.id,early.id,2,0],[rotation.id+'_late',rotation.id,late.id,1,1]])await root.query('INSERT INTO "ShiftScheduleBlock"(id,"scheduleId","templateId","repeatDays","sortOrder") VALUES($1,$2,$3,$4,$5)',[id,source,template,repeat,order])
+  await root.query('INSERT INTO "StaffScheduleAssignment"(id,"staffProfileId","scheduleId","startDate","endDate","updatedAt") VALUES($1,$2,$3,\'2020-01-08\',\'2020-01-12\',now())',[staff.id+'_assignment',staff.profile,rotation.id])
   return {early,late,base,rotation}
  })
  return {...staff,...data,savedDefault}
@@ -1051,7 +1054,8 @@ async function standardHistoryFixture(){
 test('standard history and live availability share schedule-anchored rotation, assignment gaps, breaks and off days',async()=>{
  standardHistory=await standardHistoryFixture()
  const {profile,early,late}=standardHistory,{runWithTenantDbContext:scope}=require('../lib/prisma.ts'),{syncHistoryAsAdministrator:sync}=require('./helpers/availability-fixtures.cjs'),{checkAsAdministrator:check}=require('./helpers/availability-fixtures.cjs')
- await scope(a,()=>sync(prisma,{tenantId:a,staffProfileIds:[profile,b+'_managerprofile'],startDate:'2020-01-05',endDate:'2020-01-14'}))
+ await assert.rejects(scope(a,()=>sync(prisma,{tenantId:a,staffProfileIds:[profile,b+'_managerprofile'],startDate:'2020-01-05',endDate:'2020-01-14'})))
+ await scope(a,()=>sync(prisma,{tenantId:a,staffProfileIds:[profile],startDate:'2020-01-05',endDate:'2020-01-14'}))
  const rows=(await root.query('SELECT * FROM "StaffRosterHistoryDay" WHERE "staffProfileId"=$1 ORDER BY date',[profile])).rows
  const expected=[null,null,early.id,late.id,early.id,early.id,null,null,null,early.id]
  assert.deepEqual(rows.map(r=>r.templateId),expected)
@@ -1068,14 +1072,16 @@ test('standard history and live availability share schedule-anchored rotation, a
 })
 
 test('standard range loading stays bounded and excludes foreign staff even with a tenant default',async()=>{
- const {loadStandardAvailability:load}=require('../modules/workforce/standard-availability.ts'),{runWithTenantDbContext:scope}=require('../lib/prisma.ts')
+ const {loadStandardWorkingTime:load}=require('../modules/workforce/standard-working-time.ts'),{runWithTenantDbContext}=require('../lib/prisma.ts'),{runWithDatabaseActor}=require('../lib/database-actor.ts')
+ const scope=(tenant,fn)=>runWithTenantDbContext(tenant,()=>runWithDatabaseActor(tenant+'_admin',fn))
  const pg=require('pg'),original=pg.Client.prototype.query;let count=0
- pg.Client.prototype.query=function(...args){const sql=typeof args[0]==='string'?args[0]:args[0]?.text;if(sql?.startsWith('SELECT ')&&/FROM "public"\."(StaffProfile|StaffScheduleAssignment|ShiftSchedule|ShiftScheduleBlock|ShiftTemplate|ShiftTemplateBreak)"/.test(sql))count++;return original.apply(this,args)}
+ pg.Client.prototype.query=function(...args){const sql=typeof args[0]==='string'?args[0]:args[0]?.text;if(sql?.includes('SELECT * FROM app.standard_working_time('))count++;return original.apply(this,args)}
  try{
-  const ids=[standardHistory.profile,b+'_managerprofile',a+'_profile']
+  const ids=[standardHistory.profile,a+'_profile']
   await assert.rejects(()=>load(prisma,'',ids,new Date('2020-01-08'),new Date('2020-01-08')),e=>e.status===403)
+  await assert.rejects(scope(a,()=>load(prisma,a,[...ids,b+'_managerprofile'],new Date('2020-01-08'),new Date('2020-01-08'))),e=>e.status===403);count=0
   await scope(a,()=>load(prisma,a,ids,new Date('2020-01-08'),new Date('2020-01-08')));const single=count
-  assert.ok(single>0&&single<=12,single);count=0
+  assert.equal(single,1);count=0
   const resolve=await scope(a,()=>load(prisma,a,ids,new Date('2020-01-05'),new Date('2020-01-31')))
   assert.equal(count,single)
   for(let day=5;day<=31;day++)resolve(standardHistory.profile,new Date('2020-01-'+String(day).padStart(2,'0')))

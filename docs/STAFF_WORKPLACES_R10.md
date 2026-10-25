@@ -4,6 +4,10 @@ Local implementation on `staging`. This is the placement foundation for native
 Shifts ownership. It does not yet switch tenant-wide schedule defaults to office
 defaults or claim complete operational office isolation. No hosted data changes.
 
+Follow-up: [phase 2D4B2](STANDARD_SCHEDULE_OFFICES_R10.md) implements Standard
+schedule offices and defaults using these dated workplace windows. Flexible plans,
+overrides and other operational families remain pending.
+
 ## Usage and meaning
 
 Workplace is a dated working-office assignment for a staff profile. It is separate

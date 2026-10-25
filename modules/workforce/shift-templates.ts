@@ -6,8 +6,6 @@ import { BusinessError, type BusinessActor } from "@/platform/policy"
 import { requirePermission } from "@/platform/access/policy"
 import { planTransaction, auditPlan } from "./plan-transaction"
 import { protectPlanBookings } from "./plan-bookings"
-import { captureScheduleHistory, scheduleHistorySelect } from "./plan-history"
-import { syncRosterHistoryRange, normalizeHistoryRangeToPast } from "./roster-history"
 import type { ListResponse } from "@/types/api"
 
 export const shiftTemplateListSchema = z.object({
@@ -112,21 +110,11 @@ export async function updateShiftTemplate(actor: BusinessActor, id: string, data
     const before = await tx.shiftTemplate.findFirst({ where: { tenantId, id }, include: shiftTemplateInclude })
     if (!before) throw new BusinessError(404, "Shift template not found.")
     if (before.isActive !== (data.isActive ?? true)) requirePermission(actor, "shiftTemplates.archive")
-    const schedules = await tx.shiftSchedule.findMany({ where: { tenantId, blocks: { some: { templateId: id } } }, select: scheduleHistorySelect })
-    const overrides = await tx.staffShiftOverride.findMany({ where: { templateId: id, staffProfile: { user: { tenantId } } }, select: { staffProfileId: true, date: true } })
     // A shared template can affect schedules hidden by source RLS. Page booked
     // staff through the integrity guard instead of deriving impact from visible
     // assignments. Its before/after comparison rejects only actual regressions.
     const checkBookings = await protectPlanBookings(tx, tenantId, {})
-    for (const schedule of schedules) await captureScheduleHistory(tx, tenantId, schedule)
-    if (overrides.length) {
-      const setting = await tx.appSetting.findUnique({ where: { tenantId }, select: { timeZone: true } })
-      const dates = overrides.map(o => o.date.toISOString().slice(0, 10)).sort()
-      const range = normalizeHistoryRangeToPast(dates[0], dates[dates.length - 1], setting?.timeZone ?? "UTC")
-      if (range) await syncRosterHistoryRange(tx, { tenantId,
-        staffProfileIds: [...new Set(overrides.map(o => o.staffProfileId))], ...range,
-      })
-    }
+    await tx.$queryRaw`SELECT app.capture_template_history(${tenantId},${id})`
     await tx.shiftTemplate.update({ where: { tenantId, id }, data: templateFields(data) })
     await tx.shiftTemplateBreak.deleteMany({ where: { templateId: id, template: { tenantId } } })
     if (data.breaks.length) await tx.shiftTemplateBreak.createMany({ data: templateBreaks(data).map(b => ({ templateId: id, ...b })) })
@@ -142,12 +130,8 @@ export async function deleteShiftTemplate(actor: BusinessActor, id: string) {
   return planTransaction(actor, "shiftTemplates", "archive", async (tx, actor) => {
     const before = await tx.shiftTemplate.findFirst({ where: { tenantId, id }, include: shiftTemplateInclude })
     if (!before) throw new BusinessError(404, "Shift template not found.")
-    const [blocks, overrides, history] = await Promise.all([
-      tx.shiftScheduleBlock.count({ where: { templateId: id, schedule: { tenantId } } }),
-      tx.staffShiftOverride.count({ where: { templateId: id, staffProfile: { user: { tenantId } } } }),
-      tx.staffRosterHistoryDay.count({ where: { templateId: id, staffProfile: { user: { tenantId } } } }),
-    ])
-    if (blocks || overrides || history) throw new BusinessError(409, "Template is in use and cannot be deleted. Deactivate it to keep its history.")
+    const [reference] = await tx.$queryRaw<{ used: boolean }[]>`SELECT app.template_in_use(${tenantId},${id}) AS used`
+    if (reference.used) throw new BusinessError(409, "Template is in use and cannot be deleted. Deactivate it to keep its history.")
     await tx.shiftTemplate.delete({ where: { tenantId, id } })
     await auditPlan(tx, actor, "shiftTemplates", "archive", id, before, { deleted: true })
   })

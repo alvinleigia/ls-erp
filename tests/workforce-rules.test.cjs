@@ -122,14 +122,9 @@ test('roster dates validate real dates and keep date-only values independent of 
  assert.equal(d.parseDateOnly('2035-02-29'),null);assert.equal(d.parseDateOnly('2036-02-29').toISOString(),'2036-02-29T00:00:00.000Z');
  assert.deepEqual(d.enumerateDates(d.parseDateOnly('2026-03-07'),d.parseDateOnly('2026-03-10')).map(d.dateKey),['2026-03-07','2026-03-08','2026-03-09','2026-03-10']);
  const h=require('./modules/workforce/roster-history.ts');assert.deepEqual(h.normalizeHistoryRangeToPast('2020-01-06','2020-01-07','Asia/Kolkata'),{startDate:'2020-01-06',endDate:'2020-01-07'});
- const rows=[],scoped=async({where})=>{assert.equal(where.staffProfile.user.tenantId,'a');return []};
- const db={staffScheduleAssignment:{findMany:scoped},staffShiftOverride:{findMany:scoped},leaveRequest:{findMany:scoped},staffFlexibleAvailability:{findMany:scoped},
- staffProfile:{findMany:async({where})=>{assert.equal(where.user.tenantId,'a');return [{id:'own',schedulingMode:'STANDARD'}]}},
- shiftSchedule:{findFirst:async({where})=>{assert.equal(where.tenantId,'a');return {id:'schedule',startDate:new Date('2026-03-07'),weekOffDay1:'SUNDAY',weekOffDay2:null,weekOff2Weeks:[],blocks:[{templateId:'t',repeatDays:1,sortOrder:0,template:{id:'t',name:'Day',startTime:'09:00',endTime:'17:00',breaks:[]}}]}}},
- staffRosterHistoryDay:{upsert:async({create})=>rows.push(create)}};
- h.syncRosterHistoryRange(db,{tenantId:'a',staffProfileIds:['own','foreign'],startDate:'2026-03-07',endDate:'2026-03-10',mode:'replace'}).then(()=>{
- assert.deepEqual(rows.map(r=>r.date.toISOString()),['2026-03-07T00:00:00.000Z','2026-03-08T00:00:00.000Z','2026-03-09T00:00:00.000Z','2026-03-10T00:00:00.000Z']);
- assert.deepEqual(rows.map(r=>r.source),['SCHEDULE','OFF','SCHEDULE','SCHEDULE']);assert.ok(rows.every(r=>r.staffProfileId==='own'));}).catch(e=>{console.error(e);process.exitCode=1});`
+ const calls=[]; const db={$queryRaw:async(strings,...values)=>{calls.push(values);return [{count:4}]}};
+ h.syncRosterHistoryRange(db,{tenantId:'a',staffProfileIds:['own'],startDate:'2026-03-07',endDate:'2026-03-10',mode:'replace'}).then(count=>{
+ assert.equal(count,4);assert.deepEqual(calls,[['a',['own'],'2026-03-07','2026-03-10',true]]);}).catch(e=>{console.error(e);process.exitCode=1});`
  for(const TZ of ['UTC','Asia/Kolkata','America/Los_Angeles'])execFileSync(process.execPath,['--require','./tests/register.cjs','-e',code],{cwd:path.resolve(__dirname,'..'),env:{...process.env,TZ}})
 })
 

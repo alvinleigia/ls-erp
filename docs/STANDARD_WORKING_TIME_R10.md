@@ -4,6 +4,10 @@ Local implementation on `staging`. This is the integrity prerequisite within the
 office-schedule phase. It does **not** add office-specific defaults yet, enable
 native Shifts office RLS or claim complete operational office isolation.
 
+Follow-up: [phase 2D4B2](STANDARD_SCHEDULE_OFFICES_R10.md) adds native Standard
+schedule offices, dated-workplace defaults and independent canonical history.
+The sections below retain the phase 2D4B1 timing/privacy contract and its evidence.
+
 ## Completed behavior
 
 Appointment availability, appointment create/edit/bulk moves, order scheduling and

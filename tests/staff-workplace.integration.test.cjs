@@ -110,7 +110,7 @@ test('same-office and backwards changes cannot rewrite established history',asyn
 test('all current/future shift sources block transfer while ended work does not',async()=>{
  const staff=await placed(),v=await view(staff),template=staff+'_template',schedule=staff+'_schedule'
  await root.query('INSERT INTO "ShiftTemplate"(id,"tenantId",name,"startTime","endTime","updatedAt") VALUES($1,$2,\'Private shift\',\'09:00\',\'17:00\',now())',[template,tenant])
- await root.query('INSERT INTO "ShiftSchedule"(id,"tenantId",name,"startDate","weekOffDay1","weekOff2Weeks","updatedAt") VALUES($1,$2,\'Private schedule\',\'2036-01-01\',\'SUNDAY\',ARRAY[]::integer[],now())',[schedule,tenant])
+ await root.query('INSERT INTO "ShiftSchedule"(id,"tenantId","officeId",name,"startDate","weekOffDay1","weekOff2Weeks","updatedAt") VALUES($1,$2,(SELECT id FROM \"BusinessOffice\" WHERE \"tenantId\"=$2 AND \"isInitial\"),\'Private schedule\',\'2036-01-01\',\'SUNDAY\',ARRAY[]::integer[],now())',[schedule,tenant])
  const sources=[
   ['StaffScheduleAssignment','INSERT INTO "StaffScheduleAssignment"(id,"staffProfileId","scheduleId","startDate","updatedAt") VALUES($1,$1,$2,\'2036-01-01\',now())',[staff,schedule]],
   ['StaffShiftOverride','INSERT INTO "StaffShiftOverride"(id,"staffProfileId",date,"templateId","updatedAt") VALUES($1,$1,\'2036-01-07\',$2,now())',[staff,template]],

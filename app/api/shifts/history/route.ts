@@ -6,6 +6,6 @@ import { listRosterHistory } from "@/modules/workforce/roster-service"
 export async function GET(request: Request) {
   return withWorkforceApi(request, "shifts", "shiftRoster", "read", async actor => {
     const query = workforceDateRangeSchema.parse(Object.fromEntries(new URL(request.url).searchParams))
-    return NextResponse.json(await listRosterHistory(actor.tenantId, query))
+    return NextResponse.json(await listRosterHistory(actor, query))
   }, "history")
 }

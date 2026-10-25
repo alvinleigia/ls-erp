@@ -9,17 +9,14 @@ export const scheduleHistorySelect = {
 type ScheduleHistory = Prisma.ShiftScheduleGetPayload<{ select: typeof scheduleHistorySelect }>
 
 export async function captureScheduleHistory(tx: Prisma.TransactionClient, tenantId: string, schedule: ScheduleHistory) {
-  const profiles = schedule.isDefault
-    ? await tx.staffProfile.findMany({ where: { user: { tenantId } }, select: { id: true } })
-    : schedule.assignments.map(item => ({ id: item.staffProfileId }))
-  if (!profiles.length) return
-  const startDate = schedule.isDefault ? schedule.startDate.toISOString().slice(0, 10)
-    : schedule.assignments.map(item => item.startDate.toISOString().slice(0, 10)).sort()[0]
+  if (schedule.isDefault) {
+    await tx.$queryRaw`SELECT app.capture_schedule_history(${tenantId},${schedule.id})`
+    return
+  }
+  if (!schedule.assignments.length) return
+  const startDate = schedule.assignments.map(item => item.startDate.toISOString().slice(0, 10)).sort()[0]
   const setting = await tx.appSetting.findUnique({ where: { tenantId }, select: { timeZone: true } })
-  await captureRosterHistoryUpToYesterday(tx, {
-    timeZone: setting?.timeZone ?? "UTC",
-    tenantId, staffProfileIds: [...new Set(profiles.map(item => item.id))], startDate,
-  })
+  await captureRosterHistoryUpToYesterday(tx, { tenantId, timeZone: setting?.timeZone ?? "UTC", staffProfileIds: [...new Set(schedule.assignments.map(item => item.staffProfileId))], startDate })
 }
 
 

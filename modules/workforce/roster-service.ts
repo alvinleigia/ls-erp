@@ -7,6 +7,7 @@ import { requirePermission } from "@/platform/access/policy"
 import { rosterMutation } from "./roster-mutation"
 import { auditPlan } from "./plan-transaction"
 import { protectPlanBookings } from "./plan-bookings"
+import { authorizeBusinessOperation } from "@/platform/access/operation"
 import { scheduleTransaction } from "./schedule-transaction"
 import { normalizeHistoryRangeToPast, syncRosterHistoryRange } from "./roster-history"
 import { dateKey, enumerateDates, timeMinutes } from "./roster-dates"
@@ -163,10 +164,12 @@ export async function deleteFlexibleSlots(actor: BusinessActor, data: z.infer<ty
   })
 }
 
-export async function listRosterHistory(tenantId: string, query: WorkforceDateRangeQuery) {
+export async function listRosterHistory(actor: BusinessActor, query: WorkforceDateRangeQuery) {
+  const { tenantId } = actor
   const where = staffWhere(tenantId, query.staffIds)
   if (!query.staffIds?.split(",").some(id => id.trim())) return { items: [] }
   return scheduleTransaction(tenantId, async tx => {
+    await authorizeBusinessOperation(tx, actor, "shiftRoster.read", ["shifts"])
     const profiles = await tx.staffProfile.findMany({ where, select: { id: true, userId: true } })
     if (!profiles.length) return { items: [] }
     const timeZone = await businessTimeZone(tx, tenantId)

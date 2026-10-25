@@ -7,6 +7,7 @@ import { recordDomainAuditEvent } from "@/lib/domain-audit"
 import { captureScheduleHistory, scheduleHistorySelect } from "./plan-history"
 import type { ShiftScheduleInput } from "@/lib/validation"
 import { BusinessError, type BusinessActor } from "@/platform/policy"
+import { officeAllowed } from "@/platform/companies/office-access"
 import { requirePermission } from "@/platform/access/policy"
 import { shiftScheduleListSchema, type WorkforceDateRangeQuery } from "./schedule-validation"
 
@@ -16,7 +17,7 @@ const scheduleBlocks = {
 } satisfies Prisma.ShiftScheduleBlockFindManyArgs
 const scheduleInclude = {
   blocks: scheduleBlocks,
-  assignments: { include: { staffProfile: { select: { user: { select: { id: true, name: true, email: true } } } } } },
+  assignments: { orderBy: { id: "asc" }, include: { staffProfile: { select: { user: { select: { id: true, name: true, email: true } } } } } },
 } satisfies Prisma.ShiftScheduleInclude
 function requireTenant(tenantId: string) {
   if (!tenantId) throw new BusinessError(403, "Tenant context is required.")
@@ -36,10 +37,8 @@ async function resolveScheduleStaff(tx: Prisma.TransactionClient, tenantId: stri
   if (users.some(user => user.staffProfile?.schedulingMode === "FLEXIBLE")) {
     throw new BusinessError(409, "Flexible-mode staff cannot be assigned to shift schedules.")
   }
-  const profiles: { id: string }[] = []
-  for (const user of users) profiles.push(user.staffProfile ?? await tx.staffProfile.create({
-    data: { userId: user.id }, select: { id: true },
-  }))
+  if (users.some(user => !user.staffProfile)) throw new BusinessError(400, "Set up the staff profile and workplace before assigning schedules.")
+  const profiles = users.map(user => user.staffProfile!)
   return profiles
 }
 
@@ -74,8 +73,10 @@ export async function listShiftSchedules(tenantId: string, query: z.infer<typeof
     prisma.shiftSchedule.count({ where }),
     prisma.shiftSchedule.findMany({ where, include: scheduleInclude, orderBy, skip: pageSize ? (page - 1) * pageSize : undefined, take: pageSize }),
   ])
+  const labels = items.length ? await prisma.$queryRaw<{ id: string; office: { id: string; name: string; companyName: string; active: boolean } | null }[]>`SELECT s.id,app.schedule_office_label(${tenantId},s.id) AS office FROM "ShiftSchedule" s WHERE s."tenantId"=${tenantId} AND s.id=ANY(${items.map(item => item.id)}::text[])` : []
+  const officeLabels = new Map(labels.map(row => [row.id, row.office]))
   const effectivePageSize = pageSize ?? (total || 1)
-  return { items, page, pageSize: effectivePageSize, total, totalPages: Math.max(1, Math.ceil(total / effectivePageSize)) }
+  return { items: items.map(item => ({ ...item, office: officeLabels.get(item.id) ?? null })), page, pageSize: effectivePageSize, total, totalPages: Math.max(1, Math.ceil(total / effectivePageSize)) }
 }
 
 export async function saveShiftSchedule(actor: BusinessActor, data: ShiftScheduleInput, id?: string) {
@@ -84,17 +85,24 @@ export async function saveShiftSchedule(actor: BusinessActor, data: ShiftSchedul
     requirePermission(actor, "shiftTemplates.read")
     const current = id ? await tx.shiftSchedule.findFirst({ where: { tenantId, id }, include: scheduleInclude }) : null
     if (id && !current) throw new BusinessError(404, "Schedule not found.")
+    const officeId = current?.officeId ?? (await tx.$queryRaw<{ id: string | null }[]>`SELECT app.creation_office_id() AS id`)[0]?.id
+    if (!officeId) throw new BusinessError(403, "Select an office and reload the creation form.")
+    if (!await officeAllowed(tx, actor, officeId)) throw new BusinessError(403, "Schedule office access is not permitted.")
     const today = new Date().toISOString().slice(0, 10)
-    if (data.startDate < today) throw new BusinessError(400, "Schedule start date cannot be in the past.")
-    if (data.assignmentStartDate && data.assignmentStartDate < today) throw new BusinessError(400, "Assignment start date cannot be in the past.")
+    if (data.startDate < today && (!current || current.startDate.toISOString().slice(0, 10) !== data.startDate)) throw new BusinessError(400, "Schedule start date cannot be in the past.")
+    if (!data.isDefault && data.assignmentStartDate && data.assignmentStartDate < today && (!current || current.assignments[0]?.startDate.toISOString().slice(0, 10) !== data.assignmentStartDate)) throw new BusinessError(400, "Assignment start date cannot be in the past.")
     const templateIds = [...new Set(data.blocks.map(block => block.templateId))]
     if (await tx.shiftTemplate.count({ where: { tenantId, id: { in: templateIds } } }) !== templateIds.length) {
       throw new BusinessError(400, "One or more shift templates were not found in this tenant.")
     }
-    const profiles = data.isDefault ? [] : await resolveScheduleStaff(tx, tenantId, data.staffIds)
     const assignmentStart = new Date(data.assignmentStartDate || data.startDate)
     const assignmentEnd = data.assignmentEndDate ? new Date(data.assignmentEndDate) : null
-    if (profiles.length) await assertNoAssignmentOverlap(tx, tenantId, profiles.map(profile => profile.id), assignmentStart, assignmentEnd, { scheduleId: id })
+    const currentIds = current?.assignments.map(a => a.staffProfile.user.id).sort() ?? []
+    const preserveAssignments = !!current && !current.isDefault && !data.isDefault && JSON.stringify([...new Set(data.staffIds)].sort()) === JSON.stringify(currentIds)
+      && current.assignments[0]?.startDate.getTime() === assignmentStart.getTime()
+      && (current.assignments[0]?.endDate?.getTime() ?? null) === (assignmentEnd?.getTime() ?? null)
+    const profiles = data.isDefault ? [] : preserveAssignments ? current!.assignments.map(a => ({ id: a.staffProfileId })) : await resolveScheduleStaff(tx, tenantId, data.staffIds)
+    if (profiles.length && !preserveAssignments) await assertNoAssignmentOverlap(tx, tenantId, profiles.map(profile => profile.id), assignmentStart, assignmentEnd, { scheduleId: id })
 
     const checkBookings = await protectPlanBookings(tx, tenantId, {
       schedulingMode: "STANDARD",
@@ -103,12 +111,12 @@ export async function saveShiftSchedule(actor: BusinessActor, data: ShiftSchedul
     if (current) await captureScheduleHistory(tx, tenantId, current)
     let previousDefaults: { id: string; isDefault: boolean }[] = []
     if (data.isDefault) {
-      const previous = await tx.shiftSchedule.findMany({ where: { tenantId, isDefault: true, ...(id ? { id: { not: id } } : {}) }, select: scheduleHistorySelect })
+      const previous = await tx.shiftSchedule.findMany({ where: { tenantId, officeId, isDefault: true, ...(id ? { id: { not: id } } : {}) }, select: scheduleHistorySelect })
       // Check displaced defaults while holding the lock, including concurrent creates.
       if (previous.length) requirePermission(actor, "shiftSchedules.edit")
       previousDefaults = previous.map(schedule => ({ id: schedule.id, isDefault: schedule.isDefault }))
       for (const schedule of previous) await captureScheduleHistory(tx, tenantId, schedule)
-      await tx.shiftSchedule.updateMany({ where: { tenantId, isDefault: true, ...(id ? { id: { not: id } } : {}) }, data: { isDefault: false } })
+      await tx.shiftSchedule.updateMany({ where: { tenantId, officeId, isDefault: true, ...(id ? { id: { not: id } } : {}) }, data: { isDefault: false } })
     }
     const fields = {
       name: data.name?.trim() || null, isDefault: !!data.isDefault, startDate: new Date(data.startDate),
@@ -116,15 +124,15 @@ export async function saveShiftSchedule(actor: BusinessActor, data: ShiftSchedul
       weekOff2Weeks: data.weekOffDay2 && !data.weekOff2Weeks.length ? [1, 2, 3, 4, 5] : data.weekOff2Weeks,
     }
     const saved = id ? await tx.shiftSchedule.update({ where: { tenantId, id }, data: fields, select: { id: true } })
-      : await tx.shiftSchedule.create({ data: { tenantId, ...fields }, select: { id: true } })
+      : await tx.shiftSchedule.create({ data: { tenantId, officeId, ...fields }, select: { id: true } })
     if (id) {
       await tx.shiftScheduleBlock.deleteMany({ where: { scheduleId: id, schedule: { tenantId } } })
-      await tx.staffScheduleAssignment.deleteMany({ where: { scheduleId: id, schedule: { tenantId }, staffProfile: { user: { tenantId } } } })
+      if (!preserveAssignments) await tx.staffScheduleAssignment.deleteMany({ where: { scheduleId: id, schedule: { tenantId }, staffProfile: { user: { tenantId } } } })
     }
     await tx.shiftScheduleBlock.createMany({ data: data.blocks.map((block, index) => ({
       scheduleId: saved.id, templateId: block.templateId, repeatDays: block.repeatDays, sortOrder: block.sortOrder ?? index,
     })) })
-    if (profiles.length) await tx.staffScheduleAssignment.createMany({ data: profiles.map(profile => ({
+    if (profiles.length && !preserveAssignments) await tx.staffScheduleAssignment.createMany({ data: profiles.map(profile => ({
       scheduleId: saved.id, staffProfileId: profile.id, startDate: assignmentStart, endDate: assignmentEnd,
     })) })
     const schedule = await tx.shiftSchedule.findFirstOrThrow({ where: { tenantId, id: saved.id }, include: scheduleInclude })
@@ -132,7 +140,7 @@ export async function saveShiftSchedule(actor: BusinessActor, data: ShiftSchedul
     if (previousDefaults.length) await recordDomainAuditEvent(tx, {
       tenantId, actorUserId: actor.userId, actorRole: actor.role, requestId: actor.requestId,
       event: "workforce.shiftSchedules.edit", entityType: "shiftSchedules",
-      before: { defaultSchedules: previousDefaults }, after: { defaultSchedules: [] },
+      metadata: { officeId }, before: { defaultSchedules: previousDefaults }, after: { defaultSchedules: [] },
     })
     await auditPlan(tx, actor, "shiftSchedules", id ? "edit" : "create", saved.id, current, schedule)
     return { schedule }
@@ -167,7 +175,14 @@ export async function listShiftAssignments(tenantId: string, query: WorkforceDat
     include: { schedule: { include: { blocks: scheduleBlocks } }, staffProfile: { select: { userId: true } } },
     orderBy: { startDate: "asc" },
   })
-  return { items: assignments.map(({ staffProfile, ...assignment }) => ({ ...assignment, staffId: staffProfile.userId })) }
+  const profiles = await prisma.staffProfile.findMany({ where: { user: { tenantId, ...(staffIds.length ? { id: { in: staffIds } } : {}) } }, select: { id: true } })
+  const defaults: { staffId: string; date: Date; scheduleId: string }[] = []
+  for (let offset = 0; offset < profiles.length; offset += 200) for (let start = new Date(query.startDate).getTime(); start <= new Date(query.endDate).getTime(); start += 366 * 86400000) {
+    defaults.push(...await prisma.$queryRaw<typeof defaults>`SELECT * FROM app.standard_default_choices(${tenantId},${profiles.slice(offset, offset + 200).map(p => p.id)}::text[],${new Date(start).toISOString().slice(0, 10)}::date,${new Date(Math.min(new Date(query.endDate).getTime(), start + 365 * 86400000)).toISOString().slice(0, 10)}::date)`)
+  }
+  const sourceIds = [...new Set(defaults.map(day => day.scheduleId))]
+  const defaultSchedules = sourceIds.length ? await prisma.shiftSchedule.findMany({ where: { tenantId, id: { in: sourceIds } }, include: { blocks: scheduleBlocks } }) : []
+  return { defaultSchedules, items: assignments.map(({ staffProfile, ...assignment }) => ({ ...assignment, staffId: staffProfile.userId })), defaults: defaults.map(day => ({ ...day, date: day.date.toISOString().slice(0, 10) })) }
 }
 
 export async function endShiftAssignment(actor: BusinessActor, id: string, endDate: string) {
@@ -175,7 +190,7 @@ export async function endShiftAssignment(actor: BusinessActor, id: string, endDa
   return planTransaction(actor, "shiftSchedules", "archive", async (tx, actor) => {
     const assignment = await tx.staffScheduleAssignment.findFirst({
       where: { id, schedule: { tenantId }, staffProfile: { user: { tenantId } } },
-      select: { id: true, staffProfileId: true, startDate: true, endDate: true },
+      select: { id: true, staffProfileId: true, startDate: true, endDate: true, schedule: { select: { officeId: true } } },
     })
     if (!assignment) throw new BusinessError(404, "Assignment not found.")
     if (endDate < assignment.startDate.toISOString().slice(0, 10)) throw new BusinessError(400, "End date cannot be before assignment start date.")
@@ -187,7 +202,7 @@ export async function endShiftAssignment(actor: BusinessActor, id: string, endDa
       where: { id, schedule: { tenantId } }, data: { endDate: new Date(endDate) }, select: { id: true, startDate: true, endDate: true },
     })
     await checkBookings()
-    await auditPlan(tx, actor, "shiftSchedules", "archive", id, assignment, updated)
+    await auditPlan(tx, actor, "shiftSchedules", "archive", id, { ...assignment, officeId: assignment.schedule.officeId }, { ...updated, officeId: assignment.schedule.officeId })
     return { item: { id: updated.id, startDate: updated.startDate.toISOString().slice(0, 10), endDate: updated.endDate?.toISOString().slice(0, 10) ?? null } }
   })
 }

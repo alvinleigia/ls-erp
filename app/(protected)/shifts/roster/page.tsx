@@ -173,7 +173,8 @@ export default function RosterPage() {
   const [staffAssignments, setStaffAssignments] = React.useState<
     Record<string, StaffScheduleAssignment[]>
   >({})
-  const [defaultSchedule, setDefaultSchedule] = React.useState<ShiftSchedule | null>(null)
+  const [defaultSchedules, setDefaultSchedules] = React.useState<Record<string, ShiftSchedule>>({})
+  const [defaultDays, setDefaultDays] = React.useState<Record<string, Record<string, string>>>({})
   const [overrides, setOverrides] = React.useState<ShiftOverride[]>([])
   const [flexibleSlots, setFlexibleSlots] = React.useState<StaffFlexibleSlot[]>([])
   const [flexibleWeekPlans, setFlexibleWeekPlans] = React.useState<StaffFlexibleWeekPlan[]>([])
@@ -273,28 +274,9 @@ export default function RosterPage() {
     }
   }, [readTemplates])
 
-  const loadDefaultSchedule = React.useCallback(async () => {
-    if (!readSchedules) { setDefaultSchedule(null); return }
-    try {
-      const response = await fetch(
-        "/api/shifts/schedules?isDefault=true&page=1&pageSize=1",
-        { cache: "no-store" }
-      )
-      if (!response.ok) {
-        throw new Error("Failed to load default schedule.")
-      }
-      const data = (await response.json()) as { items?: ShiftSchedule[] }
-      const defaultItem = data.items?.[0] ?? null
-      setDefaultSchedule(defaultItem)
-    } catch (error) {
-      console.error(error)
-      setDefaultSchedule(null)
-    }
-  }, [readSchedules])
-
   const loadStaffAssignments = React.useCallback(
     async (staffIds: string[], rangeStart: string, rangeEnd: string) => {
-      if (!readSchedules) { setStaffAssignments({}); return }
+      if (!readSchedules) { setStaffAssignments({}); setDefaultDays({}); setDefaultSchedules({}); return }
       try {
         const response = await fetch(
           `/api/shifts/assignments?startDate=${rangeStart}&endDate=${rangeEnd}&staffIds=${staffIds.join(
@@ -305,7 +287,7 @@ export default function RosterPage() {
         if (!response.ok) {
           throw new Error("Failed to load staff assignments.")
         }
-        const data = (await response.json()) as { items?: StaffScheduleAssignment[] }
+        const data = (await response.json()) as { items?: StaffScheduleAssignment[]; defaults?: { staffId: string; date: string; scheduleId: string }[]; defaultSchedules?: ShiftSchedule[] }
         const grouped: Record<string, StaffScheduleAssignment[]> = {}
         for (const assignment of data.items ?? []) {
           if (!assignment.staffId) continue
@@ -314,9 +296,16 @@ export default function RosterPage() {
           }
           grouped[assignment.staffId].push(assignment)
         }
+        setDefaultSchedules(Object.fromEntries((data.defaultSchedules ?? []).map(schedule => [schedule.id, schedule])))
+        const days: Record<string, Record<string, string>> = {}
+        for (const day of data.defaults ?? []) { days[day.staffId] ??= {}; days[day.staffId][day.date] = day.scheduleId }
+        setDefaultDays(days)
         setStaffAssignments(grouped)
       } catch (error) {
         console.error(error)
+        setStaffAssignments({})
+        setDefaultDays({})
+        setDefaultSchedules({})
         toast.error("Unable to load staff schedules.")
       }
     },
@@ -334,10 +323,6 @@ export default function RosterPage() {
   React.useEffect(() => {
     void loadTemplates()
   }, [loadTemplates])
-
-  React.useEffect(() => {
-    void loadDefaultSchedule()
-  }, [loadDefaultSchedule])
 
   const availabilityDates = React.useMemo(() => {
     if (rosterMode === "grid") {
@@ -612,7 +597,11 @@ export default function RosterPage() {
       // Apply older assignments first; the latest start (then ID) wins.
       const assignments = [...(staffAssignments[member.id] ?? [])].sort((a, b) =>
         a.startDate.localeCompare(b.startDate) || a.id.localeCompare(b.id))
-      const baseMap = { ...(defaultSchedule ? scheduleMap(defaultSchedule) : {}) }
+      const baseMap: Record<string, string | null> = {}
+      for (const [day, sourceId] of Object.entries(defaultDays[member.id] ?? {})) {
+        const source = defaultSchedules[sourceId]
+        if (source) baseMap[day] = scheduleMap(source)[day] ?? null
+      }
       for (const assignment of assignments) {
         const start = assignment.startDate.slice(0, 10), end = assignment.endDate?.slice(0, 10)
         for (const [day, templateId] of Object.entries(scheduleMap(assignment.schedule))) {
@@ -622,7 +611,7 @@ export default function RosterPage() {
       maps[member.id] = baseMap
     }
     return maps
-  }, [availabilityDates, defaultSchedule, filteredStaff, staffAssignments])
+  }, [availabilityDates, defaultSchedules, defaultDays, filteredStaff, staffAssignments])
 
   const overrideMap = React.useMemo(() => {
     const map: Record<string, Record<string, string | null>> = {}

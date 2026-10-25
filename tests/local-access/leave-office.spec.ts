@@ -17,6 +17,8 @@ test("leave forms retain captured office identity and private history stays scop
     await assignProfiles(admin.context, fixture.users.staff.id, roleIds, { rules: { ...access.accessPolicy.rules, "shiftRoster.read": "ALL" } })
     const profile = `${fixture.slug}_leave_profile`, definition = `${fixture.slug}_leave_definition`
     await fixture.db.query('INSERT INTO "StaffProfile"(id,"userId","managerUserId","schedulingMode","updatedAt") VALUES($1,$2,$3,\'FLEXIBLE\',now())', [profile, fixture.users.staff.id, fixture.users.manager.id])
+    await fixture.db.query('INSERT INTO "StaffWorkplacePolicy"("tenantId","staffProfileId",version,"updatedAt") VALUES($1,$2,1,now())', [fixture.slug, profile])
+    await fixture.db.query('INSERT INTO "StaffWorkplaceAssignment"(id,"tenantId","staffProfileId","officeId","updatedAt") VALUES($2,$1,$2,$3,now())', [fixture.slug, profile, a.id])
     await fixture.db.query('INSERT INTO "LeaveDefinition"(id,"tenantId",code,name,"leaveType","updatedAt") VALUES($1,$2,\'NATIVE\',\'Native office leave\',\'PAID\',now())', [definition, fixture.slug])
     await fixture.db.query('INSERT INTO "LeaveGroup"(id,"tenantId",code,name,"assignmentMode","updatedAt") VALUES($1,$2,\'ALL\',\'All staff\',\'ALL_STAFF\',now())', [definition, fixture.slug])
     await fixture.db.query('INSERT INTO "LeaveGroupLeave"(id,"leaveGroupId","leaveDefinitionId") VALUES($1,$1,$1)', [definition])
