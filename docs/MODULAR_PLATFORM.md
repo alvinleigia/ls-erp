@@ -1,3 +1,26 @@
+## R10 - Protected Standard working time (phase 2D4B1, local)
+
+Standard booking and plan integrity now use a protected timing projection instead
+of ordinary schedule queries. Hidden assignments retain precedence over visible
+defaults; hidden defaults remain effective. Rotation anchors, monthly week-offs,
+assignment boundaries and breaks are preserved. Returned timings contain no source
+IDs or labels. Successful availability carries no template identifier.
+
+Shared-template edits check booked staff in bounded pages rather than infer impact
+only from visible assignments. Existing bookings on hidden schedules block an
+incompatible template edit with atomic rollback. Current account/tenant status,
+profile Read rules and an active legitimate consumer are checked on every batch;
+source-module deactivation does not erase hours for an authorized booking consumer.
+
+Pending migration 120 adds functions only and preserves all 128 preceding tables
+and policies exactly, with verified forced rollback. All 12 focused checks, 176
+workforce/appointment regressions and the real Chrome workflow passed. Final build,
+TypeScript, targeted lint and whitespace passed. This is workflow verification,
+not a visual UI claim. No push, hosted migration, deployment or client-data change.
+Native schedule/assignment office identity, office-specific defaults, independent
+history capture and remaining operational boundaries are still pending. See the
+[Standard working-time contract](STANDARD_WORKING_TIME_R10.md).
+
 ## R10 - Dated staff workplaces (phase 2D4A, local)
 
 Staff scheduling profiles now have explicit dated workplace assignments, separate

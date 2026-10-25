@@ -2,7 +2,7 @@ import type { Prisma, StaffSchedulingMode } from "@prisma/client"
 import { BusinessError } from "@/platform/policy"
 import { dateKeyInTimeZone, appointmentRangeOnDate, dateKey } from "./roster-dates"
 import { loadFlexibleAvailability } from "./flexible-availability"
-import { loadStandardAvailability } from "./standard-availability"
+import { loadStandardWorkingTime } from "./standard-working-time"
 import { workingSegments } from "./working-segments"
 import { approvedLeaveBlocks } from "./availability-blocks"
 import { activeStaffBookingSlots, type BusySlot } from "@/modules/appointments/booking-integrity"
@@ -24,7 +24,7 @@ async function availability(tx: Prisma.TransactionClient, tenantId: string, book
   const ids = [...new Set(bookings.map(booking => booking.profileId))]
   const scope = { staffProfileId: { in: ids }, staffProfile: { user: { tenantId } } }
   const [standard, flexible, overrides, leaves] = await Promise.all([
-    loadStandardAvailability(tx, tenantId, [...new Set(bookings.filter(b => b.mode === "STANDARD").map(b => b.profileId))], start, end),
+    loadStandardWorkingTime(tx, tenantId, [...new Set(bookings.filter(b => b.mode === "STANDARD").map(b => b.profileId))], start, end),
     loadFlexibleAvailability(tx, tenantId, [...new Set(bookings.filter(b => b.mode === "FLEXIBLE").map(b => b.profileId))], start, end),
     tx.staffShiftOverride.findMany({ where: { ...scope, date: { gte: start, lte: end } },
       select: { staffProfileId: true, date: true, template: { select: { startTime: true, endTime: true, breaks: { select: { startTime: true, endTime: true } } } } } }),

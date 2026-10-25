@@ -11,7 +11,7 @@ import { requirePermission } from "@/platform/access/policy"
 import { shiftScheduleListSchema, type WorkforceDateRangeQuery } from "./schedule-validation"
 
 const scheduleBlocks = {
-  orderBy: { sortOrder: "asc" },
+  orderBy: [{ sortOrder: "asc" }, { id: "asc" }],
   include: { template: { select: { id: true, name: true } } },
 } satisfies Prisma.ShiftScheduleBlockFindManyArgs
 const scheduleInclude = {

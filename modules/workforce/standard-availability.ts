@@ -7,10 +7,11 @@ import { workingSegments } from "./working-segments"
 const templateSelect = { id: true, name: true, startTime: true, endTime: true,
   breaks: { select: { startTime: true, endTime: true } } } as const
 const scheduleSelect = { id: true, startDate: true, weekOffDay1: true, weekOffDay2: true, weekOff2Weeks: true,
-  blocks: { select: { templateId: true, repeatDays: true, sortOrder: true, template: { select: templateSelect } } } } as const
+  blocks: { orderBy: [{ sortOrder: "asc" }, { id: "asc" }] as Prisma.ShiftScheduleBlockOrderByWithRelationInput[], select: { templateId: true, repeatDays: true, sortOrder: true, template: { select: templateSelect } } } } as const
 type Template = Prisma.ShiftTemplateGetPayload<{ select: typeof templateSelect }>
 function off(reason: string) { return { template: null as Template | null, segments: [] as { start: number; end: number }[], reason } }
 
+// Source-detail adapter for roster history; never use this for booking integrity.
 // Batch the whole requested range, then cache each schedule's rotation once.
 // Profile ownership is checked even when the tenant has a default schedule.
 export async function loadStandardAvailability(db: Prisma.TransactionClient, tenantId: string,

@@ -166,7 +166,7 @@ test('shared staff availability preserves overrides, breaks and leave, with expl
  await root.query('INSERT INTO "ShiftTemplateBreak" (id,"templateId","startTime","endTime") VALUES ($1,$2,\'12:00\',\'13:00\')',[a+'_break',template.id])
  await root.query('INSERT INTO "StaffShiftOverride" (id,"staffProfileId",date,"templateId","updatedAt") VALUES ($1,$2,\'2031-10-06\',$3,now())',[a+'_override',a+'_profile',template.id])
  const at=(start,end,tenant=a,profile=a+'_profile')=>runWithTenantDbContext(tenant,()=>check(profile,new Date(`2031-10-06T${start}:00Z`),new Date(`2031-10-06T${end}:00Z`),tenant))
- assert.deepEqual(await at('09:00','10:00'),{ok:true,templateId:template.id})
+ assert.deepEqual(await at('09:00','10:00'),{ok:true})
  assert.match((await at('11:30','12:30')).reason,/break/)
  await assert.rejects(at('09:00','10:00',b),error=>error.status===403)
  await assert.rejects(check(a+'_profile',new Date(),new Date()),/Tenant context is required/)
@@ -176,7 +176,7 @@ test('shared staff availability preserves overrides, breaks and leave, with expl
  await root.query('UPDATE "StaffShiftOverride" SET "templateId"=NULL WHERE id=$1',[a+'_override'])
  assert.match((await at('09:00','10:00')).reason,/unavailable/)
  await root.query('INSERT INTO "StaffFlexibleAvailability" (id,"staffProfileId",date,"startTime","endTime","updatedAt") VALUES ($1,$2,\'2031-10-06\',\'10:00\',\'12:00\',now())',[b+'_slot',b+'_profile'])
- assert.deepEqual(await at('10:00','11:00',b,b+'_profile'),{ok:true,templateId:null})
+ assert.deepEqual(await at('10:00','11:00',b,b+'_profile'),{ok:true})
  assert.equal((await at('09:00','10:00',b,b+'_profile')).ok,false)
 })
 
@@ -1060,7 +1060,7 @@ test('standard history and live availability share schedule-anchored rotation, a
   const day=rows[i].date.toISOString().slice(0,10)
   const checkAt=(start,end)=>scope(a,()=>check(profile,new Date(day+'T'+start+':00Z'),new Date(day+'T'+end+':00Z'),a))
   const available=await checkAt('10:00','11:00');assert.equal(available.ok,!!expected[i],day)
-  if(expected[i])assert.equal(available.templateId,expected[i])
+  assert.equal('templateId' in available,false)
   assert.equal((await checkAt('12:00','12:30')).ok,false,day+' break')
  }
  assert.equal((await scope(a,()=>check(profile,new Date('2020-01-08T09:00:00Z'),new Date('2020-01-08T10:00:00Z'),a))).ok,false)

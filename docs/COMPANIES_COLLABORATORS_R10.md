@@ -55,6 +55,8 @@ checks separate from access to appointment/customer details.
 Phase 2D3 adds [native leave ownership and private roster snapshots](WORKFORCE_OFFICE_OWNERSHIP_R10.md), including personal history after office transfer.
 Phase 2D4A adds [dated staff workplaces](STAFF_WORKPLACES_R10.md), separately from
 office grants and CRM creation preferences. Native plan/default ownership follows.
+Phase 2D4B1 adds [protected Standard working time](STANDARD_WORKING_TIME_R10.md)
+so hidden assignments/defaults remain effective in booking and plan integrity.
 Operational families, assignment selectors and workspace
 controls remain prerequisites before exposing office controls or deploying the
 office-isolation release.

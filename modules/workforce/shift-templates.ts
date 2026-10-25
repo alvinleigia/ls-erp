@@ -114,11 +114,10 @@ export async function updateShiftTemplate(actor: BusinessActor, id: string, data
     if (before.isActive !== (data.isActive ?? true)) requirePermission(actor, "shiftTemplates.archive")
     const schedules = await tx.shiftSchedule.findMany({ where: { tenantId, blocks: { some: { templateId: id } } }, select: scheduleHistorySelect })
     const overrides = await tx.staffShiftOverride.findMany({ where: { templateId: id, staffProfile: { user: { tenantId } } }, select: { staffProfileId: true, date: true } })
-    const assignedIds = [...new Set(schedules.flatMap(s => s.assignments.map(a => a.staffProfileId)))]
-    const checkBookings = await protectPlanBookings(tx, tenantId, { OR: [
-      { schedulingMode: "STANDARD", ...(!schedules.some(s => s.isDefault) ? { id: { in: assignedIds } } : {}) },
-      { id: { in: [...new Set(overrides.map(o => o.staffProfileId))] } },
-    ] })
+    // A shared template can affect schedules hidden by source RLS. Page booked
+    // staff through the integrity guard instead of deriving impact from visible
+    // assignments. Its before/after comparison rejects only actual regressions.
+    const checkBookings = await protectPlanBookings(tx, tenantId, {})
     for (const schedule of schedules) await captureScheduleHistory(tx, tenantId, schedule)
     if (overrides.length) {
       const setting = await tx.appSetting.findUnique({ where: { tenantId }, select: { timeZone: true } })

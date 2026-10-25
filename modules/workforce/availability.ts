@@ -1,6 +1,6 @@
 import { loadFlexibleAvailability } from "./flexible-availability"
 import { prisma } from "@/lib/prisma"
-import { loadStandardAvailability } from "./standard-availability"
+import { loadStandardWorkingTime } from "./standard-working-time"
 import { workingSegments } from "./working-segments"
 import { approvedLeaveBlocks } from "./availability-blocks"
 import { type Prisma } from "@prisma/client"
@@ -14,7 +14,7 @@ type ZonedDateParts = {
 }
 
 type AvailabilityCheckResult =
-  | { ok: true; templateId: string | null }
+  | { ok: true }
   | { ok: false; reason: string }
 
 type WorkingSegment = {
@@ -55,22 +55,20 @@ const resolveWorkingAvailabilityForDate = async (
 
   const override = await db.staffShiftOverride.findUnique({
     where: { staffProfileId_date: { staffProfileId, date: dateValue }, staffProfile: { user: { tenantId } } },
-    include: {
+    select: {
       template: {
-        include: { breaks: { orderBy: { sortOrder: "asc" } } },
+        select: { startTime: true, endTime: true, breaks: { select: { startTime: true, endTime: true } } },
       },
     },
   })
   if (override) {
-    if (!override.templateId || !override.template) {
+    if (!override.template) {
       return {
-        template: null,
         segments: [] as WorkingSegment[],
         reason: "Staff is unavailable on this date.",
       }
     }
     return {
-      template: override.template,
       segments: workingSegments(override.template),
       reason: "",
     }
@@ -85,7 +83,6 @@ const resolveWorkingAvailabilityForDate = async (
   })
   if (!staffProfile) {
     return {
-      template: null,
       segments: [] as WorkingSegment[],
       reason: "Staff profile not found.",
     }
@@ -93,10 +90,10 @@ const resolveWorkingAvailabilityForDate = async (
 
   if (staffProfile.schedulingMode === "FLEXIBLE") {
     const resolve = await loadFlexibleAvailability(db, tenantId, [staffProfileId], dateValue, dateValue)
-    return { template: null, ...resolve(staffProfileId, dateValue) }
+    return resolve(staffProfileId, dateValue)
   }
 
-  const resolve = await loadStandardAvailability(db, tenantId, [staffProfileId], dateValue, dateValue)
+  const resolve = await loadStandardWorkingTime(db, tenantId, [staffProfileId], dateValue, dateValue)
   return resolve(staffProfileId, dateValue)
 }
 
@@ -133,7 +130,7 @@ export const checkStaffAppointmentAvailability = async (
     }
   }
 
-  const { template, segments, reason } = await resolveWorkingAvailabilityForDate(
+  const { segments, reason } = await resolveWorkingAvailabilityForDate(
     staffProfileId,
     dateKey,
     tenantId,
@@ -160,5 +157,5 @@ export const checkStaffAppointmentAvailability = async (
     }
   }
 
-  return { ok: true, templateId: template?.id ?? null }
+  return { ok: true }
 }

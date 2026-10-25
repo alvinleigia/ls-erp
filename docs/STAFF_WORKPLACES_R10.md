@@ -121,6 +121,9 @@ local synthetic data. Nothing was pushed, migrated on a hosted database or deplo
 
 ## Next 2D4 slice
 
+The [protected Standard working-time prerequisite](STANDARD_WORKING_TIME_R10.md)
+is now implemented locally in phase 2D4B1. The native boundaries below remain next.
+
 Add native office ownership to schedules, assignments, overrides and flexible
 plans, with office-specific default uniqueness. Resolve working-time integrity
 through a protected canonical projection before ordinary plan reads gain office
