@@ -1,8 +1,15 @@
 import type { Weekday } from "@/types/scheduling"
 export type WorkforceOffice = { id: string; name: string; companyName: string; active: boolean }
+export type RosterDay = {
+  staffId: string; date: string
+  state: "WORKING" | "NONWORKING" | "OUTSIDE" | "UNPLACED" | "MISSING"
+  periods: { startTime: string; endTime: string }[]
+  paidMinutes: number | null; frozen: boolean; canEdit: boolean
+}
 export type { AppointmentConflict } from "@/types/appointments"
 
 export type StaffOption = {
+  status?: string
   id: string
   name: string | null
   email: string

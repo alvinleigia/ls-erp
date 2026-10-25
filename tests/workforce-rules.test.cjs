@@ -4,14 +4,14 @@ const { test } = require('node:test')
 const assert = require('node:assert/strict')
 const path = require('node:path')
 
-test('past roster display uses saved bounds and paid minutes without reconstructing template breaks',()=>{
- const {historyPeriods,rosterPaidMinutes}=require('../app/(protected)/shifts/roster/roster-model.ts')
- const saved={startTime:'09:00',endTime:'17:00',paidMinutes:420}
- assert.deepEqual(historyPeriods(saved),[{startTime:'09:00',endTime:'17:00'}])
- assert.equal(rosterPaidMinutes(saved,historyPeriods(saved)),420)
- assert.deepEqual(historyPeriods({startTime:null,endTime:null}),[])
- assert.equal(rosterPaidMinutes({paidMinutes:0},[{startTime:'09:00',endTime:'17:00'}]),0)
- assert.equal(rosterPaidMinutes(null,[{startTime:'09:00',endTime:'12:00'},{startTime:'13:00',endTime:'17:00'}]),420)
+test('roster lookup bounds include 62 dates, reject larger ranges and constrain search/paging',()=>{
+ const {rosterReadSchema:schema}=require('../modules/workforce/roster-read.ts')
+ const range={startDate:'2036-01-01',endDate:'2036-03-02'}
+ assert.equal(schema.safeParse(range).success,true)
+ assert.equal(schema.safeParse({...range,endDate:'2036-03-03'}).success,false)
+ assert.equal(schema.safeParse({...range,startDate:'2036-03-03'}).success,false)
+ for(const extra of [{page:0},{pageSize:101},{q:'x'.repeat(161)},{staffIds:'foreign'}])assert.equal(schema.safeParse({...range,...extra}).success,false)
+ assert.equal(schema.parse({...range,q:'  worker  '}).q,'worker')
 })
 
 test('flexible history capture scopes staff, merges ranges, preserves gaps and bounds source batches',async t=>{
@@ -159,16 +159,13 @@ test('scheduling mode cutoffs use the tenant calendar day and Monday across UTC 
  assert.deepEqual(dates('2026-11-01T09:30:00Z','America/Los_Angeles'),['2026-11-01','2026-10-26'])
 })
 
-test('standard rotation and browser maps agree across timezones, week-offs and schedule start bounds',()=>{
+test('standard rotation respects timezones, week-offs and schedule start bounds',()=>{
  const {execFileSync}=require('node:child_process')
  const code=`const assert=require('node:assert/strict');const {buildStandardScheduleMap:map}=require('./modules/workforce/standard-schedule.ts');
- const {buildScheduleMap:ui}=require('./app/(protected)/shifts/roster/roster-model.ts');
  const schedule={startDate:'2026-03-06',weekOffDay1:'SUNDAY',weekOffDay2:'SATURDAY',weekOff2Weeks:[2],blocks:[{templateId:'late',repeatDays:1,sortOrder:1},{templateId:'early',repeatDays:2,sortOrder:0}]};
  const keys=['2026-03-05','2026-03-06','2026-03-07','2026-03-08','2026-03-09','2026-03-10'];
  const expected=[null,'early','early',null,'late','early'];
  assert.deepEqual([...map(schedule,new Date(keys[0]),new Date(keys[5])).values()],expected);
- const local=keys.map(key=>{const [y,m,d]=key.split('-').map(Number);return new Date(y,m-1,d)});
- assert.deepEqual(Object.values(ui(schedule,local)),expected);
  assert.equal(map(schedule,new Date('2026-03-14'),new Date('2026-03-14')).get('2026-03-14'),null);
  schedule.weekOff2Weeks=[];assert.equal(map(schedule,new Date('2026-03-07'),new Date('2026-03-07')).get('2026-03-07'),null);`
  for(const TZ of ['UTC','Asia/Kolkata','America/Los_Angeles'])execFileSync(process.execPath,['--require','./tests/register.cjs','-e',code],{cwd:path.resolve(__dirname,'..'),env:{...process.env,TZ}})

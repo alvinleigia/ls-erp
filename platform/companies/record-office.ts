@@ -12,6 +12,8 @@ export function officeBoundaryError(error: unknown): BusinessError | null {
     ["Record office access is not permitted", 403],
     ["Leave ownership access is not permitted", 403],
     ["Roster history access is not permitted", 403],
+    ["Roster browsing access is not permitted", 403],
+    ["Invalid roster selection", 400],
     ["Schedule office access is not permitted", 403],
     ["Flexible plan office access is not permitted", 403],
     ["Daily roster office access is not permitted", 403],

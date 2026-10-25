@@ -1,3 +1,32 @@
+## R10 - Office-scoped roster browsing (phase 2D4C1, local)
+
+Roster staff search/counts/paging now follow readable dated workplaces and saved
+history. Personal history Read survives office revocation; only admins discover
+completely unplaced profiles. Live hours use a neutral office/date-bounded
+projection over protected timing and private leave availability. Hidden source
+configurations cannot fabricate Off days, and no hidden source names, IDs or
+leave causes enter the response. Past bounds/minutes remain frozen.
+
+Transfer dates outside the viewer's offices, unplaced dates and missing history
+have explicit unknown states and null minutes. Closed offices remain readable
+and cannot advertise edits. Grid/calendar consume the same day projection; the
+roster's duplicate timing adapter and unused source reads are removed. Reads
+are explicitly paged/searched; stale or failed responses cannot retain old hours.
+Migration 125 adds projections only, with forced rollback and exact preservation
+of all 128 prior tables, policies, source functions and grants.
+
+Date-bound assignment pickers remain phase 2D4C2, followed by appointment ownership
+and remaining operational/release gates. This is local and unreleased: nothing
+pushed, migrated on a hosted database or deployed. Client data is unchanged.
+Local verification: 11 native roster Read and 176 existing integration checks
+passed, plus two real-sign-in Chrome scenarios for hidden-source hours, scoped
+107-person paging, transfer masking, revocation and tenant-day frozen history.
+The existing daily-override Chrome workflow also passed; form/grid screenshots
+were inspected. Unused browser timing helpers were removed, and all 15 workforce
+rule checks passed again. Calendar remains feature/license gated.
+Production build/TypeScript, changed-file ESLint and whitespace checks passed.
+See the [roster Read contract](ROSTER_READ_R10.md) for evidence and limits.
+
 ## R10 - Daily roster offices (phase 2D4B3B2, local)
 
 Daily Flexible slots and daily overrides now have immutable tenant/office

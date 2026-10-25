@@ -34,37 +34,18 @@ import type {
   AppointmentConflict,
   AvailabilityEvent,
   RosterHistoryDay,
+  RosterDay,
   ShiftOverride,
-  ShiftSchedule,
   ShiftTemplateRow,
-  StaffFlexibleSlot,
   StaffFlexiblePattern,
   StaffFlexibleWeekPlan,
   StaffOption,
-  StaffScheduleAssignment,
 } from "@/types/shifts"
 import {
   APPROVED_LEAVE_COLOR,
   RESOURCE_COLORS,
   UNAVAILABLE_COLOR,
-  buildScheduleMap,
-  buildShiftSegments,
-  historyPeriods,
-  rosterPaidMinutes,
-  buildTemplateColorMap,
-  buildTemplateMap,
-  formatDateKey,
 } from "./roster-model"
-
-const WEEKDAY_BY_INDEX: Weekday[] = [
-  "SUNDAY",
-  "MONDAY",
-  "TUESDAY",
-  "WEDNESDAY",
-  "THURSDAY",
-  "FRIDAY",
-  "SATURDAY",
-]
 
 const WEEKDAY_ORDER: Weekday[] = [
   "MONDAY",
@@ -122,11 +103,6 @@ const getWeekStartMondayKey = (value: Date) => {
   return toISODate(date)
 }
 
-const toMinutes = (value: string) => {
-  const [hours, minutes] = value.split(":").map((part) => Number(part))
-  return (Number.isNaN(hours) ? 0 : hours) * 60 + (Number.isNaN(minutes) ? 0 : minutes)
-}
-
 const createEmptyFlexibleDraftDay = (day: Weekday): FlexibleDraftDay => ({
   day,
   isOff: true,
@@ -154,7 +130,7 @@ export default function RosterPage() {
   const { can, enabled } = useBusinessModules()
   const canEditRoster = can("shiftRoster.edit"), canArchiveRoster = can("shiftRoster.archive")
   const canCreatePlan = can("shiftPlans.create"), canEditPlan = can("shiftPlans.edit"), canArchivePlan = can("shiftPlans.archive")
-  const readTemplates = can("shiftTemplates.read"), readSchedules = can("shiftSchedules.read"), readPlans = can("shiftPlans.read")
+  const readTemplates = can("shiftTemplates.read"), readPlans = can("shiftPlans.read")
   const readLeaves = enabled("leaves") && can("leaveApprovals.read")
 
   const searchParams = useSearchParams()
@@ -164,6 +140,11 @@ export default function RosterPage() {
   const [viewDates, setViewDates] = React.useState<Date[]>([])
   const [staff, setStaff] = React.useState<StaffOption[]>([])
   const [staffFilter, setStaffFilter] = React.useState<string>("all")
+  const [rosterSearch, setRosterSearch] = React.useState("")
+  const [rosterPage, setRosterPage] = React.useState(1)
+  const [rosterRevision, setRosterRevision] = React.useState(0)
+  const [rosterView, setRosterView] = React.useState<{ key: string; days: RosterDay[]; total: number; totalPages: number } | null>(null)
+  const [rosterError, setRosterError] = React.useState("")
   const [rosterMode, setRosterMode] = React.useState<"grid" | "calendar">("grid")
   const [settings, setSettings] = React.useState<AppSettingsPayload>({
     workingHours: [],
@@ -171,13 +152,7 @@ export default function RosterPage() {
   })
   const [firstDayOfWeek, setFirstDayOfWeek] = React.useState(0)
   const [templates, setTemplates] = React.useState<ShiftTemplateRow[]>([])
-  const [staffAssignments, setStaffAssignments] = React.useState<
-    Record<string, StaffScheduleAssignment[]>
-  >({})
-  const [defaultSchedules, setDefaultSchedules] = React.useState<Record<string, ShiftSchedule>>({})
-  const [defaultDays, setDefaultDays] = React.useState<Record<string, Record<string, string>>>({})
   const [overrides, setOverrides] = React.useState<ShiftOverride[]>([])
-  const [flexibleSlots, setFlexibleSlots] = React.useState<StaffFlexibleSlot[]>([])
   const [flexibleWeekPlans, setFlexibleWeekPlans] = React.useState<StaffFlexibleWeekPlan[]>([])
   const [flexiblePatterns, setFlexiblePatterns] = React.useState<StaffFlexiblePattern[]>([])
   const [approvedLeaves, setApprovedLeaves] = React.useState<LeaveRosterItem[]>([])
@@ -220,21 +195,6 @@ export default function RosterPage() {
   const [conflictRescheduleDate, setConflictRescheduleDate] = React.useState("")
   const [conflictRescheduleTime, setConflictRescheduleTime] = React.useState("")
 
-  const loadStaff = React.useCallback(async () => {
-    try {
-      const response = await fetch("/api/directory?role=STAFF&pageSize=100")
-      if (!response.ok) {
-        throw new Error("Failed to load staff.")
-      }
-      const data = (await response.json()) as { items?: StaffOption[] }
-      const items = data.items ?? []
-      setStaff(items)
-    } catch (error) {
-      console.error(error)
-      toast.error("Unable to load staff.")
-    }
-  }, [])
-
   const loadSettings = React.useCallback(async () => {
     try {
       const response = await fetch("/api/settings/operations")
@@ -276,48 +236,6 @@ export default function RosterPage() {
     }
   }, [readTemplates])
 
-  const loadStaffAssignments = React.useCallback(
-    async (staffIds: string[], rangeStart: string, rangeEnd: string) => {
-      if (!readSchedules) { setStaffAssignments({}); setDefaultDays({}); setDefaultSchedules({}); return }
-      try {
-        const response = await fetch(
-          `/api/shifts/assignments?startDate=${rangeStart}&endDate=${rangeEnd}&staffIds=${staffIds.join(
-            ","
-          )}`,
-          { cache: "no-store" }
-        )
-        if (!response.ok) {
-          throw new Error("Failed to load staff assignments.")
-        }
-        const data = (await response.json()) as { items?: StaffScheduleAssignment[]; defaults?: { staffId: string; date: string; scheduleId: string }[]; defaultSchedules?: ShiftSchedule[] }
-        const grouped: Record<string, StaffScheduleAssignment[]> = {}
-        for (const assignment of data.items ?? []) {
-          if (!assignment.staffId) continue
-          if (!grouped[assignment.staffId]) {
-            grouped[assignment.staffId] = []
-          }
-          grouped[assignment.staffId].push(assignment)
-        }
-        setDefaultSchedules(Object.fromEntries((data.defaultSchedules ?? []).map(schedule => [schedule.id, schedule])))
-        const days: Record<string, Record<string, string>> = {}
-        for (const day of data.defaults ?? []) { days[day.staffId] ??= {}; days[day.staffId][day.date] = day.scheduleId }
-        setDefaultDays(days)
-        setStaffAssignments(grouped)
-      } catch (error) {
-        console.error(error)
-        setStaffAssignments({})
-        setDefaultDays({})
-        setDefaultSchedules({})
-        toast.error("Unable to load staff schedules.")
-      }
-    },
-    [readSchedules]
-  )
-
-  React.useEffect(() => {
-    void loadStaff()
-  }, [loadStaff])
-
   React.useEffect(() => {
     void loadSettings()
   }, [loadSettings])
@@ -352,17 +270,31 @@ export default function RosterPage() {
     })
   }, [date, firstDayOfWeek, rosterMode, viewDates])
 
+  const rosterStart = toISODate(availabilityDates[0]), rosterEnd = toISODate(availabilityDates[availabilityDates.length - 1])
+  const rosterAllowed = enabled("shifts") && can("shiftRoster.read")
+  const rosterKey = `${rosterStart}:${rosterEnd}:${rosterPage}:${rosterSearch}:${rosterRevision}:${rosterAllowed}`
   React.useEffect(() => {
-    if (!staff.length || !availabilityDates.length) return
-    const rangeStart = toISODate(availabilityDates[0])
-    const rangeEnd = toISODate(availabilityDates[availabilityDates.length - 1])
-    const staffIds =
-      staffFilter === "all"
-        ? staff.map((member) => member.id)
-        : staff.filter((member) => member.id === staffFilter).map((member) => member.id)
-    if (!staffIds.length) return
-    void loadStaffAssignments(staffIds, rangeStart, rangeEnd)
-  }, [availabilityDates, loadStaffAssignments, staff, staffFilter])
+    const controller = new AbortController()
+    setRosterError("")
+    if (!rosterAllowed) { setStaff([]); setRosterView(null); return }
+    const query = new URLSearchParams({ startDate: rosterStart, endDate: rosterEnd, page: String(rosterPage), pageSize: "100", q: rosterSearch })
+    void (async () => {
+      try {
+        const response = await fetch(`/api/shifts/roster?${query}`, { cache: "no-store", signal: controller.signal })
+        const data = await response.json()
+        if (!response.ok) throw new Error(data.error || "Unable to load roster.")
+        if (controller.signal.aborted) return
+        if (rosterPage > data.totalPages) { setRosterPage(data.totalPages); return }
+        setStaff(data.items ?? [])
+        setRosterView({ key: rosterKey, days: data.days ?? [], total: data.total, totalPages: data.totalPages })
+        setStaffFilter(current => current === "all" || data.items.some((item: StaffOption) => item.id === current) ? current : "all")
+      } catch (error) {
+        if (controller.signal.aborted) return
+        setStaff([]); setRosterView(null); setRosterError(error instanceof Error ? error.message : "Unable to load roster.")
+      }
+    })()
+    return () => controller.abort()
+  }, [rosterAllowed, rosterStart, rosterEnd, rosterPage, rosterSearch, rosterRevision, rosterKey])
 
   const filteredStaff = React.useMemo(() => {
     if (staffFilter === "all") {
@@ -397,34 +329,6 @@ export default function RosterPage() {
   React.useEffect(() => {
     void loadOverrides()
   }, [loadOverrides])
-
-  const loadFlexibleSlots = React.useCallback(async () => {
-    if (!availabilityDates.length || !staff.length) return
-    const start = toISODate(availabilityDates[0])
-    const end = toISODate(availabilityDates[availabilityDates.length - 1])
-    const staffIds =
-      staffFilter === "all" ? staff.map((member) => member.id) : [staffFilter]
-    if (!staffIds.length) return
-    try {
-      const response = await fetch(
-        `/api/shifts/flexible-slots?startDate=${start}&endDate=${end}&staffIds=${staffIds.join(",")}`,
-        { cache: "no-store" }
-      )
-      if (!response.ok) {
-        throw new Error("Failed to load flexible slots.")
-      }
-      const data = (await response.json()) as { items?: StaffFlexibleSlot[] }
-      setFlexibleSlots(data.items ?? [])
-    } catch (error) {
-      console.error(error)
-      setFlexibleSlots([])
-      toast.error("Unable to load flexible staff slots.")
-    }
-  }, [availabilityDates, staff, staffFilter])
-
-  React.useEffect(() => {
-    void loadFlexibleSlots()
-  }, [loadFlexibleSlots])
 
   const loadFlexibleWeekPlans = React.useCallback(async () => {
     if (!availabilityDates.length || !staff.length) return
@@ -540,13 +444,11 @@ export default function RosterPage() {
     void loadApprovedLeaves()
   }, [loadApprovedLeaves])
 
-  const todayKey = React.useMemo(() => toISODate(new Date()), [])
-
   const loadHistoryDays = React.useCallback(async () => {
     if (!availabilityDates.length || !staff.length) return
     const start = toISODate(availabilityDates[0])
     const end = toISODate(availabilityDates[availabilityDates.length - 1])
-    if (start >= todayKey) {
+    if (!rosterView?.days.some(day => day.frozen)) {
       setHistoryDays([])
       return
     }
@@ -567,18 +469,11 @@ export default function RosterPage() {
       console.error(error)
       setHistoryDays([])
     }
-  }, [availabilityDates, staff, staffFilter, todayKey])
+  }, [availabilityDates, staff, staffFilter, rosterView])
 
   React.useEffect(() => {
     void loadHistoryDays()
   }, [loadHistoryDays])
-
-  const templateMap = React.useMemo(() => buildTemplateMap(templates), [templates])
-
-  const templateColorMap = React.useMemo(
-    () => buildTemplateColorMap(templates),
-    [templates]
-  )
 
   const staffSchedulingModeMap = React.useMemo(() => {
     const map: Record<string, "STANDARD" | "FLEXIBLE"> = {}
@@ -587,33 +482,6 @@ export default function RosterPage() {
     }
     return map
   }, [staff])
-
-  const scheduleMaps = React.useMemo(() => {
-    const maps: Record<string, Record<string, string | null>> = {}
-    const cache = new Map<string, Record<string, string | null>>()
-    const scheduleMap = (schedule: ShiftSchedule) => {
-      if (!cache.has(schedule.id)) cache.set(schedule.id, buildScheduleMap(schedule, availabilityDates))
-      return cache.get(schedule.id)!
-    }
-    for (const member of filteredStaff) {
-      // Apply older assignments first; the latest start (then ID) wins.
-      const assignments = [...(staffAssignments[member.id] ?? [])].sort((a, b) =>
-        a.startDate.localeCompare(b.startDate) || a.id.localeCompare(b.id))
-      const baseMap: Record<string, string | null> = {}
-      for (const [day, sourceId] of Object.entries(defaultDays[member.id] ?? {})) {
-        const source = defaultSchedules[sourceId]
-        if (source) baseMap[day] = scheduleMap(source)[day] ?? null
-      }
-      for (const assignment of assignments) {
-        const start = assignment.startDate.slice(0, 10), end = assignment.endDate?.slice(0, 10)
-        for (const [day, templateId] of Object.entries(scheduleMap(assignment.schedule))) {
-          if (day >= start && (!end || day <= end)) baseMap[day] = templateId
-        }
-      }
-      maps[member.id] = baseMap
-    }
-    return maps
-  }, [availabilityDates, defaultSchedules, defaultDays, filteredStaff, staffAssignments])
 
   const overrideMap = React.useMemo(() => {
     const map: Record<string, Record<string, string | null>> = {}
@@ -627,30 +495,6 @@ export default function RosterPage() {
     }
     return map
   }, [overrides])
-
-  const flexibleSlotMap = React.useMemo(() => {
-    const map: Record<string, Record<string, Array<{ startTime: string; endTime: string }>>> = {}
-    for (const slot of flexibleSlots) {
-      if (!slot.staffId) continue
-      if (!map[slot.staffId]) {
-        map[slot.staffId] = {}
-      }
-      if (!map[slot.staffId][slot.date]) {
-        map[slot.staffId][slot.date] = []
-      }
-      map[slot.staffId][slot.date].push({
-        startTime: slot.startTime,
-        endTime: slot.endTime,
-      })
-    }
-
-    for (const staffId of Object.keys(map)) {
-      for (const dateKey of Object.keys(map[staffId])) {
-        map[staffId][dateKey].sort((a, b) => a.startTime.localeCompare(b.startTime))
-      }
-    }
-    return map
-  }, [flexibleSlots])
 
   const flexibleWeekPlanMap = React.useMemo(() => {
     const map: Record<string, Record<string, StaffFlexibleWeekPlan>> = {}
@@ -735,215 +579,21 @@ export default function RosterPage() {
     (value: Date, staffId?: string) => {
       if (!staffId) return null
       const dateKey = toISODate(value)
-      if (dateKey >= todayKey) return null
+      if (!rosterView?.days.some(day => day.staffId === staffId && day.date === dateKey && day.frozen)) return null
       return historyMap[staffId]?.[dateKey] ?? null
     },
-    [historyMap, todayKey]
+    [historyMap, rosterView]
   )
 
-  const getStaffTemplateForDate = React.useCallback(
-    (value: Date, staffId?: string) => {
-      if (!staffId) return null
-      const history = getHistoryDay(value, staffId)
-      if (history) {
-        if (!history.templateId || !history.templateName || !history.startTime || !history.endTime) {
-          return null
-        }
-        return {
-          id: history.templateId,
-          name: history.templateName,
-          startTime: history.startTime,
-          endTime: history.endTime,
-        } as ShiftTemplateRow
-      }
-      const dateKey = formatDateKey(value)
-      const override = overrideMap[staffId]?.[dateKey]
-      if (override !== undefined) {
-        return override ? templateMap[override] ?? null : null
-      }
-      if ((staffSchedulingModeMap[staffId] ?? "STANDARD") === "FLEXIBLE") {
-        return null
-      }
-      const scheduleMap = scheduleMaps[staffId]
-      if (scheduleMap && Object.prototype.hasOwnProperty.call(scheduleMap, dateKey)) {
-        const templateId = scheduleMap[dateKey]
-        return templateId ? templateMap[templateId] ?? null : null
-      }
-      return null
-    },
-    [getHistoryDay, overrideMap, scheduleMaps, staffSchedulingModeMap, templateMap]
-  )
+  const rosterDayMap = React.useMemo(() => new Map(rosterView?.days.map(day => [day.staffId + ":" + day.date, day]) ?? []), [rosterView])
+  const getRosterDay = React.useCallback((value: Date, staffId?: string) => staffId ? rosterDayMap.get(staffId + ":" + toISODate(value)) : undefined, [rosterDayMap])
+  const getStaffPeriodsForDate = React.useCallback((value: Date, staffId?: string) => getRosterDay(value, staffId)?.periods ?? [], [getRosterDay])
 
-  const getStaffPeriodsForDate = React.useCallback(
-    (value: Date, staffId?: string) => {
-      if (!staffId) {
-        return []
-      }
-      const history = getHistoryDay(value, staffId)
-      if (history) return historyPeriods(history)
-      const dateKey = formatDateKey(value)
-      const override = overrideMap[staffId]?.[dateKey]
-      if (override !== undefined) {
-        if (!override) {
-          return []
-        }
-        const template = templateMap[override]
-        return template ? buildShiftSegments(template) : []
-      }
-
-      const schedulingMode = staffSchedulingModeMap[staffId] ?? "STANDARD"
-      if (schedulingMode === "FLEXIBLE") {
-        const weekStartDate = getWeekStartMondayKey(value)
-        const weekday = WEEKDAY_BY_INDEX[value.getDay()]
-        const dayPlan = flexibleWeekPlanMap[staffId]?.[weekStartDate]?.days.find(
-          (day) => day.day === weekday
-        )
-        if (dayPlan?.isOff) {
-          return []
-        }
-        if (dayPlan?.slots?.length) {
-          return dayPlan.slots.flatMap((slot) => {
-            const breaks = slot.breaks
-              .slice()
-              .sort((a, b) => toMinutes(a.startTime) - toMinutes(b.startTime))
-            const segments: Array<{ startTime: string; endTime: string }> = []
-            let cursor = toMinutes(slot.startTime)
-            const slotEnd = toMinutes(slot.endTime)
-
-            for (const currentBreak of breaks) {
-              const breakStart = toMinutes(currentBreak.startTime)
-              const breakEnd = toMinutes(currentBreak.endTime)
-              if (breakStart > cursor) {
-                segments.push({
-                  startTime: `${String(Math.floor(cursor / 60)).padStart(2, "0")}:${String(cursor % 60).padStart(2, "0")}`,
-                  endTime: `${String(Math.floor(breakStart / 60)).padStart(2, "0")}:${String(breakStart % 60).padStart(2, "0")}`,
-                })
-              }
-              cursor = Math.max(cursor, breakEnd)
-            }
-
-            if (cursor < slotEnd) {
-              segments.push({
-                startTime: `${String(Math.floor(cursor / 60)).padStart(2, "0")}:${String(cursor % 60).padStart(2, "0")}`,
-                endTime: `${String(Math.floor(slotEnd / 60)).padStart(2, "0")}:${String(slotEnd % 60).padStart(2, "0")}`,
-              })
-            }
-
-            return segments
-          })
-        }
-
-        const recurringPattern = getActiveRecurringPatternForDate(staffId, value)
-        if (recurringPattern) {
-          const dateKeyUtc = toISODate(value)
-          const validFrom = new Date(`${recurringPattern.validFrom}T00:00:00.000Z`).getTime()
-          const validTo = recurringPattern.validTo
-            ? new Date(`${recurringPattern.validTo}T23:59:59.999Z`).getTime()
-            : Number.POSITIVE_INFINITY
-          const dateValue = new Date(`${dateKeyUtc}T00:00:00.000Z`).getTime()
-          if (dateValue >= validFrom && dateValue <= validTo) {
-            const weekOffset = Math.floor(Math.max(0, (dateValue - validFrom) / 86400000) / 7)
-            const weekIndex = (weekOffset % recurringPattern.cycleLengthWeeks) + 1
-            const patternWeek = recurringPattern.weeks.find((week) => week.weekIndex === weekIndex)
-            const patternDay = patternWeek?.days.find((day) => day.day === weekday)
-            if (patternDay?.isOff) {
-              return []
-            }
-            if (patternDay?.slots?.length) {
-              return patternDay.slots.flatMap((slot) => {
-                const breaks = slot.breaks
-                  .slice()
-                  .sort((a, b) => toMinutes(a.startTime) - toMinutes(b.startTime))
-                const segments: Array<{ startTime: string; endTime: string }> = []
-                let cursor = toMinutes(slot.startTime)
-                const slotEnd = toMinutes(slot.endTime)
-
-                for (const currentBreak of breaks) {
-                  const breakStart = toMinutes(currentBreak.startTime)
-                  const breakEnd = toMinutes(currentBreak.endTime)
-                  if (breakStart > cursor) {
-                    segments.push({
-                      startTime: `${String(Math.floor(cursor / 60)).padStart(2, "0")}:${String(cursor % 60).padStart(2, "0")}`,
-                      endTime: `${String(Math.floor(breakStart / 60)).padStart(2, "0")}:${String(breakStart % 60).padStart(2, "0")}`,
-                    })
-                  }
-                  cursor = Math.max(cursor, breakEnd)
-                }
-
-                if (cursor < slotEnd) {
-                  segments.push({
-                    startTime: `${String(Math.floor(cursor / 60)).padStart(2, "0")}:${String(cursor % 60).padStart(2, "0")}`,
-                    endTime: `${String(Math.floor(slotEnd / 60)).padStart(2, "0")}:${String(slotEnd % 60).padStart(2, "0")}`,
-                  })
-                }
-
-                return segments
-              })
-            }
-          }
-        }
-
-        const legacyFlexible = flexibleSlotMap[staffId]?.[dateKey]
-        return legacyFlexible?.length ? legacyFlexible : []
-      }
-      const scheduleMap = scheduleMaps[staffId]
-      if (scheduleMap && Object.prototype.hasOwnProperty.call(scheduleMap, dateKey)) {
-        const templateId = scheduleMap[dateKey]
-        if (!templateId) {
-          return []
-        }
-        const template = templateMap[templateId]
-        return template ? buildShiftSegments(template) : []
-      }
-      return []
-    },
-    [
-      getActiveRecurringPatternForDate,
-      flexibleWeekPlanMap,
-      flexibleSlotMap,
-      getHistoryDay,
-      overrideMap,
-      scheduleMaps,
-      staffSchedulingModeMap,
-      templateMap,
-    ]
-  )
-
-  const staffWeeklyHours = React.useMemo(() => {
-    const map: Record<string, number> = {}
-    for (const member of filteredStaff) {
-      let minutesTotal = 0
-      for (const day of availabilityDates) {
-        const dateKey = toISODate(day)
-        const history = getHistoryDay(day, member.id)
-        if (history?.source === "LEAVE" || leaveMap[member.id]?.[dateKey]) {
-          continue
-        }
-        const periods = getStaffPeriodsForDate(day, member.id)
-        minutesTotal += rosterPaidMinutes(history, periods)
-      }
-      map[member.id] = minutesTotal / 60
-    }
-    return map
-  }, [availabilityDates, filteredStaff, getHistoryDay, getStaffPeriodsForDate, leaveMap])
-
-  const dailyHoursTotals = React.useMemo(
-    () =>
-      availabilityDates.map((day) => {
-        const dateKey = toISODate(day)
-        const totalMinutes = filteredStaff.reduce((staffSum, member) => {
-          const history = getHistoryDay(day, member.id)
-          if (history?.source === "LEAVE" || leaveMap[member.id]?.[dateKey]) {
-            return staffSum
-          }
-          const periods = getStaffPeriodsForDate(day, member.id)
-          const minutes = rosterPaidMinutes(history, periods)
-          return staffSum + minutes
-        }, 0)
-        return totalMinutes / 60
-      }),
-    [availabilityDates, filteredStaff, getHistoryDay, getStaffPeriodsForDate, leaveMap]
-  )
+  const staffWeeklyHours = React.useMemo(() => Object.fromEntries(filteredStaff.map(member => [member.id,
+    availabilityDates.reduce((sum, day) => sum + (getRosterDay(day, member.id)?.paidMinutes ?? 0), 0) / 60,
+  ])), [availabilityDates, filteredStaff, getRosterDay])
+  const dailyHoursTotals = React.useMemo(() => availabilityDates.map(day => filteredStaff.reduce((sum, member) =>
+    sum + (getRosterDay(day, member.id)?.paidMinutes ?? 0), 0) / 60), [availabilityDates, filteredStaff, getRosterDay])
 
   const dailyLeaveTotals = React.useMemo(
     () =>
@@ -951,13 +601,15 @@ export default function RosterPage() {
         const dateKey = toISODate(day)
         return filteredStaff.reduce(
           (sum, member) => {
+            const value = getRosterDay(day, member.id)
+            if (!value || !["WORKING", "NONWORKING"].includes(value.state)) return sum
             const history = getHistoryDay(day, member.id)
-            return sum + (history?.source === "LEAVE" || leaveMap[member.id]?.[dateKey] ? 1 : 0)
+            return sum + (history?.source === "LEAVE" || (!value.frozen && leaveMap[member.id]?.[dateKey]) ? 1 : 0)
           },
           0
         )
       }),
-    [availabilityDates, filteredStaff, getHistoryDay, leaveMap]
+    [availabilityDates, filteredStaff, getRosterDay, getHistoryDay, leaveMap]
   )
 
   const formatHours = React.useCallback((value: number) => {
@@ -968,96 +620,27 @@ export default function RosterPage() {
   }, [])
 
   const calendarEvents = React.useMemo(() => {
-    const list: AvailabilityEvent[] = []
-
-    for (const leave of approvedLeaves) {
-      const leaveStart = parseISODate(leave.startDate)
-      const leaveEnd = parseISODate(leave.endDate)
-      if (!leaveStart || !leaveEnd) continue
-      const eventStart = new Date(leaveStart)
-      eventStart.setHours(0, 0, 0, 0)
-      const eventEnd = new Date(leaveEnd)
-      eventEnd.setDate(eventEnd.getDate() + 1)
-      eventEnd.setHours(0, 0, 0, 0)
-      list.push({
-        Id: `leave-${leave.id}`,
-        Subject: `${leave.leaveDefinitionCode} - ${leave.leaveDefinitionName}`,
-        StartTime: eventStart,
-        EndTime: eventEnd,
-        IsAllDay: true,
-        staffId: leave.staffId,
-        isLeave: true,
-        leaveCode: leave.leaveDefinitionCode,
-        leaveName: leave.leaveDefinitionName,
-        leaveReason: leave.reason,
-        CategoryColor: APPROVED_LEAVE_COLOR,
+    const events: AvailabilityEvent[] = []
+    for (const day of availabilityDates) for (const member of filteredStaff) {
+      const value = getRosterDay(day, member.id)
+      if (!value || !["WORKING", "NONWORKING"].includes(value.state)) continue
+      const key = toISODate(day), history = getHistoryDay(day, member.id)
+      const leave = history?.source === "LEAVE" ? history : !value.frozen ? leaveMap[member.id]?.[key] : undefined
+      const start = new Date(day); start.setHours(0, 0, 0, 0)
+      const end = new Date(start); end.setDate(end.getDate() + 1)
+      events.push({
+        Id: `${member.id}-${key}`, staffId: member.id, StartTime: start, EndTime: end, IsAllDay: true,
+        Subject: leave ? `${leave.leaveDefinitionCode ?? "LEAVE"} - ${leave.leaveDefinitionName ?? "Leave"}` : value.state === "WORKING" ? history?.templateName || "Working hours" : "Off / unavailable",
+        isLeave: Boolean(leave), isUnavailable: !leave && value.state === "NONWORKING",
+        leaveCode: leave?.leaveDefinitionCode ?? undefined, leaveName: leave?.leaveDefinitionName ?? undefined,
+        leaveReason: leave && "leaveReason" in leave ? leave.leaveReason : leave && "reason" in leave ? leave.reason : undefined,
+        templateStart: value.periods[0]?.startTime, templateEnd: value.periods.at(-1)?.endTime,
+        templateBreaks: value.periods.slice(1).map((period, index) => `${formatTimeFrom24h(value.periods[index].endTime, settings)} - ${formatTimeFrom24h(period.startTime, settings)}`),
+        CategoryColor: leave ? APPROVED_LEAVE_COLOR : value.state === "NONWORKING" ? UNAVAILABLE_COLOR : undefined,
       })
     }
-
-    for (const day of availabilityDates) {
-      for (const member of filteredStaff) {
-        const dateKey = formatDateKey(day)
-        const overrideValue = overrideMap[member.id]?.[dateKey]
-        if (overrideValue === null) {
-          const start = new Date(day)
-          start.setHours(0, 0, 0, 0)
-          const end = new Date(start)
-          end.setDate(end.getDate() + 1)
-          list.push({
-            Id: `${member.id}-${dateKey}-unavailable`,
-            Subject: "Unavailable",
-            StartTime: start,
-            EndTime: end,
-            IsAllDay: true,
-            staffId: member.id,
-            isUnavailable: true,
-            CategoryColor: UNAVAILABLE_COLOR,
-          })
-          continue
-        }
-        const periods = getStaffPeriodsForDate(day, member.id)
-        if (!periods.length) continue
-        const template = getStaffTemplateForDate(day, member.id)
-        const label = template?.name ?? "Flexible shift"
-        const start = new Date(day)
-        start.setHours(0, 0, 0, 0)
-        const end = new Date(start)
-        end.setDate(end.getDate() + 1)
-        const breaks = (template?.breaks ?? [])
-          .map(
-            (period) =>
-              `${formatTimeFrom24h(period.startTime, settings)} - ${formatTimeFrom24h(
-                period.endTime,
-                settings
-              )}`
-          )
-          .filter(Boolean)
-        list.push({
-          Id: `${member.id}-${formatDateKey(day)}`,
-          Subject: label,
-          StartTime: start,
-          EndTime: end,
-          IsAllDay: true,
-          staffId: member.id,
-          templateStart: template?.startTime ?? periods[0]?.startTime,
-          templateEnd: template?.endTime ?? periods[periods.length - 1]?.endTime,
-          templateBreaks: breaks.length ? breaks : undefined,
-          CategoryColor: template ? templateColorMap[template.id] : undefined,
-        })
-      }
-    }
-
-    return list
-  }, [
-    approvedLeaves,
-    availabilityDates,
-    filteredStaff,
-    getStaffPeriodsForDate,
-    getStaffTemplateForDate,
-    overrideMap,
-    settings,
-    templateColorMap,
-  ])
+    return events
+  }, [availabilityDates, filteredStaff, getRosterDay, getHistoryDay, leaveMap, settings])
 
   const isPastDate = React.useCallback((value: Date) => toISODate(value) < toISODate(new Date()), [])
 
@@ -1229,6 +812,7 @@ export default function RosterPage() {
   const openOverrideEditor = React.useCallback(
     (staffId: string, dateValue: Date) => {
       if (!canEditRoster && !canCreatePlan && !canEditPlan) return
+      if (!getRosterDay(dateValue, staffId)?.canEdit) return
       if (isPastDate(dateValue)) {
         toast.error("Past dates cannot be edited.")
         return
@@ -1261,7 +845,7 @@ export default function RosterPage() {
       setOverrideOpen(true)
     },
     [
-      canEditRoster, canCreatePlan, canEditPlan,
+      canEditRoster, canCreatePlan, canEditPlan, getRosterDay,
       getFlexibleDraftForEffectiveWeek,
       getRecurringDraftFromPattern,
       isPastDate,
@@ -1283,7 +867,7 @@ export default function RosterPage() {
         ) : null}
         {data.templateBreaks?.length ? (
           <div>
-            Breaks: {data.templateBreaks.join(", ")}
+            Gaps between periods: {data.templateBreaks.join(", ")}
           </div>
         ) : null}
         {data.isUnavailable ? (
@@ -1570,6 +1154,7 @@ export default function RosterPage() {
             const error = await response.json().catch(() => ({}))
             throw new Error(error.error || "Failed to save flexible weekly plan.")
           }
+          setRosterRevision(value => value + 1)
           toast.success("Flexible weekly override saved.")
         } else {
           const response = await fetch("/api/shifts/flexible-patterns", {
@@ -1609,6 +1194,7 @@ export default function RosterPage() {
           }
           const data = (await response.json()) as { item?: { id?: string } }
           setRecurringPatternId(data.item?.id ?? "")
+          setRosterRevision(value => value + 1)
           toast.success(
             saveAsNewPattern
               ? "Recurring flexible pattern saved as new."
@@ -1619,8 +1205,7 @@ export default function RosterPage() {
         setOverrideOpen(false)
         await loadFlexiblePatterns()
         await loadFlexibleWeekPlans()
-        await loadFlexibleSlots()
-        await loadOverrides()
+          await loadOverrides()
         return
       }
 
@@ -1651,9 +1236,9 @@ export default function RosterPage() {
         toast.error("No dates updated. Check skip holidays/week off.")
         return
       }
+      setRosterRevision(value => value + 1)
       toast.success("Shift override saved.")
       setOverrideOpen(false)
-      await loadFlexibleSlots()
       await loadOverrides()
     } catch (error) {
       console.error(error)
@@ -1662,7 +1247,6 @@ export default function RosterPage() {
       )
     }
   }, [
-    loadFlexibleSlots,
     loadFlexiblePatterns,
     loadFlexibleWeekPlans,
     loadOverrides,
@@ -1796,6 +1380,7 @@ export default function RosterPage() {
             toast.error("No weekly override found to clear.")
             return
           }
+          setRosterRevision(value => value + 1)
           toast.success("Flexible weekly override cleared.")
         } else {
           if (!recurringPatternId) {
@@ -1814,13 +1399,13 @@ export default function RosterPage() {
             throw new Error(error.error || "Failed to deactivate recurring flexible pattern.")
           }
           setRecurringPatternId("")
+          setRosterRevision(value => value + 1)
           toast.success("Recurring flexible pattern deactivated.")
         }
         setOverrideOpen(false)
         await loadFlexiblePatterns()
         await loadFlexibleWeekPlans()
-        await loadFlexibleSlots()
-        await loadOverrides()
+          await loadOverrides()
         return
       }
 
@@ -1842,9 +1427,9 @@ export default function RosterPage() {
         toast.error("No overrides found for that range.")
         return
       }
+      setRosterRevision(value => value + 1)
       toast.success("Overrides cleared.")
       setOverrideOpen(false)
-      await loadFlexibleSlots()
       await loadOverrides()
     } catch (error) {
       console.error(error)
@@ -1853,7 +1438,6 @@ export default function RosterPage() {
       )
     }
   }, [
-    loadFlexibleSlots,
     loadFlexiblePatterns,
     loadFlexibleWeekPlans,
     loadOverrides,
@@ -2051,6 +1635,7 @@ export default function RosterPage() {
         const error = await response.json().catch(() => ({}))
         throw new Error(error.error || "Unable to resolve conflicts.")
       }
+      setRosterRevision(value => value + 1)
       toast.success("Appointments updated.")
       setConflictsOpen(false)
       setConflicts([])
@@ -2071,13 +1656,14 @@ export default function RosterPage() {
 
   return (
     <div className={pageClass}>
-      {(!readTemplates || !readSchedules || !readPlans || !readLeaves) && <p role="status" className="text-sm text-muted-foreground">This roster shows only the schedules, plans and leaves your role can access. Hidden records still apply to booking availability.</p>}
-      <PageHeader title={<> Roster </>} description={<> View staff schedules in a monthly roster. </>} />
-      {staffFilter !== "all" && <StaffWorkplacePanel key={staffFilter} staffId={staffFilter} />}
+      <p className="text-sm text-muted-foreground">Hours cover permitted dates on this page. Plan details and leave reasons require separate access.</p>
+      <PageHeader title={<> Roster </>} description={<> View permitted staff hours and saved roster history. </>} />
+      {rosterView?.key === rosterKey && staffFilter !== "all" && <StaffWorkplacePanel key={staffFilter} staffId={staffFilter} />}
 
       <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+        <Input aria-label="Search roster staff" placeholder="Search all permitted staff" maxLength={160} value={rosterSearch} onChange={event => { setRosterSearch(event.target.value); setRosterPage(1); setStaffFilter("all") }} />
         <div className="flex flex-col gap-2">
-          <label className="text-sm font-medium">Staff filter</label>
+          <label className="text-sm font-medium">Staff filter (this page)</label>
           <div className="w-full min-w-[220px] md:w-[280px]">
             <SearchableSelect
             value={staffFilter}
@@ -2143,8 +1729,9 @@ export default function RosterPage() {
         </div>
       </div>
 
-      {rosterMode === "grid" ? (
+      {rosterView?.key !== rosterKey || !rosterAllowed ? <p role={rosterError ? "alert" : "status"}>{rosterError || (rosterAllowed ? "Loading roster..." : "Roster access is not available.")}</p> : rosterMode === "grid" ? (
         <div className="rounded-xl border bg-card p-3 shadow-sm">
+          {!filteredStaff.length && <p className="mb-3 text-sm text-muted-foreground">No permitted staff match this date range and search.</p>}
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
             <div className="font-medium">
               Week: {formatDateForDisplay(availabilityDates[0], settings.dateFormat)} -{" "}
@@ -2178,7 +1765,7 @@ export default function RosterPage() {
                       </div>
                     </th>
                   ))}
-                  <th className="w-28 border p-2 text-left font-medium">Week total</th>
+                  <th className="w-28 border p-2 text-left font-medium">Visible hours</th>
                 </tr>
               </thead>
               <tbody>
@@ -2186,14 +1773,16 @@ export default function RosterPage() {
                   <tr key={member.id}>
                     <td className="border p-2 align-top">
                       <div className="font-medium">{member.name?.trim() || member.email}</div>
+                      {member.status && member.status !== "ACTIVE" && <span className="text-xs text-muted-foreground">{member.status.toLowerCase()}</span>}
                     </td>
                     {availabilityDates.map((day) => {
                       const dateKey = toISODate(day)
                       const history = getHistoryDay(day, member.id)
-                      const leave = leaveMap[member.id]?.[dateKey]
+                      const leave = getRosterDay(day, member.id)?.frozen ? undefined : leaveMap[member.id]?.[dateKey]
                       const overrideValue = overrideMap[member.id]?.[dateKey]
-                      const template = getStaffTemplateForDate(day, member.id)
                       const periods = getStaffPeriodsForDate(day, member.id)
+                      const rosterDay = getRosterDay(day, member.id)
+                      if (!rosterDay || !["WORKING", "NONWORKING"].includes(rosterDay.state)) return <td key={`${member.id}-${dateKey}`} className="border p-2 text-xs text-muted-foreground">{rosterDay?.state === "UNPLACED" ? "No workplace" : rosterDay?.state === "OUTSIDE" ? "Outside your offices" : "History unavailable"}</td>
 
                       if (history) {
                         if (history.source === "LEAVE") {
@@ -2237,7 +1826,7 @@ export default function RosterPage() {
                         return (
                           <td
                             key={`${member.id}-${dateKey}`}
-                            className="cursor-pointer border bg-red-50 p-2 align-top text-xs text-red-700"
+                            className={rosterDay.canEdit ? "cursor-pointer border bg-red-50 p-2 align-top text-xs text-red-700" : "border bg-red-50 p-2 align-top text-xs text-red-700"}
                             onClick={() => openOverrideEditor(member.id, day)}
                           >
                             Unavailable
@@ -2249,10 +1838,10 @@ export default function RosterPage() {
                         return (
                           <td
                             key={`${member.id}-${dateKey}`}
-                            className="cursor-pointer border bg-muted/30 p-2 align-top text-xs text-muted-foreground"
+                            className={rosterDay.canEdit ? "cursor-pointer border bg-muted/30 p-2 align-top text-xs text-muted-foreground" : "border bg-muted/30 p-2 align-top text-xs text-muted-foreground"}
                             onClick={() => openOverrideEditor(member.id, day)}
                           >
-                            Off
+                            Off / unavailable
                           </td>
                         )
                       }
@@ -2260,11 +1849,11 @@ export default function RosterPage() {
                       return (
                         <td
                           key={`${member.id}-${dateKey}`}
-                          className="cursor-pointer border p-2 align-top"
+                          className={rosterDay.canEdit ? "cursor-pointer border p-2 align-top" : "border p-2 align-top"}
                           onClick={() => openOverrideEditor(member.id, day)}
                         >
                           <div className="rounded bg-sky-600 px-2 py-1 text-xs font-medium text-white">
-                            {template?.name ?? "Flexible shift"}
+                            {history?.templateName || "Working hours"}
                           </div>
                           <div className="mt-1 text-xs text-muted-foreground">
                             {periods
@@ -2285,7 +1874,7 @@ export default function RosterPage() {
               </tbody>
               <tfoot>
                 <tr>
-                  <td className="border bg-muted/30 p-2 font-medium">Daily total</td>
+                  <td className="border bg-muted/30 p-2 font-medium">Visible daily hours</td>
                   {dailyHoursTotals.map((value, index) => (
                     <td key={`daily-hours-${index}`} className="border bg-muted/30 p-2 font-medium">
                       {formatHours(value)}
@@ -2299,7 +1888,7 @@ export default function RosterPage() {
                 </tr>
                 <tr>
                   <td className="border bg-muted/10 p-2 text-xs text-muted-foreground">
-                    Leaves count
+                    Visible leave count
                   </td>
                   {dailyLeaveTotals.map((value, index) => (
                     <td
@@ -2360,6 +1949,14 @@ export default function RosterPage() {
         </div>
       </div>
       )}
+      <div className="flex items-center justify-between gap-3 text-sm text-muted-foreground">
+        <span>{rosterView?.key === rosterKey ? `${rosterView.total} permitted staff - Page ${rosterPage} of ${rosterView.totalPages}` : ""}</span>
+        <div className="flex gap-2">
+          <Button variant="outline" disabled={!rosterAllowed} onClick={() => setRosterRevision(value => value + 1)}>Refresh roster</Button>
+          <Button variant="outline" disabled={rosterPage <= 1 || rosterView?.key !== rosterKey} onClick={() => { setRosterPage(value => value - 1); setStaffFilter("all") }}>Previous staff page</Button>
+          <Button variant="outline" disabled={!rosterView || rosterView.key !== rosterKey || rosterPage >= rosterView.totalPages} onClick={() => { setRosterPage(value => value + 1); setStaffFilter("all") }}>Next staff page</Button>
+        </div>
+      </div>
       <Dialog
         open={overrideOpen}
         onOpenChange={(open) => {
