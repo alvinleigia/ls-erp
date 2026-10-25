@@ -256,6 +256,7 @@ test("10,000 typed values use an indexed filter and bounded record queries", asy
   const started = performance.now()
   const rows = await staffCrm.listEnquiries({ customFieldId: field.id, customFieldValue: "123", pageSize: 5 })
   assert.equal(rows.total, 10); assert.equal(rows.items.length, 5)
-  assert.ok(queries.length < 15, `Expected bounded queries, got ${queries.length}`)
+  // Includes the one transaction-local office-context capture, never per row.
+  assert.ok(queries.length <= 15, `Expected bounded queries, got ${queries.length}`)
   console.log(`Custom field indexed filter: 10,000 values, page 5, ${queries.length} queries, ${(performance.now() - started).toFixed(1)} ms service; ${plan[0]["QUERY PLAN"][0]["Execution Time"]} ms indexed SQL.`)
 })

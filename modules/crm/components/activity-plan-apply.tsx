@@ -1,4 +1,5 @@
 "use client"
+import { useCreationOfficeSnapshot } from "@/platform/companies/creation-snapshot"
 import { useTerminology } from "@/platform/terminology/provider"
 import { Section } from "@/components/erp/section"
 import { AccessPageHeader, AccessFormActions } from "@/platform/access/record-page"
@@ -22,6 +23,7 @@ import type { WorkCreateInput } from "../work-validation"
 
 type Initial = { planId?: string; contactId?: string; enquiryId?: string; opportunityId?: string }
 export function ActivityPlanApply({ initial }: { initial: Initial }) {
+  const creationHeaders = useCreationOfficeSnapshot(true)
   const { can } = useBusinessModules(), { data: session } = useSession()
   const currentUserId = session?.user?.id || "", canReadDirectory = can("assignmentTargets.read"), canAssignActivities = can("activities.assign")
   const term = useTerminology()
@@ -71,7 +73,7 @@ export function ActivityPlanApply({ initial }: { initial: Initial }) {
     // Reuse the key after an uncertain network response, including preview retries.
     const requestKey = reviewed && preview ? preview.requestKey : crypto.randomUUID()
     try {
-      const response = await fetch(`/api/crm/activity-plans/${planId}/${apply ? "apply" : "preview"}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...input, requestKey }) })
+      const response = await fetch(`/api/crm/activity-plans/${planId}/${apply ? "apply" : "preview"}`, { method: "POST", headers: { "Content-Type": "application/json", ...await creationHeaders() }, body: JSON.stringify({ ...input, requestKey }) })
       const data = await response.json(); if (!response.ok) throw new Error(data.error || "Unable to apply plan.")
       if (apply) { toast.success(`${data.count} ${term("crm.activity.plural", "activities")} scheduled.`); router.push(`/crm/activities?scope=visible&state=all&planLaunchId=${encodeURIComponent(data.id)}`) }
       else setPreview({ signature, requestKey, steps: data.steps, timeZone: data.timeZone })

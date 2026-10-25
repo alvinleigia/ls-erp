@@ -72,7 +72,7 @@ export class TenantPgAdapter extends PrismaPg {
       try {
         const actorId = databaseActorId()
         if (actorId && !/^[A-Za-z0-9_-]+$/.test(actorId)) throw new Error("Invalid database actor identity.")
-        await tx.queryRaw({ sql: `${this.scopeSql}, set_config('app.actor_id', '${actorId}', true)`, args: [], argTypes: [] })
+        await tx.queryRaw({ sql: `${this.scopeSql}, set_config('app.actor_id', '${actorId}', true), set_config('app.office_id', '', true), set_config('app.office_version', '', true)`, args: [], argTypes: [] })
         return tx
       } catch (error) {
         await finish(tx, false)

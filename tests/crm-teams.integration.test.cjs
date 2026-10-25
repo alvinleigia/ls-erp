@@ -184,11 +184,12 @@ test("team fields apply only to matching records; transfers preserve history wit
   const { customFieldExport } = require("../platform/custom-fields/values.ts")
   const exportActor = { tenantId: tenant, userId: manager.id, role: "MANAGER" }
   queries = []
-  const dealExport = await db.$transaction(tx => customFieldExport(tx, exportActor, opportunityFields, [deal.id]))
+  const { runWithDatabaseActor } = require("../lib/database-actor.ts")
+  const dealExport = await runWithDatabaseActor(manager.id, async () => await db.$transaction(tx => customFieldExport(tx, exportActor, opportunityFields, [deal.id])))
   assert.ok(dealExport.values[deal.id].includes("Retained"))
   assert.equal(queries.filter(query => /FROM "public"\."CrmOpportunity" /.test(query)).length, 1, "Team lookup must be batched")
   await root.crmOpportunity.update({ where: { tenantId_id: { tenantId: tenant, id: deal.id } }, data: { salesTeamId: b.id } })
-  const movedExport = await db.$transaction(tx => customFieldExport(tx, exportActor, opportunityFields, [deal.id]))
+  const movedExport = await runWithDatabaseActor(manager.id, async () => await db.$transaction(tx => customFieldExport(tx, exportActor, opportunityFields, [deal.id])))
   assert.equal(movedExport.values[deal.id].includes("Retained"), false)
   await assert.rejects(configB.save(definition("cross_team", { salesTeamId: a.id })), status(400))
 })

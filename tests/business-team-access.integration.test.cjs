@@ -79,7 +79,8 @@ test('catalog and dashboard adapters inherit the same project scope',async()=>{
  assert.equal((await reader.get(unitA.id)).id,unitA.id);await assert.rejects(reader.get(unitB.id),denied(404));assert.equal((await reader.get(general.id)).id,general.id)
  assert.equal((await staffReader.get(unitA.id)).id,unitA.id)
  const actor={...identity(manager),...accessContext(await findAccessUser(db,tenant,manager.id))}
- const result=await projectDashboard(db,actor,await db.tenantModule.findMany({where:{tenantId:tenant}}),{enquiries:null,opportunities:null})
+ const {runWithDatabaseActor}=require('../lib/database-actor.ts')
+ const result=await runWithDatabaseActor(actor.userId,async()=>await projectDashboard(db,actor,await db.tenantModule.findMany({where:{tenantId:tenant}}),{enquiries:null,opportunities:null}))
  assert.equal(result.active,2);assert.equal(result.subprojects,1)
  await assert.rejects(db.realEstateProject.update({where:{id:pA.id},data:{teamId:foreignTeam.id}}))
 })

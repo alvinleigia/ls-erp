@@ -1,10 +1,11 @@
 # R10 phase 2A: office membership and context backend
 
 This is the shared membership engine, implemented locally on `staging`.
-It is not the completed office-isolation release. Existing business modules
-still use their R9 record policies; no office access controls or workspace
-switcher are exposed in the UI. Native record ownership and source-bound
-enforcement must be completed together before this is released to clients.
+It is not the completed office-isolation release. Phase 2B now connects
+[sales record ownership and office RLS](SALES_OFFICE_OWNERSHIP_R10.md) while
+retaining R9 rules. Operational families and provisioning remain pending; no
+office access controls or workspace switcher are exposed in the UI. Complete
+the release contract before deploying these phases to clients.
 
 ## Membership contract
 
@@ -41,8 +42,8 @@ Existing tenant-owned users receive their initial office as ordinary persisted
 grant data. No company/descendant grant is created. All 122 preceding tables,
 including IDs, owners, profiles, teams, sharing, values and financial snapshots,
 remain unchanged. New unassigned users have no policy/grants and no implicit
-office. User provisioning must supply office membership before native office
-record enforcement is enabled in phase 2B.
+office. User provisioning must supply office membership before the native office
+record-enforcement release is deployed.
 
 Composite foreign keys enforce tenant identity. Office/company references are
 checked at transaction commit so privileged whole-tenant maintenance cleanup can
@@ -87,9 +88,9 @@ for membership changes and self/Admin-only for preference changes.
 
 ## Remaining phase 2 work
 
-1. Add native office ownership to business roots and canonical source inheritance
-   to children. Backfill the existing pilot's records into its initial office,
-   preserving all existing responsibility and sharing relationships.
+1. Sales roots and canonical children now have native ownership in phase 2B.
+   Complete the operational families and personal/conflict paths, retaining the
+   initial-office backfill and all existing responsibility/sharing relationships.
 2. Use one exhaustive resource registry for office-owned, source-inherited,
    deliberately tenant-shared reference/security data, and composed reports.
    Office eligibility must intersect profiles, actions, record rules, activation

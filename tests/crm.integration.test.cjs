@@ -6,6 +6,7 @@ const { randomUUID } = require("node:crypto")
 const { Pool } = require("pg")
 const { PrismaClient } = require("@prisma/client")
 const { TenantPgAdapter } = require("../lib/tenant-pg-adapter.ts")
+const { runWithDatabaseActor } = require("../lib/database-actor.ts")
 const { createCrmService } = require("../modules/crm/service.ts")
 require("../lib/logger.ts").logger.info = () => {}
 
@@ -290,12 +291,13 @@ test("legacy application writes remain valid during the activity rollout", async
   const contact = await manager.createContact({ name: "Rolling upgrade customer" })
   const enquiry = await manager.createEnquiry({ ...enquiryInput(contact.id, staffA.id), title: "Rolling upgrade enquiry" })
   const id = `old_client_${suffix}`
-  await dbA.$executeRawUnsafe('INSERT INTO "CrmTask" (id,"tenantId","enquiryId",title,"dueOn") VALUES ($1,$2,$3,$4,$5::date)', id, a, enquiry.id, "Old client task", "2026-10-01")
+  await assert.rejects(dbA.$executeRawUnsafe('INSERT INTO "CrmTask" (id,"tenantId","enquiryId",title,"dueOn") VALUES ($1,$2,$3,$4,$5::date)', id, a, enquiry.id, "Old client task", "2026-10-01"))
+  await runWithDatabaseActor(adminA.id, async () => await dbA.$executeRawUnsafe('INSERT INTO "CrmTask" (id,"tenantId","enquiryId",title,"dueOn") VALUES ($1,$2,$3,$4,$5::date)', id, a, enquiry.id, "Old client task", "2026-10-01"))
   const task = await root.crmTask.findUniqueOrThrow({ where: { id } })
   assert.equal(task.contactId, contact.id); assert.equal(task.assignedUserId, staffA.id); assert.equal(task.followParentAssignment, true)
-  await dbA.$executeRawUnsafe('UPDATE "CrmEnquiry" SET "assignedUserId"=$1 WHERE id=$2 AND "tenantId"=$3', otherA.id, enquiry.id, a)
+  await runWithDatabaseActor(adminA.id, async () => await dbA.$executeRawUnsafe('UPDATE "CrmEnquiry" SET "assignedUserId"=$1 WHERE id=$2 AND "tenantId"=$3', otherA.id, enquiry.id, a))
   assert.equal((await other.getWork(id)).assignedUserId, otherA.id)
-  await dbA.$executeRawUnsafe('UPDATE "CrmTask" SET "completedAt"=NOW() WHERE id=$1 AND "tenantId"=$2', id, a)
+  await runWithDatabaseActor(adminA.id, async () => await dbA.$executeRawUnsafe('UPDATE "CrmTask" SET "completedAt"=NOW() WHERE id=$1 AND "tenantId"=$2', id, a))
   assert.equal((await other.getWork(id)).status, "COMPLETED")
 })
 
@@ -534,7 +536,7 @@ test("sales tables enforce RLS, tenant composite foreign keys and stage/pipeline
   await assert.rejects(root.crmOpportunity.update({ where: { id: localDeal.id }, data: { stageId: foreign.stages[0].id } }))
   await assert.rejects(root.crmOpportunity.update({ where: { id: localDeal.id }, data: { contactId: otherContact.id } }))
   await assert.rejects(root.crmOpportunity.update({ where: { id: localDeal.id }, data: { assignedUserId: adminB.id } }))
-  await assert.rejects(dbA.crmOpportunity.updateMany({ where: { id: localDeal.id }, data: { tenantId: b } }))
+  await assert.rejects(runWithDatabaseActor(adminA.id, async () => await dbA.crmOpportunity.updateMany({ where: { id: localDeal.id }, data: { tenantId: b } })))
   await assert.rejects(root.crmOpportunityActivity.create({ data: { tenantId: a, opportunityId: foreignDeal.id, actorUserId: adminA.id, event: "bad", message: "bad" } }))
   await assert.rejects(root.crmOpportunity.update({ where: { id: localDeal.id }, data: { amount: "-1" } }))
   const another = await manager.createPipeline(pipelineInput("FK same tenant"))

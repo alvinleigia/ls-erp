@@ -1,5 +1,5 @@
-const {materializeRules}=require('./helpers/resource-policy-data.cjs')
 /* eslint-disable @typescript-eslint/no-require-imports */
+const {materializeRules}=require('./helpers/resource-policy-data.cjs')
 const {}=require("./helpers/access-fixtures.cjs")
 const { test, before, after } = require("node:test")
 const assert = require("node:assert/strict")
@@ -116,7 +116,8 @@ test("sales KPIs reconcile scoped records, custom activity types, currencies and
   const period = { start: new Date("2026-10-01T00:00:00Z"), end: new Date("2026-11-01T00:00:00Z"), now, today: "2026-10-06" }
   const flags = ["crm", "realEstate", "salesDocuments", "paymentPlans"].map(key => ({ key, allowed: true, enabled: true }))
   const actor = { tenantId: tenant, userId: "dashboard_a_admin", role: "ADMIN" }
-  const read = (who = actor, modules = flags) => runWithTenantDbContext(tenant, () => salesDashboard(prisma, who, modules, period))
+  const { runWithDatabaseActor } = require("../lib/database-actor.ts")
+  const read = (who = actor, modules = flags) => runWithTenantDbContext(tenant, () => runWithDatabaseActor(who.userId, async () => await salesDashboard(prisma, who, modules, period)))
   await root.query('INSERT INTO "CrmContact" (id,"tenantId",name,"ownerUserId","updatedAt") VALUES (\'dash_contact\',$1,\'Buyer\',$2,now())', [tenant, actor.userId])
   await root.query('INSERT INTO "CrmPipeline" (id,"tenantId",name,"updatedAt") VALUES (\'dash_pipeline\',$1,\'Property sales\',now())', [tenant])
   for (const [index, kind] of ["OPEN", "WON", "LOST"].entries()) await root.query('INSERT INTO "CrmStage" (id,"tenantId","pipelineId",name,kind,probability,color,position) VALUES ($1,$2,\'dash_pipeline\',$3::text,$3::text::"CrmStageKind",CASE WHEN $3=\'WON\' THEN 100 WHEN $3=\'LOST\' THEN 0 ELSE 50 END,\'blue\',$4)', [`dash_${kind}`, tenant, kind, index])

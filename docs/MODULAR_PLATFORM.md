@@ -1,3 +1,25 @@
+## R10 - Sales office ownership (phase 2B, local)
+
+CRM enquiries/opportunities/activities, projects, import batches and plan launches
+now have immutable native office ownership. Quotations, orders, financial children,
+project units, sharing metadata and audit/history inherit their canonical source
+boundary. Existing profiles, record rules, activation and Restricted privacy remain
+mandatory. Stale creation forms return a conflict rather than changing offices.
+
+Pending migration 114 preserves all 125 preceding tables after excluding only the
+new fields; owners, timestamps, grants and frozen snapshots remain unchanged.
+Rollback, 25 office-record tests, 22 membership tests, real Chrome form/session
+checks and the existing ERP suite (258 passed, two historical-only skips) passed.
+CRM regression: 136 passed/two skips; sales: 61; teams/import: 30; sharing: 13.
+Build/TypeScript and changed-file lint passed (one existing fixture warning).
+The 10,000-value typed filter completes in bounded queries without a timeout increase.
+
+This milestone remains local on staging: no push, hosted migration or deployment.
+Operational families, provisioning, assignment selectors and workspace controls
+are still release prerequisites. External collaborator logins follow in phase 3.
+See [Sales office ownership](SALES_OFFICE_OWNERSHIP_R10.md) for the boundary and
+remaining release contract.
+
 ## R10 - Office membership and context backend (phase 2A, local)
 
 The shared backend supports exact-office and company grants, explicit subsidiary

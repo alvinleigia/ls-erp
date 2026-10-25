@@ -90,6 +90,9 @@ model CrmActivityPlan {
 }
 
 model CrmPlanLaunch {
+  officeId String @default(dbgenerated("app.creation_office_id()"))
+  office BusinessOffice @relation(fields: [tenantId, officeId], references: [tenantId, id], onDelete: NoAction)
+  @@index([tenantId, officeId])
   id String @id @default(cuid())
   tenantId String
   planId String
@@ -146,6 +149,9 @@ model CrmStage {
 }
 
 model CrmOpportunity {
+  officeId String @default(dbgenerated("app.creation_office_id()"))
+  office BusinessOffice @relation(fields: [tenantId, officeId], references: [tenantId, id], onDelete: NoAction)
+  @@index([tenantId, officeId])
   sharingPolicyId String?
   sharingPolicy RecordSharingPolicy? @relation(fields: [tenantId, sharingPolicyId], references: [tenantId, id], onDelete: Restrict)
   @@unique([tenantId, sharingPolicyId])
@@ -352,6 +358,12 @@ model CrmLostReason {
 }
 
 model CrmEnquiry {
+  officeId String @default(dbgenerated("app.creation_office_id()"))
+  office BusinessOffice @relation(fields: [tenantId, officeId], references: [tenantId, id], onDelete: NoAction)
+  importId String?
+  importBatch CrmEnquiryImport? @relation(fields: [tenantId, importId], references: [tenantId, id], onDelete: Restrict)
+  @@index([tenantId, officeId])
+  @@index([tenantId, importId])
   sharingPolicyId String?
   sharingPolicy RecordSharingPolicy? @relation(fields: [tenantId, sharingPolicyId], references: [tenantId, id], onDelete: Restrict)
   @@unique([tenantId, sharingPolicyId])
@@ -402,6 +414,9 @@ model CrmEnquiry {
 }
 
 model CrmTask {
+  officeId String @default(dbgenerated("app.creation_office_id()"))
+  office BusinessOffice @relation(fields: [tenantId, officeId], references: [tenantId, id], onDelete: NoAction)
+  @@index([tenantId, officeId])
   sharingPolicyId String?
   sharingPolicy RecordSharingPolicy? @relation(fields: [tenantId, sharingPolicyId], references: [tenantId, id], onDelete: Restrict)
   @@unique([tenantId, sharingPolicyId])
@@ -932,6 +947,12 @@ model BusinessCompany {
 }
 
 model BusinessOffice {
+  enquiries CrmEnquiry[]
+  opportunities CrmOpportunity[]
+  tasks CrmTask[]
+  projects RealEstateProject[]
+  imports CrmEnquiryImport[]
+  planLaunches CrmPlanLaunch[]
   creationPolicies BusinessOfficePolicy[]
   grants BusinessOfficeGrant[]
   id String @id @default(cuid())
@@ -988,6 +1009,10 @@ model BusinessCompanyGrant {
 }
 
 model CrmEnquiryImport {
+  officeId String @default(dbgenerated("app.creation_office_id()"))
+  office BusinessOffice @relation(fields: [tenantId, officeId], references: [tenantId, id], onDelete: NoAction)
+  enquiries CrmEnquiry[]
+  @@index([tenantId, officeId])
   id String @id @default(cuid())
   tenantId String
   createdByUserId String
@@ -2122,6 +2147,9 @@ model InventoryStockMovement {
   @@index([occurredAt])
 }
 model RealEstateProject {
+  officeId String @default(dbgenerated("app.creation_office_id()"))
+  office BusinessOffice @relation(fields: [tenantId, officeId], references: [tenantId, id], onDelete: NoAction)
+  @@index([tenantId, officeId])
   sharingPolicyId String?
   sharingPolicy RecordSharingPolicy? @relation(fields: [tenantId, sharingPolicyId], references: [tenantId, id], onDelete: Restrict)
   @@unique([tenantId, sharingPolicyId])

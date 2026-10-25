@@ -1,3 +1,4 @@
+import { officeBoundaryError } from "@/platform/companies/record-office"
 import { recordActionAccess } from "@/platform/access/record-actions"
 import { authorizeBusinessOperation } from "@/platform/access/operation"
 import { workScope } from "./work-service"
@@ -68,6 +69,7 @@ export function createCrmService<Fields extends object = object, Metadata extend
           return operation(tx, actor)
         }, { isolationLevel: "Serializable", maxWait: 20000, timeout: 20000 })
       } catch (error) {
+        const officeError = officeBoundaryError(error); if (officeError) throw officeError
         const code = (error as { code?: string })?.code
         if (serializationConflict(error) && attempt < 2) continue
         if (code === "P2002") {
@@ -118,7 +120,7 @@ export function createCrmService<Fields extends object = object, Metadata extend
     if (!assignee) throw new CrmError(400, "Choose an active salesperson in this business.")
   }
 
-  async function createEnquiryRecord(tx: Tx, actor: CrmActor, input: unknown, validateOnly = false) {
+  async function createEnquiryRecord(tx: Tx, actor: CrmActor, input: unknown, validateOnly = false, importId?: string) {
     const custom = splitCustomFields(input)
     const { core, extension } = extensions.splitWrite(custom.core)
     const data = crmEnquiryCreateSchema.parse(core)
@@ -128,6 +130,11 @@ export function createCrmService<Fields extends object = object, Metadata extend
     if (team?.workflow === "DIRECT") throw new CrmError(400, ["This team starts with ", termText("crm.opportunity.plural", "opportunities"), ". Create an ", termText("crm.opportunity.singular", "opportunity"), " instead."])
     if (data.newContact) requirePermission(actor, "contacts.create")
     if (validateOnly) {
+      if (importId) {
+        const batch = await tx.crmEnquiryImport.findUnique({ where: { tenantId_id: { tenantId: actor.tenantId, id: importId } }, select: { officeId: true } })
+        const [scope] = batch ? await tx.$queryRaw<{ allowed: boolean }[]>`SELECT app.office_assignment_allowed(${actor.tenantId},${batch.officeId},${data.assignedUserId}) AS allowed` : []
+        if (!scope?.allowed) throw new CrmError(400, "Choose an assignee with access to this office.")
+      }
       // Import always creates a new contact and uses configured source IDs.
       // Preview uses the same validators without writing CRM records or audit events.
       if (!data.newContact || data.accountId || data.source !== undefined) throw new CrmError(400, "Unsupported import contact or source.")
@@ -152,7 +159,7 @@ export function createCrmService<Fields extends object = object, Metadata extend
       }
     }
     const context = await enquiryContext(tx, actor, contact.id, data)
-    const enquiry = await tx.crmEnquiry.create({ data: { salesTeamId: team?.id ?? null, title: data.title, requirements: data.requirements, assignedUserId: data.assignedUserId, contactId: contact.id, ...context, tenantId: actor.tenantId }, include: enquiryInclude })
+    const enquiry = await tx.crmEnquiry.create({ data: { importId, salesTeamId: team?.id ?? null, title: data.title, requirements: data.requirements, assignedUserId: data.assignedUserId, contactId: contact.id, ...context, tenantId: actor.tenantId }, include: enquiryInclude })
     await extensions.save(tx, actor, "enquiry", enquiry.id, extension)
     await saveCustomFields(tx, actor, enquiryFields, enquiry, custom.patch, true)
     await activity(tx, actor, enquiry.id, "created", "Enquiry created.")

@@ -1,5 +1,6 @@
 "use client"
 import * as React from "react"
+import { useCreationOfficeSnapshot } from "@/platform/companies/creation-snapshot"
 import { useTerminology } from "@/platform/terminology/provider"
 import { importFieldLabel } from "../import-labels"
 import { type ColumnDef, getCoreRowModel, useReactTable } from "@tanstack/react-table"
@@ -31,6 +32,7 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
 const body = (method: string, data: unknown) => ({ method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) })
 
 export function EnquiryImport() {
+  const creationHeaders = useCreationOfficeSnapshot()
   const term = useTerminology()
   const [batch, setBatch] = React.useState<Batch | null>(null)
   const [config, setConfig] = React.useState<ImportConfig>({ mapping: {}, defaults: {} })
@@ -66,7 +68,7 @@ export function EnquiryImport() {
     await act(async () => {
       if (file.size > IMPORT_MAX_BYTES) throw new Error("Choose a file up to 3 MB.")
       const form = new FormData(); form.set("file", file)
-      const data = await request<Batch>(endpoint, { method: "POST", body: form })
+      const data = await request<Batch>(endpoint, { method: "POST", headers: await creationHeaders(), body: form })
       setBatch(data); setConfig(data.config); setResult("all")
       window.history.replaceState(null, "", `?batch=${data.id}`)
       await refreshHistory()

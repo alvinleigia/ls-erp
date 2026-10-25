@@ -1,4 +1,5 @@
 "use client"
+import { useCreationOfficeSnapshot } from "@/platform/companies/creation-snapshot"
 import { useTerminology, useTerminologyReader } from "@/platform/terminology/provider"
 import { withRecordView, useRecordView, AccessRecordForm, AccessSummarySection, AccessSectionEdit } from "@/platform/access/record-view"
 import { SalesTeamSelect } from "@/platform/teams/controls"
@@ -36,6 +37,7 @@ export const textareaClass = "min-h-24 w-full rounded-md border bg-background px
 
 export const EnquiryEditor = withRecordView(EnquiryEditorBody)
 function EnquiryEditorBody({ id, initialContactId, initialReferences }: { id?: string; initialContactId?: string; initialReferences?: CrmViewReferences }) {
+  const creationHeaders = useCreationOfficeSnapshot(!id)
   const { can } = useBusinessModules()
   const readTerm = useTerminologyReader()
   const term = useTerminology()
@@ -98,7 +100,7 @@ function EnquiryEditorBody({ id, initialContactId, initialReferences }: { id?: s
       const base = { salesTeamId: values.salesTeamId || null, ...extension.payload, ...custom.payload, title: values.title, sourceId: values.sourceId, accountId: values.accountId, targetCloseOn: values.targetCloseOn, requirements: values.requirements, assignedUserId: values.assignedUserId,
         ...(!enquiry?.referralRestricted ? { referralContactId: values.referralContactId, referralAccountId: values.referralAccountId } : {}) }
       const payload = id ? { ...base, version: enquiry?.version, status: values.status, outcome: values.outcome, lostReasonId: values.lostReasonId } : { ...base, ...(contactMode === "new" ? { newContact } : { contactId: values.contactId }) }
-      const response = await fetch(id ? `/api/crm/enquiries/${id}` : "/api/crm/enquiries", { method: id ? "PATCH" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) })
+      const response = await fetch(id ? `/api/crm/enquiries/${id}` : "/api/crm/enquiries", { method: id ? "PATCH" : "POST", headers: { "Content-Type": "application/json", ...await creationHeaders() }, body: JSON.stringify(payload) })
       const data = await response.json()
       if (!response.ok) { setErrorsFromResponse(data); throw new Error(data.error || readTerm("crm.enquiry.singular", "Unable to save enquiry.", "Unable to save {label}.")) }
       view.done(); toast.success(term("crm.enquiry.singular", "Enquiry saved.", "{label} saved."))

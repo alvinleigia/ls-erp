@@ -1,4 +1,5 @@
 "use client"
+import { useCreationOfficeSnapshot } from "@/platform/companies/creation-snapshot"
 import { useTerminology, useTerminologyReader } from "@/platform/terminology/provider"
 import { useCustomFields } from "@/modules/crm/components/custom-fields"
 import { useBusinessModules } from "@/platform/module-provider"
@@ -32,6 +33,7 @@ import { CatalogList } from "@/modules/catalog/components/item-list"
 const empty: Project = { id: "", name: "", code: "", parentId: null, developerAccountId: null, location: "", description: "", categories: [], lifecycle: "", priceMin: "", priceMax: "", currency: "", archived: false, version: 1 }
 export const ProjectEditor = withRecordView(ProjectEditorBody)
 function ProjectEditorBody({ id, parentId = "" }: { id?: string; parentId?: string }) {
+  const creationHeaders = useCreationOfficeSnapshot(!id)
   const readTerm = useTerminologyReader()
   const term = useTerminology()
   const { can, enabled } = useBusinessModules()
@@ -88,7 +90,7 @@ function ProjectEditorBody({ id, parentId = "" }: { id?: string; parentId?: stri
     setSaving(true); setError(""); clearErrors()
     const { name, code, parentId, developerAccountId, teamId, location, description, categories, lifecycle, priceMin, priceMax, currency, archived, version } = record
     try {
-      const response = await fetch(`/api/real-estate/projects${id ? `/${id}` : ""}`, { method: id ? "PATCH" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...custom.payload, name, code, parentId: parentId || "", developerAccountId: developerAccountId || "", teamId: teamId || "", location, description, categories, lifecycle, priceMin: priceMin || "", priceMax: priceMax || "", currency: currency || "", archived: archive ? !archived : archived, ...(id ? { version } : {}) }) })
+      const response = await fetch(`/api/real-estate/projects${id ? `/${id}` : ""}`, { method: id ? "PATCH" : "POST", headers: { "Content-Type": "application/json", ...await creationHeaders() }, body: JSON.stringify({ ...custom.payload, name, code, parentId: parentId || "", developerAccountId: developerAccountId || "", teamId: teamId || "", location, description, categories, lifecycle, priceMin: priceMin || "", priceMax: priceMax || "", currency: currency || "", archived: archive ? !archived : archived, ...(id ? { version } : {}) }) })
       const data = await response.json()
       if (!response.ok) { setErrorsFromResponse(data); throw new Error(data.error || readTerm("realEstate.project.singular", "Unable to save project.", "Unable to save {label}.")) }
       setConfirm(false); setEditing(null); toast.success(term(recordKey + ".singular", "Project saved.", "{label} saved."))

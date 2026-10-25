@@ -19,7 +19,7 @@ import { baseImportFields, importChoices, importReportColumns, suggestImportMapp
 import { crmCsv } from "./csv"
 
 type Tx = Prisma.TransactionClient
-type Create = (tx: Tx, actor: CrmActor, input: unknown, validateOnly?: boolean) => Promise<{ id: string } | null>
+type Create = (tx: Tx, actor: CrmActor, input: unknown, validateOnly?: boolean, importId?: string) => Promise<{ id: string } | null>
 const permission = ["enquiries.create", "contacts.create"] as const
 const json = (value: unknown): Prisma.InputJsonValue => JSON.parse(JSON.stringify(value))
 const configSchema = z.object({ mapping: z.record(z.string(), z.number().int().min(0).max(79)), defaults: z.record(z.string(), z.string().max(10000)) }).strict()
@@ -189,7 +189,7 @@ export function createEnquiryImportService({ run, audit, readTerms }: CrmService
             email = clean(values[config.mapping.email] || ""); phone = phoneText(values[config.mapping.phone] || "")
             await duplicate(tx, actor, id, rowNumber, email, phone)
             const input = inputFor(values, config, setup!.fields, extensions)
-            const enquiry = await create(tx, actor, input, mode === "validate")
+            const enquiry = await create(tx, actor, input, mode === "validate", record.id)
             await tx.crmEnquiryImportRow.update({ where: rowKey(actor.tenantId, id, rowNumber), data: { status: mode === "validate" ? "READY" : "IMPORTED", email: email || null, phone: phone || null, errors: [], ...(enquiry ? { enquiryId: enquiry.id } : {}) } })
           })
         } catch (error) {

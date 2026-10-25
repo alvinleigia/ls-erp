@@ -1,5 +1,7 @@
 import { findAccessUser, accessContext } from "./access/server"
 import { runWithDatabaseActor } from "@/lib/database-actor"
+import { runWithOfficeRequest } from "@/lib/database-office"
+import { officeExpectation, officeBoundaryError } from "./companies/record-office"
 import { NextResponse } from "next/server"
 import { ZodError } from "zod"
 import { prisma, runWithTenantDbContext } from "@/lib/prisma"
@@ -30,12 +32,13 @@ export async function withCurrentAccountApi(request: Request, handler: (actor: B
         throw new BusinessError(403, "Business workspace access is not permitted.")
       }
       actor = { tenantId, userId: sessionUserId!, ...accessContext(user), requestId: log.requestId }
-      return runWithDatabaseActor(actor.userId, () => handler(actor!))
+      return runWithDatabaseActor(actor.userId, () => runWithOfficeRequest(officeExpectation(request), () => handler(actor!)))
     })
     logApiRequestSuccess(log, result instanceof NextResponse ? result.status : successStatus)
     if (result instanceof NextResponse) { result.headers.set("Cache-Control", "no-store"); return withRequestId(result, log.requestId) }
     return withRequestId(NextResponse.json(result, { status: successStatus, headers: { "Cache-Control": "no-store" } }), log.requestId)
-  } catch (error) {
+  } catch (caught) {
+    const error = officeBoundaryError(caught) ?? caught
     const missingMigration = (error as { code?: string })?.code === "P2021"
     const status = error instanceof BusinessError ? error.status : error instanceof ZodError ? 400 : missingMigration ? 503 : 500
     logApiRequestError(log, error, status)

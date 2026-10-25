@@ -1,4 +1,5 @@
 "use client"
+import { useCreationOfficeSnapshot } from "@/platform/companies/creation-snapshot"
 import { useTerminology, useTerminologyReader } from "@/platform/terminology/provider"
 import { withRecordView, useRecordView, AccessRecordForm, AccessSummarySection } from "@/platform/access/record-view"
 import { formatDateForDisplay } from "@/lib/date"
@@ -44,6 +45,7 @@ function CompletionFields({ type, value, onChange, timeZone }: { type: WorkType;
 }
 export const WorkEditor = withRecordView(WorkEditorBody)
 function WorkEditorBody({ id, initial = {} }: { id?: string; initial?: Initial }) {
+  const creationHeaders = useCreationOfficeSnapshot(!id)
   const readTerm = useTerminologyReader()
   const term = useTerminology()
   const { can, enabled } = useBusinessModules()
@@ -105,7 +107,7 @@ function WorkEditorBody({ id, initial = {} }: { id?: string; initial?: Initial }
     return () => controller.abort()
   }, [id, contactId])
   async function request(path: string, method: string, body: unknown) {
-    const response = await fetch(path, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
+    const response = await fetch(path, { method, headers: { "Content-Type": "application/json", ...await creationHeaders() }, body: JSON.stringify(body) })
     const data = await response.json()
     if (!response.ok) { setErrorsFromResponse(data); throw new Error(data.error || readTerm("crm.activity.singular", "Unable to save activity.", "Unable to save {label}.")) }
     return data

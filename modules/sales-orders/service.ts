@@ -1,3 +1,4 @@
+import { officeBoundaryError } from "@/platform/companies/record-office"
 import { authorizeBusinessOperation } from "@/platform/access/operation"
 import { recordActionAccess } from "@/platform/access/record-actions"
 
@@ -23,6 +24,7 @@ export function createSalesOrderService(db: PrismaClient, identity: Pick<Busines
           return operation(tx, actor)
         }, { isolationLevel: "Serializable", maxWait: 20000, timeout: 20000 })
       } catch (e) {
+        const officeError = officeBoundaryError(e); if (officeError) throw officeError
         if ((serializationConflict(e) || (e as { code?: string }).code === "P2002") && attempt < 3) continue
         if (serializationConflict(e) || (e as { code?: string }).code === "P2002") throw new BusinessError(409, "This order changed. Refresh and try again.")
         throw e

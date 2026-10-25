@@ -1,5 +1,5 @@
-const {materializeRules}=require('./helpers/resource-policy-data.cjs')
 /* eslint-disable @typescript-eslint/no-require-imports */
+const {materializeRules}=require('./helpers/resource-policy-data.cjs')
 const {grantPgFixtureUsers}=require("./helpers/access-fixtures.cjs")
 const {test,before,after}=require('node:test'),assert=require('node:assert/strict'),path=require('node:path'),{randomUUID}=require('node:crypto')
 const {AsyncLocalStorage}=require('node:async_hooks'),{Client,Pool}=require('pg'),{PrismaClient}=require('@prisma/client')
@@ -43,7 +43,8 @@ before(async()=>{
 after(async()=>{await db.$disconnect();await pool.end();await prisma.$disconnect();await global.prismaPool?.end();await root.end()})
 test('lists omit payloads and details show recorded field changes with nested credentials redacted',async()=>{
  const response=await body(await call())
- assert.equal(response.canReviewSecurity,true);assert.equal(response.total,7)
+ // Orphaned CRM/quotation snapshots have no canonical office and stay hidden.
+ assert.equal(response.canReviewSecurity,true);assert.equal(response.total,5)
  for(const row of response.items){assert.equal(row.before,undefined);assert.equal(row.after,undefined);assert.equal(row.metadata,undefined);assert.equal(row.actorName,'MANAGER')}
  const detail=await body(await call('ADMIN','',a+'_product'))
  assert.deepEqual(detail.changes.map(c=>c.field),['name','status'])

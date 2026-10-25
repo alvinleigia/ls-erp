@@ -1,4 +1,5 @@
 "use client"
+import { useCreationOfficeSnapshot } from "@/platform/companies/creation-snapshot"
 import { useTerminology, useTerminologyReader } from "@/platform/terminology/provider"
 import { initialOpportunityStage } from "../conversion-stage"
 import { withRecordView, useRecordView, AccessRecordForm, AccessSummarySection, AccessSectionEdit } from "@/platform/access/record-view"
@@ -40,6 +41,7 @@ function fields(record: CrmOpportunityRow) {
 }
 export const OpportunityEditor = withRecordView(OpportunityEditorBody)
 function OpportunityEditorBody({ id, enquiryId, initialReferences }: { id?: string; enquiryId?: string; initialReferences?: CrmViewReferences }) {
+  const creationHeaders = useCreationOfficeSnapshot(!id)
   const { can } = useBusinessModules()
   const readTerm = useTerminologyReader()
   const term = useTerminology()
@@ -105,7 +107,7 @@ function OpportunityEditorBody({ id, enquiryId, initialReferences }: { id?: stri
   async function save(event: React.FormEvent) {
     event.preventDefault(); setSaving(true); setError(""); clearErrors()
     try {
-      const response = await fetch(id ? `/api/crm/opportunities/${id}` : "/api/crm/opportunities", { method: id ? "PATCH" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...values, ...custom.payload, ...(!enquiryId ? extension.payload : {}), ...(id ? { version: record?.version } : { enquiryId: enquiryId || "", enquiryVersion }) }) })
+      const response = await fetch(id ? `/api/crm/opportunities/${id}` : "/api/crm/opportunities", { method: id ? "PATCH" : "POST", headers: { "Content-Type": "application/json", ...await creationHeaders() }, body: JSON.stringify({ ...values, ...custom.payload, ...(!enquiryId ? extension.payload : {}), ...(id ? { version: record?.version } : { enquiryId: enquiryId || "", enquiryVersion }) }) })
       const data = await response.json()
       if (!response.ok) { setErrorsFromResponse(data); throw new Error(data.error || readTerm("crm.opportunity.singular", "Unable to save opportunity.", "Unable to save {label}.")) }
       view.done(); toast.success(term("crm.opportunity.singular", "Opportunity saved.", "{label} saved."))

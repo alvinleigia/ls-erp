@@ -1,3 +1,4 @@
+import { officeBoundaryError } from "@/platform/companies/record-office"
 import { authorizeBusinessOperation } from "@/platform/access/operation"
 import { recordActionAccess } from "@/platform/access/record-actions"
 
@@ -37,6 +38,7 @@ export function createRealEstateService(db: PrismaClient, identity: Pick<Busines
           return operation(tx, actor)
         }, { isolationLevel: "Serializable", maxWait: 20000, timeout: 20000 })
       } catch (error) {
+        const officeError = officeBoundaryError(error); if (officeError) throw officeError
         const code = (error as { code?: string }).code
         const meta = (error as { meta?: { code?: string; driverAdapterError?: { cause?: { originalCode?: string } } } }).meta
         const serialization = code === "P2034" || (code === "P2010" && (meta?.code === "40001" || meta?.driverAdapterError?.cause?.originalCode === "40001"))

@@ -44,12 +44,12 @@ async function main() {
     const sources = ["node_modules", "prisma/migrations", "docs/industry-release-manifest.json", "tests", "application", "modules", "platform", "lib", "types", "package.json"]
     const mounts = sources.flatMap(src => ["--mount", `type=bind,source=${path.join(root, src)},target=/work/${src},readonly`])
     const env = { CRM_TEST_DATABASE_URL: "postgresql://postgres@127.0.0.1:5432/ls_salon_crm_test", DATABASE_URL: "postgresql://crm_test_runtime@127.0.0.1:5432/ls_salon_crm_test", NODE_ENV: "test", R5_HISTORICAL_CONTAINER: "1",
-      CRM_TEST_EXPECT_UPGRADE_FIXTURE: "1", CRM_TEST_EXPECT_INTAKE_UPGRADE: "1", CRM_TEST_EXPECT_PROJECT_UPGRADE: "1", CRM_TEST_EXPECT_CHOICES_UPGRADE: "1" }
+      R10_SINGLE_OFFICE_FIXTURES: "1", CRM_TEST_EXPECT_UPGRADE_FIXTURE: "1", CRM_TEST_EXPECT_INTAKE_UPGRADE: "1", CRM_TEST_EXPECT_PROJECT_UPGRADE: "1", CRM_TEST_EXPECT_CHOICES_UPGRADE: "1" }
     const args = ["run", "--rm", "--network", `container:${name}`, "--workdir", "/work", ...Object.keys(env).flatMap(key => ["--env", key]), ...mounts, node, "node"]
     console.log("Replaying migrations with pre-upgrade fixtures in an isolated database.")
     console.log((await docker([...args, "tests/helpers/historical-upgrade.cjs"], env)).trim())
     console.log((await docker([...args, "tests/helpers/catalog-migration.cjs"], env)).trim())
-    for (const helper of ["branding-migration", "quotation-archive-migration", "sales-orders-migration", "unit-reservations-migration", "order-receivables-migration", "collection-follow-ups-migration", "flexible-team-intake-migration", "business-team-access-migration", "composable-profiles-migration", "resource-action-policies-migration","record-sharing-migration","company-office-migration","office-membership-migration"]) console.log((await docker([...args, `tests/helpers/${helper}.cjs`], env)).trim())
+    for (const helper of ["branding-migration", "quotation-archive-migration", "sales-orders-migration", "unit-reservations-migration", "order-receivables-migration", "collection-follow-ups-migration", "flexible-team-intake-migration", "business-team-access-migration", "composable-profiles-migration", "resource-action-policies-migration","record-sharing-migration","company-office-migration","office-membership-migration","office-record-migration"]) console.log((await docker([...args, `tests/helpers/${helper}.cjs`], env)).trim())
     console.log("Running catalog, quotation and module permission checks.")
     const files = ["tests/catalog.integration.test.cjs", "tests/quotations.integration.test.cjs", "tests/module-access.integration.test.cjs"]
     const output = await docker([...args, "--require", "./tests/register.cjs", "--test", "--test-reporter=tap", "--test-concurrency=1", "--test-force-exit", ...files], env)
