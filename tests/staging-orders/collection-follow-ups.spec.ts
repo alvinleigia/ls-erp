@@ -1,3 +1,4 @@
+import { createStaff } from './helpers'
 import fs from 'node:fs'
 import { randomUUID } from 'node:crypto'
 import { parse } from 'dotenv'
@@ -69,7 +70,7 @@ test('hosted collection follow-ups: scheduling, outcomes, linked next step, acce
     expect(next.followUpOfId).toBe(task.id); expect(next.collectionOrderId).toBe(order.id)
     expect((await json(admin, path)).outstanding).toBe('100')
     await json(foreign, path + '/follow-ups', 404); await json(foreign, listPath, 404)
-    const user = (await json(admin, '/api/users', 200, 'POST', { name: `QA collection staff ${run}`, email: `qa-collection-${run}@example.test`, role: 'STAFF', password: state.password })).user
+    const user = (await createStaff(admin, { name: `QA collection staff ${run}`, email: `qa-collection-${run}@example.test`, role: 'STAFF', password: state.password })).user
     const assigned = await json(admin, '/api/crm/work', 201, 'POST', { collectionOrderId: order.id, contactId: contact.id, opportunityId: deal.id, title: title + ' assigned', type: 'CALL', callDirection: 'OUTBOUND', assignedUserId: user.id, dueOn: '2026-10-24' })
     const staff = await open(a.origin, user.email, state.password, a.tenant.id)
     expect((await json(staff, `/api/crm/work/${assigned.id}`)).id).toBe(assigned.id)

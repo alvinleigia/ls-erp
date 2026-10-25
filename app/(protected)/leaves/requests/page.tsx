@@ -94,6 +94,7 @@ export default function LeaveRequestsPage() {
   const { data: session } = useSession()
   const router = useRouter()
   const role = (session?.user as { role?: string })?.role
+  const personalLeaveEligible = role === "MANAGER" || role === "STAFF"
   const canManage = can("leaveApprovals.read")
 
   React.useEffect(() => {
@@ -172,12 +173,12 @@ export default function LeaveRequestsPage() {
   }, [pagination.pageIndex, pagination.pageSize, search, sorting, statusFilter])
 
   React.useEffect(() => {
-    void loadRows()
-  }, [loadRows])
+    if (personalLeaveEligible) void loadRows()
+  }, [loadRows, personalLeaveEligible])
 
   React.useEffect(() => {
-    void loadLeaveOptions()
-  }, [loadLeaveOptions])
+    if (personalLeaveEligible) void loadLeaveOptions()
+  }, [loadLeaveOptions, personalLeaveEligible])
 
   React.useEffect(() => {
     setPagination((prev) => (prev.pageIndex === 0 ? prev : { ...prev, pageIndex: 0 }))

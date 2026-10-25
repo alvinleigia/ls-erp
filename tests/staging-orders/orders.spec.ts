@@ -1,3 +1,4 @@
+import { createStaff } from './helpers'
 import { assignProfiles } from './helpers'
 // Opt-in hosted writes, restricted to the two existing synthetic staging tenants.
 // Never imports the local database fixture or accepts arbitrary target origins.
@@ -43,7 +44,7 @@ test('hosted Sales Orders: frozen revisions, transitions, access, module control
       { name: 'Won', kind: 'WON', probability: 100, color: '#228833' },
       { name: 'Lost', kind: 'LOST', probability: 0, color: '#aa2233' },
     ] })
-    const staffUser = (await json(admin, '/api/users', 200, 'POST', { name: `QA R7 staff ${run}`, email: `qa-r7-staff-${run}@example.test`, role: 'STAFF', password: state.password })).user
+    const staffUser = (await createStaff(admin, { name: `QA R7 staff ${run}`, email: `qa-r7-staff-${run}@example.test`, role: 'STAFF', password: state.password })).user
     const staff = await open(a.origin, staffUser.email, state.password, a.tenant.id)
     const deal = await json(admin, '/api/crm/opportunities', 201, 'POST', { title, contactId: contact.id, assignedUserId: staffUser.id, pipelineId: pipeline.id, stageId: pipeline.stages.find((s: { kind: string }) => s.kind === 'OPEN').id, amount: '300.38', currency: 'INR', expectedCloseOn: '2027-12-31' })
     const content = { ...structuredClone(emptyQuotationContent), title, supplierName: 'QA Shared Industries', currency: 'INR', lines: [{ description: 'Support hours', quantity: '3', unit: 'hour', rate: '100.125' }], terms: 'QA agreed terms v1' }

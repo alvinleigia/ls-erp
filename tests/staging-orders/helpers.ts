@@ -12,6 +12,16 @@ export async function assignProfiles(c: BrowserContext, userId: string, roleIds:
   for (const key of Object.keys(defaultRecordRules()) as (keyof RecordRules)[]) { const resource = key.split('.')[0]; const scope = ['projects','projectMembers'].includes(resource) ? scopes.projectRecordScope : ['enquiries','opportunities','contacts','accounts','activities','quotations','salesOrders','receivables','orderPayments','unitReservations','assignmentTargets'].includes(resource) ? scopes.salesRecordScope : undefined; if (scope) rules[key] = (scope === 'ACCOUNT_ROLE' ? 'ALL' : scope === 'OWN' && ['contacts','accounts','activities'].includes(resource) ? 'RELATED' : scope) as NonNullable<RecordRules[typeof key]> }
   return json(c, `/api/access/users/${userId}`, 200, 'PATCH', { roleIds, version: current.accessPolicy.version, rules })
 }
+// New accounts require explicit profiles. This QA profile grants the actions
+// exercised by financial staff tests while withholding confirmation/collection.
+export async function createStaff(c: BrowserContext, input: { name: string; email: string; password: string; role: string }) {
+  const profile = await json(c, '/api/access/roles', 201, 'POST', { name: `${input.name} access`, permissions: [
+    'dashboard.read','contacts.read','enquiries.read','opportunities.read','quotations.read','quotations.create','quotations.edit','quotations.export',
+    'salesOrders.read','salesOrders.create','receivables.read','orderPayments.read','unitReservations.read','catalogItems.read',
+    'activities.read','activities.create','activities.edit','activities.archive','activities.export','reports.read',
+  ] })
+  return json(c, '/api/users', 200, 'POST', { ...input, accessRoleIds: [profile.id], recordRules: defaultRecordRules() })
+}
 export async function login(browser: Browser, origin: string, email: string, password: string, tenantId?: string) {
   expect(['https://ls-erp-staging.vercel.app', 'https://ls-erp-staging-qa-a.vercel.app', 'https://ls-erp-staging-qa-b.vercel.app']).toContain(origin)
   const c = await browser.newContext({ baseURL: origin })

@@ -1,3 +1,4 @@
+import { createStaff } from './helpers'
 // Hosted writes are limited to synthetic QA tenants on the staging deployment.
 import fs from 'node:fs'
 import { randomUUID } from 'node:crypto'
@@ -35,7 +36,7 @@ test('hosted unit reservations: hold, allocation, release, expiry, isolation and
     const pipeline = await json(admin, '/api/crm/pipelines', 201, 'POST', { name: `QA reservations ${run}`, stages: [
       { name: 'Qualified', kind: 'OPEN', probability: 20, color: '#123456' }, { name: 'Won', kind: 'WON', probability: 100, color: '#228833' }, { name: 'Lost', kind: 'LOST', probability: 0, color: '#aa2233' },
     ] })
-    const staffUser = (await json(admin, '/api/users', 200, 'POST', { name: `QA reservation staff ${run}`, email: `qa-res-${run}@example.test`, role: 'STAFF', password: state.password })).user
+    const staffUser = (await createStaff(admin, { name: `QA reservation staff ${run}`, email: `qa-res-${run}@example.test`, role: 'STAFF', password: state.password })).user
     const staff = await open(a.origin, staffUser.email, state.password, a.tenant.id)
     const deal = await json(admin, '/api/crm/opportunities', 201, 'POST', { title, contactId: contact.id, assignedUserId: staffUser.id, pipelineId: pipeline.id, stageId: pipeline.stages.find((s: { kind: string }) => s.kind === 'OPEN').id, amount: '100.125', currency: 'INR', expectedCloseOn: '2027-12-31' })
     const content = { ...structuredClone(emptyQuotationContent), title, supplierName: 'QA Shared Industries', currency: 'INR', lines: [{ description: title, quantity: '1', unit: 'each', rate: '100.125', catalogItemId: item.id, catalogItemVersion: item.version }] }
