@@ -48,6 +48,8 @@ Phase 2B connects [native office ownership for sales records](SALES_OFFICE_OWNER
 to CRM, projects, quotations, orders and financial children. Phase 2C adds the
 [user and tenant account provisioning backend](OFFICE_PROVISIONING_R10.md).
 Phase 2C also adds [invitation onboarding](INVITATION_ONBOARDING_R10.md).
+Phase 2D1 adds the [private scheduling availability foundation](SCHEDULING_PRIVACY_R10.md)
+so hidden leave cannot become a free booking slot when office filters are added.
 Operational families, assignment selectors and workspace
 controls remain prerequisites before exposing office controls or deploying the
 office-isolation release.

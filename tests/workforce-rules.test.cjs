@@ -71,7 +71,11 @@ test('leave lifecycle guards retain valid transitions and reject repeated or ter
 
 test('notification settings and every recipient lookup stay within the supplied tenant', async () => {
   const payload = { tenantId: 'tenant-a', staffUserId: 'staff-a', leaveCode: 'AL', leaveName: 'Annual leave', startDateIso: '2030-10-07', endDateIso: '2030-10-07', daysCount: 1 }
-  const tx = { user: {
+  const tx = {
+    staffProfile: { findFirst: async ({ where }) => { assert.equal(where.user.tenantId, payload.tenantId); assert.equal(where.userId, payload.staffUserId); return { managerUserId: 'manager-a', leaveApprovalMode: 'REPORTING_MANAGER' } } },
+    $queryRaw: async (_sql, ...values) => { assert(values.includes(payload.tenantId)); assert(values.includes('manager-a')); return [{ role: 'MANAGER', slug: payload.tenantId, status: 'ACTIVE', rules: { 'leaveApprovals.read': 'REPORTS', 'leaveApprovals.approve': 'REPORTS' }, managedTeamIds: [], memberTeamIds: [], accessAssignments: [{ roleId: 'reviewer', role: { archived: false, permissions: ['leaveApprovals.read', 'leaveApprovals.approve'] } }] }] },
+    user: {
+    findFirst: async ({ where }) => { assert.equal(where.tenantId, payload.tenantId); assert.equal(where.id, 'manager-a'); assert.equal(where.status, 'ACTIVE'); return { email: 'manager@example.test' } },
     findUnique: async ({ where }) => {
       assert.equal(where.tenantId, payload.tenantId)
       if (where.id === 'manager-a') return { email: 'manager@example.test', status: 'ACTIVE', role: 'MANAGER' }
@@ -88,7 +92,7 @@ test('notification settings and every recipient lookup stay within the supplied 
   await notifications.notifyLeaveReviewed(tx, { ...payload, status: 'APPROVED', reviewerName: 'Manager', reviewerComment: null })
   assert.deepEqual(sent.splice(0).map(row => row.to), ['staff@example.test'])
   await notifications.notifyLeaveCanceled(tx, { ...payload, canceledByUserId: 'staff-a', canceledByName: 'Staff', cancelReason: null })
-  assert.deepEqual(sent.splice(0).map(row => row.to), ['admin@example.test'])
+  assert.deepEqual(sent.splice(0).map(row => row.to).sort(), ['admin@example.test', 'manager@example.test'])
   await notifications.notifyLeaveCanceled(tx, { ...payload, canceledByUserId: 'admin-a', canceledByName: 'Admin', cancelReason: null })
   assert.deepEqual(sent.splice(0).map(row => row.to), ['staff@example.test'])
   await notifications.notifyLeaveRevoked(tx, { ...payload, revokedByName: 'Admin', revokeReason: null })
@@ -193,7 +197,8 @@ test('flexible plan booking protection checks later pages with bounded scoped qu
    appointmentReads++;assert.equal(where.tenantId,'a');assert.deepEqual(where.staffProfile.AND,[{id:'staff',schedulingMode:'FLEXIBLE'},{user:{tenantId:'a'}}]);assert.equal(take,200)
    assert.deepEqual(Object.keys(select).sort(),['endAt','id','staffProfile','staffProfileId','startAt']);return rows.filter(row=>!where.id||row.id>where.id.gt).slice(0,take)
   }},
-  staffShiftOverride:{findMany:async input=>scoped(input)},leaveRequest:{findMany:async input=>scoped(input)},
+  $queryRaw:async(_sql,tenant,ids)=>{assert.equal(tenant,'a');assert.deepEqual(ids,['staff']);return []},
+  staffShiftOverride:{findMany:async input=>scoped(input)},leaveRequest:{findMany:async()=>{throw Error('Private leave details must not be read by the guard.')}},
   staffFlexibleWeekPlan:{findMany:async input=>{scoped(input);planReads++;return [{staffProfileId:'staff',weekStartDate:new Date('2038-01-04'),days:['MONDAY','TUESDAY'].map(day=>({day,isOff:changed&&day==='TUESDAY',slots:[{startTime:'09:00',endTime:'17:00',breaks:[]}]}))}]}},
   staffFlexiblePattern:{findMany:async input=>{planReads++;return scoped(input)}},staffFlexibleAvailability:{findMany:async input=>{planReads++;return scoped(input)}},
  }
@@ -216,7 +221,8 @@ test('daily plan guards bound candidates by UTC padding and use exact tenant dat
    assert.equal(where.date.gte.toISOString(),'2038-01-07T00:00:00.000Z');assert.equal(where.date.lte.toISOString(),'2038-01-07T00:00:00.000Z')
    return [{staffProfileId:'staff',date:new Date('2038-01-07'),template:{startTime:'09:00',endTime:changed?'17:00':'22:00',breaks:[]}}]
   }},
-  leaveRequest:{findMany:async()=>[]},staffFlexibleWeekPlan:{findMany:async()=>[]},staffFlexiblePattern:{findMany:async()=>[]},staffFlexibleAvailability:{findMany:async()=>[]},
+  $queryRaw:async(_sql,tenant,ids)=>{assert.equal(tenant,'a');assert.deepEqual(ids,['staff']);return []},
+  leaveRequest:{findMany:async()=>{throw Error('Private leave details must not be read by the guard.')}},staffFlexibleWeekPlan:{findMany:async()=>[]},staffFlexiblePattern:{findMany:async()=>[]},staffFlexibleAvailability:{findMany:async()=>[]},
  }
  const check=await protect(db,'a',{id:'staff'},['2038-01-07']);changed=true
  await assert.rejects(check,e=>e instanceof PlanBookingConflict&&e.status===409&&JSON.stringify(e.appointmentIds)==='["1"]')

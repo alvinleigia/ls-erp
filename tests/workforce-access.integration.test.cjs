@@ -160,7 +160,7 @@ test('navigation starts at the first allowed view and hides disabled workforce m
 })
 
 test('shared staff availability preserves overrides, breaks and leave, with explicit tenant scope',async()=>{
- const {checkStaffAppointmentAvailability:check}=require('../modules/workforce/availability.ts')
+ const {checkAsAdministrator:check}=require('./helpers/availability-fixtures.cjs')
  const {runWithTenantDbContext}=require('../lib/prisma.ts')
  await root.query('INSERT INTO "AppSetting" (id,"tenantId","timeZone","updatedAt") VALUES ($1,$2,\'UTC\',now()),($3,$4,\'UTC\',now())',[a+'_settings',a,b+'_settings',b])
  await root.query('INSERT INTO "ShiftTemplateBreak" (id,"templateId","startTime","endTime") VALUES ($1,$2,\'12:00\',\'13:00\')',[a+'_break',template.id])
@@ -168,10 +168,10 @@ test('shared staff availability preserves overrides, breaks and leave, with expl
  const at=(start,end,tenant=a,profile=a+'_profile')=>runWithTenantDbContext(tenant,()=>check(profile,new Date(`2031-10-06T${start}:00Z`),new Date(`2031-10-06T${end}:00Z`),tenant))
  assert.deepEqual(await at('09:00','10:00'),{ok:true,templateId:template.id})
  assert.match((await at('11:30','12:30')).reason,/break/)
- assert.equal((await at('09:00','10:00',b)).ok,false)
+ await assert.rejects(at('09:00','10:00',b),error=>error.status===403)
  await assert.rejects(check(a+'_profile',new Date(),new Date()),/Tenant context is required/)
  await root.query('INSERT INTO "LeaveRequest" (id,"tenantId","staffProfileId","leaveDefinitionId","startDate","endDate","daysCount",status,"updatedAt") VALUES ($1,$2,$3,$4,\'2031-10-06\',\'2031-10-06\',1,\'APPROVED\',now())',[a+'_availability_leave',a,a+'_profile',definition.id])
- assert.match((await at('09:00','10:00')).reason,/approved leave/)
+ assert.equal((await at('09:00','10:00')).reason,'Staff member is unavailable on this date.')
  await root.query('DELETE FROM "LeaveRequest" WHERE id=$1',[a+'_availability_leave'])
  await root.query('UPDATE "StaffShiftOverride" SET "templateId"=NULL WHERE id=$1',[a+'_override'])
  assert.match((await at('09:00','10:00')).reason,/unavailable/)
@@ -755,7 +755,7 @@ test('pattern previews use bounded business-date windows, count clones consisten
 
 
 test('saved weekly plans override recurring availability and clearing restores the recurring cycle',async()=>{
- const {checkStaffAppointmentAvailability:check}=require('../modules/workforce/availability.ts')
+ const {checkAsAdministrator:check}=require('./helpers/availability-fixtures.cjs')
  const {runWithTenantDbContext}=require('../lib/prisma.ts')
  const at=(date,start,end)=>runWithTenantDbContext(a,()=>check(a+'_profile',new Date(date+'T'+start+':00Z'),new Date(date+'T'+end+':00Z'),a))
  assert.equal((await at('2038-01-04','14:00','15:00')).ok,true)
@@ -970,7 +970,7 @@ test('flexible history and live availability share weekly, recurring and daily p
  for(const [date,start,end,minutes] of [['2020-01-06','10:00','18:00',420],['2020-01-07',null,null,0],['2020-01-08','09:00','17:00',420],['2020-01-13','10:00','18:00',420],['2020-01-18',null,null,0],['2020-01-20','09:00','17:00',420],['2020-01-27','09:00','11:00',120]]){
   const row=byDate.get(date);assert.deepEqual([row.startTime,row.endTime,row.paidMinutes],[start,end,minutes],date)
  }
- const {checkStaffAppointmentAvailability:check}=require('../modules/workforce/availability.ts')
+ const {checkAsAdministrator:check}=require('./helpers/availability-fixtures.cjs')
  for(const [date,start,end,expected] of [['2020-01-06','09:00','10:00',false],['2020-01-06','10:00','11:00',true],['2020-01-06','12:00','12:30',false],['2020-01-07','10:00','11:00',false],['2020-01-08','09:00','10:00',true],['2020-01-13','09:00','10:00',false],['2020-01-13','17:00','18:00',true],['2020-01-18','09:00','10:00',false],['2020-01-20','09:00','10:00',true],['2020-01-27','09:00','10:00',true]]){
   assert.equal((await scope(a,()=>check(profile,new Date(date+'T'+start+':00Z'),new Date(date+'T'+end+':00Z'),a))).ok,expected,date+' '+start)
  }
@@ -1021,7 +1021,7 @@ test('weekly history keeps its calendar date when a booking falls on the previou
  const days=planDays().map(day=>({...day,isOff:true,slots:[]}))
  days[0]={...days[0],isOff:false,slots:[{startTime:'00:15',endTime:'01:15',breaks:[{startTime:'00:30',endTime:'00:45'}]}]}
  await ok(await call('shifts/flexible-week-plans','PUT',{staffId:id,weekStartDate:'2020-01-06',days}))
- const {runWithTenantDbContext:scope}=require('../lib/prisma.ts'),{syncRosterHistoryRange:sync}=require('../modules/workforce/roster-history.ts'),{checkStaffAppointmentAvailability:check}=require('../modules/workforce/availability.ts')
+ const {runWithTenantDbContext:scope}=require('../lib/prisma.ts'),{syncRosterHistoryRange:sync}=require('../modules/workforce/roster-history.ts'),{checkAsAdministrator:check}=require('./helpers/availability-fixtures.cjs')
  await root.query('UPDATE "AppSetting" SET "timeZone"=$1 WHERE "tenantId"=$2',['Asia/Kolkata',a])
  try{
   await scope(a,()=>sync(prisma,{tenantId:a,staffProfileIds:[profile],startDate:'2020-01-06',endDate:'2020-01-06'}))
@@ -1050,7 +1050,7 @@ async function standardHistoryFixture(){
 
 test('standard history and live availability share schedule-anchored rotation, assignment gaps, breaks and off days',async()=>{
  standardHistory=await standardHistoryFixture()
- const {profile,early,late}=standardHistory,{runWithTenantDbContext:scope}=require('../lib/prisma.ts'),{syncRosterHistoryRange:sync}=require('../modules/workforce/roster-history.ts'),{checkStaffAppointmentAvailability:check}=require('../modules/workforce/availability.ts')
+ const {profile,early,late}=standardHistory,{runWithTenantDbContext:scope}=require('../lib/prisma.ts'),{syncRosterHistoryRange:sync}=require('../modules/workforce/roster-history.ts'),{checkAsAdministrator:check}=require('./helpers/availability-fixtures.cjs')
  await scope(a,()=>sync(prisma,{tenantId:a,staffProfileIds:[profile,b+'_managerprofile'],startDate:'2020-01-05',endDate:'2020-01-14'}))
  const rows=(await root.query('SELECT * FROM "StaffRosterHistoryDay" WHERE "staffProfileId"=$1 ORDER BY date',[profile])).rows
  const expected=[null,null,early.id,late.id,early.id,early.id,null,null,null,early.id]
@@ -1085,7 +1085,7 @@ test('standard range loading stays bounded and excludes foreign staff even with 
 })
 
 test('standard history retains saved snapshots and explicit corrections preserve higher-priority leave and overrides',async()=>{
- const {profile,rotation,base,savedDefault,late}=standardHistory,{runWithTenantDbContext:scope}=require('../lib/prisma.ts'),{syncRosterHistoryRange:sync}=require('../modules/workforce/roster-history.ts'),{checkStaffAppointmentAvailability:check}=require('../modules/workforce/availability.ts')
+ const {profile,rotation,base,savedDefault,late}=standardHistory,{runWithTenantDbContext:scope}=require('../lib/prisma.ts'),{syncRosterHistoryRange:sync}=require('../modules/workforce/roster-history.ts'),{checkAsAdministrator:check}=require('./helpers/availability-fixtures.cjs')
  const params={tenantId:a,staffProfileIds:[profile],startDate:'2020-01-05',endDate:'2020-01-14'}
  const read=async()=>(await root.query('SELECT * FROM "StaffRosterHistoryDay" WHERE "staffProfileId"=$1 ORDER BY date',[profile])).rows
  const before=await read()
@@ -1159,7 +1159,7 @@ test('plan guards retain override and leave precedence and allow repairs with un
  await root.query('INSERT INTO "StaffShiftOverride" (id,"staffProfileId",date,"templateId","updatedAt") VALUES ($1,$2,$3,$4,now())',[profile+'_override',profile,'2038-01-04',template.id])
  await requestFixture('guard_leave',{profile,date:'2038-01-05',status:'APPROVED'})
  await ok(await call('shifts/flexible-week-plans','PUT',{...body,days:offPlanDays()}))
- const {runWithTenantDbContext:scope}=require('../lib/prisma.ts'),{checkStaffAppointmentAvailability:check}=require('../modules/workforce/availability.ts')
+ const {runWithTenantDbContext:scope}=require('../lib/prisma.ts'),{checkAsAdministrator:check}=require('./helpers/availability-fixtures.cjs')
  assert.equal((await scope(a,()=>check(profile,new Date('2038-01-04T10:00:00Z'),new Date('2038-01-04T11:00:00Z'),a))).ok,true)
 })
 

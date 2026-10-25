@@ -1,3 +1,20 @@
+## R10 - Private scheduling availability (phase 2D1, local)
+
+Shared appointment and shift-plan integrity checks use a tenant-bound date-only
+projection for approved leave. Hidden source records or disabled Leaves still
+block bookings, without exposing request IDs, reasons or classifications.
+Current actor status, profiles, read rules and module access are rechecked;
+authorization failures cannot be interpreted as free time. Business actions,
+assignment targets and source-record access retain their own authorization.
+
+Pending migration 116 preserves every row in all 125 preceding tables; forced
+rollback and exact comparison passed. All 163 regression checks and a real Chrome
+authenticated booking flow passed, along with build, TypeScript and targeted lint.
+No visual UI verification is claimed. No push, hosted migration, deployment or
+client-data change. Native operational office ownership, remaining conflict paths,
+personal/history rules, stock boundaries and office controls remain release
+prerequisites. See [the scheduling privacy contract](SCHEDULING_PRIVACY_R10.md).
+
 ## R10 - Invitation onboarding (phase 2C, local)
 
 Tenant-admin invitations carry explicit profile/rule/office proposals and offer

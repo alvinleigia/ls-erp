@@ -4,6 +4,7 @@ import { dateKeyInTimeZone, appointmentRangeOnDate, dateKey } from "./roster-dat
 import { loadFlexibleAvailability } from "./flexible-availability"
 import { loadStandardAvailability } from "./standard-availability"
 import { workingSegments } from "./working-segments"
+import { approvedLeaveBlocks } from "./availability-blocks"
 
 const PAGE_SIZE = 200
 type Booking = { id: string; staffProfileId: string; staffProfile: { schedulingMode: StaffSchedulingMode }; startAt: Date; endAt: Date }
@@ -27,8 +28,7 @@ async function availability(tx: Prisma.TransactionClient, tenantId: string, book
     loadFlexibleAvailability(tx, tenantId, [...new Set(bookings.filter(b => b.mode === "FLEXIBLE").map(b => b.profileId))], start, end),
     tx.staffShiftOverride.findMany({ where: { ...scope, date: { gte: start, lte: end } },
       select: { staffProfileId: true, date: true, template: { select: { startTime: true, endTime: true, breaks: { select: { startTime: true, endTime: true } } } } } }),
-    tx.leaveRequest.findMany({ where: { ...scope, tenantId, status: "APPROVED", startDate: { lte: end }, endDate: { gte: start } },
-      select: { staffProfileId: true, startDate: true, endDate: true } }),
+    approvedLeaveBlocks(tx, tenantId, ids, start, end),
   ])
   const overrideMap = new Map(overrides.map(row => [row.staffProfileId + ":" + dateKey(row.date), row]))
   const leavesByStaff = new Map<string, typeof leaves>()

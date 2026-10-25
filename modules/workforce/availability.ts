@@ -2,6 +2,7 @@ import { loadFlexibleAvailability } from "./flexible-availability"
 import { prisma } from "@/lib/prisma"
 import { loadStandardAvailability } from "./standard-availability"
 import { workingSegments } from "./working-segments"
+import { approvedLeaveBlocks } from "./availability-blocks"
 import { type Prisma } from "@prisma/client"
 
 type ZonedDateParts = {
@@ -124,23 +125,11 @@ export const checkStaffAppointmentAvailability = async (
   }
 
   const dateValue = new Date(`${dateKey}T00:00:00.000Z`)
-  const approvedLeave = await db.leaveRequest.findFirst({
-    where: {
-      staffProfileId,
-      staffProfile: { user: { tenantId } },
-      status: "APPROVED",
-      startDate: { lte: dateValue },
-      endDate: { gte: dateValue },
-    },
-    select: {
-      leaveDefinition: { select: { code: true, name: true } },
-    },
-  })
-  if (approvedLeave) {
-    const leaveLabel = `${approvedLeave.leaveDefinition.code} - ${approvedLeave.leaveDefinition.name}`
+  const blocked = await approvedLeaveBlocks(db, tenantId, [staffProfileId], dateValue, dateValue)
+  if (blocked.length) {
     return {
       ok: false,
-      reason: `Staff member is on approved leave (${leaveLabel}) on this date.`,
+      reason: "Staff member is unavailable on this date.",
     }
   }
 
