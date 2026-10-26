@@ -1,8 +1,9 @@
+import { inventoryMutation } from "./transaction"
 import { Prisma } from "@prisma/client"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { inventoryCategoryStatusSchema, type CreateInventoryCategoryInput, type UpdateInventoryCategoryInput } from "@/lib/validation"
-import { BusinessError } from "@/platform/policy"
+import { BusinessError, type BusinessActor } from "@/platform/policy"
 
 export const inventoryCategoryListSchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
@@ -60,78 +61,87 @@ export async function listInventoryCategories(tenantId: string, query: z.infer<t
 }
 
 // Runs inside the authorized module API tenant context.
-export async function createInventoryCategory(tenantId: string, data: CreateInventoryCategoryInput) {
-  if (!tenantId) throw new BusinessError(403, "Tenant context is required.")
-  const existing = await prisma.inventoryCategory.findFirst({
-    where: { tenantId, name: data.name.trim() },
-    select: { id: true },
-  })
-  if (existing) {
-    throw new BusinessError(409, "Category name already exists.")
-  }
+export async function createInventoryCategory(actor: BusinessActor, data: CreateInventoryCategoryInput) {
+  return inventoryMutation(actor, "inventoryCategories", "create", { status: data.status }, async (tx, actor) => {
+    const { tenantId } = actor
 
-  const item = await prisma.inventoryCategory.create({
-    data: {
-      tenantId,
-      name: data.name.trim(),
-      description: data.description?.trim() || undefined,
-      status: data.status ?? "ACTIVE",
-      sortOrder: data.sortOrder ?? 0,
-    },
-    select: inventoryCategorySelect,
-  })
-  return item
-}
-
-// Runs inside the authorized module API tenant context.
-export async function updateInventoryCategory(tenantId: string, id: string, data: UpdateInventoryCategoryInput) {
-  if (!tenantId) throw new BusinessError(403, "Tenant context is required.")
-  if (data.name?.trim()) {
-    const existing = await prisma.inventoryCategory.findUnique({
-      where: { tenantId_name: { tenantId, name: data.name.trim() } },
+    const existing = await tx.inventoryCategory.findFirst({
+      where: { tenantId, name: data.name.trim() },
       select: { id: true },
     })
-    if (existing && existing.id !== id) {
+    if (existing) {
       throw new BusinessError(409, "Category name already exists.")
     }
-  }
 
-  const item = await prisma.inventoryCategory.updateManyAndReturn({
-    where: { id, tenantId },
-    data: {
-      ...(data.name?.trim() ? { name: data.name.trim() } : {}),
-      ...(data.description?.trim()
-        ? { description: data.description.trim() }
-        : data.description === ""
-          ? { description: null }
-          : {}),
-      ...(data.status ? { status: data.status } : {}),
-      ...(typeof data.sortOrder === "number" ? { sortOrder: data.sortOrder } : {}),
-    },
-    select: inventoryCategorySelect,
+    const item = await tx.inventoryCategory.create({
+      data: {
+        tenantId,
+        name: data.name.trim(),
+        description: data.description?.trim() || undefined,
+        status: data.status ?? "ACTIVE",
+        sortOrder: data.sortOrder ?? 0,
+      },
+      select: inventoryCategorySelect,
+    })
+    return item
   })
-
-  const updatedItem = item[0]
-  if (!updatedItem) {
-    throw new BusinessError(404, "Category not found.")
-  }
-  return updatedItem
 }
 
 // Runs inside the authorized module API tenant context.
-export async function archiveInventoryCategory(tenantId: string, id: string) {
-  if (!tenantId) throw new BusinessError(403, "Tenant context is required.")
-  const linkedProducts = await prisma.inventoryProduct.count({
-    where: { tenantId, categoryId: id },
-  })
+export async function updateInventoryCategory(actor: BusinessActor, id: string, data: UpdateInventoryCategoryInput) {
+  return inventoryMutation(actor, "inventoryCategories", "edit", { id, status: data.status }, async (tx, actor) => {
+    const { tenantId } = actor
 
-  if (linkedProducts > 0) {
-    await prisma.inventoryCategory.updateMany({
+    if (data.name?.trim()) {
+      const existing = await tx.inventoryCategory.findUnique({
+        where: { tenantId_name: { tenantId, name: data.name.trim() } },
+        select: { id: true },
+      })
+      if (existing && existing.id !== id) {
+        throw new BusinessError(409, "Category name already exists.")
+      }
+    }
+
+    const item = await tx.inventoryCategory.updateManyAndReturn({
       where: { id, tenantId },
-      data: { status: "INACTIVE" },
+      data: {
+        ...(data.name?.trim() ? { name: data.name.trim() } : {}),
+        ...(data.description?.trim()
+          ? { description: data.description.trim() }
+          : data.description === ""
+            ? { description: null }
+            : {}),
+        ...(data.status ? { status: data.status } : {}),
+        ...(typeof data.sortOrder === "number" ? { sortOrder: data.sortOrder } : {}),
+      },
+      select: inventoryCategorySelect,
     })
-  } else {
-    await prisma.inventoryCategory.deleteMany({ where: { id, tenantId } })
-  }
-  return { linkedProducts }
+
+    const updatedItem = item[0]
+    if (!updatedItem) {
+      throw new BusinessError(404, "Category not found.")
+    }
+    return updatedItem
+  })
+}
+
+// Runs inside the authorized module API tenant context.
+export async function archiveInventoryCategory(actor: BusinessActor, id: string) {
+  return inventoryMutation(actor, "inventoryCategories", "archive", { id }, async (tx, actor) => {
+    const { tenantId } = actor
+
+    const linkedProducts = await tx.inventoryProduct.count({
+      where: { tenantId, categoryId: id },
+    })
+
+    if (linkedProducts > 0) {
+      await tx.inventoryCategory.updateMany({
+        where: { id, tenantId },
+        data: { status: "INACTIVE" },
+      })
+    } else {
+      await tx.inventoryCategory.deleteMany({ where: { id, tenantId } })
+    }
+    return { linkedProducts }
+  })
 }

@@ -1,5 +1,6 @@
 import type { Prisma } from "@prisma/client"
-import { requireBusinessModule } from "@/platform/module-server"
+import { authorizeBusinessOperation } from "@/platform/access/operation"
+import { lockTenantOperations } from "@/platform/transactions/tenant-operation"
 import { requirePermission } from "@/platform/access/policy"
 import { BusinessError, type BusinessActor } from "@/platform/policy"
 
@@ -21,8 +22,9 @@ export const applyInventoryStockDelta = async (params: {
   const { tx, deltaByProduct, tenantId } = params
   if (!deltaByProduct.size) return
   if (params.actor.tenantId !== tenantId) throw new BusinessError(403, "Inventory access is required for stock changes.")
-  await requireBusinessModule(tx, tenantId, "inventory")
   requirePermission(params.actor, "inventoryProducts.edit")
+  await lockTenantOperations(tx, tenantId)
+  await authorizeBusinessOperation(tx, params.actor, "inventoryProducts.edit", ["inventory"])
 
   const productIds = [...deltaByProduct.keys()]
   const products = await tx.inventoryProduct.findMany({

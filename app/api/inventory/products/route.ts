@@ -49,7 +49,6 @@ async function handlePOST(request: Request, actor: BusinessActor) {
   const logContext = createApiLogContext(request)
   logApiRequestStart(logContext, request)
 
-  const { tenantId } = actor
 
   const body = await request.json().catch(() => null)
   if (!body) {
@@ -68,7 +67,7 @@ async function handlePOST(request: Request, actor: BusinessActor) {
   }
 
   try {
-    const item = await createProduct(tenantId, parsed.data)
+    const item = await createProduct(actor, parsed.data)
 
     const response = NextResponse.json({ item: serializeProduct(item) }, { status: 201 })
     logApiRequestSuccess(logContext, 201, { productId: item.id })

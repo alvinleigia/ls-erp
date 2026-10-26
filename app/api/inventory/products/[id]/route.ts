@@ -19,7 +19,6 @@ async function handlePATCH(
 ) {
   const logContext = createApiLogContext(request)
   logApiRequestStart(logContext, request)
-  const { tenantId } = actor
 
   try {
     const { id } = await params
@@ -34,7 +33,7 @@ async function handlePATCH(
       return withRequestId(response, logContext.requestId)
     }
 
-    const item = await updateProduct(tenantId, id, parsed.data)
+    const item = await updateProduct(actor, id, parsed.data)
 
     const response = NextResponse.json({ item: item ? { ...item, ...serializeProduct(item) } : null })
     logApiRequestSuccess(logContext, 200, { itemId: id })
@@ -53,11 +52,10 @@ async function handleDELETE(
 ) {
   const logContext = createApiLogContext(request)
   logApiRequestStart(logContext, request)
-  const { tenantId } = actor
 
   try {
     const { id } = await params
-    const { linkedPurchases, hasStockMovements } = await archiveProduct(tenantId, id)
+    const { linkedPurchases, hasStockMovements } = await archiveProduct(actor, id)
 
     const response = NextResponse.json({ ok: true })
     logApiRequestSuccess(logContext, 200, { itemId: id, linkedPurchases, hasStockMovements })

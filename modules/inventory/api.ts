@@ -1,13 +1,12 @@
 import type { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { recordDomainAuditEventSafe } from "@/lib/domain-audit"
 import { withBusinessApi, readJson } from "@/platform/business-api"
 import { requireBusinessModule } from "@/platform/module-server"
 import { requirePermission } from "@/platform/access/policy"
 import type { PermissionAction } from "@/platform/access/catalog"
 import { BusinessError, type BusinessActor } from "@/platform/policy"
 
-export type InventoryResource = "inventoryProducts" | "inventoryCategories" | "inventorySuppliers" | "inventoryPurchases"
+import type { InventoryResource } from "./transaction"
 
 const findRecord = (resource: InventoryResource, tenantId: string, id: string) => {
   const args = { where: { tenantId, id } }
@@ -32,18 +31,6 @@ export function withInventoryApi(request: Request, resource: InventoryResource, 
       // Receiving purchases changes stock even if the catalog editor is hidden.
       if (resource === "inventoryPurchases" && input?.status === "RECEIVED" && before?.status !== "RECEIVED") requirePermission(actor, "inventoryProducts.edit")
     }
-    const response = await handler(actor)
-    if (response.ok && action !== "read") {
-      const result = await response.clone().json()
-      const entityId = id ?? result.item?.id
-      const after = entityId ? await findRecord(resource, actor.tenantId, entityId) : null
-      await recordDomainAuditEventSafe(prisma, {
-        tenantId: actor.tenantId, actorUserId: actor.userId, actorRole: actor.role, requestId: actor.requestId,
-        event: `inventory.${resource}.${action}`, entityType: resource, entityId,
-        ...(before ? { before: JSON.parse(JSON.stringify(before)) } : {}),
-        ...(after ? { after: JSON.parse(JSON.stringify(after)) } : {}),
-      })
-    }
-    return response
+    return handler(actor)
   })
 }

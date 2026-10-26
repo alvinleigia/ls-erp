@@ -20,7 +20,6 @@ async function handlePATCH(
 ) {
   const logContext = createApiLogContext(request)
   logApiRequestStart(logContext, request)
-  const { tenantId } = actor
 
   try {
     const { id } = await params
@@ -35,7 +34,7 @@ async function handlePATCH(
       return withRequestId(response, logContext.requestId)
     }
 
-    const supplier = await updateSupplier(tenantId, id, parsed.data)
+    const supplier = await updateSupplier(actor, id, parsed.data)
 
     const response = NextResponse.json({
       item: {
@@ -59,11 +58,10 @@ async function handleDELETE(
 ) {
   const logContext = createApiLogContext(request)
   logApiRequestStart(logContext, request)
-  const { tenantId } = actor
 
   try {
     const { id } = await params
-    const { linkedProducts, linkedPurchases } = await archiveSupplier(tenantId, id)
+    const { linkedProducts, linkedPurchases } = await archiveSupplier(actor, id)
 
     const response = NextResponse.json({ ok: true })
     logApiRequestSuccess(logContext, 200, { supplierId: id, linkedProducts, linkedPurchases })

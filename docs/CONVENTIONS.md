@@ -102,6 +102,8 @@ This is the baseline for new modules (API + UI) in this codebase.
 - Prefer the standard DataTable + DataTableToolbar + DataTablePagination pattern for admin lists.
 
 ## Operational service ownership
+- Inventory mutations use `modules/inventory/transaction.ts`; refresh authority after shared/source locks and commit strict before/after audits with source, relation and stock writes. Use the shared `platform/transactions/tenant-operation.ts` lock for stock/scheduling/security coordination. New opening quantities and count corrections require signed movements. Stock is still tenant-wide until the atomic office-balance cutover; see `docs/INVENTORY_STOCK_R10.md`.
+
 - Keep reusable order resolution, pricing and scheduling in `modules/appointments`; API routes are HTTP adapters and are not imported by domain modules.
 - Use `modules/workforce/availability.ts` for staff working-time checks after endpoint authorization. Always supply the tenant ID and establish tenant DB context.
 - Booking availability and plan guards use `modules/workforce/availability-blocks.ts` for private leave conflicts. Bind a real actor; the projection returns only unavailable dates and fails closed on lost authority. Hidden source rows or disabled Leaves must not make a staff member bookable. Do not return leave identifiers, classifications or reasons from availability. See `docs/SCHEDULING_PRIVACY_R10.md`; remaining operational office ownership is still a release prerequisite.

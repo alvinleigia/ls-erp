@@ -57,7 +57,6 @@ async function handlePOST(request: Request, actor: BusinessActor) {
   const logContext = createApiLogContext(request)
   logApiRequestStart(logContext, request)
 
-  const { tenantId } = actor
 
   const body = await request.json().catch(() => null)
   if (!body) {
@@ -76,7 +75,7 @@ async function handlePOST(request: Request, actor: BusinessActor) {
   }
 
   try {
-    const supplier = await createSupplier(tenantId, parsed.data)
+    const supplier = await createSupplier(actor, parsed.data)
 
     const response = NextResponse.json(
       {

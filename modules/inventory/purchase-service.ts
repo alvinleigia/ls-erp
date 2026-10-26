@@ -1,3 +1,4 @@
+import { inventoryMutation } from "./transaction"
 import { Prisma } from "@prisma/client"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
@@ -120,69 +121,69 @@ export async function listPurchases(tenantId: string, query: z.infer<typeof purc
 }
 
 export async function createPurchase(actor: BusinessActor, data: CreatePurchaseOrderInput) {
-  const { tenantId } = actor
-  if (!tenantId) throw new BusinessError(403, "Tenant context is required.")
-  if (data.status === "RECEIVED") requirePermission(actor, "inventoryProducts.edit")
-  const today = new Date().toISOString().slice(0, 10).replaceAll("-", "")
-  const runningCount = await prisma.purchaseOrder.count({
-    where: {
-      tenantId,
-      createdAt: { gte: new Date(`${new Date().toISOString().slice(0, 10)}T00:00:00.000Z`) },
-    },
-  })
-  const orderNumber = `PO-${today}-${String(runningCount + 1).padStart(4, "0")}`
+  return inventoryMutation(actor, "inventoryPurchases", "create", { status: data.status }, async (tx, actor) => {
+    const { tenantId } = actor
 
-  const productIds = [...new Set(data.items.map((item) => item.productId))]
-  const products = await prisma.inventoryProduct.findMany({
-    where: { tenantId, id: { in: productIds } },
-    select: {
-      id: true,
-      taxes: { select: { tax: { select: { percent: true } } } },
-    },
-  })
-  const taxMap = new Map(
-    products.map((product) => [
-      product.id,
-      product.taxes.reduce((sum, item) => sum + Math.max(0, item.tax.percent), 0),
-    ])
-  )
+    if (data.status === "RECEIVED") requirePermission(actor, "inventoryProducts.edit")
+    const today = new Date().toISOString().slice(0, 10).replaceAll("-", "")
+    const runningCount = await tx.purchaseOrder.count({
+      where: {
+        tenantId,
+        createdAt: { gte: new Date(`${new Date().toISOString().slice(0, 10)}T00:00:00.000Z`) },
+      },
+    })
+    const orderNumber = `PO-${today}-${String(runningCount + 1).padStart(4, "0")}`
 
-  const supplier = await prisma.supplier.findFirst({
-    where: { id: data.supplierId, tenantId },
-    select: { id: true },
-  })
-  if (!supplier) {
-    throw new BusinessError(404, "Supplier not found.")
-  }
-  if (products.length !== productIds.length) {
-    throw new BusinessError(400, "One or more products do not belong to this tenant.")
-  }
+    const productIds = [...new Set(data.items.map((item) => item.productId))]
+    const products = await tx.inventoryProduct.findMany({
+      where: { tenantId, id: { in: productIds } },
+      select: {
+        id: true,
+        taxes: { select: { tax: { select: { percent: true } } } },
+      },
+    })
+    const taxMap = new Map(
+      products.map((product) => [
+        product.id,
+        product.taxes.reduce((sum, item) => sum + Math.max(0, item.tax.percent), 0),
+      ])
+    )
 
-  const linePayload = data.items.map((item) => {
-    const quantity = Math.max(1, item.quantity)
-    const unitCostCents = Math.max(0, item.unitCostCents)
-    const taxPercent = taxMap.get(item.productId) ?? 0
-    const lineSubtotalCents = quantity * unitCostCents
-    const lineTaxCents = Math.round((lineSubtotalCents * taxPercent) / 100)
-    const lineTotalCents = lineSubtotalCents + lineTaxCents
-    return {
-      ...item,
-      quantity,
-      unitCostCents,
-      taxPercent,
-      lineSubtotalCents,
-      lineTaxCents,
-      lineTotalCents,
-      receivedQty: data.status === "RECEIVED" ? quantity : 0,
+    const supplier = await tx.supplier.findFirst({
+      where: { id: data.supplierId, tenantId },
+      select: { id: true },
+    })
+    if (!supplier) {
+      throw new BusinessError(404, "Supplier not found.")
     }
-  })
+    if (products.length !== productIds.length) {
+      throw new BusinessError(400, "One or more products do not belong to this tenant.")
+    }
 
-  const subtotalCents = linePayload.reduce((sum, item) => sum + item.lineSubtotalCents, 0)
-  const taxCents = linePayload.reduce((sum, item) => sum + item.lineTaxCents, 0)
-  const totalCents = subtotalCents + taxCents
-  const initialStatus = data.status ?? "ORDERED"
+    const linePayload = data.items.map((item) => {
+      const quantity = Math.max(1, item.quantity)
+      const unitCostCents = Math.max(0, item.unitCostCents)
+      const taxPercent = taxMap.get(item.productId) ?? 0
+      const lineSubtotalCents = quantity * unitCostCents
+      const lineTaxCents = Math.round((lineSubtotalCents * taxPercent) / 100)
+      const lineTotalCents = lineSubtotalCents + lineTaxCents
+      return {
+        ...item,
+        quantity,
+        unitCostCents,
+        taxPercent,
+        lineSubtotalCents,
+        lineTaxCents,
+        lineTotalCents,
+        receivedQty: data.status === "RECEIVED" ? quantity : 0,
+      }
+    })
 
-  return prisma.$transaction(async tx => {
+    const subtotalCents = linePayload.reduce((sum, item) => sum + item.lineSubtotalCents, 0)
+    const taxCents = linePayload.reduce((sum, item) => sum + item.lineTaxCents, 0)
+    const totalCents = subtotalCents + taxCents
+    const initialStatus = data.status ?? "ORDERED"
+
     const order = await tx.purchaseOrder.create({
       data: {
         tenantId,
@@ -217,22 +218,21 @@ export async function createPurchase(actor: BusinessActor, data: CreatePurchaseO
 }
 
 export async function updatePurchase(actor: BusinessActor, id: string, data: UpdatePurchaseOrderInput) {
-  const { tenantId } = actor
-  if (!tenantId) throw new BusinessError(403, "Tenant context is required.")
-  return prisma.$transaction(async tx => {
-    // Serialize receipt transitions on this purchase, including concurrent requests.
-    const locked = await tx.$queryRaw<{ id: string }[]>(Prisma.sql`SELECT id FROM "PurchaseOrder" WHERE id = ${id} AND "tenantId" = ${tenantId} FOR UPDATE`)
-    if (!locked.length) throw new BusinessError(404, "Purchase order not found.")
+  return inventoryMutation(actor, "inventoryPurchases", "edit", { id, status: data.status }, async (tx, actor) => {
+    const { tenantId } = actor
+
     const existing = await tx.purchaseOrder.findUniqueOrThrow({ where: { id, tenantId }, select: purchaseOrderSelect })
     const nextStatus = data.status ?? existing.status
     const shouldReceive = existing.status !== "RECEIVED" && nextStatus === "RECEIVED"
     if (shouldReceive) requirePermission(actor, "inventoryProducts.edit")
-    await tx.purchaseOrder.update({ where: { id, tenantId }, data: {
-      ...(data.status ? { status: data.status } : {}),
-      ...(data.expectedDate !== undefined ? { expectedDate: data.expectedDate ? toDateOnly(data.expectedDate) : null } : {}),
-      ...(data.notes !== undefined ? { notes: data.notes?.trim() || null } : {}),
-      ...(shouldReceive ? { receivedAt: new Date() } : {}),
-    } })
+    await tx.purchaseOrder.update({
+      where: { id, tenantId }, data: {
+        ...(data.status ? { status: data.status } : {}),
+        ...(data.expectedDate !== undefined ? { expectedDate: data.expectedDate ? toDateOnly(data.expectedDate) : null } : {}),
+        ...(data.notes !== undefined ? { notes: data.notes?.trim() || null } : {}),
+        ...(shouldReceive ? { receivedAt: new Date() } : {}),
+      }
+    })
     if (shouldReceive) await receivePurchaseItems(tx, tenantId, existing)
     return tx.purchaseOrder.findUniqueOrThrow({ where: { id, tenantId }, select: purchaseOrderSelect })
   })

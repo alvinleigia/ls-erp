@@ -493,11 +493,9 @@ test('stock deductions from independent transactions cannot oversell after both 
  let reads=0,release;const bothRead=new Promise(resolve=>{release=resolve})
  const actor={tenantId:a,userId:a+'_admin',role:'ADMIN'}
  const consume=()=>runWithTenantDbContext(a,()=>prisma.$transaction(async tx=>{
-  const db=new Proxy(tx,{get(target,key){if(key!=='inventoryProduct')return target[key];return new Proxy(target.inventoryProduct,{get(model,operation){
-   if(operation!=='findMany')return model[operation]
-   return async args=>{const result=await model.findMany(args);if(++reads===2)release();await bothRead;return result}
-  }})}})
-  await applyInventoryStockDelta({actor,tenantId:a,tx:db,deltaByProduct:new Map([[stockProduct,-1]]),movement:()=>({type:'BOOKING_PRODUCT_SALE',note:'Concurrent stock test'})})
+  const preflight=await tx.inventoryProduct.findUnique({where:{id:stockProduct},select:{onHandQty:true}})
+  assert.equal(preflight.onHandQty,1);if(++reads===2)release();await bothRead
+  await applyInventoryStockDelta({actor,tenantId:a,tx,deltaByProduct:new Map([[stockProduct,-1]]),movement:()=>({type:'BOOKING_PRODUCT_SALE',note:'Concurrent stock test'})})
  }))
  const before=(await orderCounts()).movements
  const results=await Promise.allSettled([consume(),consume()])

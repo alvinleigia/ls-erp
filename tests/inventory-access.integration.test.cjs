@@ -314,3 +314,74 @@ test("supplier partial edits, search and referenced archives retain purchase lin
   const events=(await root.query('SELECT event,after FROM "AuditLog" WHERE "entityId"=$1',[vendor.id])).rows
   assert.ok(events.some(row=>row.event==='inventory.inventorySuppliers.archive'&&row.after.status==='INACTIVE'))
 })
+
+// Inventory's transaction boundary must contain source writes, child rows,
+// stock movements and its mandatory audit together.
+async function inventorySnapshot(){
+ const tables=['InventoryCategory','Supplier','InventoryProduct','PurchaseOrder','InventoryStockMovement','AuditLog'];
+ const rows=await Promise.all(tables.map(table=>root.query(`SELECT to_jsonb(r) row FROM "${table}" r WHERE "tenantId"=$1 ORDER BY id`,[tenantA]).then(r=>r.rows)));
+ rows.push((await root.query('SELECT to_jsonb(i) row FROM "PurchaseOrderItem" i JOIN "PurchaseOrder" o ON o.id=i."orderId" WHERE o."tenantId"=$1 ORDER BY i.id',[tenantA])).rows);return rows;
+}
+const stockItemBody=(sku,extra={})=>({sku,name:sku,categoryId:category.id,costPriceCents:100,mrpCents:150,...extra});
+let proofStock,proofPurchase;
+test('inventory audits are atomic for every catalog mutation and purchase receipt',async()=>{
+ proofStock=(await ok(await invoke('products','POST',stockItemBody('ATOMIC-STOCK',{onHandQty:5})),201)).item;
+ proofPurchase=(await ok(await invoke('purchases','POST',{supplierId:supplier.id,orderDate:'2036-02-01',items:[{productId:proofStock.id,quantity:2,unitCostCents:100}]}),201)).item;
+ const emptyCategory=(await ok(await invoke('categories','POST',{name:'Audit delete category'}),201)).item;
+ const emptySupplier=(await ok(await invoke('suppliers','POST',{name:'Audit delete supplier'}),201)).item;
+ const emptyProduct=(await ok(await invoke('products','POST',stockItemBody('AUDIT-DELETE')),201)).item;
+ const fn='inventory_audit_'+suffix;
+ await root.query(`CREATE FUNCTION ${fn}() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW."tenantId"='${tenantA}' AND NEW.event LIKE 'inventory.%' THEN RAISE EXCEPTION 'Required inventory audit failed';END IF;RETURN NEW;END $$;CREATE TRIGGER ${fn} BEFORE INSERT ON "AuditLog" FOR EACH ROW EXECUTE FUNCTION ${fn}()`);
+ try{
+  const before=await inventorySnapshot();
+  for(const [entity,method,input,id]of[
+   ['categories','POST',{name:'Rollback category'}],['suppliers','POST',{name:'Rollback supplier'}],['products','POST',stockItemBody('ROLLBACK-OPENING',{onHandQty:3})],
+   ['purchases','POST',{supplierId:supplier.id,orderDate:'2036-02-02',status:'RECEIVED',items:[{productId:proofStock.id,quantity:3,unitCostCents:777}]}],
+   ['categories','PATCH',{description:'Must roll back'},emptyCategory.id],['suppliers','PATCH',{notes:'Must roll back'},emptySupplier.id],['products','PATCH',{onHandQty:17,supplierLinks:[{supplierId:supplier.id,isPreferred:true}]},proofStock.id],
+   ['purchases','PATCH',{status:'RECEIVED'},proofPurchase.id],['categories','DELETE',undefined,emptyCategory.id],['suppliers','DELETE',undefined,emptySupplier.id],['products','DELETE',undefined,emptyProduct.id],
+  ]){await ok(await invoke(entity,method,input,id),500);assert.deepEqual(await inventorySnapshot(),before,entity+' '+method)}
+ }finally{await root.query(`DROP TRIGGER ${fn} ON "AuditLog";DROP FUNCTION ${fn}()`)}
+})
+test('stock corrections have signed movements and include relation snapshots in the same audit',async()=>{
+ await ok(await invoke('products','PATCH',{onHandQty:8,supplierLinks:[{supplierId:supplier.id,isPreferred:true}]},proofStock.id));
+ await ok(await invoke('products','PATCH',{onHandQty:6},proofStock.id));
+ const moves=(await root.query('SELECT type,"quantityDelta",note FROM "InventoryStockMovement" WHERE "productId"=$1 ORDER BY "createdAt",id',[proofStock.id])).rows;
+ assert.deepEqual(moves.map(m=>m.quantityDelta),[5,3,-2]);assert.deepEqual(moves.map(m=>m.type),['ADJUSTMENT_ADD','ADJUSTMENT_ADD','ADJUSTMENT_SUB']);
+ const audit=(await root.query(`SELECT "before","after" FROM "AuditLog" WHERE "entityId"=$1 AND event='inventory.inventoryProducts.edit' ORDER BY "createdAt"`,[proofStock.id])).rows;
+ assert.equal(audit[0].before.onHandQty,5);assert.equal(audit[0].after.onHandQty,8);assert.equal(audit[0].after.suppliers[0].supplierId,supplier.id);
+ const fn='inventory_movement_'+suffix;await root.query(`CREATE FUNCTION ${fn}() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW."tenantId"='${tenantA}' AND NEW.note='Stock count correction' THEN RAISE EXCEPTION 'Movement write failed';END IF;RETURN NEW;END $$;CREATE TRIGGER ${fn} BEFORE INSERT ON "InventoryStockMovement" FOR EACH ROW EXECUTE FUNCTION ${fn}()`);
+ try{const before=await inventorySnapshot();await ok(await invoke('products','PATCH',{onHandQty:9},proofStock.id),500);assert.deepEqual(await inventorySnapshot(),before)}finally{await root.query(`DROP TRIGGER ${fn} ON "InventoryStockMovement";DROP FUNCTION ${fn}()`)}
+})
+async function waitInventoryWriter(){const deadline=Date.now()+8000;while(Date.now()<deadline){if((await root.query("SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE usename='crm_test_runtime' AND wait_event_type='Lock') waiting")).rows[0].waiting)return;await new Promise(resolve=>setTimeout(resolve,20))}throw Error('Inventory writer did not reach its lock.')}
+test('queued inventory writers refresh module, action, account and receipt stock permission',async()=>{
+ const original=(await root.query('SELECT permissions FROM "TenantAccessRole" WHERE id=$1',[roleId])).rows[0].permissions;
+ const full=['inventoryCategories.read','inventoryCategories.create','inventoryCategories.edit','inventoryCategories.archive','inventorySuppliers.read','inventorySuppliers.archive','inventoryProducts.read','inventoryProducts.create','inventoryProducts.edit','inventoryPurchases.read','inventoryPurchases.edit'];
+ try{for(const change of ['module','create','edit','account','receipt']){
+  await permissions(full);await flag(true);await root.query(`UPDATE "User" SET status='ACTIVE' WHERE id=$1`,[tenantA+'_manager']);
+  const before=await inventorySnapshot();await root.query('BEGIN');let pending;
+  try{
+   await root.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',['workforce-schedules:'+tenantA]);
+   const request=change==='module'||change==='create'?['products','POST',stockItemBody('QUEUE-'+change),undefined]:change==='edit'?['categories','PATCH',{description:'Denied queued edit'},category.id]:change==='account'?['suppliers','DELETE',undefined,supplier.id]:['purchases','PATCH',{status:'RECEIVED'},proofPurchase.id];
+   pending=invoke(...request,tenantA,'MANAGER');await waitInventoryWriter();
+   if(change==='module')await flag(false);else if(change==='account')await root.query(`UPDATE "User" SET status='SUSPENDED' WHERE id=$1`,[tenantA+'_manager']);else await permissions(full.filter(p=>p!==(change==='create'?'inventoryProducts.create':change==='edit'?'inventoryCategories.edit':'inventoryProducts.edit')));
+   await root.query('COMMIT');await ok(await pending,403);assert.deepEqual(await inventorySnapshot(),before,change);
+  }finally{await root.query('ROLLBACK');if(pending)await pending;await flag(true);await root.query(`UPDATE "User" SET status='ACTIVE' WHERE id=$1`,[tenantA+'_manager'])}
+ }}finally{await permissions(original)}
+})
+test('status restoration requires current Archive after the source changed while waiting',async()=>{
+ const item=(await ok(await invoke('categories','POST',{name:'Queued status restoration'}),201)).item;
+ const original=(await root.query('SELECT permissions FROM "TenantAccessRole" WHERE id=$1',[roleId])).rows[0].permissions;await permissions(['inventoryCategories.read','inventoryCategories.edit']);
+ await root.query('BEGIN');let pending;
+ try{
+  await root.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',['workforce-schedules:'+tenantA]);
+  pending=invoke('categories','PATCH',{status:'ACTIVE'},item.id,tenantA,'MANAGER');await waitInventoryWriter();
+  await root.query(`UPDATE "InventoryCategory" SET status='INACTIVE' WHERE id=$1`,[item.id]);await root.query('COMMIT');await ok(await pending,403);
+  assert.equal((await root.query('SELECT status FROM "InventoryCategory" WHERE id=$1',[item.id])).rows[0].status,'INACTIVE');
+ }finally{await root.query('ROLLBACK');if(pending)await pending;await permissions(original)}
+})
+test('concurrent purchase creation uses distinct numbers and service identity cannot forge stock access',async()=>{
+ const input={supplierId:supplier.id,orderDate:'2036-02-02',items:[{productId:proofStock.id,quantity:1,unitCostCents:100}]};
+ const orders=await Promise.all([invoke('purchases','POST',input),invoke('purchases','POST',input)]);const saved=await Promise.all(orders.map(r=>ok(r,201)));assert.notEqual(saved[0].item.orderNumber,saved[1].item.orderNumber);
+ const original=(await root.query('SELECT permissions FROM "TenantAccessRole" WHERE id=$1',[roleId])).rows[0].permissions;await permissions(['inventoryProducts.read']);
+ try{const {applyInventoryStockDelta}=require('../modules/inventory/stock-service.ts'),before=await inventorySnapshot();await runWithTenantDbContext(tenantA,()=>assert.rejects(prisma.$transaction(tx=>applyInventoryStockDelta({tx,actor:{tenantId:tenantA,userId:tenantA+'_manager',role:'ADMIN'},tenantId:tenantA,deltaByProduct:new Map([[proofStock.id,-1]]),movement:()=>({type:'ADJUSTMENT_SUB',note:'Forged actor'})})),e=>e.status===403));assert.deepEqual(await inventorySnapshot(),before)}finally{await permissions(original)}
+})

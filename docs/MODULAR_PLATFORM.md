@@ -1,3 +1,24 @@
+## R10 - Inventory write and audit foundation (phase 2D6A, local)
+
+Inventory category/supplier/product/purchase writes now refresh current access
+inside a shared, serialized transaction, after source locks. Secondary Archive and
+receipt stock Edit checks use current state. Mandatory audits commit with source,
+relations, receipt quantities and stock movements; audit failure rolls everything
+back. New opening stock and manual count corrections append signed movements.
+Repeated/concurrent receipts preserve cumulative quantities without double counting.
+Purchase numbers and duplicate checks are allocated under the same write lock.
+
+Inventory, nested booking stock, scheduling and security operations share the
+existing native lock through a common platform transaction primitive. Existing
+client data and permissions are unchanged; no schema/data migration or hosted work
+is included. Verification passed: 85 Inventory/booking tests and 176 broader
+scheduling/booking/workforce checks, without skips (198 distinct tests across
+overlapping suites), plus real-sign-in Chrome. Stock/audit/revocation assertions
+passed and its screenshot was inspected; build, TypeScript, lint and whitespace
+checks passed. Stock is still tenant-wide. Native office balances, purchase/movement
+ownership, source-office reads and UI alignment remain for phase 2D6B. See the
+[Inventory stock contract](INVENTORY_STOCK_R10.md).
+
 ## R10 - Booking staff choices and office filters (phase 2D5B, local)
 
 Appointment/booking forms now use paged staff choices under their own permissions,
