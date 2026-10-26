@@ -17,8 +17,8 @@ import { applyStockDelta, buildStockDeltaForOrderUpdate } from "./order-stock"
 import type { OrderListInput } from "./order-validation"
 
 export async function listOrders(tenantId: string, input: OrderListInput) {
-  const { page, pageSize, status, customerId } = input
-  const where: Prisma.AppointmentOrderWhereInput = { tenantId, status, ...(customerId ? { customerId } : {}) }
+  const { page, pageSize, status, customerId, officeId, staffId } = input
+  const where: Prisma.AppointmentOrderWhereInput = { tenantId, status, ...(officeId ? { officeId } : {}), ...(staffId ? { lines: { some: { staffProfile: { userId: staffId } } } } : {}), ...(customerId ? { customerId } : {}) }
   const [total, rows] = await prisma.$transaction([
     prisma.appointmentOrder.count({ where }),
     prisma.appointmentOrder.findMany({ where, include: appointmentOrderInclude,

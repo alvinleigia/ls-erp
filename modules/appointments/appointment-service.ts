@@ -16,8 +16,8 @@ import type { AppointmentAvailabilityInput, AppointmentListInput } from "./appoi
 
 // Call within the Appointments API's authorized tenant context.
 export async function listAppointments(tenantId: string, input: AppointmentListInput): Promise<ListResponse<AppointmentRow>> {
-  const { page, pageSize, q, staffId, customerId, status, startDate, endDate, sort, order } = input
-  const where: Prisma.AppointmentWhereInput = { tenantId }
+  const { page, pageSize, q, staffId, officeId, customerId, status, startDate, endDate, sort, order } = input
+  const where: Prisma.AppointmentWhereInput = { tenantId, ...(officeId ? { officeId } : {}) }
   if (staffId) where.staffProfile = { userId: staffId, user: { tenantId } }
   if (customerId) where.customerId = customerId
   if (status) where.status = status

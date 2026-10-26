@@ -7,7 +7,7 @@ const authPath=require.resolve('../auth.ts');require.cache[authPath]={id:authPat
 const errors=[];require('../lib/logger.ts').logger.info=()=>{};require('../lib/logger.ts').logger.error=(_,c)=>errors.push(c.error?.message)
 const {prisma,runWithTenantDbContext}=require('../lib/prisma.ts'),{runWithDatabaseActor}=require('../lib/database-actor.ts'),{defaultRecordRules,supportedScopes}=require('../platform/access/rules.ts')
 const {appointmentTransaction}=require('../modules/appointments/appointment-transaction.ts'),{appointmentConflictSummary}=require('../modules/appointments/booking-integrity.ts')
-const routes=Object.fromEntries(['','/[id]','/availability','/resolve','/orders','/orders/[id]','/orders/[id]/invoice','/orders/preview','/coupons/[id]'].map(p=>[p,require(`../app/api/appointments${p}/route.ts`)]))
+const routes=Object.fromEntries(['','/[id]','/availability','/resolve','/orders','/orders/[id]','/orders/[id]/invoice','/orders/preview','/coupons/[id]','/staff-choices','/office-choices'].map(p=>[p,require(`../app/api/appointments${p}/route.ts`)]))
 const t='booking_'+randomUUID().replaceAll('-',''),other=t+'_other',admin=t+'_admin',ma=t+'_ma',mb=t+'_mb',both=t+'_both',plain=t+'_plain',role=t+'_role',sa=t+'_sa',sb=t+'_sb',st=t+'_transfer',pa=t+'_pa',pb=t+'_pb',pt=t+'_pt',ca=t+'_ca',cb=t+'_cb',service=t+'_service'
 let a,b,orderA,orderB,appointmentA,appointmentB
 const ctx=(user,fn)=>runWithTenantDbContext(t,()=>runWithDatabaseActor(user,async()=>await fn()))
@@ -105,4 +105,41 @@ test('create-only profile cannot append to an old source and deferred links reje
  const linked=(await root.query('SELECT id,"customerId" FROM "Appointment" WHERE "orderLineId"=$1',[orderB.lines[0].id])).rows[0];
  await assert.rejects(ctx(both,()=>appointmentTransaction({tenantId:t,userId:both,role:'MANAGER'},'edit',tx=>tx.appointment.update({where:{id:linked.id},data:{customerId:ca}}))));
  assert.equal((await root.query('SELECT "customerId" FROM "Appointment" WHERE id=$1',[linked.id])).rows[0].customerId,linked.customerId);
+})
+async function choices(path,params,user=ma,office=a,version=5){return sessions.run({user:{id:user,tenantId:t,role:user===admin?'ADMIN':'MANAGER'}},()=>routes[path].GET(new Request('http://'+t+'.localhost/api/appointments'+path+'?'+new URLSearchParams(params),{headers:{host:t+'.localhost',...(office?{'x-office-id':office,'x-office-version':String(version)}:{})}})))}
+const window={family:'ORDER',action:'create',startAt:'2036-02-05T10:00:00Z',endAt:'2036-02-05T11:00:00Z'}
+test('booking choices delegate only current office/date eligible staff without directory permissions',async()=>{
+ const data=await body(await choices('/staff-choices',{...window,selected:sb+','+sa}));assert.equal(data.office.id,a);assert.ok(data.items.some(x=>x.id===sa));assert.ok(!JSON.stringify(data).includes(sb));assert.ok(!data.selected.some(x=>x.id===sb));assert.ok(!data.items.some(x=>x.id===st));
+ await body(await choices('/staff-choices',window,ma,null),403);await body(await choices('/staff-choices',window,ma,a,999),409);
+ const raw=await ctx(ma,()=>appointmentTransaction({tenantId:t,userId:ma,role:'MANAGER'},'create',tx=>tx.$queryRaw`SELECT app.booking_staff_choices(${t},'ORDER','create',NULL,NULL,'2036-02-05 10:00Z'::timestamptz,'2036-02-05 11:00Z'::timestamptz,ARRAY[]::text[],'',20,0) view`));assert.ok(raw[0].view.items.some(x=>x.id===sa));
+})
+test('source edits retain transferred staff while excluding them from new assignments',async()=>{
+ await root.query(`UPDATE "StaffWorkplaceAssignment" SET "endDate"='2036-02-05' WHERE "staffProfileId"=$1`,[pb]);
+ try{
+  const data=await body(await choices('/staff-choices',{...window,action:'edit',sourceId:orderB.id,startAt:'2036-02-06T10:00:00Z',endAt:'2036-02-06T11:00:00Z',selected:sb},both,null));assert.equal(data.office.id,b);assert.equal(data.selected[0].id,sb);assert.equal(data.selected[0].retained,true);assert.equal(data.selected[0].eligible,false);
+  await body(await choices('/staff-choices',{...window,action:'edit',sourceId:orderB.id,selected:sb}),404);
+  const fresh=await body(await choices('/staff-choices',{...window,startAt:'2036-02-06T10:00:00Z',endAt:'2036-02-06T11:00:00Z',selected:sb},mb,b));assert.ok(!JSON.stringify(fresh).includes(sb));
+ }finally{await root.query('UPDATE "StaffWorkplaceAssignment" SET "endDate"=NULL WHERE "staffProfileId"=$1',[pb])}
+})
+test('paged choice search and selected labels are bounded to the same office',async()=>{
+ for(let i=0;i<105;i++){
+  const id=t+'_choice_'+String(i).padStart(2,'0');await root.query(`INSERT INTO "User"(id,"tenantId",name,email,role,"updatedAt") VALUES($1,$2,$3,$1||'@example.test','STAFF',now())`,[id,t,'Choice '+String(i).padStart(2,'0')]);
+  await root.query('INSERT INTO "BusinessOfficePolicy"("tenantId","userId",version,"updatedAt") VALUES($1,$2,1,now())',[t,id]);await root.query('INSERT INTO "BusinessOfficeGrant"("tenantId","userId","officeId") VALUES($1,$2,$3)',[t,id,a]);await root.query('INSERT INTO "StaffProfile"(id,"userId","updatedAt") VALUES($1,$1,now())',[id]);await root.query('INSERT INTO "StaffWorkplacePolicy"("tenantId","staffProfileId",version,"updatedAt") VALUES($1,$2,1,now())',[t,id]);await root.query('INSERT INTO "StaffWorkplaceAssignment"(id,"tenantId","staffProfileId","officeId","updatedAt") VALUES($1,$2,$1,$3,now())',[id,t,a]);
+ }
+ const second=await body(await choices('/staff-choices',{...window,q:'Choice ',page:'6',pageSize:'20',selected:t+'_choice_00,'+sb}));assert.equal(second.total,105);assert.equal(second.items.length,5);assert.deepEqual(second.selected.map(x=>x.id),[t+'_choice_00']);assert.ok(!JSON.stringify(second).includes(sb));
+ const search=await body(await choices('/staff-choices',{...window,q:'Choice 24',selected:sa}));assert.equal(search.total,1);assert.equal(search.selected[0].id,sa);
+})
+test('office filters and browse labels narrow current readable sources and include closed history',async()=>{
+ const offices=await body(await choices('/office-choices',{}));assert.deepEqual(offices.items.map(x=>x.id),[a]);const all=await body(await choices('/office-choices',{},both));assert.equal(all.total,2);
+ const browse=await body(await choices('/staff-choices',{family:'APPOINTMENT',action:'browse',officeId:b,selected:sb}));assert.equal(browse.total,0);assert.deepEqual(browse.selected,[]);
+ const same=await body(await choices('/staff-choices',{family:'APPOINTMENT',action:'browse',officeId:a,startDate:'2036-02-04',endDate:'2036-02-04',selected:sa}));assert.deepEqual(same.items.map(x=>x.id),[sa]);
+ await root.query('UPDATE "BusinessOffice" SET archived=true WHERE id=$1',[a]);try{const closed=await body(await choices('/office-choices',{selected:a}));assert.equal(closed.selected.active,false);await body(await choices('/staff-choices',window),403)}finally{await root.query('UPDATE "BusinessOffice" SET archived=false WHERE id=$1',[a])}
+ const list=async(path,params)=>sessions.run({user:{id:ma,tenantId:t,role:'MANAGER'}},()=>routes[path].GET(new Request('http://'+t+'.localhost/api/appointments?'+new URLSearchParams(params),{headers:{host:t+'.localhost'}})));
+ assert.equal((await body(await list('',{officeId:b}))).total,0);assert.equal((await body(await list('/orders',{officeId:b}))).total,0);assert.ok((await body(await list('/orders',{officeId:a,staffId:sa}))).total>0);
+})
+test('choice endpoints recheck actions, activation and invalid windows',async()=>{
+ const old=(await root.query('SELECT permissions FROM "TenantAccessRole" WHERE id=$1',[role])).rows[0].permissions;
+ await root.query('UPDATE "TenantAccessRole" SET permissions=$1 WHERE id=$2',[old.filter(x=>x!=='appointments.create'),role]);try{await body(await choices('/staff-choices',window),403);await body(await choices('/staff-choices',{family:'ORDER',action:'browse'}))}finally{await root.query('UPDATE "TenantAccessRole" SET permissions=$1 WHERE id=$2',[old,role])}
+ await body(await choices('/staff-choices',{...window,endAt:window.startAt}),400);await body(await choices('/staff-choices',{...window,selected:Array(101).fill(sa).join(',')}),400);
+ await root.query(`UPDATE "TenantModule" SET enabled=false WHERE "tenantId"=$1 AND key='appointments'`,[t]);try{await body(await choices('/office-choices',{}),403);await body(await choices('/staff-choices',window),403)}finally{await root.query(`UPDATE "TenantModule" SET enabled=true WHERE "tenantId"=$1 AND key='appointments'`,[t])}
 })

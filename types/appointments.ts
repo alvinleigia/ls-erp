@@ -25,6 +25,8 @@ export type AppointmentStaffOption = {
   email: string
 }
 
+export type AppointmentStaffChoice = AppointmentStaffOption & { eligible: boolean; retained: boolean }
+
 export type AppointmentServiceOption = {
   id: string
   name: string

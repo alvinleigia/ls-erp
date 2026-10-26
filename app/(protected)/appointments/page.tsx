@@ -2,6 +2,8 @@
 import { useCreationOfficeSnapshot } from "@/platform/companies/creation-snapshot"
 import { useBusinessModules } from "@/platform/module-provider"
 
+import { BookingStaffPicker, BookingOfficePicker } from "@/components/appointments/choice-picker"
+import { wallTimeToInstant } from "@/lib/business-time"
 import { Select } from "@/components/erp/controls"
 
 import * as React from "react"
@@ -26,7 +28,6 @@ import { DraftPanel } from "@/components/erp/record-detail"
 import { Section } from "@/components/erp/section"
 import { ConfirmAction } from "@/components/erp/confirm-action"
 import { DateRangePicker } from "@/components/date-range-picker"
-import { SearchableSelect } from "@/components/searchable-select"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -61,7 +62,6 @@ import type { AppSettingsPayload } from "@/types/scheduling"
 import { AppointmentFormFields } from "./appointment-form-fields"
 import {
   buildEndTimePreview,
-  combineLocalDateTimeToISO,
   defaultAppointmentFormValues,
 } from "./appointment-form-model"
 
@@ -197,6 +197,7 @@ export default function AppointmentsPage() {
   const [services, setServices] = React.useState<AppointmentServiceOption[]>([])
   const [firstDayOfWeek, setFirstDayOfWeek] = React.useState(0)
   const [timeFormat, setTimeFormat] = React.useState<AppSettingsPayload["timeFormat"]>("H24")
+  const [timeZone, setTimeZone] = React.useState("America/New_York")
   const [currency, setCurrency] = React.useState("USD")
   const [calendarHourMode, setCalendarHourMode] = React.useState<"working" | "full">("working")
   const [calendarStatusFilter, setCalendarStatusFilter] = React.useState<
@@ -210,6 +211,7 @@ export default function AppointmentsPage() {
 
   const [search, setSearch] = React.useState("")
   const [statusFilter, setStatusFilter] = React.useState<AppointmentStatus | "all">("all")
+  const [officeFilter, setOfficeFilter] = React.useState("all")
   const [staffFilter, setStaffFilter] = React.useState<string>("all")
   const [dateRangeFilter, setDateRangeFilter] = React.useState<DateRange | undefined>(undefined)
   const [sorting, setSorting] = React.useState<SortingState>([])
@@ -307,10 +309,14 @@ export default function AppointmentsPage() {
     [formValues.date, formValues.startTime, selectedService?.durationMinutes, timeFormat]
   )
 
+  const formStartAt = React.useMemo(() => {
+    try { return wallTimeToInstant(`${formValues.date}T${formValues.startTime}`, timeZone) } catch { return null }
+  }, [formValues.date, formValues.startTime, timeZone])
+  const formEndAt = formStartAt && selectedService?.durationMinutes ? new Date(Date.parse(formStartAt) + selectedService.durationMinutes * 60000).toISOString() : null
+
   const loadLookups = React.useCallback(async () => {
-    const [customerRes, staffRes, serviceRes, settingsRes] = await Promise.all([
+    const [customerRes, serviceRes, settingsRes] = await Promise.all([
       fetch("/api/directory?role=CUSTOMER&status=ACTIVE&page=1&pageSize=100", { cache: "no-store" }),
-      fetch("/api/directory?role=STAFF&status=ACTIVE&page=1&pageSize=100", { cache: "no-store" }),
       canBook ? fetch("/api/services?status=ACTIVE&page=1&pageSize=100&sort=name&order=asc", {
         cache: "no-store",
       }) : Promise.resolve(new Response(JSON.stringify({ items: [] }), { status: 200 })),
@@ -322,13 +328,6 @@ export default function AppointmentsPage() {
         items?: Array<{ id: string; name: string | null; email: string }>
       }
       setCustomers(data.items ?? [])
-    }
-
-    if (staffRes.ok) {
-      const data = (await staffRes.json()) as {
-        items?: Array<{ id: string; name: string | null; email: string }>
-      }
-      setStaff(data.items ?? [])
     }
 
     if (serviceRes.ok) {
@@ -343,6 +342,7 @@ export default function AppointmentsPage() {
       setFirstDayOfWeek(weekdayToSchedulerFirstDay(data.settings?.firstDayOfWeek))
       setTimeFormat(data.settings?.timeFormat ?? "H24")
       setCurrency(data.settings?.currency ?? "USD")
+      setTimeZone(data.settings?.timeZone ?? "America/New_York")
       const workingPeriods =
         data.settings?.workingHours
           ?.flatMap((day) =>
@@ -363,14 +363,19 @@ export default function AppointmentsPage() {
     }
   }, [canBook])
 
+  const listRequest = React.useRef<AbortController | null>(null)
+  const calendarRequest = React.useRef<AbortController | null>(null)
   const loadAppointments = React.useCallback(async () => {
-    setLoading(true)
+    listRequest.current?.abort()
+    const controller = new AbortController(); listRequest.current = controller
+    setAppointments([]); setTotalRows(0); setLoading(true)
     const params = new URLSearchParams()
     params.set("page", String(pagination.pageIndex + 1))
     params.set("pageSize", String(pagination.pageSize))
     if (search.trim()) params.set("q", search.trim())
     if (statusFilter !== "all") params.set("status", statusFilter)
     if (staffFilter !== "all") params.set("staffId", staffFilter)
+    if (officeFilter !== "all") params.set("officeId", officeFilter)
     if (startDateFilter) params.set("startDate", startDateFilter)
     if (endDateFilter) params.set("endDate", endDateFilter)
     if (sorting[0]) {
@@ -378,32 +383,28 @@ export default function AppointmentsPage() {
       params.set("order", sorting[0].desc ? "desc" : "asc")
     }
 
-    const response = await fetch(`/api/appointments?${params.toString()}`, {
-      cache: "no-store",
-    })
-    if (!response.ok) {
-      toast.error("Unable to load appointments.")
-      setAppointments([])
-      setTotalRows(0)
-      setLoading(false)
-      return
-    }
-    const data = (await response.json()) as ListResponse<AppointmentRow>
-    setAppointments(data.items)
-    setTotalRows(data.total)
-    setLoading(false)
+    try {
+      const response = await fetch(`/api/appointments?${params}`, { cache: "no-store", signal: controller.signal })
+      if (!response.ok) throw new Error("Unable to load appointments.")
+      const data = await response.json() as ListResponse<AppointmentRow>
+      if (!controller.signal.aborted) { setAppointments(data.items); setTotalRows(data.total) }
+    } catch (error) { if (!controller.signal.aborted) toast.error(error instanceof Error ? error.message : "Unable to load appointments.") }
+    finally { if (!controller.signal.aborted) setLoading(false) }
   }, [
     endDateFilter,
     pagination.pageIndex,
     pagination.pageSize,
     search,
     sorting,
-    staffFilter,
+    staffFilter, officeFilter,
     startDateFilter,
     statusFilter,
   ])
 
   const loadCalendarAppointments = React.useCallback(async () => {
+    calendarRequest.current?.abort()
+    const controller = new AbortController(); calendarRequest.current = controller
+    setCalendarAppointments([])
     const fallbackDates = scheduleRef.current?.getCurrentViewDates?.() ?? []
     const effectiveViewDates = viewDates.length ? viewDates : fallbackDates
     if (!effectiveViewDates.length) return
@@ -423,22 +424,22 @@ export default function AppointmentsPage() {
       params.set("status", calendarStatusFilter)
     }
     if (staffFilter !== "all") params.set("staffId", staffFilter)
+    if (officeFilter !== "all") params.set("officeId", officeFilter)
 
-    const response = await fetch(`/api/appointments?${params.toString()}`, {
-      cache: "no-store",
-    })
-    if (!response.ok) {
-      toast.error("Unable to load calendar appointments.")
-      setCalendarAppointments([])
-      return
-    }
-    const data = (await response.json()) as ListResponse<AppointmentRow>
-    if (calendarStatusFilter === "non_canceled") {
-      setCalendarAppointments(data.items.filter((item) => item.status !== "CANCELED"))
-      return
-    }
-    setCalendarAppointments(data.items)
-  }, [calendarStatusFilter, staffFilter, viewDates])
+    try {
+      const rows: AppointmentRow[] = []
+      let page = 1, totalPages = 1
+      do {
+        params.set("page", String(page))
+        const response = await fetch(`/api/appointments?${params}`, { cache: "no-store", signal: controller.signal })
+        if (!response.ok) throw new Error("Unable to load calendar appointments.")
+        const data = await response.json() as ListResponse<AppointmentRow>
+        if (controller.signal.aborted) return
+        rows.push(...data.items); totalPages = data.totalPages; page++
+      } while (page <= totalPages)
+      if (!controller.signal.aborted) setCalendarAppointments(calendarStatusFilter === "non_canceled" ? rows.filter(row => row.status !== "CANCELED") : rows)
+    } catch (error) { if (!controller.signal.aborted) toast.error(error instanceof Error ? error.message : "Unable to load calendar appointments.") }
+  }, [calendarStatusFilter, staffFilter, officeFilter, viewDates])
 
   React.useEffect(() => {
     void loadLookups()
@@ -446,15 +447,17 @@ export default function AppointmentsPage() {
 
   React.useEffect(() => {
     void loadAppointments()
+    return () => listRequest.current?.abort()
   }, [loadAppointments])
 
   React.useEffect(() => {
     void loadCalendarAppointments()
+    return () => calendarRequest.current?.abort()
   }, [loadCalendarAppointments])
 
   React.useEffect(() => {
     setPagination((prev) => (prev.pageIndex === 0 ? prev : { ...prev, pageIndex: 0 }))
-  }, [endDateFilter, search, sorting, staffFilter, startDateFilter, statusFilter])
+  }, [endDateFilter, search, sorting, staffFilter, officeFilter, startDateFilter, statusFilter])
 
   const handlePaginationChange = React.useCallback(
     (updater: PaginationState | ((prev: PaginationState) => PaginationState)) => {
@@ -514,7 +517,7 @@ export default function AppointmentsPage() {
         customerId: formValues.customerId,
         serviceId: formValues.serviceId,
         staffId: formValues.staffId,
-        startAt: combineLocalDateTimeToISO(formValues.date, formValues.startTime),
+        startAt: wallTimeToInstant(`${formValues.date}T${formValues.startTime}`, timeZone),
         status: formValues.status,
       }
 
@@ -545,7 +548,7 @@ export default function AppointmentsPage() {
     } catch { toast.error("Unable to save appointment.") } finally { setSaving(false) }
 
   }, [
-    canUpdate, canCreate, creationHeaders,
+    canUpdate, canCreate, creationHeaders, timeZone,
     availability,
     availabilityChecking,
     clearErrors,
@@ -575,7 +578,7 @@ export default function AppointmentsPage() {
           headers: { "Content-Type": "application/json", ...captured },
           body: JSON.stringify({ appointmentId: editingId ?? undefined,
             customerId: formValues.customerId || undefined, serviceId: formValues.serviceId,
-            staffId: formValues.staffId, startAt: combineLocalDateTimeToISO(formValues.date, formValues.startTime) }),
+            staffId: formValues.staffId, startAt: wallTimeToInstant(`${formValues.date}T${formValues.startTime}`, timeZone) }),
         })
         const data = await response.json()
         if (!controller.signal.aborted) setAvailability(response.ok ? data as AppointmentAvailabilityResult : { available: false, reason: data.error || "Unable to verify slot availability." })
@@ -584,7 +587,7 @@ export default function AppointmentsPage() {
       } finally { if (!controller.signal.aborted) setAvailabilityChecking(false) }
     }, 250)
     return () => { clearTimeout(timer); controller.abort() }
-  }, [editingId, formOpen, formValues, creationHeaders])
+  }, [editingId, formOpen, formValues, creationHeaders, timeZone])
 
   const confirmCancelAppointment = React.useCallback(async (appointmentId: string) => {
     if (!canArchive) return
@@ -826,6 +829,7 @@ export default function AppointmentsPage() {
         header: "Service",
         accessorFn: (row) => row.service?.name || "-",
       },
+      { id: "office", header: "Office", cell: ({ row }) => row.original.office ? `${row.original.office.companyName} / ${row.original.office.name}${row.original.office.active ? "" : " (closed)"}` : "-", meta: { label: "Office" } },
       {
         id: "staff",
         meta: { label: "Staff" },
@@ -889,9 +893,9 @@ export default function AppointmentsPage() {
         enableHiding: false,
         cell: ({ row }) => {
           const appointment = row.original
-          const canEdit = canUpdate && canEditAppointment(appointment.status)
-          const canReschedule = canUpdate && canRescheduleAppointment(appointment.status)
-          const canCancel = canArchive && canCancelAppointment(appointment.status)
+          const canEdit = appointment.office?.active !== false && canUpdate && canEditAppointment(appointment.status)
+          const canReschedule = appointment.office?.active !== false && canUpdate && canRescheduleAppointment(appointment.status)
+          const canCancel = appointment.office?.active !== false && canArchive && canCancelAppointment(appointment.status)
           return (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -1030,21 +1034,11 @@ export default function AppointmentsPage() {
             </option>
           ))}
         </Select>
-        <Filters activeCount={Number(staffFilter !== "all") + Number(Boolean(dateRangeFilter))} onReset={() => { setStaffFilter("all"); setDateRangeFilter(undefined) }}>
+        <Filters activeCount={Number(staffFilter !== "all") + Number(officeFilter !== "all") + Number(Boolean(dateRangeFilter))} onReset={() => { setStaffFilter("all"); setOfficeFilter("all"); setDateRangeFilter(undefined) }}>
+        <div className="min-w-0"><label htmlFor="booking-office-filter" className="sr-only">Office filter</label><BookingOfficePicker id="booking-office-filter" value={officeFilter} onChange={id => { setOfficeFilter(id); setStaffFilter("all") }} /></div>
         <div className="min-w-0">
-          <SearchableSelect
-            value={staffFilter}
-            placeholder="All staff"
-            searchPlaceholder="Search staff..."
-            options={[
-              { value: "all", label: "All staff" },
-              ...staff.map((member) => ({
-                value: member.id,
-                label: member.name?.trim() || member.email,
-              })),
-            ]}
-            onChange={(nextValue) => setStaffFilter(nextValue)}
-          />
+          <label htmlFor="booking-staff-filter" className="sr-only">Staff filter</label>
+          <BookingStaffPicker id="booking-staff-filter" family="APPOINTMENT" action="browse" value={staffFilter} onChange={setStaffFilter} officeId={officeFilter === "all" ? undefined : officeFilter} startDate={startDateFilter || undefined} endDate={endDateFilter || undefined} all />
         </div>
         <div className="col-span-full flex flex-wrap items-center gap-2">
           <DateRangePicker
@@ -1209,6 +1203,8 @@ export default function AppointmentsPage() {
               customers={customers}
               services={services}
               staff={staff}
+              staffScope={{ family: "APPOINTMENT", action: editingId ? "edit" : "create", sourceId: editingId ?? undefined, headers: creationHeaders, startAt: formStartAt ?? undefined, endAt: formEndAt ?? undefined }}
+              onStaffChoice={choice => setStaff(previous => [...previous.filter(row => row.id !== choice.id), choice])}
               timeFormat={timeFormat}
               showStatus={Boolean(editingId)}
               disableParticipantFields={formMode === "reschedule"}

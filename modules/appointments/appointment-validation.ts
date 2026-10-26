@@ -5,6 +5,7 @@ export const appointmentListSchema = z.object({
   pageSize: z.coerce.number().int().min(1).max(100).default(20),
   q: z.string().trim().optional(),
   staffId: z.string().trim().optional(),
+  officeId: z.string().trim().min(1).max(160).optional(),
   customerId: z.string().trim().optional(),
   status: z.enum(["SCHEDULED", "CONFIRMED", "IN_PROGRESS", "COMPLETED", "CANCELED", "NO_SHOW"]).optional(),
   startDate: z.iso.date().optional(),

@@ -217,6 +217,7 @@ export function AppointmentOrderEditor({ mode, appointmentId }: AppointmentOrder
         index,
         serviceLabel: service?.name || "Service",
         staffLabel: staffMember?.name?.trim() || staffMember?.email || "Unassigned staff",
+        startAt: startsAt.toISOString(), endAt: endsAt.toISOString(),
         startsAtLabel: formatTime(startsAt),
         endsAtLabel: formatTime(endsAt),
         waitMinutes,
@@ -240,6 +241,7 @@ export function AppointmentOrderEditor({ mode, appointmentId }: AppointmentOrder
         schedulePreview.map((slot) => [
           slot.id,
           {
+            startAt: slot.startAt, endAt: slot.endAt,
             startsAtLabel: slot.startsAtLabel,
             endsAtLabel: slot.endsAtLabel,
             waitMinutes: slot.waitMinutes,
@@ -252,6 +254,7 @@ export function AppointmentOrderEditor({ mode, appointmentId }: AppointmentOrder
   const applyOrderToForm = React.useCallback(
     (order: AppointmentOrderRow) => {
       setSavedOrder(order)
+      setStaff(order.lines.flatMap(line => line.staffProfile?.user ? [line.staffProfile.user] : []))
       const start = wallTime(order.appointmentStartAt, timeZone)
       const nextValues: AppointmentOrderFormValues = {
         customerId: order.customerId,
@@ -303,11 +306,8 @@ export function AppointmentOrderEditor({ mode, appointmentId }: AppointmentOrder
 
   React.useEffect(() => {
     const loadLookups = async () => {
-      const [customerRes, staffRes, serviceRes, productRes, couponRes, settingsRes] = await Promise.all([
+      const [customerRes, serviceRes, productRes, couponRes, settingsRes] = await Promise.all([
         fetch("/api/directory?role=CUSTOMER&status=ACTIVE&page=1&pageSize=100", {
-          cache: "no-store",
-        }),
-        fetch("/api/directory?role=STAFF&status=ACTIVE&page=1&pageSize=100", {
           cache: "no-store",
         }),
         servicesAllowed ? fetch("/api/services?status=ACTIVE&page=1&pageSize=100&sort=name&order=asc", {
@@ -327,13 +327,6 @@ export function AppointmentOrderEditor({ mode, appointmentId }: AppointmentOrder
           items?: Array<{ id: string; name: string | null; email: string }>
         }
         setCustomers(data.items ?? [])
-      }
-
-      if (staffRes.ok) {
-        const data = (await staffRes.json()) as {
-          items?: Array<{ id: string; name: string | null; email: string }>
-        }
-        setStaff(data.items ?? [])
       }
 
       if (serviceRes.ok) {
@@ -602,6 +595,8 @@ export function AppointmentOrderEditor({ mode, appointmentId }: AppointmentOrder
           errors={errors}
           customers={customers}
           staff={staff}
+          staffScope={{ family: "ORDER", action: editingId ? "edit" : "create", sourceId: editingId ?? undefined, headers: creationHeaders }}
+          onStaffChoice={choice => setStaff(previous => [...previous.filter(row => row.id !== choice.id), choice])}
           services={services}
           products={products}
           productsEnabled={productsAllowed}

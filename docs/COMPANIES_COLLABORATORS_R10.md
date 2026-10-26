@@ -65,7 +65,9 @@ dated-workplace week-off selection. These are local and unreleased. The next
 workforce slice 2D4C1 adds [office-scoped roster browsing](ROSTER_READ_R10.md).
 Phase 2D4C2 adds [office/date-bound staff choices](WORKFORCE_STAFF_CHOICES_R10.md)
 for schedules and recurring assignments; roster drafts retain the clicked staff.
-Operational families, assignment selectors and workspace
+Phase 2D5A adds native appointment/booking offices; 2D5B adds paged booking staff
+choices and office filters. See [appointment office contract](APPOINTMENT_OFFICES_R10.md).
+Remaining operational families, assignment selectors and workspace
 controls remain prerequisites before exposing office controls or deploying the
 office-isolation release.
 

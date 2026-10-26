@@ -1,3 +1,28 @@
+## R10 - Booking staff choices and office filters (phase 2D5B, local)
+
+Appointment/booking forms now use paged staff choices under their own permissions,
+without a generic tenant-wide staff directory or a 100-person cap. Creation uses
+captured office/version; edits resolve the saved source. Each service line supplies
+its actual proposed/saved window, and transferred assignees remain explicit saved
+selections rather than being silently removed or offered as eligible new choices.
+Search, counts, selected labels and paging share the same native boundary.
+
+Office filters narrow both list and calendar reads; browse staff come from readable
+sources. Closed offices remain discoverable for historical reads. The list shows
+source offices and suppresses closed-office mutations. Requests cancel superseded
+loads and reject late responses; calendar loading now follows all result pages.
+Standalone booking timestamps follow the tenant time zone.
+
+Migration 128 adds lookup functions only. Rollback/application preserves every
+prior row, policy, function and grant; no hosted or client data changed. Native
+ownership/availability guards remain independent of picker responses. Remaining
+inventory/operational/report/workspace and external-collaborator release work is
+still pending. Verification: 16 native tests (including 105 staff), 176 booking/
+workforce regressions and one real-sign-in Chrome flow passed without skips.
+Retained-staff and office-filter screenshots were inspected; build, TypeScript,
+lint and whitespace checks passed. Calendar drawing remains under its existing
+disabled license feature flag and was not visually tested. See [booking choices contract](APPOINTMENT_OFFICES_R10.md).
+
 ## R10 - Appointment office ownership (phase 2D5A, local)
 
 Appointments and booking orders now have immutable tenant/office identities.

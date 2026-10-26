@@ -1,5 +1,43 @@
 # R10: appointment and booking office ownership
 
+## Phase 2D5B: booking staff choices and office filters (local)
+
+Booking forms now use paged, searchable staff choices under Appointments
+permissions. They no longer load a tenant-wide staff directory or truncate it
+at 100 people. New forms use their captured office/version; edits use the saved
+source office. Each service line supplies its full proposed time window, including
+quantity and saved scheduling offsets. Eligibility uses the native booking target
+predicate, retaining its tenant-calendar and end-exclusive midnight behavior.
+
+Saved assignees remain explicitly selected after a transfer or loss of eligibility.
+That label does not certify them for a new assignment. Invalid newly selected IDs
+are not silently cleared or resolved through the general directory. Search,
+counts, paging and selected-label resolution use the same boundary. Late, failed
+or revoked lookup responses cannot restore another scope's choices.
+
+List filters offer only accessible offices (including closed historical offices)
+and staff drawn from readable sources. Selecting an office resets the staff filter
+to All staff. The office filter narrows both the table and calendar; neither it nor
+a supplied staff ID grants access. Calendar loading follows every result page
+instead of silently stopping at 100. Source office labels appear in the list;
+closed sources suppress mutation actions. Standalone booking inputs use tenant
+time-zone conversion when forming their lookup and save timestamps.
+
+Migration 128, `20261026001700_appointment_choices`, adds lookup functions only.
+Its forced rollback/application rehearsal preserves every prior row, policy,
+function definition and function grant. The API also performs an ordinary scoped
+source lookup before resolving an edit's retained staff. Native source/mutation
+checks remain independent; a picker response never authorizes a save.
+
+Verified locally on 2026-10-26: all 16 native office/choice tests (including 105
+eligible staff), all 176 booking/workforce regressions and the real-sign-in Chrome
+flow passed without skips. The browser exercised stale forms, source-office edits,
+retained staff after transfer, absence of generic staff-directory requests, hidden
+invoice denial and office/staff filter switching. Retained-staff and final filter
+screenshots were inspected. Calendar rendering remains behind the existing disabled
+license feature flag, so it was not visually exercised. Build, TypeScript and
+changed-file ESLint passed. All checks used disposable local data.
+
 ## Phase 2D5A: native ownership (local)
 
 Appointments and booking orders have required tenant and office identities.
@@ -82,9 +120,5 @@ TypeScript, changed-file ESLint (zero warnings) and whitespace checks passed.
 All fixture data lives in disposable local PostgreSQL. Browser scenarios use real
 sign-ins against the local production build, never hosted client accounts.
 
-Phase 2D5B still needs the paged office/date-scoped appointment staff pickers,
-retained saved-assignee handling and office-aware browsing/filter controls. This
-slice enforces native ownership before that UI work; existing generic appointment
-staff selectors may still offer choices that the server rejects. Inventory stock
-ownership and remaining operational/report/release checks also remain pending.
+Inventory stock ownership and remaining operational/report/release checks remain pending.
 Do not deploy the accumulated R10 migrations or describe all modules as released.

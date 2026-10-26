@@ -1,5 +1,6 @@
 "use client"
 
+import { BookingStaffPicker, type BookingStaffScope } from "@/components/appointments/choice-picker"
 import { Select } from "@/components/erp/controls"
 
 import { FormField } from "@/components/form-field"
@@ -21,6 +22,8 @@ type AppointmentFormFieldsProps = {
   customers: AppointmentCustomerOption[]
   services: AppointmentServiceOption[]
   staff: AppointmentStaffOption[]
+  staffScope: BookingStaffScope
+  onStaffChoice: (staff: AppointmentStaffOption) => void
   timeFormat?: TimeFormat
   canCancel?: boolean
   showStatus?: boolean
@@ -33,7 +36,7 @@ export function AppointmentFormFields({
   errors,
   customers,
   services,
-  staff,
+  staff, staffScope, onStaffChoice,
   timeFormat = "H24",
   canCancel = true,
   showStatus = false,
@@ -80,18 +83,9 @@ export function AppointmentFormFields({
       </FormField>
 
       <FormField id="appointment-staff" label="Staff attendant" error={errors.staffId}>
-        <SearchableSelect
-          id="appointment-staff"
-          value={values.staffId}
-          disabled={disableParticipantFields}
-          placeholder="Select staff"
-          searchPlaceholder="Search staff..."
-          options={staff.map((member) => ({
-            value: member.id,
-            label: member.name?.trim() || member.email,
-          }))}
-          onChange={(nextValue) => update("staffId", nextValue)}
-        />
+        <BookingStaffPicker {...staffScope} id="appointment-staff" value={values.staffId}
+          selected={staff.find(member => member.id === values.staffId)} disabled={disableParticipantFields}
+          onChange={(value, choice) => { if (choice) onStaffChoice(choice); update("staffId", value) }} />
       </FormField>
 
       <div className="grid gap-4 sm:grid-cols-2">
@@ -134,4 +128,3 @@ export function AppointmentFormFields({
     </div>
   )
 }
-

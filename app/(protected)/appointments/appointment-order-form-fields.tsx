@@ -1,5 +1,6 @@
 "use client"
 
+import { BookingStaffPicker, type BookingStaffScope } from "@/components/appointments/choice-picker"
 import { Section } from "@/components/erp/section"
 import { Textarea } from "@/components/erp/controls"
 import { Select } from "@/components/erp/controls"
@@ -34,6 +35,8 @@ type AppointmentOrderFormFieldsProps = {
   errors: Record<string, string>
   customers: AppointmentCustomerOption[]
   staff: AppointmentStaffOption[]
+  staffScope: BookingStaffScope
+  onStaffChoice: (staff: AppointmentStaffOption) => void
   services: AppointmentServiceOption[]
   products: AppointmentProductOption[]
   productsEnabled?: boolean
@@ -51,6 +54,8 @@ type AppointmentOrderFormFieldsProps = {
   lineScheduleMeta?: Record<
     string,
     {
+      startAt?: string
+      endAt?: string
       startsAtLabel: string
       endsAtLabel: string
       waitMinutes: number
@@ -65,7 +70,7 @@ export function AppointmentOrderFormFields({
   setValues,
   errors,
   customers,
-  staff,
+  staff, staffScope, onStaffChoice,
   services,
   products,
   productsEnabled = true,
@@ -309,24 +314,13 @@ export function AppointmentOrderFormFields({
                   />
                 </FormField>
                 <FormField id={`line-staff-${line.id}`} label="Attendant">
-                  <SearchableSelect
-                    id={`line-staff-${line.id}`}
-                    value={line.staffId}
-                    placeholder="Select attendant"
-                    searchPlaceholder="Search attendant..."
-                    options={staff.map((member) => ({
-                      value: member.id,
-                      label: member.name?.trim() || member.email,
-                    }))}
-                    onChange={(nextValue) =>
-                      setValues((prev) => ({
-                        ...prev,
-                        lines: prev.lines.map((item) =>
-                          item.id === line.id ? { ...item, staffId: nextValue } : item
-                        ),
-                      }))
-                    }
-                  />
+                  <BookingStaffPicker {...staffScope} id={`line-staff-${line.id}`} value={line.staffId}
+                    startAt={lineScheduleMeta[line.id]?.startAt} endAt={lineScheduleMeta[line.id]?.endAt}
+                    selected={staff.find(member => member.id === line.staffId)}
+                    onChange={(nextValue, choice) => {
+                      if (choice) onStaffChoice(choice)
+                      setValues(prev => ({ ...prev, lines: prev.lines.map(item => item.id === line.id ? { ...item, staffId: nextValue } : item) }))
+                    }} />
                 </FormField>
                 <FormField id={`line-qty-${line.id}`} label="Qty">
                   <Input
@@ -696,4 +690,3 @@ export function AppointmentOrderFormFields({
     </div>
   )
 }
-
