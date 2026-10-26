@@ -6,6 +6,9 @@ export function officeBoundaryError(error: unknown): BusinessError | null {
   const value = error as { message?: string; meta?: { database_error?: string; driverAdapterError?: { cause?: { originalMessage?: string } } } }
   const message = [value?.message, value?.meta?.database_error, value?.meta?.driverAdapterError?.cause?.originalMessage].filter(Boolean).join(" ")
   const messages: readonly [string, number][] = [
+    ["Workforce staff choices access is not permitted", 403],
+    ["Workforce staff source not found", 404],
+    ["Invalid workforce staff selection", 400],
     ["Office context changed; reload the creation form", 409],
     ["Select an office and reload the creation form", 403],
     ["Office creation access is not permitted", 403],

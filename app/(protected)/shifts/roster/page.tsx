@@ -2003,43 +2003,8 @@ export default function RosterPage() {
             </Button> </>}><div className="space-y-4">
             <div className="space-y-1">
               <Label className="text-xs text-muted-foreground">Staff</Label>
-              <SearchableSelect
-                value={overrideStaffId}
-                placeholder="Select staff"
-                searchPlaceholder="Search staff..."
-                options={staff.map((member) => ({
-                  value: member.id,
-                  label: member.name?.trim() || member.email,
-                }))}
-                onChange={(nextValue) => {
-                  setOverrideStaffId(nextValue)
-                  if (!nextValue) return
-                  const nextStaffFlexible =
-                    (staffSchedulingModeMap[nextValue] ?? "STANDARD") === "FLEXIBLE"
-                  if (!nextStaffFlexible) {
-                    setUseFlexibleSlot(false)
-                    return
-                  }
-                  if (!useFlexibleSlot) return
-                  const weekStartDate = getWeekStartMondayKey(
-                    new Date(`${overrideStartDate}T00:00:00.000Z`)
-                  )
-                  setFlexibleDraftDays(getFlexibleDraftForEffectiveWeek(nextValue, weekStartDate))
-                  const recurringDraft = getRecurringDraftFromPattern(
-                    nextValue,
-                    new Date(`${weekStartDate}T00:00:00.000Z`)
-                  )
-                  setRecurringPatternId(recurringDraft.patternId)
-                  setRecurringPatternName(recurringDraft.patternName)
-                  setRecurringValidFrom(recurringDraft.validFrom || weekStartDate)
-                  setRecurringValidTo(recurringDraft.validTo)
-                  setRecurringCycleLength(recurringDraft.cycleLength)
-                  setRecurringSelectedWeekIndex(1)
-                  setRecurringDraftWeeks(recurringDraft.weeks)
-                  setRecurringImpactMode("UPDATE")
-                  setRecurringImpactPreview(null)
-                }}
-              />
+              <p className="text-sm">{staff.find(member => member.id === overrideStaffId)?.name || staff.find(member => member.id === overrideStaffId)?.email || "Selected staff"}</p>
+              <p className="text-xs text-muted-foreground">This draft applies to this staff member. Close it and choose another roster row to change staff. Saving checks the office and full date range.</p>
             </div>
             <div className="space-y-1">
               <Label className="text-xs text-muted-foreground">Mode</Label>

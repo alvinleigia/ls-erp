@@ -1,4 +1,5 @@
 "use client"
+import { SearchableSelect } from "@/components/searchable-select"
 import { Section } from "@/components/erp/section"
 
 import { Select, Checkbox } from "@/components/erp/controls"
@@ -10,13 +11,11 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { FormField } from "@/components/form-field"
-import { SearchableSelect } from "@/components/searchable-select"
 import { WEEKDAY_OPTIONS } from "@/types/scheduling"
 import type { Weekday } from "@/types/scheduling"
 import type {
   ShiftScheduleForm,
   ShiftTemplateOption,
-  StaffOption,
 } from "@/types/shifts"
 
 type ScheduleFormFieldsProps = {
@@ -24,9 +23,8 @@ type ScheduleFormFieldsProps = {
   form: ShiftScheduleForm
   setForm: React.Dispatch<React.SetStateAction<ShiftScheduleForm>>
   errors: Record<string, string>
-  allowMultiStaff: boolean
   today: string
-  staffOptions: StaffOption[]
+  staffPicker: React.ReactNode
   templates: ShiftTemplateOption[]
 }
 
@@ -35,9 +33,8 @@ export function ScheduleFormFields({
   form,
   setForm,
   errors,
-  allowMultiStaff,
   today,
-  staffOptions,
+  staffPicker,
   templates,
 }: ScheduleFormFieldsProps) {
   const addBlock = () => {
@@ -96,52 +93,7 @@ export function ScheduleFormFields({
           <div className="rounded-md border border-dashed border-input bg-background p-3 text-xs text-muted-foreground">
             Applies to staff placed in this office on each day, unless they have an explicit schedule.
           </div>
-        ) : allowMultiStaff ? (
-          <div className="space-y-2 rounded-md border border-input bg-background p-3">
-            <div className="text-xs text-muted-foreground">
-              Select one or more staff members.
-            </div>
-            <div className="grid gap-2 sm:grid-cols-2">
-              {staffOptions.map((staff) => {
-                const label = staff.name?.trim() || staff.email
-                const checked = form.staffIds.includes(staff.id)
-                return (
-                  <label key={staff.id} className="flex items-center gap-2 text-sm">
-                    <Checkbox
-                      checked={checked}
-                      onChange={(event) =>
-                        setForm((prev) => ({
-                          ...prev,
-                          staffIds: event.target.checked
-                            ? [...prev.staffIds, staff.id]
-                            : prev.staffIds.filter((value) => value !== staff.id),
-                        }))
-                      }
-                    />
-                    <span>{label}</span>
-                  </label>
-                )
-              })}
-            </div>
-          </div>
-        ) : (
-          <SearchableSelect
-            id={fieldId("schedule-staff")}
-            value={form.staffIds[0] ?? ""}
-            placeholder="Select staff"
-            searchPlaceholder="Search staff..."
-            options={staffOptions.map((staff) => ({
-              value: staff.id,
-              label: staff.name?.trim() || staff.email,
-            }))}
-            onChange={(nextValue) =>
-              setForm((prev) => ({
-                ...prev,
-                staffIds: nextValue ? [nextValue] : [],
-              }))
-            }
-            />
-        )}
+        ) : staffPicker}
         {!form.isDefault ? (
           <p className="mt-2 text-xs text-muted-foreground">
             Staff need a Standard profile and workplace coverage in this office for the entire assignment.

@@ -1,3 +1,23 @@
+## R10 - Workforce staff choices (phase 2D4C2, local)
+
+Schedule assignments and recurring creation/assignment now use a shared paged,
+searchable staff lookup. New choices follow captured office/version, mode and
+full-window workplace coverage; edits resolve their saved source office. Saved
+assignees remain explicit selections even after transfer/archive and are never
+silently removed. Browse filters use readable source records, not a tenant-wide
+directory. Shifts no longer delegates staff lookup to the generic directory.
+Roster drafts keep the clicked staff member fixed; other staff are chosen through
+another permitted roster row. Mutation coverage and booking guards remain intact.
+
+Migration 126 adds lookup functions only; prior tables, policies, functions and
+grants are unchanged. All work is local and unreleased. No hosted database or
+client data was changed. Appointment ownership and remaining operational/release
+checks remain prerequisites. Local verification: 17 native/core checks and seven
+real-sign-in Chrome scenarios passed without skips. Migration rollback/application
+kept all preceding rows/policies/functions/grants exact; production build, TypeScript,
+changed-file ESLint and whitespace checks passed. Picker/source-office form
+screenshots were inspected. See [staff choice contract](WORKFORCE_STAFF_CHOICES_R10.md).
+
 ## R10 - Office-scoped roster browsing (phase 2D4C1, local)
 
 Roster staff search/counts/paging now follow readable dated workplaces and saved

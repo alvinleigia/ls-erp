@@ -73,6 +73,8 @@
     "test:effective-working-time": "node scripts/test-sales-orders.cjs --effective-working-time",
     "test:flexible-plan-offices": "node scripts/test-sales-orders.cjs --flexible-plan-offices",
     "test:daily-roster-offices": "node scripts/test-sales-orders.cjs --daily-roster-offices",
+    "test:workforce-staff-choices": "node scripts/test-sales-orders.cjs --staff-choices",
+    "test:workforce-staff-choices:browser": "node scripts/test-sales-orders.cjs --staff-choices --browser-only",
     "test:roster-read": "node scripts/test-sales-orders.cjs --roster-read",
     "test:roster-read:browser": "node scripts/test-sales-orders.cjs --roster-read --browser-only",
     "test:daily-roster-offices:browser": "node scripts/test-sales-orders.cjs --daily-roster-offices --browser-only",

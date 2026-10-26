@@ -30,7 +30,7 @@ test("recurring forms retain office snapshots and office-scoped readers see only
       await captured
       const draft = admin.page.getByRole("dialog", { name: "New recurring plan", exact: true })
       await draft.getByLabel("Staff", { exact: true }).click()
-      await admin.page.getByRole("menuitemradio", { name: staff, exact: true }).click()
+      await admin.page.getByRole("option", { name: staff, exact: true }).click()
       await draft.getByLabel("Pattern name", { exact: true }).fill(name)
       await draft.getByLabel("Valid from", { exact: true }).fill("2036-02-04")
       await draft.getByLabel("Valid to", { exact: true }).fill("2036-02-24")
@@ -48,7 +48,7 @@ test("recurring forms retain office snapshots and office-scoped readers see only
     await json(admin.context, "/api/workspace/office", 200, "PATCH", { version: selected.version, officeId: b.id })
     const stale = await save(409)
     expect(stale.request().headers()["x-office-id"]).toBe(a.id)
-    await expect(admin.page.getByRole("alert")).toHaveText("Office context changed; reload the creation form.")
+    await expect(admin.page.getByRole("dialog", { name: "New recurring plan", exact: true })).toContainText("Office context changed; reload the creation form.")
     await expect(admin.page.getByLabel("Pattern name", { exact: true })).toHaveValue("Stale east draft")
     expect((await json(admin.context, "/api/shifts/flexible-patterns/list")).total).toBe(0)
     admin.page.once("dialog", dialog => dialog.accept()); await admin.page.reload()

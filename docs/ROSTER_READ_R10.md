@@ -1,9 +1,10 @@
 # Office-scoped roster Read - R10 phase 2D4C1
 
 Local, unreleased. This slice corrects roster browsing and its staff filter.
-Date-bound assignment pickers in schedules, recurring plans and roster editors
-remain phase 2D4C2. Other modules retain their own lookup contracts; the generic
-directory's Workforce delegation is not a certification of assignment eligibility.
+The follow-up [phase 2D4C2](WORKFORCE_STAFF_CHOICES_R10.md) now provides local
+office/date-bound schedule and recurring assignment choices and keeps roster
+drafts tied to the clicked staff. Shifts no longer delegates the generic directory;
+other modules retain their own lookup contracts.
 
 ## Read boundary
 
@@ -64,9 +65,9 @@ functions and function grants exactly. No tenant records, staff assignments,
 IDs, anchors, frozen history or permissions are migrated or overridden. There is
 no runtime legacy adapter or tenant-specific exception.
 
-This is not the complete office-isolation release. Phase 2D4C2 must connect new
-and existing assignment selectors to captured/source office and date-window
-eligibility. Appointment ownership and the remaining operational/release checks
+This is not the complete office-isolation release. Phase 2D4C2 follows this work
+with captured/source office and date-window choices. Appointment ownership and
+the remaining operational/release checks
 also remain prerequisites. No hosted migration or deployment is performed.
 
 Verification uses local synthetic tenants in a disposable database:

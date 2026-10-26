@@ -1,4 +1,5 @@
 "use client"
+import { WorkforceStaffPicker } from "@/components/workforce/staff-picker"
 import { useBusinessModules } from "@/platform/module-provider"
 import { useCurrentResourceAction } from "@/platform/access/view-guard"
 import { useCreationOfficeSnapshot } from "@/platform/companies/creation-snapshot"
@@ -39,7 +40,7 @@ import {
 import { TimePicker } from "@/components/ui/time-picker"
 import { useDateFormatter } from "@/hooks/use-date-formatter"
 import type { ListResponse } from "@/types/api"
-import type { StaffFlexiblePattern, StaffFlexiblePatternListItem, StaffOption } from "@/types/shifts"
+import type { StaffFlexiblePattern, StaffFlexiblePatternListItem } from "@/types/shifts"
 import type { Weekday } from "@/types/scheduling"
 
 type PaginationState = { pageIndex: number; pageSize: number }
@@ -116,7 +117,6 @@ export default function ShiftRecurringPlansPage() {
   const [items, setItems] = React.useState<StaffFlexiblePatternListItem[]>([])
   const [loading, setLoading] = React.useState(true)
   const [totalRows, setTotalRows] = React.useState(0)
-  const [staffOptions, setStaffOptions] = React.useState<StaffOption[]>([])
 
   const [search, setSearch] = React.useState("")
   const [staffFilter, setStaffFilter] = React.useState("all")
@@ -173,6 +173,7 @@ export default function ShiftRecurringPlansPage() {
   const [editLoading, setEditLoading] = React.useState(false)
   const [editPatternId, setEditPatternId] = React.useState("")
   const [editStaffId, setEditStaffId] = React.useState("")
+  const [editStaffLabel, setEditStaffLabel] = React.useState("")
   const [editName, setEditName] = React.useState("")
   const [editValidFrom, setEditValidFrom] = React.useState("")
   const [editValidTo, setEditValidTo] = React.useState("")
@@ -185,21 +186,6 @@ export default function ShiftRecurringPlansPage() {
   const editPreviewRequestRef = React.useRef(0)
 
   const totalPages = Math.max(1, Math.ceil(totalRows / pagination.pageSize))
-
-  const loadStaff = React.useCallback(async () => {
-    try {
-      const response = await fetch("/api/directory?role=STAFF&pageSize=100", { cache: "no-store" })
-      if (!response.ok) {
-        throw new Error("Failed to load staff list.")
-      }
-      const data = (await response.json()) as { items?: StaffOption[] }
-      setStaffOptions(data.items ?? [])
-    } catch (error) {
-      console.error(error)
-      setStaffOptions([])
-      toast.error("Unable to load staff list.")
-    }
-  }, [])
 
   const loadPlans = React.useCallback(async () => {
     setLoading(true)
@@ -235,10 +221,6 @@ export default function ShiftRecurringPlansPage() {
       setLoading(false)
     }
   }, [effectiveOn, pagination.pageIndex, pagination.pageSize, search, sorting, staffFilter, statusFilter])
-
-  React.useEffect(() => {
-    void loadStaff()
-  }, [loadStaff])
 
   React.useEffect(() => {
     void loadPlans()
@@ -339,6 +321,7 @@ export default function ShiftRecurringPlansPage() {
       }
       setEditPatternId(pattern.id)
       setEditStaffId(pattern.staffId ?? "")
+      setEditStaffLabel(item.staffName?.trim() || item.staffEmail)
       setEditName(pattern.name ?? "")
       setEditValidFrom(pattern.validFrom)
       setEditValidTo(pattern.validTo ?? "")
@@ -1278,18 +1261,7 @@ export default function ShiftRecurringPlansPage() {
           <option value="inactive">Inactive</option>
         </Select>
         <Filters activeCount={Number(staffFilter !== "all") + Number(Boolean(effectiveOn))} onReset={() => { setStaffFilter("all"); setEffectiveOn("") }}>
-        <Select
-          className="h-9 rounded-md border border-input bg-background px-3 text-sm"
-          value={staffFilter}
-          onValueChange={(value) => setStaffFilter(value)}
-        >
-          <option value="all">All staff</option>
-          {staffOptions.map((staff) => (
-            <option key={staff.id} value={staff.id}>
-              {staff.name?.trim() || staff.email}
-            </option>
-          ))}
-        </Select>
+        <WorkforceStaffPicker id="pattern-staff-filter" family="PATTERN" action="browse" value={[staffFilter]} onChange={ids => setStaffFilter(ids[0] || "all")} all />
         <Input
           type="date" aria-label="Effective on"
           className="w-[170px]"
@@ -1305,20 +1277,7 @@ export default function ShiftRecurringPlansPage() {
 
       {canCreate && createOpen && <DraftPanel title="New recurring plan" description="Create in the selected workspace office. Staff need workplace coverage for the full plan window." fingerprint={{staffId:createStaffId,name:createName,validFrom:createValidFrom,validTo:createValidTo,cycle:createCycleLength,weeks:createDraftWeeks}} saving={actionLoading || previewLoading} error={formError} saveLabel="Create pattern" onClose={() => setCreateOpen(false)} onSubmit={() => void createPattern()} ><div className="space-y-5"><Section title="Pattern details"><div className="space-y-1">
               <Label className="text-xs text-muted-foreground">Staff</Label>
-              <Select aria-label="Staff"
-                className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
-                value={createStaffId}
-                onValueChange={(value) => setCreateStaffId(value)}
-              >
-                <option value="">Select staff</option>
-                {staffOptions
-                  .filter((staff) => staff.staffProfile?.schedulingMode === "FLEXIBLE")
-                  .map((staff) => (
-                    <option key={staff.id} value={staff.id}>
-                      {staff.name?.trim() || staff.email}
-                    </option>
-                  ))}
-              </Select>
+              <WorkforceStaffPicker id="pattern-create-staff" family="PATTERN" action="create" startDate={createValidFrom} endDate={createValidTo} headers={creationHeaders} value={createStaffId ? [createStaffId] : []} onChange={ids => setCreateStaffId(ids[0] || "")} />
             </div>
 <div className="space-y-1">
               <Label className="text-xs text-muted-foreground">Pattern name</Label>
@@ -1494,21 +1453,7 @@ export default function ShiftRecurringPlansPage() {
           ) : (
             <div className="space-y-5"><Section title="Pattern details"><div className="space-y-1">
                 <Label className="text-xs text-muted-foreground">Staff</Label>
-                <Select aria-label="Staff"
-                  className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
-                  value={editStaffId}
-                  onValueChange={(value) => setEditStaffId(value)}
-                  disabled
-                >
-                  <option value="">Select staff</option>
-                  {staffOptions
-                    .filter((staff) => staff.staffProfile?.schedulingMode === "FLEXIBLE")
-                    .map((staff) => (
-                      <option key={staff.id} value={staff.id}>
-                        {staff.name?.trim() || staff.email}
-                      </option>
-                    ))}
-                </Select>
+                <p className="text-sm">{editStaffLabel || "Saved staff assignment"}</p>
               </div>
 <div className="space-y-1">
                 <Label className="text-xs text-muted-foreground">Pattern name</Label>
@@ -1860,18 +1805,7 @@ export default function ShiftRecurringPlansPage() {
             </Button> </>}><div className="space-y-3">
             <div className="space-y-1">
               <label className="text-xs text-muted-foreground">Target staff</label>
-              <Select aria-label="Target staff"
-                className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
-                value={assignStaffId}
-                onValueChange={(value) => setAssignStaffId(value)}
-              >
-                <option value="">Select staff</option>
-                {staffOptions.map((staff) => (
-                  <option key={staff.id} value={staff.id}>
-                    {staff.name?.trim() || staff.email}
-                  </option>
-                ))}
-              </Select>
+              <WorkforceStaffPicker id="pattern-target-staff" family="PATTERN" action="create" startDate={assignValidFrom} endDate={assignValidTo} headers={creationHeaders} value={assignStaffId ? [assignStaffId] : []} onChange={ids => setAssignStaffId(ids[0] || "")} />
             </div>
             <div className="space-y-1">
               <label className="text-xs text-muted-foreground">Pattern name</label>

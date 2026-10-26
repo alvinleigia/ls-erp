@@ -33,7 +33,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
 import { DataTable } from "@/components/data-table"
-import { SearchableSelect } from "@/components/searchable-select"
+import { WorkforceStaffPicker } from "@/components/workforce/staff-picker"
 import { useDateFormatter } from "@/hooks/use-date-formatter"
 import { useFormErrors } from "@/hooks/use-form-errors"
 import { toISODate } from "@/lib/date"
@@ -44,7 +44,6 @@ import type {
   ShiftScheduleBlock,
   ShiftScheduleForm,
   ShiftTemplateOption,
-  StaffOption,
 } from "@/types/shifts"
 import { ScheduleFormFields } from "./schedule-form-fields"
 import { createDefaultScheduleForm } from "./schedule-form-model"
@@ -123,7 +122,6 @@ export default function ShiftSchedulesPage() {
   const [totalRows, setTotalRows] = React.useState(0)
 
   const [templates, setTemplates] = React.useState<ShiftTemplateOption[]>([])
-  const [staffOptions, setStaffOptions] = React.useState<StaffOption[]>([])
 
   const [staffFilter, setStaffFilter] = React.useState("all")
   const [startDateFilter, setStartDateFilter] = React.useState("")
@@ -161,22 +159,6 @@ export default function ShiftSchedulesPage() {
 
   const [newSchedule, setNewSchedule] = React.useState<ShiftScheduleForm>(defaultForm)
   const [editSchedule, setEditSchedule] = React.useState<ShiftScheduleForm>(defaultForm)
-  const standardStaffOptions = React.useMemo(
-    () =>
-      staffOptions.filter(
-        (staff) => (staff.staffProfile?.schedulingMode ?? "STANDARD") === "STANDARD"
-      ),
-    [staffOptions]
-  )
-  const editStaffOptions = React.useMemo(() => {
-    const options = new Map(standardStaffOptions.map(staff => [staff.id, staff]))
-    for (const assignment of editingSchedule?.assignments ?? []) {
-      const staff = assignment.staffProfile?.user
-      if (staff && !options.has(staff.id)) options.set(staff.id, staff)
-    }
-    return [...options.values()]
-  }, [standardStaffOptions, editingSchedule])
-
   const {
     errors: createErrors,
     setErrorsFromResponse: setCreateErrorsFromResponse,
@@ -233,19 +215,6 @@ export default function ShiftSchedulesPage() {
     setTemplates(data.items ?? [])
   }, [])
 
-  const loadStaff = React.useCallback(async () => {
-    const response = await fetch("/api/directory?role=STAFF&pageSize=100", {
-      cache: "no-store",
-    })
-    if (!response.ok) {
-      toast.error("Unable to load staff list.")
-      setStaffOptions([])
-      return
-    }
-    const data = (await response.json()) as { items?: StaffOption[] }
-    setStaffOptions(data.items ?? [])
-  }, [])
-
   React.useEffect(() => {
     void loadSchedules()
   }, [loadSchedules])
@@ -253,10 +222,6 @@ export default function ShiftSchedulesPage() {
   React.useEffect(() => {
     void loadTemplates()
   }, [loadTemplates])
-
-  React.useEffect(() => {
-    void loadStaff()
-  }, [loadStaff])
 
   React.useEffect(() => {
     setPagination((prev) =>
@@ -684,19 +649,7 @@ export default function ShiftSchedulesPage() {
             onChange={(event) => setStartDateFilter(event.target.value)}
           />
           <div className="w-56">
-            <SearchableSelect
-              value={staffFilter}
-              placeholder="All staff"
-              searchPlaceholder="Search staff..."
-              options={[
-                { value: "all", label: "All staff" },
-                ...standardStaffOptions.map((staff) => ({
-                  value: staff.id,
-                  label: staff.name?.trim() || staff.email,
-                })),
-              ]}
-              onChange={(nextValue) => setStaffFilter(nextValue)}
-            />
+            <WorkforceStaffPicker id="schedule-staff-filter" family="SCHEDULE" action="browse" value={[staffFilter]} onChange={ids => setStaffFilter(ids[0] || "all")} all />
           </div>
         </div>
       </TableToolbar>
@@ -796,9 +749,8 @@ export default function ShiftSchedulesPage() {
               form={newSchedule}
               setForm={setNewSchedule}
               errors={createErrors}
-              allowMultiStaff
               today={today}
-              staffOptions={standardStaffOptions}
+              staffPicker={<WorkforceStaffPicker id="schedule-staff" family="SCHEDULE" action="create" startDate={newSchedule.assignmentStartDate || newSchedule.startDate} endDate={newSchedule.assignmentEndDate} headers={creationHeaders} value={newSchedule.staffIds} onChange={staffIds => setNewSchedule(prev => ({ ...prev, staffIds }))} multiple />}
               templates={templates}
             /></DraftPanel>}
 
@@ -807,9 +759,8 @@ export default function ShiftSchedulesPage() {
               form={editSchedule}
               setForm={setEditSchedule}
               errors={editErrors}
-              allowMultiStaff
               today={today}
-              staffOptions={editStaffOptions}
+              staffPicker={<WorkforceStaffPicker id="edit-schedule-staff" family="SCHEDULE" action="edit" sourceId={editingSchedule?.id} startDate={editSchedule.assignmentStartDate || editSchedule.startDate} endDate={editSchedule.assignmentEndDate} value={editSchedule.staffIds} selected={editingSchedule?.assignments?.flatMap(row => row.staffProfile?.user ? [row.staffProfile.user] : [])} onChange={staffIds => setEditSchedule(prev => ({ ...prev, staffIds }))} multiple />}
               templates={templates}
             /></DraftPanel>}
     </div>

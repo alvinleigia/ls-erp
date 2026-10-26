@@ -63,7 +63,8 @@ Phase 2D4B3A adds [protected effective working time](EFFECTIVE_WORKING_TIME_R10.
 2D4B3B2 adds [daily slots/override offices](DAILY_ROSTER_OFFICES_R10.md), including
 dated-workplace week-off selection. These are local and unreleased. The next
 workforce slice 2D4C1 adds [office-scoped roster browsing](ROSTER_READ_R10.md).
-Date-bound assignment selectors remain 2D4C2.
+Phase 2D4C2 adds [office/date-bound staff choices](WORKFORCE_STAFF_CHOICES_R10.md)
+for schedules and recurring assignments; roster drafts retain the clicked staff.
 Operational families, assignment selectors and workspace
 controls remain prerequisites before exposing office controls or deploying the
 office-isolation release.

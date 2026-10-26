@@ -8,7 +8,6 @@ export function GET(request: Request) {
     const { role, q, page, pageSize } = directoryQuerySchema.parse(Object.fromEntries(new URL(request.url).searchParams))
     await requireLookup(actor, role === "CUSTOMER" ? [["appointments", "appointments.read"]] : role === "MANAGER" ? [] : [
       ["appointments", "appointments.read"], ["leaves", "leaveGroups.read"],
-      ["shifts", "shiftSchedules.read"], ["shifts", "shiftPlans.read"], ["shifts", "shiftRoster.read"],
     ], "users.read")
     const where = { tenantId: actor.tenantId, role, status: "ACTIVE" as const,
       ...(q ? { OR: [{ name: { contains: q, mode: "insensitive" as const } }, { email: { contains: q, mode: "insensitive" as const } }] } : {}) }
