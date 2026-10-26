@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
 process.env.TZ='UTC'
+const {bookingContext}=require('./helpers/booking-context.cjs')
 const {test,before,after}=require('node:test'),assert=require('node:assert/strict'),{randomUUID}=require('node:crypto'),{Client}=require('pg'),{AsyncLocalStorage}=require('node:async_hooks')
 const raw=process.env.CRM_TEST_DATABASE_URL,url=new URL(raw||'http://invalid')
 if(!['127.0.0.1','localhost'].includes(url.hostname)||url.pathname!=='/ls_salon_crm_test')throw Error('Disposable local database only.')
@@ -18,7 +19,7 @@ const scoped=(user,fn,t=id)=>runWithTenantDbContext(t,()=>runWithDatabaseActor(u
 const permissions=['appointments.read','appointments.create','appointments.edit','appointments.archive','services.read','shiftRoster.read','shiftRoster.edit','shiftPlans.read','leaveApprovals.read','leaveApprovals.approve']
 const setPermissions=p=>root.query('UPDATE "TenantAccessRole" SET permissions=$1 WHERE id=$2',[p,role])
 const payload={customerId:customer,serviceId:service,staffId:employee,startAt:'2035-01-10T10:00:00Z'}
-const call=(handler,method='POST',body=payload,record,who=scheduler)=>sessions.run({user:{id:who,tenantId:id,role:who===admin?'ADMIN':'STAFF'}},()=>handler(new Request(`http://${id}.localhost/api/appointments`,{method,headers:{host:id+'.localhost','Content-Type':'application/json'},...(method==='GET'?{}:{body:JSON.stringify(body)})}),{params:Promise.resolve({id:record})}))
+const call=async(handler,method='POST',body=payload,record,who=scheduler)=>{const captured=await bookingContext(root,id,who);return sessions.run({user:{id:who,tenantId:id,role:who===admin?'ADMIN':'STAFF'}},()=>handler(new Request(`http://${id}.localhost/api/appointments`,{method,headers:{host:id+'.localhost','Content-Type':'application/json',...captured},...(method==='GET'?{}:{body:JSON.stringify(body)})}),{params:Promise.resolve({id:record})}))}
 before(async()=>{
  await root.connect()
  for(const tenant of [id,foreign])await root.query('INSERT INTO "Tenant"(id,name,slug,"updatedAt") VALUES($1,$1,$1,now())',[tenant])
@@ -55,7 +56,7 @@ test('customer conflicts are detected across hidden staff calendars and boundari
 test('moves, bulk resolution and order scheduling cannot collide with hidden bookings',async()=>{
  const edit=await call(detail.PATCH,'PATCH',{startAt:payload.startAt},visible);assert.equal(edit.status,409,JSON.stringify(await edit.json()))
  const bulk=await call(resolve,'POST',{appointmentIds:[visible],action:'reschedule',rescheduleDate:'2035-01-10',rescheduleTime:'10:00'});assert.equal(bulk.status,409,JSON.stringify(await bulk.json()))
- await assert.rejects(scoped(scheduler,()=>scheduleConfirmedOrderLines([{...slot(),durationMinutes:60}],customer,[],id)),error=>error instanceof AvailabilityConflictError&&error.suggestedStartAt==='2035-01-10T11:00:00.000Z')
+ await assert.rejects(scoped(scheduler,async()=>scheduleConfirmedOrderLines([{...slot(),durationMinutes:60}],customer,[],id,(await bookingContext(root,id,scheduler))['x-office-id'])),error=>error instanceof AvailabilityConflictError&&error.suggestedStartAt==='2035-01-10T11:00:00.000Z')
  assert.equal((await root.query('SELECT "startAt" FROM "Appointment" WHERE id=$1',[visible])).rows[0].startAt.toISOString(),'2035-01-12T10:00:00.000Z')
 })
 test('an unavailable source cannot be supplied as an edit exclusion or bulk target',async()=>{

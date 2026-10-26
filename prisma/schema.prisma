@@ -948,6 +948,8 @@ model BusinessCompany {
 }
 
 model BusinessOffice {
+  appointments Appointment[]
+  bookingOrders AppointmentOrder[]
   dailyOverrides StaffShiftOverride[]
   dailySlots StaffFlexibleAvailability[]
   flexibleWeekPlans StaffFlexibleWeekPlan[]
@@ -1268,8 +1270,11 @@ model Service {
 }
 
 model Appointment {
+  officeId String @default(dbgenerated("app.creation_office_id()"))
+  office BusinessOffice @relation(fields: [tenantId, officeId], references: [tenantId, id], onDelete: NoAction)
+  @@index([tenantId, officeId])
   id             String                @id @default(cuid())
-  tenantId       String?
+  tenantId       String
   staffProfileId String
   customerId     String
   serviceId      String
@@ -1283,7 +1288,7 @@ model Appointment {
   service        Service               @relation(fields: [serviceId], references: [id], onDelete: Restrict)
   createdAt      DateTime              @default(now())
   updatedAt      DateTime              @updatedAt
-  tenant         Tenant?               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant         Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@index([tenantId])
   @@index([staffProfileId])
@@ -1296,9 +1301,12 @@ model Appointment {
 }
 
 model AppointmentOrder {
+  officeId String @default(dbgenerated("app.creation_office_id()"))
+  office BusinessOffice @relation(fields: [tenantId, officeId], references: [tenantId, id], onDelete: NoAction)
+  @@index([tenantId, officeId])
   id                  String                        @id @default(cuid())
   invoiceBranding     Json?
-  tenantId            String?
+  tenantId            String
   customerId          String
   appointmentDate     DateTime                      @db.Date
   appointmentStartAt  DateTime
@@ -1317,7 +1325,7 @@ model AppointmentOrder {
   taxes               AppointmentOrderTax[]
   createdAt           DateTime                      @default(now())
   updatedAt           DateTime                      @updatedAt
-  tenant              Tenant?                       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant              Tenant                       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@index([tenantId])
   @@index([customerId])

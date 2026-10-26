@@ -1,4 +1,5 @@
 "use client"
+import { useCreationOfficeSnapshot } from "@/platform/companies/creation-snapshot"
 import { useBusinessModules } from "@/platform/module-provider"
 
 import * as React from "react"
@@ -91,7 +92,7 @@ export function AppointmentOrderEditor({ mode, appointmentId }: AppointmentOrder
   const [settingsReady, setSettingsReady] = React.useState(false)
   const initializedSettings = React.useRef(false)
   const [savedOrder, setSavedOrder] = React.useState<AppointmentOrderRow | null>(null)
-  const canWrite = servicesAllowed && can(mode === "create" ? "appointments.create" : "appointments.edit") && (!savedOrder?.productLines?.length || productsAllowed) && (!savedOrder?.coupons.length || couponsAllowed)
+  const canWrite = savedOrder?.office?.active !== false && servicesAllowed && can(mode === "create" ? "appointments.create" : "appointments.edit") && (!savedOrder?.productLines?.length || productsAllowed) && (!savedOrder?.coupons.length || couponsAllowed)
   const [editOpen, setEditOpen] = React.useState(false)
   const [formError, setFormError] = React.useState("")
   const [loadError, setLoadError] = React.useState("")
@@ -99,6 +100,7 @@ export function AppointmentOrderEditor({ mode, appointmentId }: AppointmentOrder
   const [saving, setSaving] = React.useState(false)
   const [emailing, setEmailing] = React.useState(false)
   const [editingId, setEditingId] = React.useState<string | null>(appointmentId ?? null)
+  const creationHeaders = useCreationOfficeSnapshot(mode === "create" && !editingId)
   const [values, setValues] = React.useState<AppointmentOrderFormValues>(
     defaultAppointmentOrderFormValues
   )
@@ -474,7 +476,7 @@ export function AppointmentOrderEditor({ mode, appointmentId }: AppointmentOrder
         editingId ? `/api/appointments/orders/${editingId}` : "/api/appointments/orders",
         {
           method: editingId ? "PATCH" : "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", ...(!editingId ? await creationHeaders() : {}) },
           body: JSON.stringify({ ...orderInput, status: target === "confirm" ? "CONFIRMED" : "DRAFT" }),
         }
       )
@@ -676,9 +678,10 @@ export function AppointmentOrderEditor({ mode, appointmentId }: AppointmentOrder
     </> : <>
       <Button variant="outline" onClick={() => router.push("/appointments")}>Back</Button>
       <Button variant="outline" onClick={handlePrintInvoice} disabled={!savedOrder || !canExport}>Print invoice</Button>
-      <Button variant="outline" onClick={() => void handleEmailInvoice()} loading={emailing} disabled={!savedOrder || !canEmail}>Email invoice</Button>
+      <Button variant="outline" onClick={() => void handleEmailInvoice()} loading={emailing} disabled={!savedOrder || !canEmail || savedOrder.office?.active === false}>Email invoice</Button>
       {canWrite && !isReadOnlyBooking && savedOrder && <Button onClick={() => { applyOrderToForm(savedOrder); setFormError(""); setEditOpen(true) }}>Edit booking</Button>}
     </>} />
+    {savedOrder?.office && <p className="text-sm text-muted-foreground">Office: {savedOrder.office.companyName} / {savedOrder.office.name}{!savedOrder.office.active && " (closed; read-only)"}</p>}
     {isReadOnlyBooking && <p className="text-sm text-muted-foreground">This booking is in the past or in a closed status and is read-only.</p>}
     {mode === "create" ? <>{formError && <p role="alert" className="text-destructive">{formError}</p>}<fieldset disabled={saving || !canWrite} className="min-w-0 space-y-6">{formContent}</fieldset></> : savedOrder && <AppointmentOrderSummary order={savedOrder} settings={settings} />}
     {editOpen && savedOrder && <DraftPanel disabled={!canWrite || !pricingPreview} title="Edit booking" description="Update booking details, items and schedule." fingerprint={values} saving={saving} error={formError} footerActions={canSaveDraft ? <Button type="button" disabled={saving || !pricingPreview} onClick={() => void handleSave("draft")}>Save draft</Button> : undefined} saveLabel={primaryActionLabel} onClose={() => { applyOrderToForm(savedOrder); setStartSuggestion(null); setEditOpen(false) }} onSubmit={() => void handleSave("confirm")}>

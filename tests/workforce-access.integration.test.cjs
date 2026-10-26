@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
+const {bookingContext}=require('./helpers/booking-context.cjs')
 const {grantPgFixtureUsers}=require("./helpers/access-fixtures.cjs")
 process.env.TZ='UTC'
 const {test,before,after}=require('node:test'),assert=require('node:assert/strict'),path=require('node:path')
@@ -897,12 +898,12 @@ test('concurrent booking and leave approval cannot both reserve the same staff t
  const date='2041-02-06',id=await requestFixture('booking_race',{date})
  await root.query(`INSERT INTO "TenantModule" ("tenantId",key,allowed,enabled,"updatedAt") VALUES ($1,'services',true,true,now()) ON CONFLICT ("tenantId",key) DO UPDATE SET allowed=true,enabled=true`,[a])
  await root.query(`INSERT INTO "StaffFlexibleAvailability" (id,"staffProfileId",date,"startTime","endTime","sortOrder","updatedAt") VALUES ($1,$2,$3,'09:00','17:00',0,now())`,[a+'_race_slot',a+'_profile',date])
- const bookingRoute=require('../app/api/appointments/route.ts')
+ const bookingRoute=require('../app/api/appointments/route.ts'),captured=await bookingContext(root,a,a+'_admin')
  await root.query('BEGIN');let approval,booking
  try{
   await root.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[`workforce-schedules:${a}`])
   approval=call('leaves/requests/[id]/review','PATCH',{status:'APPROVED'},id)
-  booking=sessions.run(session(),()=>bookingRoute.POST(new Request(`http://${a}.localhost/api/appointments`,{method:'POST',headers:{host:`${a}.localhost`,'content-type':'application/json'},body:JSON.stringify({serviceId:a+'_service',staffId:a+'_staff',customerId:a+'_customer',startAt:date+'T10:00:00Z'})})))
+  booking=sessions.run(session(),()=>bookingRoute.POST(new Request(`http://${a}.localhost/api/appointments`,{method:'POST',headers:{host:`${a}.localhost`,'content-type':'application/json',...captured},body:JSON.stringify({serviceId:a+'_service',staffId:a+'_staff',customerId:a+'_customer',startAt:date+'T10:00:00Z'})})))
   await waitForScheduleWaiters(2);await root.query('COMMIT')
   const responses=await Promise.all([approval,booking]),states=responses.map(r=>r.status)
   assert.ok(states.includes(409),JSON.stringify(states));assert.equal(states.filter(s=>s===200||s===201).length,1)

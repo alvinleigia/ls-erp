@@ -1,3 +1,4 @@
+import { bookingCreationOffice, bookingWriteOffice, assertBookingTarget, bookingOfficeLabels } from "./office"
 import { AppointmentStatus, Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 import { startOfBusinessDate } from "@/lib/business-time"
@@ -42,7 +43,7 @@ export async function listAppointments(tenantId: string, input: AppointmentListI
     prisma.appointment.findMany({ where, include: appointmentInclude,
       orderBy: [{ [sort]: order }, { id: "asc" }], skip: (page - 1) * pageSize, take: pageSize }),
   ])
-  return { items: appointments.map(serializeAppointment), page, pageSize, total, totalPages: Math.max(1, Math.ceil(total / pageSize)) }
+  return { items: (await bookingOfficeLabels(prisma, tenantId, appointments)).map(serializeAppointment), page, pageSize, total, totalPages: Math.max(1, Math.ceil(total / pageSize)) }
 }
 
 async function participants(db: Prisma.TransactionClient, tenantId: string, input: AppointmentAvailabilityInput) {
@@ -54,10 +55,13 @@ async function participants(db: Prisma.TransactionClient, tenantId: string, inpu
   return { customer, service, staffProfile }
 }
 
-export async function appointmentAvailability(tenantId: string, input: AppointmentAvailabilityInput): Promise<AppointmentAvailabilityResult> {
+export async function appointmentAvailability(actor: BusinessActor, input: AppointmentAvailabilityInput): Promise<AppointmentAvailabilityResult> {
+  const { tenantId } = actor
+  let sourceOffice: string | undefined
   if (input.appointmentId) {
-    const current = await prisma.appointment.findFirst({ where: { tenantId, id: input.appointmentId }, select: { id: true } })
+    const current = await prisma.appointment.findFirst({ where: { tenantId, id: input.appointmentId }, select: { id: true, officeId: true } })
     if (!current) throw new BusinessError(404, "Appointment not found.")
+    sourceOffice = current.officeId
   }
   const startAt = new Date(input.startAt)
   if (startAt <= new Date()) return { available: false, reason: "Cannot book appointments in the past." }
@@ -66,6 +70,8 @@ export async function appointmentAvailability(tenantId: string, input: Appointme
   if (!service || service.status !== "ACTIVE") return { available: false, reason: "Service is not active." }
   if (input.customerId && (!customer || customer.role !== "CUSTOMER" || customer.status !== "ACTIVE")) return { available: false, reason: "Customer is not active." }
   const endAt = new Date(startAt.getTime() + service.durationMinutes * 60000)
+  const office = sourceOffice ?? await bookingCreationOffice(actor)
+  await assertBookingTarget(prisma, tenantId, office, staffProfile.id, startAt, endAt)
   const reason = await appointmentConflictReason(prisma, tenantId, { ...input, startAt, endAt, staffProfileId: staffProfile.id })
   return reason ? { available: false, reason } : { available: true }
 }
@@ -88,20 +94,22 @@ export async function createAppointment(actor: BusinessActor, input: Appointment
     if (!staffProfile) throw new BusinessError(404, "Staff profile not found.")
     if (staffProfile.user.status !== "ACTIVE") throw new BusinessError(400, "Staff member is not active.")
     const endAt = new Date(startAt.getTime() + service.durationMinutes * 60000)
+    const officeId = await bookingWriteOffice(tx, actor)
+    await assertBookingTarget(tx, tenantId, officeId, staffProfile.id, startAt, endAt)
     const reason = await appointmentConflictReason(tx, tenantId, { startAt, endAt, customerId: customer.id, staffProfileId: staffProfile.id })
     if (reason) throw new BusinessError(409, reason)
     const saved = await tx.appointment.create({
-      data: { tenantId, customerId: customer.id, serviceId: service.id, staffProfileId: staffProfile.id,
+      data: { tenantId, officeId, customerId: customer.id, serviceId: service.id, staffProfileId: staffProfile.id,
         startAt, endAt, status: input.status ?? AppointmentStatus.SCHEDULED },
       include: appointmentInclude,
     })
     await recordDomainAuditEvent(tx, {
       tenantId, event: "appointment.created", entityType: "Appointment", entityId: saved.id,
       actorUserId: actor.userId, actorRole: actor.role, requestId: actor.requestId,
-      metadata: { customerId: saved.customerId, staffProfileId: saved.staffProfileId, serviceId: saved.serviceId },
+      metadata: { officeId: saved.officeId, officeFamily: "appointments", customerId: saved.customerId, staffProfileId: saved.staffProfileId, serviceId: saved.serviceId },
       after: { status: saved.status, startAt: saved.startAt.toISOString(), endAt: saved.endAt.toISOString() },
     })
-    return saved
+    return (await bookingOfficeLabels(tx, tenantId, [saved]))[0]
   })
   return { appointment: serializeAppointment(appointment) }
 }

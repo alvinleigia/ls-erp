@@ -8,6 +8,8 @@ import { BusinessError, type BusinessActor } from "@/platform/policy"
 import { requirePermission } from "@/platform/access/policy"
 import { appointmentOrderInclude, serializeAppointmentOrder } from "./order-record"
 import { buildAppointmentOrderInvoicePdf } from "./invoice-pdf"
+import { appointmentTransaction } from "./appointment-transaction"
+import { bookingWriteOffice } from "./office"
 
 // Both delivery paths use the same saved financial snapshot; catalog changes never reprice it.
 async function invoiceSource(tenantId: string, id: string) {
@@ -38,6 +40,12 @@ export async function emailInvoice(actor: BusinessActor, id: string) {
     throw new BusinessError(400, "Email notifications are disabled or SMTP is not configured.")
   }
   const pdf = await buildAppointmentOrderInvoicePdf(source)
+  await appointmentTransaction(actor, "edit", async (tx, current) => {
+    requirePermission(current, "appointments.export")
+    const saved = await tx.appointmentOrder.findFirst({ where: { tenantId: actor.tenantId, id }, select: { officeId: true } })
+    if (!saved) throw new BusinessError(404, "Appointment order not found.")
+    await bookingWriteOffice(tx, current, saved.officeId)
+  })
   await mailer.sendMail({
     to: order.customer.email, from: mailFrom, subject: `Invoice ${order.id.slice(-6)}`,
     text: `Hi ${order.customer.name || "customer"},\n\nPlease find your invoice attached.\n\nThanks,\n${businessName}`,
@@ -46,7 +54,7 @@ export async function emailInvoice(actor: BusinessActor, id: string) {
   // Delivery is external, so a later audit failure must not turn a sent email into a retryable 500.
   await recordDomainAuditEventSafe(prisma, { tenantId: actor.tenantId, actorUserId: actor.userId, actorRole: actor.role,
     requestId: actor.requestId, event: "appointments.invoice.emailed", entityType: "order", entityId: id,
-    metadata: { recipient: order.customer.email, orderUpdatedAt: order.updatedAt },
+    metadata: { officeId: order.officeId, officeFamily: "appointments", recipient: order.customer.email, orderUpdatedAt: order.updatedAt },
     after: JSON.parse(JSON.stringify(order)),
   })
   return { ok: true }

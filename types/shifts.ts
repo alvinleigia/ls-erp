@@ -1,5 +1,6 @@
 import type { Weekday } from "@/types/scheduling"
-export type WorkforceOffice = { id: string; name: string; companyName: string; active: boolean }
+import type { RecordOffice as WorkforceOffice } from "@/types/companies"
+export type { WorkforceOffice }
 export type RosterDay = {
   staffId: string; date: string
   state: "WORKING" | "NONWORKING" | "OUTSIDE" | "UNPLACED" | "MISSING"

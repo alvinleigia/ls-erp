@@ -200,7 +200,7 @@ export const resolveOrderData = async (
   const appointmentDate = toDateOnlyUtc(input.appointmentDate)
   const normalizedCouponCodes = resolveCouponRules(input.coupons)
 
-  const [customer, services, products, staffProfiles, couponsFromDb, couponUsageRows, couponTotalUsageRows, settings] =
+  const [customer, services, products, staffProfiles, couponsFromDb, couponUsageRows, settings] =
     await Promise.all([
       db.user.findFirst({
         where: { tenantId, id: input.customerId },
@@ -270,26 +270,7 @@ export const resolveOrderData = async (
           })
         : Promise.resolve([]),
       normalizedCouponCodes.length
-        ? db.appointmentOrderCoupon.groupBy({
-            by: ["code"],
-            _count: { _all: true },
-            where: {
-              code: { in: normalizedCouponCodes },
-              order: {
-                tenantId,
-                customerId: input.customerId,
-                status: { not: "CANCELED" },
-                ...(options.existingOrderId ? { id: { not: options.existingOrderId } } : {}),
-              },
-            },
-          })
-        : Promise.resolve([]),
-      normalizedCouponCodes.length
-        ? db.appointmentOrderCoupon.groupBy({
-            by: ["code"], _count: { _all: true },
-            where: { code: { in: normalizedCouponCodes }, order: { tenantId, status: { not: "CANCELED" },
-              ...(options.existingOrderId ? { id: { not: options.existingOrderId } } : {}) } },
-          })
+        ? db.$queryRaw<{ code: string; customerUses: number; totalUses: number }[]>`SELECT * FROM app.booking_coupon_usage(${tenantId},${normalizedCouponCodes}::text[],${input.customerId},${options.existingOrderId ?? null})`
         : Promise.resolve([]),
       db.appSetting.findUnique({ where: { tenantId }, select: { timeZone: true } }),
     ])
@@ -445,8 +426,8 @@ export const resolveOrderData = async (
   if (couponsFromDb.length !== normalizedCouponCodes.length) {
     throw new BusinessError(400, "A selected coupon is unavailable or outside its validity dates. Review the coupon selection.")
   }
-  const couponUsageByCode = new Map(couponUsageRows.map(row => [row.code, row._count._all]))
-  const totalUsageByCode = new Map(couponTotalUsageRows.map(row => [row.code, row._count._all]))
+  const couponUsageByCode = new Map(couponUsageRows.map(row => [row.code, row.customerUses]))
+  const totalUsageByCode = new Map(couponUsageRows.map(row => [row.code, row.totalUses]))
   for (const coupon of couponsFromDb) {
     if (coupon.maxUses !== null && (totalUsageByCode.get(coupon.code) ?? 0) >= coupon.maxUses) {
       throw new BusinessError(400, `Coupon ${coupon.code} has reached its maximum uses.`)

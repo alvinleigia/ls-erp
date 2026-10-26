@@ -1,3 +1,4 @@
+import { bookingWriteOffice, bookingOfficeLabels } from "./office"
 import type { Appointment, Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 import { recordDomainAuditEvent } from "@/lib/domain-audit"
@@ -25,7 +26,7 @@ export async function readOrder(db: Prisma.TransactionClient, tenantId: string, 
   return order
 }
 export async function getOrder(tenantId: string, id: string) {
-  return { order: serializeAppointmentOrder(await readOrder(prisma, tenantId, id)) }
+  return { order: serializeAppointmentOrder((await bookingOfficeLabels(prisma, tenantId, [await readOrder(prisma, tenantId, id)]))[0]) }
 }
 const linkedAppointments = (db: Prisma.TransactionClient, tenantId: string, order: Order) => db.appointment.findMany({
   where: { tenantId, orderLineId: { in: order.lines.map(line => line.id) } }, orderBy: { id: "asc" },
@@ -81,11 +82,13 @@ export async function updateOrder(actor: BusinessActor, id: string, patch: Appoi
   let planned: Awaited<ReturnType<typeof scheduleConfirmedOrderLines>> | null = null
   if (initial.input.status === "CONFIRMED" && initial.scheduleChanged) {
     const resolved = await resolveOrderData(initial.input, { actor, tenantId, existingOrderId: id, savedLines: snapshot.lines, savedTaxes: initial.financialChanged ? undefined : snapshot.taxes })
-    planned = await scheduleConfirmedOrderLines(resolved.lines, resolved.customerId, beforeAppointments.map(row => row.id), tenantId)
+    await bookingWriteOffice(prisma, actor, snapshot.officeId)
+    planned = await scheduleConfirmedOrderLines(resolved.lines, resolved.customerId, beforeAppointments.map(row => row.id), tenantId, snapshot.officeId)
   }
   try {
     return await appointmentTransaction(actor, "edit", async (tx, actor) => {
       const current = await readOrder(tx, tenantId, id)
+      await bookingWriteOffice(tx, actor, current.officeId)
       const appointments = await linkedAppointments(tx, tenantId, current)
       const currentSettings = await tx.appSetting.findUnique({ where: { tenantId }, select: { timeZone: true } })
       if ((currentSettings?.timeZone ?? "UTC") !== timeZone) throw stale()
@@ -190,8 +193,8 @@ export async function updateOrder(actor: BusinessActor, id: string, patch: Appoi
       const saved = await readOrder(tx, tenantId, id)
       await recordDomainAuditEvent(tx, { tenantId, actorUserId: actor.userId, actorRole: actor.role, requestId: actor.requestId,
         event: "appointments.order.edit", entityType: "order", entityId: id, before: auditValue(current), after: auditValue(saved),
-        metadata: { appointmentsBefore: auditValue(appointments), appointmentsAfter: auditValue(await linkedAppointments(tx, tenantId, saved)) } })
-      return { order: serializeAppointmentOrder(saved) }
+        metadata: { officeId: current.officeId, officeFamily: "appointments", appointmentsBefore: auditValue(appointments), appointmentsAfter: auditValue(await linkedAppointments(tx, tenantId, saved)) } })
+      return { order: serializeAppointmentOrder((await bookingOfficeLabels(tx, tenantId, [saved]))[0]) }
     })
   } catch (error) {
     if (error instanceof StockConflictError) throw new BusinessError(409, error.message)

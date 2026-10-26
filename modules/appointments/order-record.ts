@@ -30,6 +30,8 @@ export const serializeAppointmentOrder = (
   order: Prisma.AppointmentOrderGetPayload<{ include: typeof appointmentOrderInclude }>
 ): AppointmentOrderRow => ({
   id: order.id,
+  officeId: order.officeId,
+  ...("office" in order ? { office: order.office as import("@/types/companies").RecordOffice | null } : {}),
   customerId: order.customerId,
   appointmentDate: order.appointmentDate.toISOString().slice(0, 10),
   appointmentStartAt: order.appointmentStartAt.toISOString(),

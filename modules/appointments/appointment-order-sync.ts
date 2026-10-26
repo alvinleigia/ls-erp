@@ -18,7 +18,7 @@ export async function synchronizeAppointmentOrders(tx: Prisma.TransactionClient,
   if (!linked.length) return
   const lineIds = linked.map(change => change.before.orderLineId!)
   const orders = await tx.appointmentOrder.findMany({ where: { tenantId: actor.tenantId, lines: { some: { id: { in: lineIds } } } },
-    select: { id: true, status: true, customerId: true, appointmentDate: true, appointmentStartAt: true,
+    select: { id: true, officeId: true, status: true, customerId: true, appointmentDate: true, appointmentStartAt: true,
       lines: { select: { id: true, serviceId: true, staffProfileId: true, startAt: true, endAt: true, durationMinutes: true,
         appointments: { where: { tenantId: actor.tenantId }, select: { id: true }, take: 2 } } } } })
   const owners = new Map(orders.flatMap(order => order.lines.map(line => [line.id, { order, line }] as const)))
@@ -64,6 +64,6 @@ export async function synchronizeAppointmentOrders(tx: Prisma.TransactionClient,
     await recordDomainAuditEvent(tx, { tenantId: actor.tenantId, actorUserId: actor.userId, actorRole: actor.role,
       requestId: actor.requestId, event: "appointments.order.appointments_updated", entityType: "order", entityId: order.id,
       before: JSON.parse(JSON.stringify(before)), after: JSON.parse(JSON.stringify(snapshot())),
-      metadata: { appointmentsBefore: updates.map(change => value(change.before)), appointmentsAfter: updates.map(change => value(change.after)) } })
+      metadata: { officeId: order.officeId, officeFamily: "appointments", appointmentsBefore: updates.map(change => value(change.before)), appointmentsAfter: updates.map(change => value(change.after)) } })
   }
 }

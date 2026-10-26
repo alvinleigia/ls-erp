@@ -1,4 +1,5 @@
 "use client"
+import { useCreationOfficeSnapshot } from "@/platform/companies/creation-snapshot"
 import { useBusinessModules } from "@/platform/module-provider"
 
 import { Select } from "@/components/erp/controls"
@@ -227,6 +228,7 @@ export default function AppointmentsPage() {
   const [viewDates, setViewDates] = React.useState<Date[]>([])
   const [formOpen, setFormOpen] = React.useState(false)
   const [editingId, setEditingId] = React.useState<string | null>(null)
+  const creationHeaders = useCreationOfficeSnapshot(formOpen && !editingId)
   const [formMode, setFormMode] = React.useState<"create" | "edit" | "reschedule">("create")
   const [cancelConfirmOpen, setCancelConfirmOpen] = React.useState(false)
   const [cancelTarget, setCancelTarget] = React.useState<AppointmentRow | null>(null)
@@ -520,7 +522,7 @@ export default function AppointmentsPage() {
         editingId ? `/api/appointments/${editingId}` : "/api/appointments",
         {
           method: editingId ? "PATCH" : "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", ...(!editingId ? await creationHeaders() : {}) },
           body: JSON.stringify(payload),
         }
       )
@@ -543,7 +545,7 @@ export default function AppointmentsPage() {
     } catch { toast.error("Unable to save appointment.") } finally { setSaving(false) }
 
   }, [
-    canUpdate, canCreate,
+    canUpdate, canCreate, creationHeaders,
     availability,
     availabilityChecking,
     clearErrors,
@@ -562,37 +564,27 @@ export default function AppointmentsPage() {
       return
     }
 
+    const controller = new AbortController()
     const timer = setTimeout(async () => {
       setAvailabilityChecking(true)
-      const response = await fetch("/api/appointments/availability", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          appointmentId: editingId ?? undefined,
-          customerId: formValues.customerId || undefined,
-          serviceId: formValues.serviceId,
-          staffId: formValues.staffId,
-          startAt: combineLocalDateTimeToISO(formValues.date, formValues.startTime),
-        }),
-      })
-      if (!response.ok) {
-        const data = (await response.json().catch(() => ({}))) as { error?: string }
-        setAvailability({
-          available: false,
-          reason: data.error ?? "Unable to verify slot availability.",
+      try {
+        const captured = !editingId ? await creationHeaders() : {}
+        if (controller.signal.aborted) return
+        const response = await fetch("/api/appointments/availability", {
+          method: "POST", signal: controller.signal,
+          headers: { "Content-Type": "application/json", ...captured },
+          body: JSON.stringify({ appointmentId: editingId ?? undefined,
+            customerId: formValues.customerId || undefined, serviceId: formValues.serviceId,
+            staffId: formValues.staffId, startAt: combineLocalDateTimeToISO(formValues.date, formValues.startTime) }),
         })
-        setAvailabilityChecking(false)
-        return
-      }
-      const data = (await response.json()) as AppointmentAvailabilityResult
-      setAvailability(data)
-      setAvailabilityChecking(false)
+        const data = await response.json()
+        if (!controller.signal.aborted) setAvailability(response.ok ? data as AppointmentAvailabilityResult : { available: false, reason: data.error || "Unable to verify slot availability." })
+      } catch (error) {
+        if (!controller.signal.aborted) setAvailability({ available: false, reason: (error as Error).message || "Unable to verify slot availability." })
+      } finally { if (!controller.signal.aborted) setAvailabilityChecking(false) }
     }, 250)
-
-    return () => {
-      clearTimeout(timer)
-    }
-  }, [editingId, formOpen, formValues])
+    return () => { clearTimeout(timer); controller.abort() }
+  }, [editingId, formOpen, formValues, creationHeaders])
 
   const confirmCancelAppointment = React.useCallback(async (appointmentId: string) => {
     if (!canArchive) return

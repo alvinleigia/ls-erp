@@ -1,3 +1,26 @@
+## R10 - Appointment office ownership (phase 2D5A, local)
+
+Appointments and booking orders now have immutable tenant/office identities.
+Financial children and linked appointments inherit their order's office; native
+restrictive policies protect lists, details, invoices and audit history. New forms
+capture office/version for preflight and final save; edits retain their source.
+New/moved bookings require dated workplace and office-grant coverage. Hidden
+availability and global coupon limits use private projections, never ordinary
+source visibility. Bulk audits partition identifiers by office. Closed offices
+remain readable/exportable and reject changes/email delivery.
+
+Migration 127 backfills initial offices and infers missing tenants only from
+agreeing native relations. It aborts inconsistent historical links and preserves
+saved financial/branding values, IDs, timestamps, permissions and assignments.
+The complete migration and forced rollback have been rehearsed locally against
+all 128 preceding tables, policies and function grants. Verification passed: 11
+native office tests, 176 private-availability/booking/workforce regressions and
+one real-sign-in Chrome scenario, without skips. Draft/source-office screenshots
+were inspected; final build, TypeScript, lint and whitespace checks passed. No hosted database or
+client data changed. Phase 2D5B appointment staff selectors and remaining inventory,
+operational/report/release checks remain pending. See
+[appointment office contract](APPOINTMENT_OFFICES_R10.md).
+
 ## R10 - Workforce staff choices (phase 2D4C2, local)
 
 Schedule assignments and recurring creation/assignment now use a shared paged,

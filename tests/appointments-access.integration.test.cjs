@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
+const {bookingContext}=require('./helpers/booking-context.cjs')
 const {grantPgFixtureUsers}=require("./helpers/access-fixtures.cjs")
 process.env.TZ='UTC'
 const {test,before,after}=require('node:test'),assert=require('node:assert/strict'),path=require('node:path')
@@ -26,8 +27,8 @@ const {appointmentsNavigation}=require('../application/navigation.ts')
 const {resolveOrderData}=require('../modules/appointments/order-resolution.ts')
 const suffix=require('node:crypto').randomUUID().replaceAll('-',''),a=`apt_a_${suffix}`,b=`apt_b_${suffix}`,rid=`role_${suffix}`
 const session=(tenant=a,role='ADMIN')=>({user:{id:`${tenant}_${role.toLowerCase()}`,tenantId:tenant,role}})
-const request=(method,body,tenant=a,endpoint='/appointments')=>new Request(`http://${tenant}.localhost/api${endpoint}`,{method,headers:{host:`${tenant}.localhost`,'content-type':'application/json'},...(body===undefined?{}:{body:JSON.stringify(body)})})
-const call=(route,method,body,id,role='ADMIN',tenant=a,query='')=>sessions.run(session(tenant,role),()=> (typeof route==='string'?routes[route]:route)[method](request(method,body,tenant,`/appointments${query}`),{params:Promise.resolve({id})}))
+const request=(method,body,tenant=a,endpoint='/appointments',headers={})=>new Request(`http://${tenant}.localhost/api${endpoint}`,{method,headers:{host:`${tenant}.localhost`,'content-type':'application/json',...headers},...(body===undefined?{}:{body:JSON.stringify(body)})})
+const call=async(route,method,body,id,role='ADMIN',tenant=a,query='')=>{const captured=await bookingContext(root,tenant,tenant+'_'+role.toLowerCase());return sessions.run(session(tenant,role),()=> (typeof route==='string'?routes[route]:route)[method](request(method,body,tenant,`/appointments${query}`,captured),{params:Promise.resolve({id})}))}
 const perms=p=>root.query('UPDATE "TenantAccessRole" SET permissions=$1 WHERE id=$2',[p,rid])
 const flag=(enabled,allowed=true,key='appointments')=>root.query('UPDATE "TenantModule" SET enabled=$1,allowed=$2 WHERE "tenantId"=$3 AND key=$4',[enabled,allowed,a,key])
 async function ok(res,status=200){const body=await res.json();assert.equal(res.status,status,JSON.stringify({body,errors:errors.slice(-3)}));return body}

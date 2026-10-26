@@ -1,3 +1,4 @@
+import type { RecordOffice } from "@/types/companies"
 export type AppointmentStatus =
   | "SCHEDULED"
   | "CONFIRMED"
@@ -44,6 +45,8 @@ export type AppointmentProductOption = {
 }
 
 export type AppointmentCore = {
+  officeId: string
+  office?: RecordOffice | null
   id: string
   staffProfileId: string
   customerId: string
@@ -290,6 +293,8 @@ export type AppointmentOrderTaxRow = {
 }
 
 export type AppointmentOrderRow = {
+  officeId: string
+  office?: RecordOffice | null
   id: string
   customerId: string
   appointmentDate: string

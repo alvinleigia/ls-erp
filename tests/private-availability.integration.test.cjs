@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
+const {bookingContext}=require('./helpers/booking-context.cjs')
 const {test,before,after}=require('node:test'),assert=require('node:assert/strict'),{randomUUID}=require('node:crypto'),{Client}=require('pg'),{AsyncLocalStorage}=require('node:async_hooks')
 const raw=process.env.CRM_TEST_DATABASE_URL,url=new URL(raw||'http://invalid')
 if(!['127.0.0.1','localhost'].includes(url.hostname)||url.pathname!=='/ls_salon_crm_test')throw Error('Disposable local database only.')
@@ -14,7 +15,7 @@ const scoped=(user,operation,t=tenant)=>runWithTenantDbContext(t,()=>runWithData
 const blocks=(user=scheduler,ids=[profile],first=start,last=end)=>scoped(user,()=>approvedLeaveBlocks(prisma,tenant,ids,first,last))
 const setPermission=values=>root.query('UPDATE "TenantAccessRole" SET permissions=$1 WHERE id=$2',[values,access])
 const permissionSet=['appointments.read','appointments.create','services.read']
-async function call(handler){return sessions.run({user:{id:scheduler,tenantId:tenant,role:'STAFF'}},()=>handler(new Request(`http://${tenant}.localhost/api/appointments`,{method:'POST',headers:{host:tenant+'.localhost','Content-Type':'application/json'},body:JSON.stringify({customerId:customer,serviceId:service,staffId:employee,startAt:'2035-01-10T10:00:00Z'})})))}
+async function call(handler){const captured=await bookingContext(root,tenant,scheduler);return sessions.run({user:{id:scheduler,tenantId:tenant,role:'STAFF'}},()=>handler(new Request(`http://${tenant}.localhost/api/appointments`,{method:'POST',headers:{host:tenant+'.localhost','Content-Type':'application/json',...captured},body:JSON.stringify({customerId:customer,serviceId:service,staffId:employee,startAt:'2035-01-10T10:00:00Z'})})))}
 before(async()=>{
  await root.connect()
  for(const t of [tenant,foreign])await root.query('INSERT INTO "Tenant"(id,name,slug,"updatedAt") VALUES($1,$1,$1,now())',[t])

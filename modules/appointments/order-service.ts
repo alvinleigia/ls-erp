@@ -1,3 +1,4 @@
+import { bookingCreationOffice, bookingWriteOffice, bookingOfficeLabels } from "./office"
 import type { Prisma } from "@prisma/client"
 import { readDocumentBranding } from "@/platform/branding/read"
 import { AppointmentStatus } from "@prisma/client"
@@ -23,7 +24,7 @@ export async function listOrders(tenantId: string, input: OrderListInput) {
     prisma.appointmentOrder.findMany({ where, include: appointmentOrderInclude,
       orderBy: [{ updatedAt: "desc" }, { id: "asc" }], skip: (page - 1) * pageSize, take: pageSize }),
   ])
-  return { items: rows.map(serializeAppointmentOrder), page, pageSize, total, totalPages: Math.max(1, Math.ceil(total / pageSize)) }
+  return { items: (await bookingOfficeLabels(prisma, tenantId, rows)).map(serializeAppointmentOrder), page, pageSize, total, totalPages: Math.max(1, Math.ceil(total / pageSize)) }
 }
 
 export async function createOrder(actor: BusinessActor, input: AppointmentOrderCreateInput) {
@@ -31,11 +32,13 @@ export async function createOrder(actor: BusinessActor, input: AppointmentOrderC
   // Searching for a suggested slot can scan many days. Keep that outside the write lock.
   let planned: ResolvedOrderLine[] | null = null
   if (input.status === "CONFIRMED") {
+    const officeId = await bookingCreationOffice(actor)
     const preflight = await resolveOrderData(input, { actor, tenantId, enforceFutureStartAt: true })
-    planned = await scheduleConfirmedOrderLines(preflight.lines, preflight.customerId, [], tenantId)
+    planned = await scheduleConfirmedOrderLines(preflight.lines, preflight.customerId, [], tenantId, officeId)
   }
   try {
     const order = await appointmentTransaction(actor, "create", async (tx, actor) => {
+      const officeId = await bookingWriteOffice(tx, actor)
       if (input.status === "CANCELED") requirePermission(actor, "appointments.archive")
       // Re-read participants, catalog prices and coupon usage after acquiring the scheduling lock.
       const resolved = await resolveOrderData(input, { actor, tenantId, enforceFutureStartAt: true, db: tx })
@@ -53,7 +56,7 @@ export async function createOrder(actor: BusinessActor, input: AppointmentOrderC
           status: AppointmentStatus.SCHEDULED })), [])
       const created = await tx.appointmentOrder.create({
         data: {
-          tenantId,
+          tenantId, officeId,
           invoiceBranding: await readDocumentBranding(tx, tenantId) as unknown as Prisma.InputJsonValue,
           customerId: resolved.customerId,
           appointmentDate: resolved.appointmentDate,
@@ -135,9 +138,9 @@ export async function createOrder(actor: BusinessActor, input: AppointmentOrderC
       await recordDomainAuditEvent(tx, {
         tenantId, actorUserId: actor.userId, actorRole: actor.role, requestId: actor.requestId,
         event: "appointments.order.create", entityType: "order", entityId: created.id,
-        after: JSON.parse(JSON.stringify(created)),
+        metadata: { officeId, officeFamily: "appointments" }, after: JSON.parse(JSON.stringify(created)),
       })
-      return created
+      return (await bookingOfficeLabels(tx, tenantId, [created]))[0]
     })
     return { order: serializeAppointmentOrder(order) }
   } catch (error) {

@@ -9,6 +9,6 @@ export function POST(request: Request) {
   return withAppointmentsApi(request, "appointments", "read", async actor => {
     await requireServicesAccess(actor)
     const input = appointmentAvailabilitySchema.parse(await readJson(request))
-    return NextResponse.json(await appointmentAvailability(actor.tenantId, input))
+    return NextResponse.json(await appointmentAvailability(actor, input))
   })
 }

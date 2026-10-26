@@ -20,8 +20,11 @@ const getLineConflictReason = async (
   line: { staffProfileId: string; startAt: Date; endAt: Date },
   customerId: string,
   excludedAppointmentIds: string[],
-  tenantId: string
+  tenantId: string,
+  officeId: string
 ) => {
+  const [target] = await prisma.$queryRaw<{ allowed: boolean }[]>`SELECT app.booking_assignment_allowed(${tenantId},${officeId},${line.staffProfileId},${line.startAt}::timestamptz,${line.endAt}::timestamptz) AS allowed`
+  if (!target.allowed) return "Staff must cover the booking office and dates."
   const availability = await checkStaffAppointmentAvailability(
     line.staffProfileId,
     line.startAt,
@@ -58,7 +61,8 @@ const findNextAvailableLineStart = async (
   customerId: string,
   excludedAppointmentIds: string[],
   earliestStart: Date,
-  tenantId: string
+  tenantId: string,
+  officeId: string
 ) => {
   let candidate = alignToStep(earliestStart)
 
@@ -73,7 +77,7 @@ const findNextAvailableLineStart = async (
       },
       customerId,
       excludedAppointmentIds,
-      tenantId
+      tenantId, officeId
     )
     if (!reason) return { startAt, endAt }
     candidate = new Date(candidate.getTime() + SUGGESTION_STEP_MINUTES * 60_000)
@@ -86,7 +90,8 @@ export const scheduleConfirmedOrderLines = async (
   orderLines: ResolvedOrderLine[],
   customerId: string,
   excludedAppointmentIds: string[] = [],
-  tenantId: string
+  tenantId: string,
+  officeId: string
 ) => {
   const scheduledLines: ResolvedOrderLine[] = []
   let cursor = orderLines[0]?.startAt ? new Date(orderLines[0].startAt) : new Date()
@@ -105,15 +110,16 @@ export const scheduleConfirmedOrderLines = async (
         },
         customerId,
         excludedAppointmentIds,
-        tenantId
+        tenantId, officeId
       )
       if (reason) {
+        if (reason === "Staff must cover the booking office and dates.") throw new AvailabilityConflictError(reason)
         const suggestion = await findNextAvailableLineStart(
           line,
           customerId,
           excludedAppointmentIds,
           new Date(lineStart.getTime() + SUGGESTION_STEP_MINUTES * 60_000),
-          tenantId
+          tenantId, officeId
         )
         throw new AvailabilityConflictError(reason, suggestion?.startAt)
       }
@@ -127,7 +133,7 @@ export const scheduleConfirmedOrderLines = async (
       customerId,
       excludedAppointmentIds,
       lineStart,
-      tenantId
+      tenantId, officeId
     )
     if (!nextSlot) {
       throw new AvailabilityConflictError(

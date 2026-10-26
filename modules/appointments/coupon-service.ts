@@ -63,8 +63,12 @@ async function validateChange(tx: Prisma.TransactionClient, actor: BusinessActor
   }
 }
 
-const usedCoupon = async (tx: Prisma.TransactionClient, coupon: Coupon) => coupon.usedCount > 0 ||
-  await tx.appointmentOrderCoupon.count({ where: { code: coupon.code, order: { tenantId: coupon.tenantId } } }) > 0
+async function usedCoupon(tx: Prisma.TransactionClient, coupon: Coupon) {
+  if (!coupon.tenantId) throw new BusinessError(403, "Coupon tenant context is required.")
+  if (coupon.usedCount > 0) return true
+  const [row] = await tx.$queryRaw<{ used: boolean }[]>`SELECT app.booking_coupon_used(${coupon.tenantId},${coupon.code}) AS used`
+  return row.used
+}
 
 async function audit(tx: Prisma.TransactionClient, actor: BusinessActor, action: string, before: Coupon | null, after: Coupon | null) {
   await recordDomainAuditEvent(tx, { tenantId: actor.tenantId, actorUserId: actor.userId, actorRole: actor.role, requestId: actor.requestId,

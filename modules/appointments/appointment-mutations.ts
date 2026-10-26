@@ -1,3 +1,4 @@
+import { bookingWriteOffice, assertBookingTarget, bookingOfficeLabels } from "./office"
 import type { Appointment, Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 import { recordDomainAuditEvent } from "@/lib/domain-audit"
@@ -20,7 +21,7 @@ const stale = () => new BusinessError(409, "This appointment changed. Refresh be
 export async function getAppointment(tenantId: string, id: string) {
   const row = await prisma.appointment.findFirst({ where: { tenantId, id }, include: appointmentDetailInclude })
   if (!row) throw new BusinessError(404, "Appointment not found.")
-  return { appointment: serializeAppointment(row) }
+  return { appointment: serializeAppointment((await bookingOfficeLabels(prisma, tenantId, [row]))[0]) }
 }
 
 export async function updateAppointment(actor: BusinessActor, id: string, input: AppointmentUpdateInput) {
@@ -28,6 +29,7 @@ export async function updateAppointment(actor: BusinessActor, id: string, input:
     const { tenantId } = actor
     const current = await tx.appointment.findFirst({ where: { tenantId, id }, include: { staffProfile: { select: { userId: true } } } })
     if (!current) throw new BusinessError(404, "Appointment not found.")
+    await bookingWriteOffice(tx, actor, current.officeId)
     const status = input.status ?? current.status
     if (status !== current.status && (status === "CANCELED" || current.status === "CANCELED")) requirePermission(actor, "appointments.archive")
     const activation = activeAppointmentStatuses.includes(status) && !activeAppointmentStatuses.includes(current.status)
@@ -62,6 +64,7 @@ export async function updateAppointment(actor: BusinessActor, id: string, input:
       if (staff) staffProfileId = staff.id
     }
     const endAt = new Date(startAt.getTime() + duration)
+    if (schedulingFields || activation) await assertBookingTarget(tx, tenantId, current.officeId, staffProfileId, startAt, endAt)
     if ((schedulingFields || activation) && duration <= 0) throw new BusinessError(409, "Appointment duration must be positive.")
     const customerId = input.customerId ?? current.customerId
     if ((schedulingFields || activation) && activeAppointmentStatuses.includes(status)) {
@@ -75,8 +78,8 @@ export async function updateAppointment(actor: BusinessActor, id: string, input:
     })
     if (!saved) throw stale()
     await synchronizeAppointmentOrders(tx, actor, [{ before: current, after: saved }])
-    await recordDomainAuditEvent(tx, { ...auditActor(actor), event: "appointment.updated", entityId: id, before: snapshot(current), after: snapshot(saved) })
-    return { appointment: serializeAppointment(saved) }
+    await recordDomainAuditEvent(tx, { ...auditActor(actor), event: "appointment.updated", entityId: id, metadata: { officeId: current.officeId, officeFamily: "appointments" }, before: snapshot(current), after: snapshot(saved) })
+    return { appointment: serializeAppointment((await bookingOfficeLabels(tx, tenantId, [saved]))[0]) }
   })
 }
 
@@ -84,11 +87,12 @@ export async function cancelAppointment(actor: BusinessActor, id: string) {
   return appointmentTransaction(actor, "archive", async (tx, actor) => {
     const row = await tx.appointment.findFirst({ where: { tenantId: actor.tenantId, id } })
     if (!row) throw new BusinessError(404, "Appointment not found.")
+    await bookingWriteOffice(tx, actor, row.officeId)
     if (row.status === "CANCELED") return { ok: true }
     const result = await tx.appointment.updateMany({ where: { tenantId: actor.tenantId, id, updatedAt: row.updatedAt }, data: { status: "CANCELED" } })
     if (result.count !== 1) throw stale()
     await synchronizeAppointmentOrders(tx, actor, [{ before: row, after: { ...row, status: "CANCELED" } }])
-    await recordDomainAuditEvent(tx, { ...auditActor(actor), event: "appointment.canceled", entityId: id, before: { status: row.status }, after: { status: "CANCELED" } })
+    await recordDomainAuditEvent(tx, { ...auditActor(actor), event: "appointment.canceled", entityId: id, metadata: { officeId: row.officeId, officeFamily: "appointments" }, before: { status: row.status }, after: { status: "CANCELED" } })
     return { ok: true }
   })
 }
@@ -102,6 +106,7 @@ export async function resolveAppointments(actor: BusinessActor, input: Appointme
         staffProfile: { select: { user: { select: { role: true, status: true } } } } },
     })
     if (rows.length !== ids.length) throw new BusinessError(404, "One or more appointments were not found. Refresh the selection.")
+    for (const office of new Set(rows.map(row => row.officeId))) await bookingWriteOffice(tx, actor, office)
     let moves = rows.map(row => ({ ...row }))
     let timeZone: string | undefined
     let targetStaffProfileId: string | undefined
@@ -131,6 +136,7 @@ export async function resolveAppointments(actor: BusinessActor, input: Appointme
         // Reassignment already validated its destination; rescheduling retains the current staff.
         if (input.action === "reschedule" && (move.staffProfile.user.role !== "STAFF" || move.staffProfile.user.status !== "ACTIVE")) throw new BusinessError(400, "Staff member is not active.")
       }
+      for (const move of moves) await assertBookingTarget(tx, tenantId, move.officeId, move.staffProfileId, move.startAt, move.endAt)
       // Unchanged selected rows remain in the database conflict query.
       await assertAppointmentMovesAvailable(tx, tenantId, moves, moves.map(row => row.id))
     }
@@ -144,14 +150,17 @@ export async function resolveAppointments(actor: BusinessActor, input: Appointme
     }
     await synchronizeAppointmentOrders(tx, actor, moves.map(move => ({ before: before.get(move.id)!, after: move })))
     const event = input.action === "cancel" ? "appointment.bulk_canceled" : input.action === "reassign" ? "appointment.bulk_reassigned" : "appointment.bulk_rescheduled"
-    await recordDomainAuditEvent(tx, {
-      ...auditActor(actor), event, before: moves.map(move => snapshot(before.get(move.id)!)),
-      after: input.action === "cancel" ? { status: "CANCELED" } : moves.map(snapshot),
-      metadata: { appointmentIds: moves.map(move => move.id), updatedCount: moves.length,
-        ...(input.action === "reassign" ? { targetStaffId: input.targetStaffId, targetStaffProfileId } : {}),
-        ...(input.action === "reschedule" ? { rescheduleDate: input.rescheduleDate, rescheduleTime: input.rescheduleTime, timeZone } : {}),
-      },
-    })
+    for (const officeId of new Set(moves.map(row => row.officeId))) {
+      const scoped = moves.filter(row => row.officeId === officeId)
+      await recordDomainAuditEvent(tx, {
+        ...auditActor(actor), event, before: scoped.map(move => snapshot(before.get(move.id)!)),
+        after: input.action === "cancel" ? { status: "CANCELED" } : scoped.map(snapshot),
+        metadata: { officeId, officeFamily: "appointments", appointmentIds: scoped.map(move => move.id), updatedCount: scoped.length,
+          ...(input.action === "reassign" ? { targetStaffId: input.targetStaffId, targetStaffProfileId } : {}),
+          ...(input.action === "reschedule" ? { rescheduleDate: input.rescheduleDate, rescheduleTime: input.rescheduleTime, timeZone } : {}),
+        },
+      })
+    }
     return { updatedCount: moves.length }
   })
 }

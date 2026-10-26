@@ -6,6 +6,10 @@ export function officeBoundaryError(error: unknown): BusinessError | null {
   const value = error as { message?: string; meta?: { database_error?: string; driverAdapterError?: { cause?: { originalMessage?: string } } } }
   const message = [value?.message, value?.meta?.database_error, value?.meta?.driverAdapterError?.cause?.originalMessage].filter(Boolean).join(" ")
   const messages: readonly [string, number][] = [
+    ["Booking office access is not permitted", 403],
+    ["Booking source identity is not permitted", 400],
+    ["Staff must cover the booking office and dates", 400],
+    ["Coupon integrity access is not permitted", 403],
     ["Workforce staff choices access is not permitted", 403],
     ["Workforce staff source not found", 404],
     ["Invalid workforce staff selection", 400],
