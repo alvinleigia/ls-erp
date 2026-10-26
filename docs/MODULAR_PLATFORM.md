@@ -1,3 +1,28 @@
+## R10 - Inventory office-stock migration rehearsal (phase 2D6B1, local candidate)
+
+A pending native cutover separates shared catalogue identity from office balances,
+costs and reorder settings. It preserves authoritative saved quantities once in
+the initial office, without reconstructing or duplicating incomplete history.
+Canonical booking/receipt allocations and native commands prevent source-office
+mistakes and receipt replay; ordinary runtime writes cannot forge stock history.
+Count corrections use stock versions, deferred proofs require coherent source
+posting, and stock audits are mandatory in the same transaction. Closed offices
+retain Read and reject changes; permission checks run after the shared lock.
+
+This SQL remains outside the deployable migration directory. Active Prisma,
+services and UI are unchanged and stock is still tenant-wide in the application.
+The next phase, 2D6B2, must switch services/schema/forms/choices/dashboards and
+promote the candidate together, then verify API and browser flows. No runtime
+compatibility adapter, hosted database change, push or deployment is included.
+See [Inventory stock contract](INVENTORY_STOCK_R10.md) for the pending source,
+rehearsal command and remaining cutover requirements.
+
+Verification: 18 candidate native/migration checks and 85 unchanged active
+Inventory/booking regression tests passed. Preservation/forced rollback covers
+all 128 prior tables and existing policies/functions/grants. TypeScript,
+changed-file ESLint and whitespace checks passed. This candidate has no UI to
+browser-test yet.
+
 ## R10 - Inventory write and audit foundation (phase 2D6A, local)
 
 Inventory category/supplier/product/purchase writes now refresh current access

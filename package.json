@@ -73,6 +73,7 @@
     "test:effective-working-time": "node scripts/test-sales-orders.cjs --effective-working-time",
     "test:flexible-plan-offices": "node scripts/test-sales-orders.cjs --flexible-plan-offices",
     "test:daily-roster-offices": "node scripts/test-sales-orders.cjs --daily-roster-offices",
+    "test:inventory-office-rehearsal": "node scripts/test-sales-orders.cjs --inventory-office-rehearsal",
     "test:inventory-transactions": "node scripts/test-sales-orders.cjs --inventory",
     "test:inventory-transactions:browser": "node scripts/test-sales-orders.cjs --inventory --browser",
     "test:appointment-offices": "node scripts/test-sales-orders.cjs --appointment-offices",
