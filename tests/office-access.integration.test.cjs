@@ -43,7 +43,7 @@ after(async () => { await Promise.all(clients.map(c => c.$disconnect())); await 
 test('new unassigned business users have no implicit office or creation context', async () => {
   assert.equal((await service.getMemberships(staff.id)).version, 0)
   assert.deepEqual(await list(staff), [])
-  assert.deepEqual(await own.getOwnContext(), { creationOffice: null, version: 0 })
+  assert.deepEqual(await own.getOwnContext(), { creationOffice: null, creationOfficeId: null, version: 0 })
   await assert.rejects(own.selectCreationOffice({ version: 0, officeId: a.id }), denied(403))
   assert.equal((await service.getMemberships(staff.id)).version, 0)
 })

@@ -102,9 +102,11 @@ The existing APIs are suitable foundations. UI progress is local only:
 2. Phase 2D8B connects initial office access to direct creation and invitation
    forms, sharing the membership fields and read-only draft resolver.
    Dated employee workplace placement and leave approval routing remain separate.
-3. Add a self-service creation-office selector through `/api/workspace/offices`
-   and `/api/workspace/office`. It changes only a persisted creation preference,
-   never memberships, Read scope, saved record offices or report population.
+3. Phase 2D8C adds the self-service [creation-office selector](WORKSPACE_OFFICE_UI_R10.md)
+   through `/api/workspace/offices` and `/api/workspace/office`. It changes only
+   a persisted preference, never memberships, Read scope or saved record offices.
+   Existing office-specific views keep their own context; this is not a global
+   report filter.
    New drafts capture ID/version on opening; stale saves retain the draft and
    return 409. Linked work keeps its source office.
 4. Verify the combined controls with multi-office managers, explicit subsidiary
@@ -114,5 +116,6 @@ The existing APIs are suitable foundations. UI progress is local only:
 5. Complete the R10 staged release/recovery gates before exposing these changes
    to hosted tenants. External collaborator accounts remain a later R10 phase.
 
-The next bounded implementation is **phase 2D8C: the self-service creation-office
-selector**. This review does not authorize bypasses or substitute directory placement for access.
+The next bounded work is the **combined multi-office workflow and release-readiness
+review**. This review does not authorize bypasses or substitute directory placement
+for access.

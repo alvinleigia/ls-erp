@@ -100,7 +100,7 @@ PostgreSQL and synthetic sign-ins only. Evidence is retained under ignored
 
 ## Next bounded work
 
-Phase 2D8C adds the self-service creation-office selector. It changes a creation
-preference only, preserving office memberships, saved record offices, source
-Read, report population and captured draft versions. External collaborators and
-the full staged release remain later R10 work.
+Phase 2D8C now adds the [creation-office selector](WORKSPACE_OFFICE_UI_R10.md).
+It preserves memberships, saved offices, source Read and captured draft versions.
+Combined workflow verification, external collaborators and the full staged
+release remain later R10 work.

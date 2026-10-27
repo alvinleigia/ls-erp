@@ -5,8 +5,8 @@ It is not the completed office-isolation release. Phase 2B now connects
 [sales record ownership and office RLS](SALES_OFFICE_OWNERSHIP_R10.md) while
 retaining R9 rules. Later local phases cover operational families and provisioning.
 Phase 2D8A adds the [admin editor](OFFICE_MEMBERSHIP_UI_R10.md); initial-access
-forms and the workspace switcher remain pending. Complete
-the release contract before deploying these phases to clients.
+forms are implemented in phase 2D8B and the [workspace selector](WORKSPACE_OFFICE_UI_R10.md)
+is implemented in 2D8C. Complete the release contract before deploying these phases to clients.
 
 ## Membership contract
 
@@ -94,8 +94,9 @@ for membership changes and self/Admin-only for preference changes.
 
 Phase 2D7C now provides the executable ownership/model registration and workspace
 readiness review in `RESOURCE_OWNERSHIP_R10.md`. Phase 2D8A implements the
-local admin membership editor. Initial provisioning forms and self-service
-creation-office controls are the next UI work.
+local admin membership editor; 2D8B connects initial provisioning forms and
+2D8C adds self-service creation-office controls. Combined workflow verification
+and release/recovery gates remain.
 
 1. Sales roots and canonical children now have native ownership in phase 2B.
    Complete the operational families and personal/conflict paths, retaining the

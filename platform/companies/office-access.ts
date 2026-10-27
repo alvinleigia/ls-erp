@@ -14,7 +14,7 @@ type Tx = Prisma.TransactionClient
 export type { OfficeChoice } from "@/types/companies"
 const id = z.string().trim().min(1).max(200)
 const selectionSchema = z.object({ version: z.number().int().nonnegative(), officeId: id.nullable() }).strict()
-const listSchema = z.object({ page: z.coerce.number().int().min(1).max(100000).default(1), pageSize: z.coerce.number().int().min(1).max(100).default(20), q: z.string().trim().max(160).default(""), sort: z.enum(["name", "code"]).default("name"), order: z.enum(["asc", "desc"]).default("asc") }).strict()
+const listSchema = z.object({ page: z.coerce.number().int().min(1).max(100000).default(1), pageSize: z.coerce.number().int().min(1).max(100).default(20), q: z.string().trim().max(160).default(""), selected: id.nullable().default(null), sort: z.enum(["name", "code"]).default("name"), order: z.enum(["asc", "desc"]).default("asc") }).strict()
 // These checks grant no profile action or record access by themselves. Native
 // record policies must intersect office eligibility with their own source rules.
 export async function officeAccessible(tx: Tx, actor: Pick<BusinessActor, "tenantId" | "userId">, officeId: string, userId = actor.userId) {
@@ -101,11 +101,12 @@ export function createOfficeAccessService(db: PrismaClient, identity: Identity) 
       const query = listSchema.parse(input)
       return run(false, async (tx, actor) => {
         const sort = Prisma.raw(query.sort), pageSort = Prisma.raw(`p.${query.sort}`), direction = Prisma.raw(query.order)
-        const [result] = await tx.$queryRaw<{ items: OfficeChoice[]; total: number }[]>`WITH permitted AS MATERIALIZED (
+        const [result] = await tx.$queryRaw<{ items: OfficeChoice[]; total: number; selected: OfficeChoice | null }[]>`WITH permitted AS MATERIALIZED (
           SELECT * FROM app.business_office_choices(${actor.tenantId},${actor.userId})
-          WHERE strpos(lower(name),lower(${query.q}))>0 OR strpos(lower(code),lower(${query.q}))>0 OR strpos(lower("companyName"),lower(${query.q}))>0
-        ), page AS (SELECT * FROM permitted ORDER BY ${sort} ${direction},id LIMIT ${query.pageSize} OFFSET ${(query.page - 1) * query.pageSize})
-        SELECT COALESCE((SELECT jsonb_agg(to_jsonb(p) ORDER BY ${pageSort} ${direction},p.id) FROM page p),'[]'::jsonb) AS items,(SELECT count(*)::integer FROM permitted) AS total`
+        ), filtered AS (SELECT * FROM permitted WHERE strpos(lower(name),lower(${query.q}))>0 OR strpos(lower(code),lower(${query.q}))>0 OR strpos(lower("companyName"),lower(${query.q}))>0
+        ), page AS (SELECT * FROM filtered ORDER BY ${sort} ${direction},id LIMIT ${query.pageSize} OFFSET ${(query.page - 1) * query.pageSize})
+        SELECT COALESCE((SELECT jsonb_agg(to_jsonb(p) ORDER BY ${pageSort} ${direction},p.id) FROM page p),'[]'::jsonb) AS items,(SELECT count(*)::integer FROM filtered) AS total,
+          (SELECT to_jsonb(p) FROM permitted p WHERE p.id=${query.selected}) AS selected`
         return { ...result, page: query.page, pageSize: query.pageSize, totalPages: Math.max(1, Math.ceil(result.total / query.pageSize)) }
       })
     },
@@ -113,7 +114,7 @@ export function createOfficeAccessService(db: PrismaClient, identity: Identity) 
       return run(false, async (tx, actor) => {
         const current = await tx.businessOfficePolicy.findUnique({ where: { tenantId_userId: { tenantId: actor.tenantId, userId: actor.userId } } })
         const choices = current?.creationOfficeId ? await tx.$queryRaw<OfficeChoice[]>`SELECT * FROM app.business_office_choices(${actor.tenantId},${actor.userId}) WHERE id=${current.creationOfficeId}` : []
-        return { creationOffice: choices[0] ?? null, version: current?.version ?? 0 }
+        return { creationOffice: choices[0] ?? null, creationOfficeId: current?.creationOfficeId ?? null, version: current?.version ?? 0 }
       })
     },
     selectCreationOffice(input: unknown) {

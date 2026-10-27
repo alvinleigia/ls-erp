@@ -13,3 +13,5 @@ export type OfficeMemberships = {
 export type MembershipSubject = { kind: "user"; userId: string } | { kind: "new"; role: import("@/lib/permissions").Role; status: import("@/types/users").UserStatus }
 export const membershipPreviewKey = (subject: MembershipSubject, draft: OfficeMembershipDraft) => JSON.stringify({ subject, draft })
 export const emptyOfficeMembership: OfficeMembershipDraft = { officeIds: [], companies: [], creationOfficeId: null }
+
+export type WorkspaceOfficeContext = { creationOffice: OfficeChoice | null; creationOfficeId: string | null; version: number }

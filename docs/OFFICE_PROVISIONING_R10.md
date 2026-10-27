@@ -82,9 +82,9 @@ migration, deployment or client-data change was performed.
   are inferred from the sender.
 - Complete operational/workforce source ownership and privacy-safe scheduling
   conflicts, preserving personal leave and configured approval relationships.
-- User membership administration and initial office forms are implemented
-  locally in phases 2D8A/B. Complete workspace selection and the remaining release
-  requirements, then external collaborators and attribution.
+- User memberships, initial office forms and self-service preferences are
+  implemented locally in phases 2D8A/B/C. Complete combined workflow verification
+  and the remaining release requirements, then external collaborators and attribution.
 - Rehearse the whole release against a restore-tested backup copy and compare
   existing pilot access before hosted staging verification. Production remains a
   separately authorized release.

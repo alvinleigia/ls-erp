@@ -1,3 +1,4 @@
+import { WorkspaceOfficeSelector } from "@/platform/companies/workspace-office-selector"
 import { ApplicationAccessProvider } from "@/application/access-provider";
 import { redirect } from "next/navigation";
 
@@ -19,7 +20,7 @@ export default async function ProtectedLayout({
 }) {
   const [session, tenant] = await Promise.all([auth(), resolveTenantFromServerHeaders()]);
 
-  if (!session?.user) {
+  if (!session?.user?.id) {
     redirect("/auth/signin");
   }
   const sessionTenantId = (session.user as { tenantId?: string | null }).tenantId ?? null
@@ -42,7 +43,7 @@ export default async function ProtectedLayout({
         <AppSidebar key={sidebarLogo || "default"} brandingLogo={sidebarLogo} brandingName={branding.name || tenant.name} />
 
         <main className="min-w-0 flex-1 p-6">
-          <SidebarTrigger />
+          <div className="flex min-w-0 items-center justify-between gap-3"><SidebarTrigger />{businessWorkspace && <WorkspaceOfficeSelector key={`${tenant.id}:${session.user.id}`} tenantId={tenant.id} userId={session.user.id} />}</div>
           <div className="mt-6">{children}</div>
         </main>
       </div>

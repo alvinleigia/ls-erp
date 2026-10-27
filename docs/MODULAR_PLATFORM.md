@@ -1,3 +1,38 @@
+## R10 - Self-service creation-office selector (phase 2D8C, local)
+
+Business layouts now expose a searchable/paged creation-office selector beside
+the sidebar toggle. Choices use self-service eligibility, not admin directories.
+No office is inferred for unassigned users. Explicit clearing is supported;
+closed stored preferences remain identifiable without an eligible active caption.
+Selection changes only the user's preference/version and mandatory SQL audit,
+not memberships, profiles, workplaces, teams or saved/source record offices.
+
+Matching user/tenant tabs refresh only their summary label through a scoped
+notification; focus/visibility provide refresh fallback. Open picker/business
+drafts keep their captured context. A stale preference save retains its choice
+and returns 409 until explicit reload. A real enquiry opened before another
+tab's UI switch retains its original header/version and rejects a stale save.
+No page/chart/report or business form is remounted by a preference notification.
+Existing office-specific views keep their own context; this is not a Read filter.
+
+The self list adds selected-caption resolution within the same permitted source
+population as search/count/page. Own context includes its stored creationOfficeId
+separately from the active caption. Authority loss clears controls and aborts
+pending label reads; delayed success cannot restore stale metadata. Failed choice
+loads offer explicit reload. Layout identity requires an authenticated user ID.
+
+Verified: 54 integration checks and six real-sign-in Chrome flows passed. Cases
+include cancellation, keyboard/mobile use, paging, scope boundaries, cross-tab
+synchronization/conflicts, clearing, closed history, unassigned users, current
+revocation, lookup recovery and unchanged source offices/Read. Desktop/mobile
+screenshots were inspected. The disposable 129-migration rehearsal and all 18
+Inventory native checks passed. Production build, TypeScript, changed-file ESLint
+and whitespace passed; no skips count as passes.
+
+Local on staging only: no schema migration, data backfill, hosted write, push or
+deployment. Next: combined multi-office workflow and release-readiness review,
+then the remaining R10 phases/gates. See [workspace UI contract](WORKSPACE_OFFICE_UI_R10.md).
+
 ## R10 - Initial office access in onboarding (phase 2D8B, local)
 
 User creation and invitations now share the office/company/subsidiary/creation

@@ -76,10 +76,11 @@ adds the closed composed audit registry, current report authorization and source
 boundary inventory. See [audit report contract](AUDIT_REPORTS_R10.md) and
 [resource boundary inventory](RESOURCE_BOUNDARIES_R10.md). Phase 2D7C now adds the exhaustive executable resource/model contracts and
 [workspace readiness review](RESOURCE_OWNERSHIP_R10.md). Membership/provisioning/
-workspace UI remains pending.
-Remaining operational families, assignment selectors and workspace
-controls remain prerequisites before exposing office controls or deploying the
-office-isolation release.
+workspace UI is implemented locally in phases 2D8A/B/C. See the
+[workspace selector contract](WORKSPACE_OFFICE_UI_R10.md). Combined workflow
+verification and the complete release/recovery gates remain pending.
+Complete the combined operational-family, assignment-selector and workspace
+checks before exposing office controls or deploying the office-isolation release.
 
 Add explicit company/office membership and permitted head-office oversight;
 intersect organizational scope with existing action profiles, record rules,
