@@ -71,7 +71,7 @@ async function rowIdentity(db, relation) {
   return { primaryKey, uniqueKey }
 }
 
-async function capture(rawUrl) {
+async function capture(rawUrl, { canonicalConstraints = false } = {}) {
   const db = new Client({ connectionString: localUrl(rawUrl) })
   await db.connect()
   try {
@@ -86,7 +86,9 @@ async function capture(rawUrl) {
     if (!role?.complete) throw Error("Reconciliation requires a local backup-reader role with complete RLS visibility; use a separate runtime role for access tests.")
     const tables = (await db.query(`SELECT c.relname AS name, c.relrowsecurity AS rls, c.relforcerowsecurity AS force
       FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' AND c.relkind='r' AND c.relname<>'_prisma_migrations' ORDER BY c.relname`)).rows
-    const snapshot = { format: 2, serverMajor: (await db.query("SHOW server_version_num")).rows[0].server_version_num.slice(0, -4), tables: {}, foreignKeyViolations: [], migrations: [] }
+    // Format 3 uses PostgreSQL's own canonical constraint deparser for dump/restore
+    // comparisons. Format 2 and the historical R5 comparison remain unchanged.
+    const snapshot = { format: canonicalConstraints ? 3 : 2, serverMajor: (await db.query("SHOW server_version_num")).rows[0].server_version_num.slice(0, -4), tables: {}, foreignKeyViolations: [], migrations: [] }
     snapshot.schemaObjects = {
       enums: (await db.query("SELECT t.typname AS name, array_agg(e.enumlabel ORDER BY e.enumsortorder) AS labels FROM pg_type t JOIN pg_namespace n ON n.oid=t.typnamespace JOIN pg_enum e ON e.enumtypid=t.oid WHERE n.nspname='public' GROUP BY t.typname ORDER BY t.typname")).rows,
       isolationFunctions: (await db.query("SELECT p.proname AS name, pg_get_function_identity_arguments(p.oid) AS arguments, md5(pg_get_functiondef(p.oid)) AS hash FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='app' AND p.prokind='f' ORDER BY p.proname, arguments")).rows,
@@ -97,7 +99,7 @@ async function capture(rawUrl) {
         FROM pg_attribute a LEFT JOIN pg_attrdef d ON d.adrelid=a.attrelid AND d.adnum=a.attnum WHERE a.attrelid=$1::regclass AND a.attnum>0 AND NOT a.attisdropped ORDER BY a.attnum`, [relation])).rows
       const identity = await rowIdentity(db, relation)
       const identityColumns = identity.primaryKey.length ? identity.primaryKey : identity.uniqueKey.columns
-      const constraints = (await db.query(`SELECT conname AS name, contype AS type, convalidated AS validated, pg_get_constraintdef(oid) AS definition FROM pg_constraint WHERE conrelid=$1::regclass ORDER BY conname`, [relation])).rows
+      const constraints = (await db.query(`SELECT conname AS name, contype AS type, convalidated AS validated, pg_get_constraintdef(oid${canonicalConstraints ? ',true' : ''}) AS definition FROM pg_constraint WHERE conrelid=$1::regclass ORDER BY conname`, [relation])).rows
       if (constraints.some(c => !c.validated)) throw Error(`Unvalidated constraints: ${table.name}`)
       const indexes = (await db.query("SELECT indexname AS name, indexdef AS definition FROM pg_indexes WHERE schemaname='public' AND tablename=$1 ORDER BY indexname", [table.name])).rows
       if ((await db.query("SELECT 1 FROM pg_index WHERE indrelid=$1::regclass AND (NOT indisvalid OR NOT indisready)", [relation])).rowCount) throw Error(`Invalid index: ${table.name}`)

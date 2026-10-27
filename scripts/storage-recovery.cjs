@@ -175,5 +175,5 @@ async function main() {
   const report = await backup({ storage, project: options['--project'], out: options['--out'], databaseBackup })
   console.log(JSON.stringify({ ...report, ...verify({ dir: options['--out'] }) }))
 }
-module.exports = { backup, verify, recover, inventory, protect, seal, open }
+module.exports = { backup, verify, recover, inventory, protect, seal, open, privateDirectory }
 if (require.main === module) main().catch(() => { console.error('Storage recovery failed. Check explicit paths/project, credentials, Windows account and backup integrity. Incomplete output must not be used.'); process.exitCode = 1 })

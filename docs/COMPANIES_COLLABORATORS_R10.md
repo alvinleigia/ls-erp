@@ -136,7 +136,9 @@ Phase 4C1 adds local [activity filters, drill-downs and exports](PARTNER_ACTIVIT
 Phase 4C2a adds local [receivable attribution reporting](PARTNER_FINANCIAL_R10.md).
 Phase 4C2b adds local [dashboard attribution and matching drill-downs](PARTNER_DASHBOARD_R10.md).
 [Phase 5 architecture cleanup](ARCHITECTURE_BASELINE_R10.md) resolves the local
-baseline findings. Hosted recovery and acceptance remain before release.
+baseline findings. [Phase 6A release preparation](RELEASE_READINESS_R10.md) adds
+the R10 source inventory and isolated encrypted recovery rehearsal. Hosted pilot
+recovery, copied-data access comparison and acceptance remain before release.
 
 Keep introducing collaborator, responsible salesperson, supervising manager and
 record company/office as separate dimensions. Preserve source attribution through

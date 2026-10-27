@@ -1,3 +1,20 @@
+## R10 - Local release readiness and recovery (phase 6A)
+
+The separate R10 inventory pins all 132 migrations while preserving the R5
+manifest and historical comparison rules. Real Prisma deployment order matches
+the historical rehearsal schema. Persisted encrypted database/role archives
+restore into a fresh local cluster with matching data, RLS, grants and ownership.
+
+Verified locally on 2026-10-28: 17 source/history/storage checks and 45 restored-
+database checks pass with zero skips, alongside 132 migration rehearsals and
+18 native stock preservation checks. Both synthetic containers were removed.
+No hosted records, deployments or saved browser sessions changed.
+
+See [R10 release readiness](RELEASE_READINESS_R10.md) for commands, evidence,
+snapshot/ACL comparison rules and remaining gates. Actual target history, fresh
+pilot database/storage recovery, copied-data effective-access comparison and
+hosted staging acceptance remain required; this is not production approval.
+
 ## R10 - Architecture baseline cleanup (phase 5, local)
 
 The original 23 architecture assertions now pass unchanged. Generic stock

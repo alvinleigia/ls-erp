@@ -749,6 +749,10 @@ CRM's work-time entry point re-exports these shared helpers for compatibility.
 
 ## Release reconciliation
 
+- R10 source/history checks and the isolated encrypted recovery runner are
+  documented in `docs/RELEASE_READINESS_R10.md`. Keep their source manifest separate
+  from historical R5 evidence. Synthetic recovery never certifies pilot data,
+  hosted history or release approval; retain the copied-client access comparison.
 - Use the reviewed industry-release manifest and local-only snapshot tooling for
   R5 rehearsal. Never regenerate checksums or mark failed migrations applied to
   silence a discrepancy. Compare actual target history and baseline schema first.
