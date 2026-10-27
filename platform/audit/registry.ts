@@ -33,7 +33,7 @@ function resourceFamily(resource: Resource, prefix: string, component?: string):
 // even when that family's module or permission is unavailable. Unknown events
 // stay stored but cannot enter the composed report through a broad fallback.
 export const auditFamilies: readonly AuditFamily[] = [
-  ...["workspace.", "structure.", "access.", "module.", "tenant.", "organization.", "core.invitations.", "crm.team.", "team."].map(prefix => ({ prefix, boundary: "security" as const, adminOnly: true })),
+  ...["collaborator.", "workspace.", "structure.", "access.", "module.", "tenant.", "organization.", "core.invitations.", "crm.team.", "team."].map(prefix => ({ prefix, boundary: "security" as const, adminOnly: true })),
   resourceFamily("businessSettings", "core.businessSettings."),
   resourceFamily("taxRates", "core.taxRates."),
   resourceFamily("branding", "branding."),

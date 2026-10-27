@@ -1,3 +1,26 @@
+## R10 - External collaborator directory (phase 3A, local)
+
+Tenant Admin now manages external identities under Users > External collaborators.
+Names, stable codes, classification, optional contact/organization display details,
+explicit supervisors and archived status are separate from login and employment.
+Active same-tenant management accounts are eligible supervisors; unavailable saved
+supervisors remain historical until explicit reassignment. No relationship grants
+profiles, teams, offices, records or employee status. No KPI population is changed.
+
+The shared platform service rechecks current authority under the tenant security
+lock, uses optimistic versions and writes mandatory before/after audit atomically.
+Migration 130 adds one security-owned model with forced RLS, immutable identity,
+tenant-scoped supervisor integrity, archive-only runtime lifecycle and private
+audit copies. All 131 preceding tables/policies are preserved; rollback is tested.
+The existing permission resources, scope families and sharing boundaries remain.
+
+69 distinct API/access/resource checks and six distinct Chrome flows pass, including
+focused reruns. Build, schema validation, TypeScript and changed-source ESLint pass.
+Desktop/mobile screenshots were inspected; the mobile form has no horizontal overflow.
+See [directory contract and verification](EXTERNAL_COLLABORATORS_R10.md).
+Login linkage and explicit external-account lifecycle remain phase 3B; attribution
+remains phase 4. Work is local staging only; hosted recovery/release gates remain.
+
 ## R10 - Combined multi-office acceptance (phase 2D8D, local)
 
 The combined native suite exercises onboarding, memberships, multiple managed

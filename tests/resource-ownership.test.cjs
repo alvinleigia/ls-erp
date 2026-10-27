@@ -28,7 +28,8 @@ test('consolidation preserves the reviewed scope families, sharing owners and co
  for(const [resource,policy]of Object.entries(baseline.recordPolicies))assert.equal(resourceRecordPolicies[resource],policy,resource)
  assert.deepEqual(sharingRecords,baseline.sharingRecords)
  for(const [resource,owner]of Object.entries(baseline.sharingOwners))assert.equal(sharingResource(resource)??null,owner,resource)
- assert.deepEqual(auditFamilies,baseline.auditFamilies)
+ assert.deepEqual(auditFamilies.filter(family=>family.prefix!=='collaborator.'),baseline.auditFamilies)
+ assert.deepEqual(auditFamilies.filter(family=>family.prefix==='collaborator.'),[{prefix:'collaborator.',boundary:'security',adminOnly:true}])
  for(const resource of resourceKeys){const contract=resourceRegistry[resource];if(contract.sharing){assert.ok(Object.hasOwn(sharingRecords,contract.sharing),resource);assert.equal(sharingResource(resource),contract.sharing)}}
  for(const resource of ['missing','__proto__','constructor','toString'])assert.equal(sharingResource(resource),undefined)
 })

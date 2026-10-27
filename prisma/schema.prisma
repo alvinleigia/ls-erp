@@ -741,6 +741,7 @@ enum StockMovementType {
 }
 
 model User {
+  supervisedCollaborators ExternalCollaborator[] @relation("CollaboratorSupervisor")
   officePolicy BusinessOfficePolicy?
   recordSharingGrants RecordSharingGrant[]
   accessAssignments TenantRoleAssignment[]
@@ -839,6 +840,7 @@ model Organization {
 }
 
 model Tenant {
+  externalCollaborators ExternalCollaborator[]
   officeStocks InventoryOfficeStock[]
   bookingStock InventoryBookingStock[]
   receiptStock InventoryReceiptStock[]
@@ -2980,4 +2982,28 @@ model InventoryReceiptStock {
   item PurchaseOrderItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   @@index([tenantId])
+}
+
+// External party directory. Login linkage and employee profiles are separate.
+model ExternalCollaborator {
+  id String @id @default(cuid())
+  tenantId String
+  code String
+  name String
+  classification String @default("Partner")
+  organizationName String?
+  email String?
+  phone String?
+  supervisorUserId String
+  archived Boolean @default(false)
+  version Int @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  supervisor User @relation("CollaboratorSupervisor", fields: [tenantId, supervisorUserId], references: [tenantId, id], onDelete: NoAction)
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, code])
+  @@index([tenantId, archived, name])
+  @@index([tenantId, supervisorUserId])
 }

@@ -102,6 +102,11 @@ new synthetic offices. No role fallback or permanent migration adapter.
 
 ## Phase 3: external collaborators
 
+Phase 3A implements the local [external collaborator directory](EXTERNAL_COLLABORATORS_R10.md):
+separate identities, explicit internal supervisors, archiving and mandatory audits.
+No login or employee profile is created. Login linking and lifecycle remain phase
+3B; attribution and KPI separation remain phase 4.
+
 Add an industry-neutral external collaborator identity with optional agency/party
 association and one or more linked login accounts. "Channel partner" is a
 tenant-facing classification, not a new Real Estate authorization system.
