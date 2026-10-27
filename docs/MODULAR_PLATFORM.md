@@ -1,3 +1,35 @@
+## R10 - Initial office access in onboarding (phase 2D8B, local)
+
+User creation and invitations now share the office/company/subsidiary/creation
+fields with membership administration. Initial grants remain optional; no creator,
+manager, team or initial office is copied. Customer/inactive transitions clear
+proposed grants. Business role changes retain explicit drafts and revalidate
+creation eligibility. Profiles, record limits and workplaces remain separate.
+
+A read-only Tenant Admin initial-office preview uses the same bounded resolver as
+existing-user previews. Proposed role/status never changes caller authority.
+Responses and validation are keyed to subject/draft/search/page. Actual account
+creation and invitation acceptance retain their atomic writers, fresh validation,
+mandatory audits and one-use acceptance. No public role/grant override is added.
+Validation failures retain drafts; auth denial removes office controls. Transport
+failures release the form without retrying account creation or sending an invite.
+Dialogs keep their title/actions visible while their fields scroll on mobile.
+
+Verified: 88 integration checks and eight real-sign-in Chrome flows passed.
+Cases include exact/company/subsidiary proposals, closed-office rejection and
+rollback, role/status clearing, cancellation, untouched/unassigned accounts,
+login and office-bound CRM creation, no invented workplaces, one-use acceptance,
+transport failures and existing membership/provisioning regressions. Desktop /
+mobile screenshots were inspected. The 129-migration disposable rehearsal and all
+18 Inventory native checks passed. Production build, TypeScript, changed-file
+ESLint and whitespace checks passed; no skips count as passes. Permission fixtures
+now declare native office context explicitly, and audit checks bind the returned
+version instead of relying on incidental row order. Runtime defaults are unchanged.
+
+Local on staging only: no schema migration, data backfill, hosted write, push or
+deployment. Next: phase 2D8C self-service creation-office selection, followed by
+R10 release/recovery gates. See [onboarding UI contract](OFFICE_ONBOARDING_UI_R10.md).
+
 ## R10 - Tenant-admin office membership editor (phase 2D8A, local)
 
 Business user details and Users row actions now expose Office access for Tenant

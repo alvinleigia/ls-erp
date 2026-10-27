@@ -2,7 +2,7 @@
 import * as React from "react"
 import { SearchableSelect } from "@/components/searchable-select"
 import { Button } from "@/components/ui/button"
-import { membershipDraftKey, type MembershipCompany, type MembershipOffice, type OfficeChoice, type OfficeMembershipDraft } from "@/types/companies"
+import { membershipPreviewKey, type MembershipSubject, type MembershipCompany, type MembershipOffice, type OfficeChoice, type OfficeMembershipDraft } from "@/types/companies"
 
 type Choice = { id: string; label: string; office?: MembershipOffice; company?: MembershipCompany }
 export type MembershipValidation = { key: string; valid: boolean }
@@ -10,14 +10,14 @@ const officeLabel = (office: MembershipOffice) => `${office.company.name} / ${of
 export { officeLabel }
 const creationChoice = (office: OfficeChoice): Choice => ({ id: office.id, label: `${office.companyName} / ${office.name} (${office.code})` })
 
-export function MembershipChoice({ kind, id, userId, draft, value = "", saved, disabled = false, refresh = 0, onPick, onValidation, onDenied }: {
-  kind: "office" | "company" | "creation"; id: string; userId: string; draft: OfficeMembershipDraft; value?: string
+export function MembershipChoice({ kind, id, subject, draft, value = "", saved, disabled = false, refresh = 0, onPick, onValidation, onDenied }: {
+  kind: "office" | "company" | "creation"; id: string; subject: MembershipSubject; draft: OfficeMembershipDraft; value?: string
   saved?: MembershipOffice | null; disabled?: boolean; refresh?: number
   onPick: (choice: Choice | null) => void; onValidation?: (validation: MembershipValidation) => void; onDenied: () => void
 }) {
   const [q, setQ] = React.useState(""), [page, setPage] = React.useState(1), [error, setError] = React.useState("")
   const [picked, setPicked] = React.useState<Choice | null>(null)
-  const baseKey = kind === "creation" ? membershipDraftKey(draft) : kind
+  const baseKey = kind === "creation" ? membershipPreviewKey(subject, draft) : kind
   const key = JSON.stringify([baseKey, q, page, refresh])
   const [view, setView] = React.useState<{ key: string; items: Choice[]; selected: Choice | null; total: number; totalPages: number } | null>(null)
   React.useEffect(() => {
@@ -25,12 +25,14 @@ export function MembershipChoice({ kind, id, userId, draft, value = "", saved, d
     setError("")
     const timer = setTimeout(() => void (async () => {
       try {
-        const response = kind === "creation"
-          ? await fetch(`/api/access/users/${encodeURIComponent(userId)}/offices/creation-choices`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ officeIds: JSON.parse(baseKey)[1], companies: JSON.parse(baseKey)[2], selected: value || null, q, page, pageSize: 20 }), signal: controller.signal, cache: "no-store" })
+        const proposed = kind === "creation" ? JSON.parse(baseKey) as { subject: MembershipSubject; draft: OfficeMembershipDraft } : null
+        const target = proposed?.subject
+        const response = proposed && target
+          ? await fetch(target.kind === "user" ? `/api/access/users/${encodeURIComponent(target.userId)}/offices/creation-choices` : "/api/access/initial-office-choices", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ officeIds: proposed.draft.officeIds, companies: proposed.draft.companies, selected: value || null, q, page, pageSize: 20, ...(target.kind === "new" ? { role: target.role, status: target.status } : {}) }), signal: controller.signal, cache: "no-store" })
           : await fetch(`/api/${kind === "office" ? "offices" : "companies"}?${new URLSearchParams({ status: "all", q, page: String(page), pageSize: "20" })}`, { signal: controller.signal, cache: "no-store" })
         const data = await response.json()
         if (controller.signal.aborted) return
-        if (!response.ok) { if (response.status === 403) onDenied(); throw new Error(data.error || "Unable to load choices.") }
+        if (!response.ok) { if ([401, 403].includes(response.status)) onDenied(); throw new Error(data.error || "Unable to load choices.") }
         if (kind === "creation") onValidation?.({ key: baseKey, valid: !value || !!data.selected })
         if (page > data.totalPages) { setPage(1); return }
         const items: Choice[] = kind === "creation" ? data.items.map(creationChoice) : kind === "office"
@@ -42,7 +44,7 @@ export function MembershipChoice({ kind, id, userId, draft, value = "", saved, d
       }
     })(), 200)
     return () => { clearTimeout(timer); controller.abort() }
-  }, [kind, userId, baseKey, value, q, page, key, onValidation, onDenied])
+  }, [kind, baseKey, value, q, page, key, onValidation, onDenied])
   const ready = view?.key === key
   const selected = ready && view.selected || (picked?.id === value ? picked : saved?.id === value ? { id: value, label: officeLabel(saved) } : null)
   const currentLabel = !value ? "No creation office" : selected?.label || "Unavailable selection"

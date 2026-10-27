@@ -6,6 +6,7 @@ const root=new Client({connectionString:raw}),sessions=new AsyncLocalStorage();u
 const authPath=require.resolve('../auth.ts');require.cache[authPath]={id:authPath,filename:authPath,loaded:true,exports:{auth:async()=>sessions.getStore()||null}}
 const errors=[];require('../lib/logger.ts').logger.info=()=>{};require('../lib/logger.ts').logger.error=(_,c)=>errors.push(c.error?.message)
 const {prisma}=require('../lib/prisma.ts')
+const initialPreview=require('../app/api/access/initial-office-choices/route.ts')
 const preview=require('../app/api/access/users/[id]/offices/creation-choices/route.ts'),membership=require('../app/api/access/users/[id]/offices/route.ts')
 const t='membership_ui_'+randomUUID().replaceAll('-',''),other=t+'_foreign',id=n=>t+'_'+n,admin=id('admin'),staff=id('staff'),manager=id('manager'),customer=id('customer'),parent=id('parent'),child=id('child'),grandchild=id('grandchild'),sibling=id('sibling'),closedCompany=id('closed_company'),closed=id('closed'),a=id('a'),b=id('b'),c=id('c'),d=id('d')
 const base={officeIds:[],companies:[],selected:null},grant=(companyId,includeSubsidiaries=false)=>({companyId,includeSubsidiaries})
@@ -88,4 +89,38 @@ test('hierarchy changes refresh choices and a preview never authorizes a stale s
  await root.query(`UPDATE "BusinessCompany" SET "parentId"=$1 WHERE id=$2`,[sibling,child]);try{const result=await choices({companies:[grant(parent,true)],selected:b});assert.equal(result.selected,null);assert.equal(result.total,25)}finally{await root.query(`UPDATE "BusinessCompany" SET "parentId"=$1 WHERE id=$2`,[parent,child])}
  const saved=await save({officeIds:[a],creationOfficeId:a});await choices({officeIds:[b],selected:b});await save({officeIds:[d],creationOfficeId:d})
  const before=await snapshot();await request('PATCH',{version:saved.version,officeIds:[b],companies:[],creationOfficeId:b},admin,staff,409,false);assert.deepEqual(await snapshot(),before)
+})
+
+async function initial(body={},user=admin,status=200){
+ const input={role:'STAFF',status:'ACTIVE',...base,...body}
+ const response=await sessions.run(user?{user:{id:user,tenantId:t,role:'ADMIN'}}:null,()=>initialPreview.POST(new Request('http://'+t+'.localhost/api/access/initial-office-choices',{method:'POST',headers:{host:t+'.localhost','Content-Type':'application/json'},body:JSON.stringify(input)})))
+ const data=await response.json();assert.equal(response.status,status,JSON.stringify({data,errors:errors.slice(-2)}));if(status===200)assert.equal(response.headers.get('cache-control'),'no-store');return data
+}
+test('new-account previews use the same exact/company/subsidiary population without saving an identity',async()=>{
+ const before=await snapshot(),users=(await root.query('SELECT id FROM "User" WHERE "tenantId"=$1 ORDER BY id',[t])).rows
+ assert.equal((await initial()).total,0)
+ assert.deepEqual((await initial({officeIds:[a],selected:a})).items.map(x=>x.id),[a])
+ const draft={companies:[grant(parent,true)],pageSize:2,q:'Page office',selected:b},newAccount=await initial(draft),existing=await choices(draft)
+ assert.deepEqual(newAccount,existing);assert.equal(newAccount.selected.id,b)
+ assert.equal((await initial({companies:[grant(parent)],selected:b})).selected,null)
+ assert.deepEqual(await snapshot(),before);assert.deepEqual((await root.query('SELECT id FROM "User" WHERE "tenantId"=$1 ORDER BY id',[t])).rows,users)
+})
+test('new-account role/status changes constrain choices and never borrow creator oversight',async()=>{
+ assert.equal((await initial({role:'ADMIN'})).total,(await choices({},admin,admin)).total)
+ for(const role of ['STAFF','MANAGER','CUSTOMER'])assert.equal((await initial({role})).total,0)
+ await initial({role:'CUSTOMER',officeIds:[a]},admin,400)
+ for(const status of ['SUSPENDED','INVITED','ARCHIVED']){assert.equal((await initial({status})).total,0);await initial({status,officeIds:[a]},admin,400)}
+ assert.equal((await initial({officeIds:[closed],selected:closed})).selected,null)
+})
+test('initial preview rejects foreign grants, duplicates, authority fields and unsupported roles/status',async()=>{
+ const foreign=(await root.query('SELECT id,"companyId" FROM "BusinessOffice" WHERE "tenantId"=$1',[other])).rows[0]
+ for(const body of [{officeIds:[foreign.id]},{companies:[grant(foreign.companyId)]},{officeIds:[a,a]},{companies:[grant(parent),grant(parent)]},{tenantId:other},{userId:staff},{version:1},{role:'SUPER_ADMIN'},{status:'PENDING'},{pageSize:101},{officeIds:Array(201).fill(a)},{q:'a'.repeat(161)}])await initial(body,admin,400)
+ assert.equal((await initial({officeIds:[a],selected:foreign.id})).selected,null)
+})
+test('initial preview requires fresh tenant-admin authority even with proposed ADMIN role',async()=>{
+ const before=await snapshot()
+ for(const user of [staff,manager,customer])await initial({role:'ADMIN'},user,403)
+ await initial({},null,401)
+ await root.query(`UPDATE "User" SET role='MANAGER' WHERE id=$1`,[admin]);try{await initial({role:'ADMIN'},admin,403)}finally{await root.query(`UPDATE "User" SET role='ADMIN' WHERE id=$1`,[admin])}
+ assert.deepEqual(await snapshot(),before)
 })

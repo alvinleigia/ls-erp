@@ -15,9 +15,10 @@ before saving an invitation.
 
 `POST /api/invites` accepts `accessRoleIds`, `recordRules`, optional `officeAccess`
 and `delivery` (`EMAIL` or `LINK`). Office proposals use the same exact-office,
-company and explicit-subsidiary schema as direct user creation. Office controls
-are still not exposed in the invite form; the UI's omission grants no office
-membership. No sender office, team or supervisor is copied implicitly.
+company and explicit-subsidiary schema as direct user creation. Phase 2D8B
+adds [initial office controls](OFFICE_ONBOARDING_UI_R10.md) to the invite form.
+Untouched controls grant no office membership. No sender office, team or
+supervisor is copied implicitly.
 
 Email addresses are normalized for new invitations. Existing accounts and
 case-insensitive duplicate pending invitations are rejected. Use account

@@ -99,8 +99,8 @@ The existing APIs are suitable foundations. UI progress is local only:
    existing versioned `/api/access/users/:id/offices` API. Exact offices, company
    grants and explicit subsidiary coverage remain distinct. Read eligibility includes retained
    closed-office history; creation needs an active permitted office.
-2. Wire initial office access into direct user creation and invitations. The
-   backend already accepts `officeAccess`; the current forms do not collect it.
+2. Phase 2D8B connects initial office access to direct creation and invitation
+   forms, sharing the membership fields and read-only draft resolver.
    Dated employee workplace placement and leave approval routing remain separate.
 3. Add a self-service creation-office selector through `/api/workspace/offices`
    and `/api/workspace/office`. It changes only a persisted creation preference,
@@ -114,6 +114,5 @@ The existing APIs are suitable foundations. UI progress is local only:
 5. Complete the R10 staged release/recovery gates before exposing these changes
    to hosted tenants. External collaborator accounts remain a later R10 phase.
 
-The next bounded implementation is **phase 2D8B: initial office access in user
-creation/invitations**, followed by the workspace selector. This
-review does not authorize bypasses or substitute directory placement for access.
+The next bounded implementation is **phase 2D8C: the self-service creation-office
+selector**. This review does not authorize bypasses or substitute directory placement for access.

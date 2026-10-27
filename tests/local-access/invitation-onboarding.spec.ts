@@ -7,8 +7,7 @@ test("link invitation supports profiles, one-time password setup and office-boun
   const publicContext = await browser.newContext({ baseURL: fixture.origin })
   let invited: Awaited<ReturnType<typeof login>> | undefined
   try {
-    // Exercise the actual invite dialog without SMTP or business office controls
-    // that are intentionally still behind the R10 release boundary.
+    // Exercise an explicitly unassigned invitation through the actual dialog, without SMTP.
     await admin.page.goto("/users/invites")
     await admin.page.getByRole("button", { name: "Invite user", exact: true }).click()
     const dialog = admin.page.getByRole("dialog")

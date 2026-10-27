@@ -1,6 +1,6 @@
 import { Prisma, type PrismaClient } from "@prisma/client"
 import { z } from "zod"
-import { officeMembershipSchema, membershipCreationChoicesSchema } from "./membership-validation"
+import { officeMembershipSchema, membershipCreationChoicesSchema, initialMembershipChoicesSchema } from "./membership-validation"
 export { officeMembershipSchema } from "./membership-validation"
 import { loadOfficeMemberships, saveOfficeMemberships, validateOfficeMemberships } from "./office-membership"
 import { guardUserWrite } from "@/platform/access/user-security"
@@ -48,7 +48,32 @@ export function createOfficeAccessService(db: PrismaClient, identity: Identity) 
     if (!user) throw new BusinessError(404, "User not found.")
     return user
   }
+  async function draftCreationChoices(tx: Tx, actor: BusinessActor, target: { role: string; status: string }, query: z.infer<typeof membershipCreationChoicesSchema>) {
+    await validateOfficeMemberships(tx, actor.tenantId, target.role, target.status, { officeIds: query.officeIds, companies: query.companies, creationOfficeId: null })
+    const grants = JSON.stringify(query.companies)
+    const [view] = await tx.$queryRaw<{ items: OfficeChoice[]; total: number; selected: OfficeChoice | null }[]>`
+      WITH RECURSIVE covered(id, descendants) AS (
+        SELECT c.id,g."includeSubsidiaries" FROM "BusinessCompany" c
+        JOIN jsonb_to_recordset(${grants}::jsonb) AS g("companyId" text,"includeSubsidiaries" boolean) ON g."companyId"=c.id
+        WHERE c."tenantId"=${actor.tenantId}
+        UNION SELECT c.id,true FROM "BusinessCompany" c JOIN covered p ON c."parentId"=p.id AND p.descendants WHERE c."tenantId"=${actor.tenantId}
+      ), permitted AS MATERIALIZED (
+        SELECT o.id,o.name,o.code,o."companyId",c.name AS "companyName",c.code AS "companyCode"
+        FROM "BusinessOffice" o JOIN "BusinessCompany" c ON c.id=o."companyId" AND c."tenantId"=o."tenantId"
+        WHERE o."tenantId"=${actor.tenantId} AND NOT o.archived AND NOT c.archived AND ${target.status === "ACTIVE" && hasBusinessAccess(target.role)}
+          AND (${target.role === "ADMIN"} OR o.id=ANY(${query.officeIds}::text[]) OR o."companyId" IN (SELECT id FROM covered))
+      ), filtered AS (SELECT * FROM permitted WHERE strpos(lower(name),lower(${query.q}))>0 OR strpos(lower(code),lower(${query.q}))>0 OR strpos(lower("companyName"),lower(${query.q}))>0 OR strpos(lower("companyCode"),lower(${query.q}))>0),
+      page AS (SELECT * FROM filtered ORDER BY "companyName",name,code,id LIMIT ${query.pageSize} OFFSET ${(query.page-1)*query.pageSize})
+      SELECT COALESCE((SELECT jsonb_agg(to_jsonb(p) ORDER BY p."companyName",p.name,p.code,p.id) FROM page p),'[]'::jsonb) AS items,
+        (SELECT count(*)::integer FROM filtered) AS total,
+        (SELECT to_jsonb(p) FROM permitted p WHERE p.id=${query.selected}) AS selected`
+    return { ...view, page: query.page, pageSize: query.pageSize, totalPages: Math.max(1, Math.ceil(view.total/query.pageSize)) }
+  }
   return {
+    initialCreationChoices(input: unknown) {
+      const query = initialMembershipChoicesSchema.parse(input)
+      return run(true, (tx, actor) => draftCreationChoices(tx, actor, query, query))
+    },
     getMemberships(userId: string) {
       id.parse(userId)
       return run(true, async tx => {
@@ -69,25 +94,7 @@ export function createOfficeAccessService(db: PrismaClient, identity: Identity) 
       const query = membershipCreationChoicesSchema.parse(input)
       return run(true, async (tx, actor) => {
         const target = await targetUser(tx, userId)
-        await validateOfficeMemberships(tx, actor.tenantId, target.role, target.status, { officeIds: query.officeIds, companies: query.companies, creationOfficeId: null })
-        const grants = JSON.stringify(query.companies)
-        const [view] = await tx.$queryRaw<{ items: OfficeChoice[]; total: number; selected: OfficeChoice | null }[]>`
-          WITH RECURSIVE covered(id, descendants) AS (
-            SELECT c.id,g."includeSubsidiaries" FROM "BusinessCompany" c
-            JOIN jsonb_to_recordset(${grants}::jsonb) AS g("companyId" text,"includeSubsidiaries" boolean) ON g."companyId"=c.id
-            WHERE c."tenantId"=${actor.tenantId}
-            UNION SELECT c.id,true FROM "BusinessCompany" c JOIN covered p ON c."parentId"=p.id AND p.descendants WHERE c."tenantId"=${actor.tenantId}
-          ), permitted AS MATERIALIZED (
-            SELECT o.id,o.name,o.code,o."companyId",c.name AS "companyName",c.code AS "companyCode"
-            FROM "BusinessOffice" o JOIN "BusinessCompany" c ON c.id=o."companyId" AND c."tenantId"=o."tenantId"
-            WHERE o."tenantId"=${actor.tenantId} AND NOT o.archived AND NOT c.archived AND ${target.status === "ACTIVE" && hasBusinessAccess(target.role)}
-              AND (${target.role === "ADMIN"} OR o.id=ANY(${query.officeIds}::text[]) OR o."companyId" IN (SELECT id FROM covered))
-          ), filtered AS (SELECT * FROM permitted WHERE strpos(lower(name),lower(${query.q}))>0 OR strpos(lower(code),lower(${query.q}))>0 OR strpos(lower("companyName"),lower(${query.q}))>0 OR strpos(lower("companyCode"),lower(${query.q}))>0),
-          page AS (SELECT * FROM filtered ORDER BY "companyName",name,code,id LIMIT ${query.pageSize} OFFSET ${(query.page-1)*query.pageSize})
-          SELECT COALESCE((SELECT jsonb_agg(to_jsonb(p) ORDER BY p."companyName",p.name,p.code,p.id) FROM page p),'[]'::jsonb) AS items,
-            (SELECT count(*)::integer FROM filtered) AS total,
-            (SELECT to_jsonb(p) FROM permitted p WHERE p.id=${query.selected}) AS selected`
-        return { ...view, page: query.page, pageSize: query.pageSize, totalPages: Math.max(1, Math.ceil(view.total/query.pageSize)) }
+        return draftCreationChoices(tx, actor, target, query)
       })
     },
     listOwnOffices(input: unknown) {

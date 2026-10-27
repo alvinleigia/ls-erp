@@ -33,7 +33,7 @@ export function InviteFormFields({ values, errors, onChange }: InviteFormFieldsP
           id="invite-role"
           className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
           value={values.role}
-          onChange={(event) => onChange({ ...values, role: event.target.value as Role, accessRoleIds: [] })}
+          onChange={(event) => onChange({ ...values, role: event.target.value as Role, accessRoleIds: [], officeAccess: event.target.value === "CUSTOMER" ? undefined : values.officeAccess })}
         >
           {inviteRoleOptions.map((role) => (
             <option key={role} value={role}>

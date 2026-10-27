@@ -5,6 +5,7 @@ import { defaultRecordRules } from "@/platform/access/rules"
 import { ProfilePicker, RecordPolicyFields } from "@/platform/access/profile-picker"
 import * as React from "react"
 
+import { initialOfficeEligible } from "@/platform/companies/initial-office-access"
 import { FormField } from "@/components/form-field"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -36,7 +37,9 @@ export function UserFormFields({
 }: UserFormFieldsProps) {
   const canSelfEdit = mode === "create" ? true : canManage || canEditProfile
   const update = <K extends keyof UserFormValues>(key: K, value: UserFormValues[K]) => {
-    onChange({ ...values, [key]: value, ...(key === "role" ? { accessRoleIds: [] } : {}) })
+    const next = { ...values, [key]: value, ...(key === "role" ? { accessRoleIds: [], ...(value === "STAFF" ? { marketingOptIn: false } : {}) } : {}) }
+    if (mode === "create" && !initialOfficeEligible(next.role, next.status)) next.officeAccess = undefined
+    onChange(next)
   }
   const stateOptions = getStateOptionsByCountry(values.country)
 
@@ -132,11 +135,7 @@ export function UserFormFields({
           value={values.role}
           onChange={(event) => {
             const role = event.target.value as Role
-            onChange({
-              ...values,
-              role,
-              marketingOptIn: role === "STAFF" ? false : values.marketingOptIn,
-            })
+            update("role", role)
           }}
           disabled={mode === "edit" && !canManage}
         >

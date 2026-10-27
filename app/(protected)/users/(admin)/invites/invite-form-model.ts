@@ -1,6 +1,7 @@
 import type { Role } from "@/lib/permissions"
 
 export type InviteFormValues = {
+  officeAccess?: import("@/types/companies").OfficeMembershipDraft
   email: string
   role: Role
   delivery: "EMAIL" | "LINK"

@@ -34,9 +34,10 @@ empty object shape with empty arrays and a null preference is also supported.
 Office eligibility grants no action permissions. Existing accounts, memberships,
 assignments, snapshots and record owners are not rewritten.
 
-The office controls are not yet exposed in the user form; the current form leaves
-new accounts unassigned. Do not deploy office enforcement to clients until the
-UI, invitations and remaining module requirements below are complete.
+Phase 2D8B exposes [initial office controls](OFFICE_ONBOARDING_UI_R10.md) in the
+local user form and invitation form. Untouched controls still create an
+unassigned account. The self-service workspace selector and complete R10
+release/recovery gates remain required before hosted release.
 
 ## New tenants
 
@@ -76,12 +77,14 @@ migration, deployment or client-data change was performed.
 ## Remaining release work
 
 - Invitation onboarding now has [explicit office/profile proposals and atomic
-  acceptance](INVITATION_ONBOARDING_R10.md). Office controls remain part of the
-  pending user/workspace UI work; no memberships are inferred from the sender.
+  acceptance](INVITATION_ONBOARDING_R10.md). Phase 2D8B connects its office
+  proposals to the form. Workspace selection remains pending; no memberships
+  are inferred from the sender.
 - Complete operational/workforce source ownership and privacy-safe scheduling
   conflicts, preserving personal leave and configured approval relationships.
-- Expose user memberships and workspace creation choices, constrain selectors,
-  then complete external collaborators and attribution.
+- User membership administration and initial office forms are implemented
+  locally in phases 2D8A/B. Complete workspace selection and the remaining release
+  requirements, then external collaborators and attribution.
 - Rehearse the whole release against a restore-tested backup copy and compare
   existing pilot access before hosted staging verification. Production remains a
   separately authorized release.

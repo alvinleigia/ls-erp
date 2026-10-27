@@ -11,6 +11,8 @@ import {
 import { ArrowDownIcon, ArrowUpDownIcon, ArrowUpIcon, MoreHorizontalIcon } from "lucide-react"
 import { toast } from "sonner"
 
+import { InitialOfficeAccess, initialOfficeReady } from "@/platform/companies/initial-office-access"
+import type { MembershipValidation } from "@/platform/companies/membership-choice"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -59,6 +61,10 @@ export default function InvitesPage() {
     setErrorsFromResponse: setInviteErrorsFromResponse,
     clearErrors: clearInviteErrors,
   } = useFormErrors()
+  const [officeValidation, setOfficeValidation] = React.useState<MembershipValidation | null>(null)
+  const [officeDenied, setOfficeDenied] = React.useState(false)
+  const [officeRefresh, setOfficeRefresh] = React.useState(0)
+  const denyOffice = React.useCallback(() => setOfficeDenied(true), [])
   const [inviting, setInviting] = React.useState(false)
   const [revokeTarget, setRevokeTarget] = React.useState<string | null>(null)
   const [revoking, setRevoking] = React.useState(false)
@@ -127,33 +133,40 @@ export default function InvitesPage() {
     []
   )
 
+  const officeReady = !officeDenied && initialOfficeReady(inviteValues.role, "ACTIVE", inviteValues.officeAccess, officeValidation)
   const sendInvite = async () => {
+    if (!officeReady || inviting) return
     setInviting(true)
     clearInviteErrors()
-    const response = await fetch("/api/invites", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(inviteValues),
-    })
+    try {
+      const response = await fetch("/api/invites", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(inviteValues),
+      })
 
-    if (!response.ok) {
-      const data = (await response.json()) as {
-        error?: string
-        details?: { fieldErrors?: Record<string, string[]> }
+      if (!response.ok) {
+        const data = (await response.json()) as {
+          error?: string
+          details?: { fieldErrors?: Record<string, string[]> }
+        }
+        setInviteErrorsFromResponse(data)
+        if ([401, 403].includes(response.status)) setOfficeDenied(true)
+        setOfficeValidation(null); setOfficeRefresh(value => value+1)
+        toast.error(data.error ?? "Unable to send invite.")
+        return
       }
-      setInviteErrorsFromResponse(data)
-      toast.error(data.error ?? "Unable to send invite.")
-      setInviting(false)
-      return
-    }
 
-    const result = await response.json() as { emailSent: boolean; warning?: string }
-    if (result.warning) toast.warning(result.warning)
-    else toast.success(result.emailSent ? "Invite sent." : "Invitation link created. Use Copy invite link from the list.")
-    setInviteValues(defaultInviteFormValues)
-    setInviting(false)
-    setInviteOpen(false)
-    await loadInvites()
+      const result = await response.json() as { emailSent: boolean; warning?: string }
+      if (result.warning) toast.warning(result.warning)
+      else toast.success(result.emailSent ? "Invite sent." : "Invitation link created. Use Copy invite link from the list.")
+      setInviteValues(defaultInviteFormValues)
+      setInviteOpen(false)
+      await loadInvites()
+    } catch {
+      toast.error("Unable to confirm the request. Check the list before trying again.")
+      setOfficeValidation(null); setOfficeRefresh(value => value+1)
+    } finally { setInviting(false) }
   }
 
   const copyInviteLink = React.useCallback(async (invite: InviteRow) => {
@@ -276,7 +289,6 @@ export default function InvitesPage() {
     [copyInviteLink, formatDate]
   )
 
-  // eslint-disable-next-line react-hooks/incompatible-library
   const table = useReactTable({
     data: invites,
     columns,
@@ -301,7 +313,7 @@ export default function InvitesPage() {
             Track pending invitations and revoke access.
           </p>
         </div>
-        <Button onClick={() => setInviteOpen(true)}>Invite user</Button>
+        <Button onClick={() => { setInviteValues(defaultInviteFormValues); setOfficeValidation(null); setOfficeDenied(false); setInviteOpen(true) }}>Invite user</Button>
       </div>
 
       <DataTableToolbar table={table} searchPlaceholder="Search by email">
@@ -326,26 +338,29 @@ export default function InvitesPage() {
       <DataTablePagination table={table} totalRows={totalRows} />
 
       {revokeTarget && <ConfirmAction title="Revoke invitation?" description="This link will stop working. You can create a new invitation later." label="Revoke invitation" busy={revoking} destructive onCancel={() => setRevokeTarget(null)} onConfirm={() => void revokeInvite(revokeTarget)} />}
-      <Dialog open={inviteOpen} onOpenChange={setInviteOpen}>
-        <DialogContent className="max-h-[90vh] flex flex-col">
-          <DialogHeader>
+      <Dialog open={inviteOpen} onOpenChange={open => { if (!inviting) setInviteOpen(open) }}>
+        <DialogContent className="max-h-[90vh] flex flex-col overflow-y-hidden">
+          <DialogHeader className="shrink-0">
             <DialogTitle>Invite user</DialogTitle>
             <DialogDescription>
               Send a secure invite link to set a password.
             </DialogDescription>
           </DialogHeader>
-          <div className="flex-1 overflow-y-auto">
-            <InviteFormFields
-              values={inviteValues}
-              errors={inviteErrors}
-              onChange={setInviteValues}
-            />
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            <fieldset disabled={inviting} className="min-w-0 space-y-5">
+              <InviteFormFields
+                values={inviteValues}
+                errors={inviteErrors}
+                onChange={setInviteValues}
+              />
+              <InitialOfficeAccess role={inviteValues.role} status={"ACTIVE"} draft={inviteValues.officeAccess} onChange={officeAccess => setInviteValues(previous => ({ ...previous, officeAccess }))} validation={officeValidation} onValidation={setOfficeValidation} onDenied={denyOffice} denied={officeDenied} saving={inviting} refresh={officeRefresh} />
+            </fieldset>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setInviteOpen(false)}>
+          <DialogFooter className="shrink-0">
+            <Button variant="outline" disabled={inviting} onClick={() => setInviteOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={sendInvite} loading={inviting} loadingText={inviteValues.delivery === "EMAIL" ? "Sending..." : "Creating..."}>
+            <Button onClick={sendInvite} disabled={!officeReady} loading={inviting} loadingText={inviteValues.delivery === "EMAIL" ? "Sending..." : "Creating..."}>
               {inviteValues.delivery === "EMAIL" ? "Send invite" : "Create invite link"}
             </Button>
           </DialogFooter>

@@ -50,6 +50,7 @@ export type UserProfile = UserCore & {
 }
 
 export type UserFormValues = {
+  officeAccess?: import("@/types/companies").OfficeMembershipDraft
   accessRoleIds?: string[]
   recordRules?: import("@/platform/access/rules").RecordRules
   name: string

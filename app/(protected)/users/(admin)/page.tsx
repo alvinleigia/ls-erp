@@ -18,6 +18,8 @@ import {
 } from "lucide-react"
 import { toast } from "sonner"
 
+import { InitialOfficeAccess, initialOfficeReady } from "@/platform/companies/initial-office-access"
+import type { MembershipValidation } from "@/platform/companies/membership-choice"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -71,6 +73,10 @@ export default function UsersPage() {
 
   const [users, setUsers] = React.useState<UserRow[]>([])
   const [loading, setLoading] = React.useState(true)
+  const [officeValidation, setOfficeValidation] = React.useState<MembershipValidation | null>(null)
+  const [officeDenied, setOfficeDenied] = React.useState(false)
+  const [officeRefresh, setOfficeRefresh] = React.useState(0)
+  const denyOffice = React.useCallback(() => setOfficeDenied(true), [])
   const [creating, setCreating] = React.useState(false)
   const [updating, setUpdating] = React.useState(false)
   const [createOpen, setCreateOpen] = React.useState(false)
@@ -220,32 +226,39 @@ export default function UsersPage() {
     await loadUsers()
   }
 
+  const officeReady = !officeDenied && initialOfficeReady(newUser.role, newUser.status, newUser.officeAccess, officeValidation)
   const createUser = async () => {
+    if (!officeReady || creating) return
     if (!canManage) return
     setCreating(true)
     clearCreateErrors()
-    const response = await fetch("/api/users", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(newUser),
-    })
+    try {
+      const response = await fetch("/api/users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newUser),
+      })
 
-    if (!response.ok) {
-      const data = (await response.json()) as {
-        error?: string
-        details?: { fieldErrors?: Record<string, string[]> }
+      if (!response.ok) {
+        const data = (await response.json()) as {
+          error?: string
+          details?: { fieldErrors?: Record<string, string[]> }
+        }
+        setCreateErrorsFromResponse(data)
+        if ([401, 403].includes(response.status)) setOfficeDenied(true)
+        setOfficeValidation(null); setOfficeRefresh(value => value+1)
+        toast.error(data.error ?? "Unable to create user.")
+        return
       }
-      setCreateErrorsFromResponse(data)
-      toast.error(data.error ?? "Unable to create user.")
-      setCreating(false)
-      return
-    }
 
-    toast.success("User created.")
-    setNewUser(defaultUserFormValues)
-    setCreating(false)
-    setCreateOpen(false)
-    await loadUsers()
+      toast.success("User created.")
+      setNewUser(defaultUserFormValues)
+      setCreateOpen(false)
+      await loadUsers()
+    } catch {
+      toast.error("Unable to confirm the request. Check the list before trying again.")
+      setOfficeValidation(null); setOfficeRefresh(value => value+1)
+    } finally { setCreating(false) }
   }
 
   const canEditUser = React.useCallback(
@@ -380,7 +393,6 @@ export default function UsersPage() {
     [canEditUser, canManage, startEdit]
   )
 
-  // eslint-disable-next-line react-hooks/incompatible-library
   const table = useReactTable({
     data: users,
     columns,
@@ -423,7 +435,7 @@ export default function UsersPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Button onClick={() => setCreateOpen(true)} disabled={!canManage}>
+          <Button onClick={() => { setNewUser(defaultUserFormValues); setOfficeValidation(null); setOfficeDenied(false); setCreateOpen(true) }} disabled={!canManage}>
             New user
           </Button>
         </div>
@@ -461,31 +473,34 @@ export default function UsersPage() {
       <DataTablePagination table={table} totalRows={totalRows} />
 
       {officeUser && <OfficeMembershipEditor key={officeUser.id} user={officeUser} onClose={() => setOfficeUser(null)} onSaved={() => setOfficeUser(null)} />}
-      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent className="max-h-[90vh] flex flex-col">
-          <DialogHeader>
+      <Dialog open={createOpen} onOpenChange={open => { if (!creating) setCreateOpen(open) }}>
+        <DialogContent className="max-h-[90vh] flex flex-col overflow-y-hidden">
+          <DialogHeader className="shrink-0">
             <DialogTitle>Create user</DialogTitle>
             <DialogDescription>
               Add a new user and assign a role.
             </DialogDescription>
           </DialogHeader>
 
-          <div className="flex-1 overflow-y-auto">
-            <UserFormFields
-              mode="create"
-              values={newUser}
-              errors={createErrors}
-              onChange={setNewUser}
-              canManage={canManage}
-              canEditProfile={true}
-            />
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            <fieldset disabled={creating} className="min-w-0 space-y-5">
+              <UserFormFields
+                mode="create"
+                values={newUser}
+                errors={createErrors}
+                onChange={setNewUser}
+                canManage={canManage}
+                canEditProfile={true}
+              />
+              <InitialOfficeAccess role={newUser.role} status={newUser.status} draft={newUser.officeAccess} onChange={officeAccess => setNewUser(previous => ({ ...previous, officeAccess }))} validation={officeValidation} onValidation={setOfficeValidation} onDenied={denyOffice} denied={officeDenied} saving={creating} refresh={officeRefresh} />
+            </fieldset>
           </div>
 
-          <DialogFooter className="pt-2">
-            <Button variant="outline" onClick={() => setCreateOpen(false)}>
+          <DialogFooter className="shrink-0 pt-2">
+            <Button variant="outline" disabled={creating} onClick={() => setCreateOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={createUser} loading={creating} loadingText="Creating...">
+            <Button onClick={createUser} disabled={!officeReady} loading={creating} loadingText="Creating...">
               Create user
             </Button>
           </DialogFooter>

@@ -82,7 +82,7 @@ Run `npm.cmd run test:office-membership-ui` or, after a build,
 
 ## Next bounded work
 
-Phase 2D8B adds initial office access to direct user creation/invitations, using
-the existing backend `officeAccess` contract. Phase 2D8C adds the self-service
-creation-office preference selector. Neither is implied by this editor, and
-neither may widen record Read or replace employee workplace placement.
+Phase 2D8B now connects [initial office access](OFFICE_ONBOARDING_UI_R10.md)
+to direct user creation/invitations through the shared fields and `officeAccess`
+contract. Next is phase 2D8C, the self-service creation-office preference selector.
+It cannot widen record Read or replace employee workplace placement.

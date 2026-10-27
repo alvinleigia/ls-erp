@@ -9,4 +9,7 @@ export type OfficeMemberships = {
   offices: { officeId: string; office: MembershipOffice }[]
   companies: { companyId: string; includeSubsidiaries: boolean; company: MembershipCompany }[]
 }
-export const membershipDraftKey = (draft: OfficeMembershipDraft) => JSON.stringify([draft.creationOfficeId, draft.officeIds, draft.companies])
+
+export type MembershipSubject = { kind: "user"; userId: string } | { kind: "new"; role: import("@/lib/permissions").Role; status: import("@/types/users").UserStatus }
+export const membershipPreviewKey = (subject: MembershipSubject, draft: OfficeMembershipDraft) => JSON.stringify({ subject, draft })
+export const emptyOfficeMembership: OfficeMembershipDraft = { officeIds: [], companies: [], creationOfficeId: null }
