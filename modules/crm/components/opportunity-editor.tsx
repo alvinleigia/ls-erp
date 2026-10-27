@@ -1,4 +1,5 @@
 "use client"
+import { IntroductionSelection, IntroductionDetails, introductionFields } from "@/platform/collaborators/introduction-controls"
 import { useCreationOfficeSnapshot } from "@/platform/companies/creation-snapshot"
 import { useTerminology, useTerminologyReader } from "@/platform/terminology/provider"
 import { initialOpportunityStage } from "../conversion-stage"
@@ -23,6 +24,7 @@ import Link from "@/platform/access/link"
 import { useRouter } from "next/navigation"
 import { useSession } from "next-auth/react"
 import { optionalReference, type AssignmentContext } from "@/platform/access/reference"
+import type { PartnerIntroductionEvidence } from "@/platform/collaborators/contracts"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -66,8 +68,10 @@ function OpportunityEditorBody({ id, enquiryId, initialReferences }: { id?: stri
   const [failed, setFailed] = React.useState(false)
   const [saving, setSaving] = React.useState(false)
   const [error, setError] = React.useState("")
+  const [introducedByCollaboratorId, setIntroducer] = React.useState("")
   const [revision, setRevision] = React.useState(0)
   const [enquiryVersion, setEnquiryVersion] = React.useState<number | undefined>()
+  const [sourceIntroduction, setSourceIntroduction] = React.useState<PartnerIntroductionEvidence | null>(null)
   const [initialAccount, setInitialAccount] = React.useState<{ id: string; name: string } | null>(null)
   const { errors, setErrorsFromResponse, clearErrors } = useFormErrors()
   React.useEffect(() => {
@@ -77,7 +81,7 @@ function OpportunityEditorBody({ id, enquiryId, initialReferences }: { id?: stri
       try {
         const [assignees, existing, enquiry, choices, settings] = await Promise.all([optionalReference<AssignmentContext>("/api/crm/assignees", canReadDirectory, controller.signal), id ? get(`/api/crm/opportunities/${id}`) : null, !id && enquiryId ? get(`/api/crm/enquiries/${enquiryId}`) : null, !id ? get("/api/crm/pipelines?pageSize=1") : null, !id ? get("/api/settings/display") : null])
         if (existing || enquiry) { loadExtension(existing || enquiry); await loadCustom(existing || enquiry, !existing && !!enquiry) }
-        setEnquiryVersion(enquiry?.version); setInitialAccount(enquiry?.account || null)
+        setSourceIntroduction(enquiry || null); setEnquiryVersion(enquiry?.version); setInitialAccount(enquiry?.account || null)
         if (existing) { setRecord(existing); loadAccess(existing.recordAccess); setContact(existing.contact); setValues(fields(existing)) }
         else if (enquiry?.opportunity) router.replace(`/crm/opportunities/${enquiry.opportunity.id}`)
         else { setContact(enquiry?.contact || null); setValues({ ...empty, salesTeamId: enquiry?.salesTeamId || "", title: enquiry?.title || "", contactId: enquiry?.contact.id || "", accountId: enquiry?.accountId || "", expectedCloseOn: enquiry?.targetCloseOn?.slice(0, 10) || "", description: enquiry?.requirements || "", assignedUserId: assignees?.canAssign ? enquiry?.assignedUserId || assignees.currentUserId : currentUserId, pipelineId: choices?.items[0]?.id || "", currency: settings?.settings?.currency || "" }) }
@@ -107,7 +111,7 @@ function OpportunityEditorBody({ id, enquiryId, initialReferences }: { id?: stri
   async function save(event: React.FormEvent) {
     event.preventDefault(); setSaving(true); setError(""); clearErrors()
     try {
-      const response = await fetch(id ? `/api/crm/opportunities/${id}` : "/api/crm/opportunities", { method: id ? "PATCH" : "POST", headers: { "Content-Type": "application/json", ...await creationHeaders() }, body: JSON.stringify({ ...values, ...custom.payload, ...(!enquiryId ? extension.payload : {}), ...(id ? { version: record?.version } : { enquiryId: enquiryId || "", enquiryVersion }) }) })
+      const response = await fetch(id ? `/api/crm/opportunities/${id}` : "/api/crm/opportunities", { method: id ? "PATCH" : "POST", headers: { "Content-Type": "application/json", ...await creationHeaders() }, body: JSON.stringify({ ...values, ...(!id && !enquiryId && introducedByCollaboratorId ? { introducedByCollaboratorId } : {}), ...custom.payload, ...(!enquiryId ? extension.payload : {}), ...(id ? { version: record?.version } : { enquiryId: enquiryId || "", enquiryVersion }) }) })
       const data = await response.json()
       if (!response.ok) { setErrorsFromResponse(data); throw new Error(data.error || readTerm("crm.opportunity.singular", "Unable to save opportunity.", "Unable to save {label}.")) }
       view.done(); toast.success(term("crm.opportunity.singular", "Opportunity saved.", "{label} saved."))
@@ -117,10 +121,11 @@ function OpportunityEditorBody({ id, enquiryId, initialReferences }: { id?: stri
   }
   const currencies = React.useMemo(() => Intl.supportedValuesOf("currency").map(value => ({ value, label: value })), [])
   if (loading) return <p>{term("crm.opportunity.singular", "Loading opportunity…", "Loading {label}…")}</p>
-  return <div className={pageClass}>    <AccessPageHeader title={id ? record?.title || term("crm.opportunity.singular", "Opportunity") : enquiryId ? `Convert ${term("crm.enquiry.singular", "enquiry")} to ${term("crm.opportunity.singular", "opportunity")}` : term("crm.opportunity.singular", "New opportunity", "New {label}")} backHref="/crm/opportunities" backLabel={term("crm.opportunity.plural", "Back to opportunities", "Back to {label}")} actions={<AccessFormActions form="opportunity-form" cancelHref="/crm/opportunities" saving={saving} disabled={custom.blocked || failed || !stage || pipeline?.id !== values.pipelineId} canSave={true} saveLabel={term("crm.opportunity.singular", "Save opportunity", "Save {label}")} />} /><AccessRecordForm id="opportunity-form" onSubmit={save} saving={saving} disabled={custom.blocked || failed || !stage || pipeline?.id !== values.pipelineId} error={error} fingerprint={{ values, custom: custom.payload, extension: extension.payload }} initialSection="Opportunity details"
+  return <div className={pageClass}>    <AccessPageHeader title={id ? record?.title || term("crm.opportunity.singular", "Opportunity") : enquiryId ? `Convert ${term("crm.enquiry.singular", "enquiry")} to ${term("crm.opportunity.singular", "opportunity")}` : term("crm.opportunity.singular", "New opportunity", "New {label}")} backHref="/crm/opportunities" backLabel={term("crm.opportunity.plural", "Back to opportunities", "Back to {label}")} actions={<AccessFormActions form="opportunity-form" cancelHref="/crm/opportunities" saving={saving} disabled={custom.blocked || failed || !stage || pipeline?.id !== values.pipelineId} canSave={true} saveLabel={term("crm.opportunity.singular", "Save opportunity", "Save {label}")} />} /><AccessRecordForm id="opportunity-form" onSubmit={save} saving={saving} disabled={custom.blocked || failed || !stage || pipeline?.id !== values.pipelineId} error={error} fingerprint={{ introducedByCollaboratorId, values, custom: custom.payload, extension: extension.payload }} initialSection="Opportunity details"
       overview={record && <>
         <AccessSummarySection sectionKey="Opportunity details" title={term("crm.opportunity.singular", "Opportunity details", "{label} details")} fields={[{ label: "Title", value: record.title }, { label: term("crm.contact.singular", "Contact"), value: record.contact.name }, { label: term("crm.account.singular", "Company"), value: record.account?.name }, { label: "Pipeline", value: record.pipeline.name }, { label: "Stage", value: record.stage.name }, { label: "Salesperson", value: record.assignee.name }, { label: "Sales team", value: record.salesTeam?.name }, { label: "Expected value", value: formatDecimalCurrency(record.amount, record.currency) }, { label: "Expected close", value: formatDate(record.expectedCloseOn) }, { label: "Probability", value: `${record.probability}%` }, { label: "Description", value: record.description }, { label: "Lost reason", value: record.lostReasonName }, { label: "Closing note", value: record.lossReason }]} />
         {record.enquiryId && <AccessSummarySection title="Lead attribution" canEdit={false} fields={[{ label: "Original source", value: record.source }, { label: "Referrer", value: record.referralRestricted ? "Restricted" : record.referralContact?.name || record.referralAccount?.name }]}><Link className="text-sm underline" href={`/crm/enquiries/${record.enquiryId}`}>{term("crm.enquiry.singular", "Original enquiry", "Original {label}")}</Link></AccessSummarySection>}
+        <AccessSummarySection title="Introducing collaborator" canEdit={false} fields={introductionFields(record)} />
         {extension.summary()} {custom.readOnlySection(<AccessSectionEdit section="Additional information" />)}
       </>}
       tabs={record ? [
@@ -147,6 +152,7 @@ function OpportunityEditorBody({ id, enquiryId, initialReferences }: { id?: stri
     </fieldset></Section>
     {record?.enquiryId && <Section title="Lead attribution"><dl className="grid gap-4 text-sm sm:grid-cols-2"><div><dt className="text-muted-foreground">Original source</dt><dd>{record.source || "Not recorded"}</dd></div><div><dt className="text-muted-foreground">Referrer</dt><dd>{record.referralRestricted ? "Restricted" : record.referralContact?.name || record.referralAccount?.name || "Not recorded"}</dd></div></dl></Section>}
     {(record?.enquiryId || enquiryId) && <p className="text-sm">Source: <Link className="underline" href={`/crm/enquiries/${record?.enquiryId || enquiryId}`}>{term("crm.enquiry.singular", "original enquiry and follow-ups", "original {label} and follow-ups")}</Link>. Its records and history are preserved.</p>}
+    {record || sourceIntroduction ? <IntroductionDetails record={(record || sourceIntroduction)!} /> : !enquiryId && <IntroductionSelection value={introducedByCollaboratorId} onChange={setIntroducer} disabled={saving || failed} />}
     {extension.fields({ errors, disabled: saving || failed, readOnly: !!enquiryId && !id })}
     {custom.section(saving || failed)}
   </AccessRecordForm></div>

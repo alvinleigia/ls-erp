@@ -130,8 +130,9 @@ business accounts, without orphaning source records or silently expanding access
 
 Phase 4A implements local [partner introduction evidence](PARTNER_ATTRIBUTION_R10.md)
 on enquiries/direct opportunities, inherited exactly through conversion. Existing
-records remain unattributed; no owner or access backfill. Selection screens and
-reporting/KPI filters remain phase 4B; dashboards and reports are unchanged.
+records remain unattributed; no owner or access backfill. Phase 4B adds local
+[introduction controls and sales-report filters](PARTNER_REPORTING_UI_R10.md).
+Phase 4C activity/financial reporting and dashboard contributions remain pending.
 
 Keep introducing collaborator, responsible salesperson, supervising manager and
 record company/office as separate dimensions. Preserve source attribution through

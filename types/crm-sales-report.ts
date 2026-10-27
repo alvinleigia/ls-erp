@@ -5,6 +5,7 @@ export type SalesReportGrouping = SalesReportLabel & { emptyLabel: string }
 export type SalesReportRecord = {
   id: string; title: string; recordKind: "enquiries" | "opportunities" | "activities";
   customer: string; owner: string; source: string | null; extensionValues: Record<string, string | null>;
+  partnerName: string | null; partnerCode: string | null; introductionSupervisorName: string | null;
   lostReasonName: string | null;
   status: string; amount: string | null; currency: string | null; createdAt: string; closedAt: string | null; dueOn: string | null;
 }

@@ -26,3 +26,8 @@ export type Collaborator = {
   email: string | null; phone: string | null; supervisorUserId: string; archived: boolean; version: number;
   supervisor: { id: string; name: string | null; email: string; role: string; status: string };
 }
+
+export type PartnerIntroductionEvidence = {
+  introducedByCollaboratorId: string | null;
+  partnerAttribution: { version: 1; code: string; name: string; supervisorUserId: string } | null;
+}

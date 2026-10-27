@@ -103,10 +103,16 @@ The initial run had one test using asynchronous rejection matching for a
 synchronously thrown strict-schema error. The test was corrected and concurrency coverage added; all
 52 then passed together. No authorization rule was relaxed.
 
-## Next: phase 4B and release gates
+## Phase 4B and release gates
 
-Add admin selection/read-only attribution controls and explicit reporting filters
-for introducing partner, internal/external responsible users and supervision.
+The local [introduction controls and sales reporting](PARTNER_REPORTING_UI_R10.md)
+now implement creation/read-only screens and explicit sales filters. Activity,
+financial and dashboard integrations remain phase 4C. The source contract below
+continues to bound those consumers.
+
+Use the shared admin selection/read-only attribution controls and explicit
+reporting filters for introducing partner, internal/external responsible users
+and supervision.
 Company outcomes must be counted once from canonical roots, not once per login,
 supervisor, office grant or joined source. Drill-down, count, aggregate and export
 must share the same readable population. Attribute linked quotations, orders and

@@ -1,4 +1,5 @@
 "use client"
+import { IntroductionSelection, IntroductionDetails, introductionFields } from "@/platform/collaborators/introduction-controls"
 import { useCreationOfficeSnapshot } from "@/platform/companies/creation-snapshot"
 import { useTerminology, useTerminologyReader } from "@/platform/terminology/provider"
 import { withRecordView, useRecordView, AccessRecordForm, AccessSummarySection, AccessSectionEdit } from "@/platform/access/record-view"
@@ -64,6 +65,7 @@ function EnquiryEditorBody({ id, initialContactId, initialReferences }: { id?: s
   const [loadFailed, setLoadFailed] = React.useState(false)
   const [saving, setSaving] = React.useState(false)
   const [error, setError] = React.useState("")
+  const [introducedByCollaboratorId, setIntroducer] = React.useState("")
   const [revision, setRevision] = React.useState(0)
   const { errors, setErrorsFromResponse, clearErrors } = useFormErrors()
   React.useEffect(() => {
@@ -99,7 +101,7 @@ function EnquiryEditorBody({ id, initialContactId, initialReferences }: { id?: s
     try {
       const base = { salesTeamId: values.salesTeamId || null, ...extension.payload, ...custom.payload, title: values.title, sourceId: values.sourceId, accountId: values.accountId, targetCloseOn: values.targetCloseOn, requirements: values.requirements, assignedUserId: values.assignedUserId,
         ...(!enquiry?.referralRestricted ? { referralContactId: values.referralContactId, referralAccountId: values.referralAccountId } : {}) }
-      const payload = id ? { ...base, version: enquiry?.version, status: values.status, outcome: values.outcome, lostReasonId: values.lostReasonId } : { ...base, ...(contactMode === "new" ? { newContact } : { contactId: values.contactId }) }
+      const payload = id ? { ...base, version: enquiry?.version, status: values.status, outcome: values.outcome, lostReasonId: values.lostReasonId } : { ...base, ...(introducedByCollaboratorId ? { introducedByCollaboratorId } : {}), ...(contactMode === "new" ? { newContact } : { contactId: values.contactId }) }
       const response = await fetch(id ? `/api/crm/enquiries/${id}` : "/api/crm/enquiries", { method: id ? "PATCH" : "POST", headers: { "Content-Type": "application/json", ...await creationHeaders() }, body: JSON.stringify(payload) })
       const data = await response.json()
       if (!response.ok) { setErrorsFromResponse(data); throw new Error(data.error || readTerm("crm.enquiry.singular", "Unable to save enquiry.", "Unable to save {label}.")) }
@@ -119,11 +121,12 @@ function EnquiryEditorBody({ id, initialContactId, initialReferences }: { id?: s
   const selectedAssignee = enquiry?.assignee ?? { id: values.assignedUserId, name: session?.user?.name || "Me" }
   return <div className={pageClass}>
       <AccessPageHeader title={id ? enquiry?.title || term("crm.enquiry.singular", "Enquiry") : term("crm.enquiry.singular", "New enquiry", "New {label}")} backHref="/crm/enquiries" backLabel={term("crm.enquiry.plural", "Back to enquiries", "Back to {label}")} actions={<AccessFormActions form="enquiry-form" cancelHref="/crm/enquiries" saving={saving} disabled={loadFailed || custom.blocked} canSave={true} saveLabel={term("crm.enquiry.singular", "Save enquiry", "Save {label}")}>{enquiry && <>{enquiry.opportunity ? <Button variant="outline" asChild><Link href={`/crm/opportunities/${enquiry.opportunity.id}`}>{term("crm.opportunity.singular", "Open opportunity", "Open {label}")}</Link></Button> : enquiry.status !== "CLOSED" && canEdit && <Button variant="outline" asChild><Link href={`/crm/opportunities/new?enquiryId=${enquiry.id}`}>{term("crm.opportunity.singular", "Convert to opportunity", "Convert to {label}")}</Link></Button>}</>}</AccessFormActions>} />
-    <AccessRecordForm id="enquiry-form" onSubmit={save} saving={saving} disabled={loadFailed || custom.blocked} error={error} fingerprint={{ values, referralType, extension: extension.payload, custom: custom.payload }} initialSection="Enquiry details" createSection="Customer"
+    <AccessRecordForm id="enquiry-form" onSubmit={save} saving={saving} disabled={loadFailed || custom.blocked} error={error} fingerprint={{ introducedByCollaboratorId, values, referralType, extension: extension.payload, custom: custom.payload }} initialSection="Enquiry details" createSection="Customer"
       overview={enquiry && <>
         <AccessSummarySection title="Customer" fields={[{ label: term("crm.contact.singular", "Contact"), value: <Link href={`/crm/contacts/${enquiry.contact.id}`} className="underline">{enquiry.contact.name}</Link> }, { label: term("crm.account.singular", "Buyer company"), value: enquiry.account?.name }]} />
         <AccessSummarySection sectionKey="Enquiry details" title={term("crm.enquiry.singular", "Enquiry details", "{label} details")} fields={[{ label: "Title", value: enquiry.title }, { label: "Status", value: enquiry.status === "CLOSED" ? "Lost" : enquiry.status }, { label: "Salesperson", value: enquiry.assignee.name }, { label: "Sales team", value: enquiry.salesTeam?.name }, { label: "Source", value: enquiry.source }, { label: "Target close", value: formatDate(enquiry.targetCloseOn) }, { label: "Requirements", value: enquiry.requirements }, { label: "Lost reason", value: enquiry.lostReasonName }, { label: "Closing note", value: enquiry.outcome }]} />
         <AccessSummarySection title="Referral (optional)" canEdit={!enquiry.referralRestricted} fields={[{ label: "Referred by", value: enquiry.referralRestricted ? "Restricted" : enquiry.referralContact?.name || enquiry.referralAccount?.name }]} />
+        <AccessSummarySection title="Introducing collaborator" canEdit={false} fields={introductionFields(enquiry)} />
         {extension.summary()} {custom.readOnlySection(<AccessSectionEdit section="Additional information" />)}
       </>}
       tabs={enquiry ? [{ value: "activities", permission: "activities.read" as const, label: term("crm.activity.plural", "Activities"), content: <WorkList enquiryId={enquiry.id} contactId={enquiry.contact.id} /> }, { value: "history", label: "History", content: <EnquiryTimeline enquiryId={enquiry.id} contactId={enquiry.contact.id} revision={revision} includeWork={false} /> }] : []}>
@@ -151,6 +154,7 @@ function EnquiryEditorBody({ id, initialContactId, initialReferences }: { id?: s
         {id && enquiry?.status === "CLOSED" && <p className="text-sm text-muted-foreground sm:col-span-2">To reopen, choose New, Contacted or Qualified and save. History is preserved.</p>}
       </fieldset></Section>
       <Section title="Referral (optional)" description={term("crm.enquiry.singular", "Who introduced this enquiry, separate from the buyer’s company.", "Who introduced this {label}, separate from the buyer’s company.")}><fieldset disabled={saving || loadFailed || enquiry?.referralRestricted} className="grid gap-5 sm:grid-cols-2">{enquiry?.referralRestricted ? <p className="text-sm text-muted-foreground sm:col-span-2">Referral details are restricted. They will be preserved when you save.</p> : <><FormField id="referral-type" label="Referred by"><DropdownSelect id="referral-type" className="w-full" value={referralType} options={[{ value: "none", label: "No referral" }, { value: "contact", label: "Person" }, { value: "account", label: term("crm.account.singular", "Company") }]} onValueChange={type => { setReferralType(type); setValues({ ...values, referralContactId: "", referralAccountId: "" }) }} /></FormField>{referralType !== "none" && <FormField id="referrer" label={referralType === "contact" ? "Referring person" : "Referring company"}><RecordSelect key={referralType} id="referrer" endpoint={`/api/crm/${referralType === "contact" ? "contacts" : "accounts"}`} value={referralType === "contact" ? values.referralContactId : values.referralAccountId} selected={enquiry?.referralContact ? { value: enquiry.referralContact.id, label: enquiry.referralContact.name } : enquiry?.referralAccount ? { value: enquiry.referralAccount.id, label: enquiry.referralAccount.name } : undefined} onChange={value => setValues({ ...values, referralContactId: referralType === "contact" ? value : "", referralAccountId: referralType === "account" ? value : "" })} /></FormField>}</>}</fieldset></Section>
+      {enquiry ? <IntroductionDetails record={enquiry} /> : <IntroductionSelection value={introducedByCollaboratorId} onChange={setIntroducer} disabled={saving || loadFailed} />}
       {extension.fields({ errors, disabled: saving || loadFailed })}
       {custom.section(saving || loadFailed)}
     </AccessRecordForm>

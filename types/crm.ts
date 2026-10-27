@@ -1,3 +1,4 @@
+import type { PartnerIntroductionEvidence } from "@/platform/collaborators/contracts"
 import type { enquiryStatuses } from "@/modules/crm/validation"
 import type { PropertyContext } from "./real-estate"
 export type CrmStatus = typeof enquiryStatuses[number]
@@ -10,7 +11,7 @@ export type CrmContactRow = {
   region?: string | null; postalCode?: string | null; country?: string | null;
 }
 export type CrmAccountRow = CrmContactRow & { website: string | null; notes: string | null }
-export type CrmEnquiryRow = {
+export type CrmEnquiryRow = PartnerIntroductionEvidence & {
   recordAccess?: import("@/platform/access/record-actions").RecordAccess
   salesTeamId?: string | null; salesTeam?: { id: string; name: string; workflow: string; archived: boolean } | null;
   lostReasonId?: string | null; lostReasonName?: string | null;
@@ -34,7 +35,7 @@ export type CrmTaskRow = {
 export type CrmActivityRow = { id: string; event: string; message: string; createdAt: string; actor: { name: string | null } }
 export type CrmStageRow = { isConversionDefault?: boolean; id: string; name: string; kind: "OPEN" | "WON" | "LOST"; color: string; probability: number; archived: boolean; position: number }
 export type CrmPipelineRow = { id: string; name: string; archived: boolean; version: number; stages: CrmStageRow[]; canManage?: boolean }
-export type CrmOpportunityRow = {
+export type CrmOpportunityRow = PartnerIntroductionEvidence & {
   recordAccess?: import("@/platform/access/record-actions").RecordAccess
   salesTeamId?: string | null; salesTeam?: { id: string; name: string; workflow: string; archived: boolean } | null;
   lostReasonId?: string | null; lostReasonName?: string | null;

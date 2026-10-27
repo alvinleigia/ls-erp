@@ -25,7 +25,7 @@ source management and shared enquiry context validation/referrer redaction.
 See `docs/PARTNER_ATTRIBUTION_R10.md` for the shared introducing-partner creation
 contract and native immutable conversion evidence. Attribution is separate from
 salesperson, referral, lead source, supervision and office access; report/UI
-integration follows in phase 4B.
+integration is covered by `docs/PARTNER_REPORTING_UI_R10.md`.
 
 `service.ts` owns operations and authorization scopes. Routes authenticate the
 caller and establish tenant database context; they do not implement business rules.

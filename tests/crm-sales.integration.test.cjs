@@ -1,4 +1,6 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
+
+const { saveOfficeMemberships } = require("../platform/companies/office-membership.ts")
 const {fixtureUser}=require("./helpers/access-fixtures.cjs")
 const { test, before, after } = require("node:test")
 const assert = require("node:assert/strict")
@@ -28,18 +30,22 @@ const { salesReportSchema } = require("../modules/crm/sales-report-validation.ts
 const status = n => error => error.status === n
 const period = { from: "2026-09-27", through: "2026-09-27", scope: "team" }
 let admin, manager, staff, other, customer, adminB, service, reader, second, contact, source, project, child, pipeline, open, won, lost, leads, deals
-const makeLead = (title, extra = {}) => root.crmEnquiry.create({ data: { tenantId: a, contactId: contact.id, assignedUserId: staff.id, title, createdAt: new Date("2026-09-27T00:00:00Z"), sourceId: source.id, source: source.name, ...extra } })
-const makeDeal = (title, extra = {}) => root.crmOpportunity.create({ data: { tenantId: a, title, contactId: contact.id, assignedUserId: staff.id, pipelineId: pipeline.id, stageId: open.id, amount: "0.1001", currency: "INR", probability: 20, expectedCloseOn: new Date("2026-10-01"), sourceId: source.id, source: source.name, ...extra } })
+const makeLead = (title, extra = {}) => root.crmEnquiry.create({ data: { officeId: `office_${a}`, tenantId: a, contactId: contact.id, assignedUserId: staff.id, title, createdAt: new Date("2026-09-27T00:00:00Z"), sourceId: source.id, source: source.name, ...extra } })
+const makeDeal = (title, extra = {}) => root.crmOpportunity.create({ data: { officeId: `office_${a}`, tenantId: a, title, contactId: contact.id, assignedUserId: staff.id, pipelineId: pipeline.id, stageId: open.id, amount: "0.1001", currency: "INR", probability: 20, expectedCloseOn: new Date("2026-10-01"), sourceId: source.id, source: source.name, ...extra } })
 before(async () => {
   await root.tenant.createMany({ data: [{ id: a, slug: a, name: "Sales A" }, { id: b, slug: b, name: "Sales B" }] })
   const user = (tenantId, role, name) => fixtureUser(root,{ data: { tenantId, role, name, email: `${name}-${suffix}@example.test` } })
   admin = await user(a, "ADMIN", "admin"); manager = await user(a, "MANAGER", "manager"); staff = await user(a, "STAFF", "staff"); other = await user(a, "STAFF", "other"); customer = await user(a, "CUSTOMER", "customer"); adminB = await user(b, "ADMIN", "admin-b")
+  for (const user of [admin, manager, staff, other, adminB]) {
+    const saved = await root.businessOfficePolicy.findUnique({ where: { tenantId_userId: { tenantId: user.tenantId, userId: user.id } } })
+    await (user.tenantId === a ? db : dbB).$transaction(tx => saveOfficeMemberships(tx, { tenantId: user.tenantId, userId: user.tenantId === a ? admin.id : adminB.id }, user.id, { version: saved?.version ?? 0, officeIds: [`office_${user.tenantId}`], companies: [], creationOfficeId: `office_${user.tenantId}` }))
+  }
   await root.tenantModule.createMany({ data: [a, b].flatMap(tenantId => [{ tenantId, key: "crm", allowed: true, enabled: true }, { tenantId, key: "realEstate", allowed: true, enabled: true }]) })
   await root.appSetting.create({ data: { tenantId: a, timeZone: "Asia/Kolkata" } })
   service = createCrmService(db, { tenantId: a, userId: manager.id }); reader = createCrmService(db, { tenantId: a, userId: staff.id }); second = createCrmService(dbB, { tenantId: b, userId: adminB.id })
   contact = await root.crmContact.create({ data: { tenantId: a, ownerUserId: staff.id, name: "Buyer" } })
   source = await root.crmLeadSource.create({ data: { tenantId: a, name: "Web", nameKey: "web" } })
-  project = await root.realEstateProject.create({ data: { tenantId: a, code: "P", name: "Park", lifecycle: "SELLING" } })
+  project = await root.realEstateProject.create({ data: { officeId: `office_${a}`, tenantId: a, code: "P", name: "Park", lifecycle: "SELLING" } })
   child = await root.realEstateProject.create({ data: { tenantId: a, code: "P1", name: "East", parentId: project.id, lifecycle: "SELLING" } })
   pipeline = await root.crmPipeline.create({ data: { tenantId: a, name: "Sales" } })
   const stage = (name, kind, position) => root.crmStage.create({ data: { tenantId: a, pipelineId: pipeline.id, name, kind, position, color: "#123456", probability: kind === "WON" ? 100 : 0 } })
@@ -66,7 +72,7 @@ before(async () => {
     { title: "Deal overdue", opportunityId: deals[0].id, assignedUserId: other.id },
     { title: "Second deal activity", opportunityId: deals[0].id, assignedUserId: staff.id },
     { title: "Contact only", assignedUserId: staff.id },
-  ].map(row => ({ tenantId: a, contactId: contact.id, dueOn: new Date("2020-01-01"), ...row })) })
+  ].map(row => ({ officeId: `office_${a}`, tenantId: a, contactId: contact.id, dueOn: new Date("2020-01-01"), ...row })) })
 })
 after(async () => { await Promise.all(clients.map(c => c.$disconnect())); await Promise.all(pools.map(p => p.end())) })
 
@@ -234,7 +240,7 @@ test("CSV escaping and export bounds reject oversized selections without returni
   const csv = crmCsv(["Title", "Phone"], [[' =HYPERLINK("bad")', "+91999"], ["line\nquote\"", "@SUM(1)"]])
   assert.ok(csv.startsWith("\uFEFF")); assert.ok(csv.includes('"\' =HYPERLINK(""bad"")"')); assert.ok(csv.includes('"\'+91999"')); assert.ok(csv.includes('"line\nquote"""')); assert.ok(csv.includes('"\'@SUM(1)"'))
   assert.doesNotThrow(() => checkExportLimit(2000)); assert.throws(() => checkExportLimit(2001), status(400))
-  await root.crmEnquiry.createMany({ data: Array.from({ length: 2001 }, (_, i) => ({ tenantId: a, contactId: contact.id, assignedUserId: manager.id, title: `Bulk ${i}`, createdAt: new Date("2026-09-27T00:00:00Z") })) })
+  await root.crmEnquiry.createMany({ data: Array.from({ length: 2001 }, (_, i) => ({ officeId: `office_${a}`, tenantId: a, contactId: contact.id, assignedUserId: manager.id, title: `Bulk ${i}`, createdAt: new Date("2026-09-27T00:00:00Z") })) })
   const bulk = { ...period, assignedUserId: manager.id }
   assert.equal((await service.salesOverview(bulk)).totals.leads, 2001)
   assert.equal((await service.salesReportRecords({ ...bulk, pageSize: 10 })).items.length, 10)

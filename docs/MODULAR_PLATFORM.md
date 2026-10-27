@@ -1,3 +1,25 @@
+## R10 - Introduction controls and sales reporting (phase 4B, local)
+
+Tenant Admin selects an optional introducing collaborator on new enquiries/direct
+opportunities; external logins self-attribute without directory access. Existing
+records and conversion display immutable saved evidence. Failed/stale selections
+preserve drafts. The shared evidence type and controls are industry-independent.
+
+Sales reports independently filter internal/external sales owners, recorded partner
+origin, a partner and supervisor at introduction. Grouping, values, drill-downs,
+counts and CSV use the same readable source sets; choices expose only source-backed
+IDs/names, including archived partners, without granting private directory access.
+No login/membership join duplicates outcomes. Null attribution is not internal
+origin. Saved supervision is separate from current directory supervision.
+
+68 service/native checks and six distinct Chrome flows pass, including focused
+final reruns. Build, TypeScript, lint and whitespace pass; desktop/mobile captures
+inspected. All 132 migration rehearsals and 18 stock checks pass; no new migration.
+See [controls/reporting contract](PARTNER_REPORTING_UI_R10.md). Next is phase 4C
+activity performance and source-derived financial/dashboard integration. Hosted
+recovery/staging acceptance and production release gates remain. Nothing pushed
+or deployed; pilot data and hosted sessions unchanged.
+
 ## R10 - Partner introduction evidence (phase 4A, local)
 
 Enquiry/direct-opportunity creation records an external actor's own collaborator,

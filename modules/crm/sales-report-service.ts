@@ -6,7 +6,7 @@ import { scopeAllowsOthers } from "@/platform/access/rules"
 import type { PermissionRun } from "@/platform/access/server"
 import { Prisma } from "@prisma/client"
 import { CrmError, type CrmActor } from "./policy"
-import { salesReportSchema, type SalesReportQuery } from "./sales-report-validation"
+import { salesReportSchema, attributionChoiceSchema, type SalesReportQuery } from "./sales-report-validation"
 import { businessDate, startOfBusinessDate } from "./work-time"
 import type { CrmExtensions, CrmExtensionQuery, CrmReportDimension } from "./extensions"
 import { checkExportLimit, CRM_EXPORT_LIMIT, crmCsv } from "./csv"
@@ -26,6 +26,9 @@ export function createSalesReportService({ run, readTerms }: Context, extensions
     const dimensions: CrmReportDimension[] = [
       { key: "source", label: "Source", emptyLabel: "Unclassified / legacy source", value: Prisma.sql`"sourceId"`, display: Prisma.sql`source` },
       { key: "salesperson", label: "Salesperson", emptyLabel: "Unassigned", value: Prisma.sql`"assignedUserId"`, display: Prisma.sql`owner` },
+      { key: "partner", label: "Introducing collaborator", emptyLabel: "No recorded introducing partner", value: Prisma.sql`"introducedByCollaboratorId"`, display: Prisma.sql`"partnerName"` },
+      { key: "introductionSupervisor", label: "Supervisor at introduction", emptyLabel: "No recorded partner supervisor", value: Prisma.sql`"introductionSupervisorId"`, display: Prisma.sql`COALESCE("introductionSupervisorName",'Former supervisor')` },
+      { key: "responsibleType", label: "Salesperson type", emptyLabel: "Unassigned", value: Prisma.sql`"responsibleType"`, display: Prisma.sql`CASE WHEN "responsibleType"='external' THEN 'External collaborators' ELSE 'Internal users' END` },
       { key: "lostReason", label: "Lost reason", emptyLabel: "No reason / legacy closure", value: Prisma.sql`"lostReasonId"`, display: Prisma.sql`"lostReasonName"` },
       ...extension.dimensions,
     ]
@@ -44,14 +47,22 @@ export function createSalesReportService({ run, readTerms }: Context, extensions
       ${q.lostReasonId ? Prisma.sql`AND r."lostReasonId" = ${q.lostReasonId}` : Prisma.empty}
       ${q.salesTeamId ? Prisma.sql`AND r."salesTeamId" = ${q.salesTeamId}` : Prisma.empty}
       ${q.sourceId ? Prisma.sql`AND r."sourceId" = ${q.sourceId}` : Prisma.empty}
+      ${q.responsibleType === "all" ? Prisma.empty : q.responsibleType === "external" ? Prisma.sql`AND u."collaboratorId" IS NOT NULL` : Prisma.sql`AND u."collaboratorId" IS NULL`}
+      ${q.introduction === "all" ? Prisma.empty : q.introduction === "partner" ? Prisma.sql`AND r."introducedByCollaboratorId" IS NOT NULL` : Prisma.sql`AND r."introducedByCollaboratorId" IS NULL`}
+      ${q.introducedByCollaboratorId ? Prisma.sql`AND r."introducedByCollaboratorId"=${q.introducedByCollaboratorId}` : Prisma.empty}
+      ${q.introductionSupervisorId ? Prisma.sql`AND r."partnerAttribution"->>'supervisorUserId'=${q.introductionSupervisorId}` : Prisma.empty}
       ${extension.filter}`
     const sharedColumns = Prisma.sql`r.id, r.title, r."tenantId", r."assignedUserId", r."sourceId", r."createdAt", r."lostReasonId", r."lostReasonName",
+      r."introducedByCollaboratorId", r."partnerAttribution"->>'name' AS "partnerName", r."partnerAttribution"->>'code' AS "partnerCode",
+      r."partnerAttribution"->>'supervisorUserId' AS "introductionSupervisorId", CASE WHEN r."introducedByCollaboratorId" IS NULL THEN NULL ELSE COALESCE(NULLIF(btrim(su.name),''), CASE WHEN su.id IS NULL THEN 'Former supervisor' ELSE 'Unnamed supervisor' END) END AS "introductionSupervisorName",
+      CASE WHEN u."collaboratorId" IS NULL THEN 'internal' ELSE 'external' END AS "responsibleType",
       c.name AS customer, u.name AS owner, COALESCE(s.name, r.source) AS source,
       ${extension.values} AS "extensionValues"`
     const joins = Prisma.sql`
       JOIN "CrmContact" c ON c.id = r."contactId" AND c."tenantId" = r."tenantId"
       JOIN "User" u ON u.id = r."assignedUserId" AND u."tenantId" = r."tenantId"
-      LEFT JOIN "CrmLeadSource" s ON s.id = r."sourceId" AND s."tenantId" = r."tenantId"`
+      LEFT JOIN "CrmLeadSource" s ON s.id = r."sourceId" AND s."tenantId" = r."tenantId"
+      LEFT JOIN "User" su ON su.id=r."partnerAttribution"->>'supervisorUserId' AND su."tenantId"=r."tenantId"`
     const cte = Prisma.sql`WITH leads_all AS (
       SELECT ${sharedColumns}, r.status::text AS status,
         EXISTS (SELECT 1 FROM "CrmOpportunity" o WHERE o."tenantId" = r."tenantId" AND o."enquiryId" = r.id
@@ -75,6 +86,7 @@ export function createSalesReportService({ run, readTerms }: Context, extensions
     gaps AS (SELECT * FROM pipeline d WHERE NOT EXISTS (SELECT 1 FROM "CrmTask" t WHERE t."tenantId" = d."tenantId" AND t."opportunityId" = d.id AND t.status IN ('OPEN', 'IN_PROGRESS'))),
     overdue AS (
       SELECT t.id, t.title, t.status::text AS status, t."createdAt", t."dueOn", COALESCE(l.customer, d.customer) AS customer,
+        COALESCE(l."partnerName",d."partnerName") AS "partnerName", COALESCE(l."partnerCode",d."partnerCode") AS "partnerCode", COALESCE(l."introductionSupervisorName",d."introductionSupervisorName") AS "introductionSupervisorName",
         u.name AS owner, COALESCE(l.source, d.source) AS source, COALESCE(l."extensionValues", d."extensionValues") AS "extensionValues", COALESCE(l."lostReasonName", d."lostReasonName") AS "lostReasonName"
       FROM "CrmTask" t
       LEFT JOIN leads_all l ON l.id = t."enquiryId" AND l."tenantId" = t."tenantId"
@@ -100,7 +112,7 @@ export function createSalesReportService({ run, readTerms }: Context, extensions
     if (exporting) checkExportLimit(total)
     const lead = q.view === "leads" || q.view === "converted", work = q.view === "overdue"
     const items = await tx.$queryRaw<SalesReportRecord[]>(Prisma.sql`${cte}
-      SELECT id, title, customer, owner, source, "extensionValues", status, "createdAt", "lostReasonName",
+      SELECT id, title, customer, owner, source, "partnerName", "partnerCode", "introductionSupervisorName", "extensionValues", status, "createdAt", "lostReasonName",
         ${lead || work ? Prisma.sql`NULL::text AS amount, NULL::text AS currency, NULL::timestamp AS "closedAt"` : Prisma.sql`amount::text, currency, "closedAt"`},
         ${work ? Prisma.sql`"dueOn"` : Prisma.sql`NULL::date`} AS "dueOn",
         ${lead ? "enquiries" : work ? "activities" : "opportunities"}::text AS "recordKind"
@@ -109,6 +121,24 @@ export function createSalesReportService({ run, readTerms }: Context, extensions
     return pageResult(items.map(r => ({ ...r, createdAt: new Date(r.createdAt).toISOString(), closedAt: r.closedAt ? new Date(r.closedAt).toISOString() : null, dueOn: r.dueOn ? new Date(r.dueOn).toISOString().slice(0, 10) : null })), total, q)
   }
   return {
+    salesAttributionChoices(input: unknown) {
+      const { choice, q: search, selectedId, ...filters } = (input && typeof input === "object" && !Array.isArray(input) ? input : {}) as Record<string, unknown>
+      const query = attributionChoiceSchema.parse({ choice, q: search, selectedId })
+      const split = extensions.splitQuery(filters), q = salesReportSchema.parse(split.core)
+      return run(["reports.read", "enquiries.read", "opportunities.read", "activities.read"], async (tx, actor) => {
+        const c = await context(tx, actor, q, split.extension)
+        const key = query.choice === "partner" ? Prisma.sql`"introducedByCollaboratorId"` : Prisma.sql`"introductionSupervisorId"`
+        const label = query.choice === "partner" ? Prisma.sql`"partnerName" || ' (' || "partnerCode" || ')'` : Prisma.sql`COALESCE("introductionSupervisorName",'Former supervisor')`
+        const sourceColumns = Prisma.sql`id,"createdAt","introducedByCollaboratorId","partnerName","partnerCode","introductionSupervisorId","introductionSupervisorName"`
+        const sources = Prisma.join((["leads", "pipeline", "won", "lost"] as const).map(view => Prisma.sql`SELECT ${sourceColumns} FROM ${table(view)}`), " UNION ALL ")
+        const choices = Prisma.sql`${c.cte}, visible_sources AS (${sources}), labels AS (
+          SELECT DISTINCT ON (${key}) ${key} AS id, ${label} AS name FROM visible_sources WHERE ${key} IS NOT NULL ORDER BY ${key}, "createdAt" DESC, visible_sources.id
+        ), choices AS (SELECT * FROM labels WHERE name ILIKE ${"%" + query.q + "%"} ${query.selectedId ? Prisma.sql`AND id=${query.selectedId}` : Prisma.empty})`
+        const [{ total }] = await tx.$queryRaw<{ total: number }[]>(Prisma.sql`${choices} SELECT COUNT(*)::int AS total FROM choices`)
+        const items = await tx.$queryRaw<{ id: string; name: string }[]>(Prisma.sql`${choices} SELECT * FROM choices ORDER BY name,id LIMIT ${q.pageSize} OFFSET ${(q.page-1)*q.pageSize}`)
+        return pageResult(items,total,q)
+      })
+    },
     salesOverview(input: unknown) {
       const split = extensions.splitQuery(input), q = salesReportSchema.parse(split.core)
       return run(["reports.read", "enquiries.read", "opportunities.read", "activities.read"], async (tx, actor) => {
@@ -126,8 +156,8 @@ export function createSalesReportService({ run, readTerms }: Context, extensions
         const c = await context(tx, actor, q, split.extension), key = c.dimension.value
         const label = c.dimension.display
         const grouped = Prisma.sql`${c.cte}, groups AS (SELECT COALESCE(${key}, '__none__') AS id,
-          CASE WHEN ${key} IS NULL THEN ${c.dimension.emptyLabel} ELSE COALESCE(MAX(${label}), 'Unnamed') END AS label,
-          COUNT(*)::int AS leads, COUNT(*) FILTER (WHERE converted)::int AS converted FROM leads ${q.dimension === "lostReason" ? Prisma.sql`WHERE status = 'CLOSED'` : Prisma.empty} GROUP BY ${key})`
+          CASE WHEN ${key} IS NULL THEN ${c.dimension.emptyLabel} ELSE COALESCE((array_agg(${label} ORDER BY "createdAt" DESC, l.id))[1], 'Unnamed') END AS label,
+          COUNT(*)::int AS leads, COUNT(*) FILTER (WHERE converted)::int AS converted FROM leads l ${q.dimension === "lostReason" ? Prisma.sql`WHERE status = 'CLOSED'` : Prisma.empty} GROUP BY ${key})`
         const [{ total }] = await tx.$queryRaw<{ total: number }[]>(Prisma.sql`${grouped} SELECT COUNT(*)::int AS total FROM groups`)
         const items = await tx.$queryRaw<SalesLeadGroup[]>(Prisma.sql`${grouped} SELECT * FROM groups ORDER BY label, id LIMIT ${q.pageSize} OFFSET ${(q.page - 1) * q.pageSize}`)
         return pageResult(items, total, q)
@@ -153,8 +183,8 @@ export function createSalesReportService({ run, readTerms }: Context, extensions
       return run(["reports.read", "reports.export", "enquiries.read", "opportunities.read", "activities.read", q.view === "leads" || q.view === "converted" ? "enquiries.export" : q.view === "overdue" ? "activities.export" : "opportunities.export"], async (tx, actor) => {
         const c = await context(tx, actor, q, split.extension), result = await records(tx, c, q, true)
         const term = createTermResolver(await readTerms(tx, actor))
-        return crmCsv(["ID", "Title", "Record type", term("crm.contact.singular", "Customer"), "Assigned staff", "Source", ...c.columns.map(column => reportLabel(term, column)), "Status / outcome", "Lost reason", term("crm.opportunity.singular", "Deal value", "{label} value"), "Currency", "Created (UTC)", "Closed (UTC)", "Due date"],
-          result.items.map(r => [r.id, r.title, r.recordKind, r.customer, r.owner, r.source, ...c.columns.map(column => r.extensionValues[column.key]), r.status === "CLOSED" ? "Lost" : r.status, r.lostReasonName, r.amount, r.currency, r.createdAt, r.closedAt, r.dueOn]))
+        return crmCsv(["ID", "Title", "Record type", term("crm.contact.singular", "Customer"), "Assigned user", "Source", "Introducing collaborator", "Partner code", "Supervisor at introduction", ...c.columns.map(column => reportLabel(term, column)), "Status / outcome", "Lost reason", term("crm.opportunity.singular", "Deal value", "{label} value"), "Currency", "Created (UTC)", "Closed (UTC)", "Due date"],
+          result.items.map(r => [r.id, r.title, r.recordKind, r.customer, r.owner, r.source, r.partnerName, r.partnerCode, r.introductionSupervisorName, ...c.columns.map(column => r.extensionValues[column.key]), r.status === "CLOSED" ? "Lost" : r.status, r.lostReasonName, r.amount, r.currency, r.createdAt, r.closedAt, r.dueOn]))
       })
     },
   }
