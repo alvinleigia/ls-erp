@@ -1,9 +1,11 @@
+import { attributionChoiceSchema } from "@/platform/collaborators/report-validation"
+import { readAttributionChoices } from "@/platform/collaborators/report-choices"
 import { authorizeBusinessOperation } from "@/platform/access/operation"
 import { recordActionAccess } from "@/platform/access/record-actions"
 
 import { Prisma, type PrismaClient } from "@prisma/client"
 
-import { requirePermission } from "@/platform/access/policy"
+import { requirePermission, permits } from "@/platform/access/policy"
 import type { Requirement } from "@/platform/access/catalog"
 import { BusinessError, type BusinessActor } from "@/platform/policy"
 
@@ -11,7 +13,7 @@ import { serializationConflict } from "@/platform/database-errors"
 import { recordDomainAuditEvent } from "@/lib/domain-audit"
 import { receivableOpenSchema, receivableListSchema, orderPaymentSchema, orderPaymentReversalSchema } from "@/lib/validation"
 import type { ReceivableSource } from "./contracts"
-import { readReceivableOverview } from "./overview"
+import { readReceivableOverview, receivableOverviewSet } from "./overview"
 type Tx = Prisma.TransactionClient
 const D = Prisma.Decimal
 const iso = (date: Date | null) => date?.toISOString().slice(0, 10) ?? null
@@ -69,7 +71,16 @@ export function createReceivableService(db: PrismaClient, identity: Pick<Busines
   return {
     list(input: unknown) {
       const query = receivableListSchema.parse(input)
-      return run("receivables.read", false, async (tx, actor) => readReceivableOverview(tx, actor.tenantId, source.visibleOrderIds(actor), await today(tx, actor.tenantId), query))
+      return run("receivables.read", false, async (tx, actor) => ({ ...await readReceivableOverview(tx, actor.tenantId, source.visibleOrderIds(actor, query), await today(tx, actor.tenantId), query), canFilterOrigin: permits(actor,"opportunities.read") }))
+    },
+    attributionChoices(input: unknown) {
+      const { choice, q: search, selectedId, recordQuery, ...filters } = (input && typeof input === "object" && !Array.isArray(input) ? input : {}) as Record<string, unknown>
+      const selection = attributionChoiceSchema.parse({ choice, q: search, selectedId }), query = receivableListSchema.parse({ ...filters, q: recordQuery })
+      return run(["receivables.read", "opportunities.read"], false, async (tx, actor) => {
+        const cte = receivableOverviewSet(actor.tenantId, source.visibleOrderIds(actor,query), await today(tx,actor.tenantId), query)
+        const orderIds = Prisma.sql`${cte} SELECT "orderId" FROM filtered`
+        return readAttributionChoices(tx,actor.tenantId,source.attributionSources(actor,orderIds),selection,query.page,query.pageSize)
+      })
     },
     get(id: string, requestedPage = 1) {
       return run("receivables.read", false, async (tx, actor) => {

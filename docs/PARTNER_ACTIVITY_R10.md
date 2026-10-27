@@ -94,8 +94,9 @@ Ignored evidence: `tmp/industry-release/phase4c1-api.log`,
 Screenshots are under `test-results/local-access`. Nothing pushed or deployed;
 pilot data and hosted sessions are unchanged.
 
-Phase 4C2 remains: source-derived financial reporting and dashboard attribution
-integration. Existing financial/dashboard totals are unchanged in phase 4C1.
+Phase 4C2a adds [receivable attribution reporting](PARTNER_FINANCIAL_R10.md);
+phase 4C2b dashboard attribution remains. Existing financial/dashboard totals were
+unchanged in phase 4C1.
 Current-supervisor portfolio reporting remains separate from saved supervision.
 Hosted staging recovery, copied-data rehearsal, effective-access comparisons and
 separate production release authorization remain required.

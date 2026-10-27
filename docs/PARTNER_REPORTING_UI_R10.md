@@ -114,8 +114,8 @@ Ignored evidence under `tmp/industry-release`: `phase4b-retained.log`,
 ## Next and release boundary
 
 Phase 4C1 implements [activity filters, drill-downs and exports](PARTNER_ACTIVITY_R10.md).
-Phase 4C2 extends the same explicit attribution/identity filters to linked financial
-reporting/dashboard contributions. Derive child
+Phase 4C2a implements [receivable attribution reporting](PARTNER_FINANCIAL_R10.md);
+phase 4C2b dashboard contributions remain. Derive child
 financial attribution through the canonical opportunity; do not introduce editable
 copies or add enquiry and opportunity counts into one duplicated outcome total.
 Current-supervisor portfolio reporting must stay distinct from saved supervision.

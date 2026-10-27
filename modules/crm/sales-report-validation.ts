@@ -14,7 +14,5 @@ export const salesReportSchema = activityReportSchema.safeExtend({
   page: z.coerce.number().int().min(1).max(100000).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(20),
 })
-export const attributionChoiceSchema = z.object({
-  choice: z.enum(["partner", "supervisor"]), q: z.string().trim().max(160).default(""), selectedId: z.string().trim().min(1).max(100).optional(),
-}).strict()
+
 export type SalesReportQuery = z.infer<typeof salesReportSchema>

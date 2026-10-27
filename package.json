@@ -60,6 +60,8 @@
     "test:access:profiles": "node scripts/test-sales-orders.cjs --profiles",
     "test:companies": "node scripts/test-sales-orders.cjs --companies",
     "test:companies:browser": "node scripts/test-sales-orders.cjs --companies --browser",
+    "test:partner-financial": "node scripts/test-sales-orders.cjs --partner-financial",
+    "test:partner-financial:browser": "node scripts/test-sales-orders.cjs --partner-financial --browser",
     "test:partner-activity": "node scripts/test-sales-orders.cjs --partner-activity",
     "test:partner-activity:browser": "node scripts/test-sales-orders.cjs --partner-activity --browser",
     "test:partner-reporting": "node scripts/test-sales-orders.cjs --partner-reporting",

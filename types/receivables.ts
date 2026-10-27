@@ -1,3 +1,3 @@
 export type ReceivableOverviewRow = { orderId: string; title: string; customerName: string; currency: string; total: string; paid: string; outstanding: string; overdue: string; nextDue: string | null }
 export type ReceivableCurrencySummary = { currency: string; orders: number; total: string; paid: string; outstanding: string; overdue: string; current: string; unscheduled: string; days1to30: string; days31to60: string; days61to90: string; days91plus: string }
-export type ReceivableOverview = { items: ReceivableOverviewRow[]; summaries: ReceivableCurrencySummary[]; currencies: string[]; today: string; total: number; page: number; pageSize: number; totalPages: number }
+export type ReceivableOverview = { canFilterOrigin?: boolean; items: ReceivableOverviewRow[]; summaries: ReceivableCurrencySummary[]; currencies: string[]; today: string; total: number; page: number; pageSize: number; totalPages: number }

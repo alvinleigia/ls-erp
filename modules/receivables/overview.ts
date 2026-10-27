@@ -4,8 +4,8 @@ import type { ReceivableOverview, ReceivableOverviewRow, ReceivableCurrencySumma
 
 // All amounts and filtering stay in Postgres numeric arithmetic. The same scoped
 // set feeds the paginated rows, counts and per-currency summaries in one snapshot.
-export async function readReceivableOverview(tx: Prisma.TransactionClient, tenantId: string, visibleOrderIds: Prisma.Sql, today: string, q: ReceivableListQuery): Promise<ReceivableOverview> {
-  const cte = Prisma.sql`WITH orders AS (
+export function receivableOverviewSet(tenantId: string, visibleOrderIds: Prisma.Sql, today: string, q: ReceivableListQuery) {
+  return Prisma.sql`WITH orders AS (
     SELECT o.id, o.title, o."customerName", r.currency FROM "OrderReceivable" r
     JOIN "SalesOrder" o ON o."tenantId"=r."tenantId" AND o.id=r."orderId"
     WHERE r."tenantId"=${tenantId} AND o.status='CONFIRMED' AND o.id IN (${visibleOrderIds})
@@ -32,6 +32,9 @@ export async function readReceivableOverview(tx: Prisma.TransactionClient, tenan
     ${q.currency ? Prisma.sql`AND currency=${q.currency}` : Prisma.empty}
     ${q.status === "OPEN" ? Prisma.sql`AND outstanding>0` : q.status === "OVERDUE" ? Prisma.sql`AND overdue>0` : q.status === "SETTLED" ? Prisma.sql`AND outstanding=0` : Prisma.empty}
   )`
+}
+export async function readReceivableOverview(tx: Prisma.TransactionClient, tenantId: string, visibleOrderIds: Prisma.Sql, today: string, q: ReceivableListQuery): Promise<ReceivableOverview> {
+  const cte = receivableOverviewSet(tenantId, visibleOrderIds, today, q)
   const sort = { overdue: Prisma.sql`filtered.overdue`, outstanding: Prisma.sql`filtered.outstanding`, nextDue: Prisma.sql`filtered."nextDue"`, title: Prisma.sql`filtered.title` }[q.sort]
   const direction = q.order === "asc" ? Prisma.sql`ASC` : Prisma.sql`DESC`
   const items = await tx.$queryRaw<ReceivableOverviewRow[]>(Prisma.sql`${cte} SELECT "orderId",title,"customerName",currency,total::text,paid::text,outstanding::text,overdue::text,"nextDue" FROM filtered ORDER BY ${sort} ${direction} NULLS LAST,"orderId" ASC LIMIT ${q.pageSize} OFFSET ${(q.page - 1) * q.pageSize}`)

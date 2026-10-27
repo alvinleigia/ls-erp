@@ -1,3 +1,19 @@
+## R10 - Receivable attribution reporting (phase 4C2a, local)
+
+Receivables reuse shared salesperson-type and original partner/saved-supervisor
+filters through the canonical opportunity. Rows, paged counts, numeric balances,
+aging and source-backed choices share the matching opened/confirmed order set.
+Financial Read remains independent of source Read; origin filters and selectors
+require opportunity Read and its scopes. Sharing never transfers source access.
+No copied child attribution, financial rewrite or access/data migration.
+
+84 service/native checks and nine distinct Chrome flows pass; desktop/mobile
+captures inspected. All 132 migration rehearsals and 18 native stock checks pass.
+Build, TypeScript, lint and whitespace pass. See [financial reporting contract](PARTNER_FINANCIAL_R10.md).
+Next is phase 4C2b CRM/document dashboard attribution, matching links and choices.
+Hosted recovery, copied-data rehearsal and release gates remain. Nothing pushed
+or deployed; pilot data and hosted sessions unchanged.
+
 ## R10 - Activity attribution and performance (phase 4C1, local)
 
 Activity overview, workload/type/call-outcome tables and My Work drill-downs now

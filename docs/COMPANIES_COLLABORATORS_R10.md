@@ -133,7 +133,8 @@ on enquiries/direct opportunities, inherited exactly through conversion. Existin
 records remain unattributed; no owner or access backfill. Phase 4B adds local
 [introduction controls and sales-report filters](PARTNER_REPORTING_UI_R10.md).
 Phase 4C1 adds local [activity filters, drill-downs and exports](PARTNER_ACTIVITY_R10.md).
-Phase 4C2 source-derived financial reporting and dashboard contributions remain pending.
+Phase 4C2a adds local [receivable attribution reporting](PARTNER_FINANCIAL_R10.md).
+Phase 4C2b dashboard attribution remains pending.
 
 Keep introducing collaborator, responsible salesperson, supervising manager and
 record company/office as separate dimensions. Preserve source attribution through

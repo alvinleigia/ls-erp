@@ -1,3 +1,4 @@
+import { attributionFilterShape, validateAttributionFilters } from "@/platform/collaborators/report-validation"
 import { recordRulesSchema } from "@/platform/access/rules"
 import { initialOfficeMembershipSchema } from "@/platform/companies/membership-validation"
 import { z } from "zod"
@@ -1582,11 +1583,12 @@ export const unitReservationCreateSchema = z.object({
 }).strict()
 export const receivableOpenSchema = z.object({ dueDates: z.array(z.iso.date().nullable()).min(1).max(60) }).strict()
 export const receivableListSchema = z.object({
+  ...attributionFilterShape,
   page: z.coerce.number().int().min(1).max(1000000).default(1), pageSize: z.coerce.number().int().min(1).max(100).default(20),
   q: z.string().trim().max(120).default(""), currency: z.string().trim().toUpperCase().regex(/^[A-Z]{3}$/).optional(),
   status: z.enum(["ALL", "OPEN", "OVERDUE", "SETTLED"]).default("OPEN"),
   sort: z.enum(["overdue", "outstanding", "nextDue", "title"]).default("overdue"), order: z.enum(["asc", "desc"]).default("desc"),
-}).strict()
+}).strict().superRefine(validateAttributionFilters)
 export type ReceivableListQuery = z.infer<typeof receivableListSchema>
 export const orderPaymentSchema = z.object({
   requestKey: z.uuid(), version: z.number().int().positive(),

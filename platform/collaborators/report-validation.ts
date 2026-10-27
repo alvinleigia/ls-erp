@@ -13,3 +13,7 @@ export const attributionFilterSchema = z.object(attributionFilterShape).strict()
 export type AttributionFilter = { responsibleType?: "all" | "internal" | "external"; introduction?: "all" | "partner" | "unattributed"; introducedByCollaboratorId?: string; introductionSupervisorId?: string }
 export const hasIntroductionFilter = (q: AttributionFilter) => (q.introduction && q.introduction !== "all") || !!q.introducedByCollaboratorId || !!q.introductionSupervisorId
 export const attributionQuery = (q: AttributionFilter): Record<string, string> => Object.fromEntries(Object.entries(q).filter(([key, value]) => key in attributionFilterShape && value && value !== "all"))
+
+export const attributionChoiceSchema = z.object({
+  choice: z.enum(["partner", "supervisor"]), q: z.string().trim().max(160).default(""), selectedId: z.string().trim().min(1).max(100).optional(),
+}).strict()

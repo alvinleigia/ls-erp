@@ -3,7 +3,7 @@ import { introductionWhere, responsibleUserWhere, introductionSql, responsibleUs
 import { workAttributionWhere } from "./attribution-scope"
 import { permits } from "@/platform/access/policy"
 import { ownedRecordSql } from "@/platform/access/record-scope"
-import { attributionChoiceSchema } from "./sales-report-validation"
+import { attributionChoiceSchema } from "@/platform/collaborators/report-validation"
 import { peopleScope } from "@/platform/access/people-scope"
 import { opportunityScope } from "@/modules/crm/policy"
 import { termText } from "@/platform/terminology/message"
