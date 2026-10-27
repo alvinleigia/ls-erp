@@ -1,3 +1,4 @@
+import { addDaysToDateKey } from "@/lib/business-time"
 import { Prisma, type PrismaClient } from "@prisma/client"
 import { authorizeBusinessOperation } from "@/platform/access/operation"
 import { permits } from "@/platform/access/policy"
@@ -10,7 +11,7 @@ import { crmDashboardSets } from "@/modules/crm/dashboard-sets"
 import { documentDashboardSets } from "@/modules/sales-documents/dashboard-sets"
 import { salesDashboard } from "./sales-summary"
 import { dashboardSelectionSchema, dashboardRecordSchema, dashboardPageSchema, type DashboardSelection } from "./validation"
-import { getRangeBounds, zonedDateTimeToUtc, toDateKeyInTimeZone, addDaysToDateKey } from "./period"
+import { getRangeBounds, zonedDateTimeToUtc, toDateKeyInTimeZone } from "./period"
 import type { DashboardKind, DashboardPeriod } from "@/types/dashboard"
 
 type Identity=Pick<BusinessActor,"tenantId"|"userId"|"requestId">

@@ -1,3 +1,10 @@
+export const dateKeyToUtcDate = (value: string) => new Date(`${value}T00:00:00.000Z`)
+export const addDaysToDateKey = (value: string, days: number) => {
+  const base = dateKeyToUtcDate(value)
+  base.setUTCDate(base.getUTCDate() + days)
+  return base.toISOString().slice(0, 10)
+}
+
 // Date-only work stays a calendar date; timed work is an absolute instant.
 export function wallTime(instant: Date | string, timeZone: string) {
   const parts = new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(new Date(instant))

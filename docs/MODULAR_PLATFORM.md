@@ -1,3 +1,21 @@
+## R10 - Architecture baseline cleanup (phase 5, local)
+
+The original 23 architecture assertions now pass unchanged. Generic stock
+corrections and native booking posting have separate adapters with shared fresh
+stock authority. Audit/coupon/dashboard/seed date offsets use the shared business-
+time helper directly; no dashboard export alias remains. Inventory office and
+workforce staff-choice validation/query/module checks live in their owning
+services; both routes remain transport adapters with native scopes intact.
+
+169 checks pass together, plus 17 booking checks including one new stock-posting
+case: 170 distinct checks across both runs. Ten Chrome flows pass together;
+stock/audit/coupon captures inspected. All 132 migration rehearsals and 18 stock
+preservation checks pass. Build, TypeScript, lint and whitespace pass. No schema,
+data, grant or permission migration; no assertion skip or compatibility fallback.
+See [cleanup contract and verification](ARCHITECTURE_BASELINE_R10.md).
+Next is release-readiness and copied-data recovery/acceptance verification.
+Nothing pushed or deployed; pilot data and hosted sessions unchanged.
+
 ## R10 - Dashboard attribution and matching records (phase 4C2b, local)
 
 Dashboard sales filters use shared identity/original-introduction predicates.

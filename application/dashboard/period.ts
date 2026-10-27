@@ -1,3 +1,5 @@
+import { dateKeyToUtcDate } from "@/lib/business-time"
+
 const firstDayIndexMap = {
   SUNDAY: 0,
   MONDAY: 1,
@@ -19,13 +21,6 @@ const parseDateOnly = (value: string | null) => {
   const parsed = new Date(`${value}T00:00:00.000Z`)
   if (Number.isNaN(parsed.getTime())) return null
   return parsed
-}
-
-export const dateKeyToUtcDate = (value: string) => new Date(`${value}T00:00:00.000Z`)
-export const addDaysToDateKey = (value: string, days: number) => {
-  const base = dateKeyToUtcDate(value)
-  base.setUTCDate(base.getUTCDate() + days)
-  return base.toISOString().slice(0, 10)
 }
 
 const getDatePartsInTimeZone = (value: Date, timeZone: string) => {

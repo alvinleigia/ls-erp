@@ -68,6 +68,9 @@ This is the baseline for new modules (API + UI) in this codebase.
   - API-generated links: derive from `request.url` / request headers.
   - avoid fixed-origin env vars (for example `APP_URL`, `NEXT_PUBLIC_APP_URL`) for tenant-domain links.
 
+## Shared implementation boundaries
+- Calendar-only offsets/conversion belong in `lib/business-time.ts`; platform and domain code must not import dashboard composition for date arithmetic. Booking-native stock posting belongs in the source-specific inventory adapter, while generic corrections and shared stock authority remain separate. Office/staff selector routes forward input to their owning module; validation and fresh post-lock authorization stay in that service. See `docs/ARCHITECTURE_BASELINE_R10.md`.
+
 ## Audit logging
 - Composed audit reports use the closed `platform/audit/registry.ts` event-family registry and native source RLS. Count and page headers share one statement snapshot; list/detail checks refresh authority after the tenant security lock. New families require explicit audience, activation, source/privacy and negative isolation checks. Unknown families stay hidden, including for Admin. See `docs/AUDIT_REPORTS_R10.md` and `docs/RESOURCE_BOUNDARIES_R10.md`.
 - Domain-changing APIs should write audit rows via `recordDomainAuditEventSafe` (`lib/domain-audit.ts`).

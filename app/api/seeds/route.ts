@@ -1,3 +1,4 @@
+import { dateKeyToUtcDate, addDaysToDateKey } from "@/lib/business-time"
 import { createInventoryCategory, updateInventoryCategory } from "@/modules/inventory/category-service"
 import { createSupplier, updateSupplier } from "@/modules/inventory/supplier-service"
 import { officeBoundaryError } from "@/platform/companies/record-office"
@@ -772,14 +773,6 @@ const getDatePartsInTimeZone = (value: Date, timeZone: string) => {
 const toDateKeyInTimeZone = (value: Date, timeZone: string) => {
   const parts = getDatePartsInTimeZone(value, timeZone)
   return `${String(parts.year).padStart(4, "0")}-${String(parts.month).padStart(2, "0")}-${String(parts.day).padStart(2, "0")}`
-}
-
-const dateKeyToUtcDate = (value: string) => new Date(`${value}T00:00:00.000Z`)
-
-const addDaysToDateKey = (value: string, days: number) => {
-  const base = dateKeyToUtcDate(value)
-  base.setUTCDate(base.getUTCDate() + days)
-  return base.toISOString().slice(0, 10)
 }
 
 const zonedDateTimeToUtc = (

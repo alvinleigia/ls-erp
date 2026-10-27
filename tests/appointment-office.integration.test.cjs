@@ -143,3 +143,20 @@ test('choice endpoints recheck actions, activation and invalid windows',async()=
  await body(await choices('/staff-choices',{...window,endAt:window.startAt}),400);await body(await choices('/staff-choices',{...window,selected:Array(101).fill(sa).join(',')}),400);
  await root.query(`UPDATE "TenantModule" SET enabled=false WHERE "tenantId"=$1 AND key='appointments'`,[t]);try{await body(await choices('/office-choices',{}),403);await body(await choices('/staff-choices',window),403)}finally{await root.query(`UPDATE "TenantModule" SET enabled=true WHERE "tenantId"=$1 AND key='appointments'`,[t])}
 })
+
+test('booking stock adapter posts and restores canonical quantities exactly once in the saved office',async()=>{
+ const category=t+'_stock_category'
+ await root.query('INSERT INTO "TenantModule"("tenantId",key,allowed,enabled,"updatedAt") VALUES($1,\'inventory\',true,true,now())',[t])
+ await root.query('INSERT INTO "InventoryCategory"(id,"tenantId",name,"updatedAt") VALUES($1,$2,\'Booking stock boundary\',now())',[category,t])
+ const products=require('../app/api/inventory/products/route.ts')
+ const created=await sessions.run({user:{id:admin,tenantId:t,role:'ADMIN'}},()=>products.POST(new Request('http://'+t+'.localhost/api/inventory/products',{method:'POST',headers:{host:t+'.localhost','content-type':'application/json','x-office-id':a,'x-office-version':'5'},body:JSON.stringify({sku:'BOOKING-BOUNDARY',name:'Booking stock boundary',categoryId:category,costPriceCents:100,mrpCents:500,onHandQty:10})})))
+ const product=(await body(created,201)).item
+ const data={...order(sa,ca,'2036-02-10','CONFIRMED'),appointmentStartTime:'15:00',appointmentStartAt:'2036-02-10T15:00:00Z',productLines:[{productId:product.id,quantity:2,unitPriceCents:500,discountType:'NONE',discountValue:0,taxIds:[],taxMode:'EXCLUSIVE'}]}
+ const saved=(await body(await call('/orders','POST',data,undefined,admin),201)).order
+ const quantity=async()=>Number((await root.query('SELECT "onHandQty" FROM "InventoryOfficeStock" WHERE "tenantId"=$1 AND "officeId"=$2 AND "productId"=$3',[t,a,product.id])).rows[0].onHandQty)
+ assert.equal(saved.officeId,a);assert.equal(await quantity(),8)
+ await body(await call('/orders/[id]','PATCH',{status:'CANCELED'},saved.id,admin));assert.equal(await quantity(),10)
+ await body(await call('/orders/[id]','PATCH',{status:'CANCELED'},saved.id,admin));assert.equal(await quantity(),10)
+ const movements=await root.query('SELECT "quantityDelta" FROM "InventoryStockMovement" WHERE "tenantId"=$1 AND "officeId"=$2 AND "productId"=$3 ORDER BY "createdAt",id',[t,a,product.id])
+ assert.deepEqual(movements.rows.map(r=>r.quantityDelta),[10,-2,2])
+})

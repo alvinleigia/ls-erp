@@ -1,3 +1,4 @@
+import { requireBusinessModule } from "@/platform/module-server"
 import { z } from "zod"
 import { authorizeBusinessOperation } from "@/platform/access/operation"
 import type { BusinessActor } from "@/platform/policy"
@@ -11,7 +12,9 @@ export const staffChoicesSchema = z.object({
 }).strict().refine(v => v.action === "browse" ? !v.sourceId : !!v.startDate && (!v.endDate || v.endDate >= v.startDate) && (v.action === "edit" ? !!v.sourceId : !v.sourceId), "Choose an office and valid assignment dates.")
   .refine(v => v.selected.split(",").filter(Boolean).length <= 100, "Select at most 100 staff.")
 
-export async function workforceStaffChoices(actor: BusinessActor, query: z.infer<typeof staffChoicesSchema>) {
+export async function workforceStaffChoices(actor: BusinessActor, input: unknown) {
+  await requireBusinessModule(prisma, actor.tenantId, "shifts")
+  const query = staffChoicesSchema.parse(input)
   return prisma.$transaction(async tx => {
     // Readers can share this lock. Scheduling/security mutations take its
     // exclusive counterpart; refresh permissions only after acquiring it.

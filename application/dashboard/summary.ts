@@ -1,3 +1,4 @@
+import { dateKeyToUtcDate, addDaysToDateKey } from "@/lib/business-time"
 import { Role, UserStatus } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 import { permits } from "@/platform/access/policy"
@@ -8,7 +9,7 @@ import { appointmentsDashboardData } from "@/modules/appointments/dashboard"
 import { workforceDashboardData } from "@/modules/workforce/dashboard"
 import { servicesDashboardData } from "@/modules/services/dashboard"
 import { inventoryDashboardData } from "@/modules/inventory/dashboard"
-import { addDays, dateKeyToUtcDate, addDaysToDateKey, toDateKeyInTimeZone, toDateLabelInTimeZone, zonedDateTimeToUtc, getRangeBounds } from "./period"
+import { addDays, toDateKeyInTimeZone, toDateLabelInTimeZone, zonedDateTimeToUtc, getRangeBounds } from "./period"
 
 // The HTTP entry point establishes current-account authorization and tenant DB context.
 export async function dashboardSummary(actor: BusinessActor, options: {

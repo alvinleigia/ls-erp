@@ -96,16 +96,11 @@ Ignored evidence: `tmp/industry-release/phase4c2b-rehearsal.log`,
 `phase4c2b-browser.log`, `phase4c2b-browser-dashboard-final.log` and lint/TypeScript
 logs. Screenshots are under `test-results/local-access`.
 
-The wider historical `tests/crm-extensions.test.cjs` architecture scan currently
-has 20 passes and three pre-existing failures in unchanged files: inventory stock command text
-contains an order reference that its old assertion forbids; platform audit imports
-the application date helper; and inventory office-choice routes violate that
-scan's transport-only assertion. This phase corrects its own shared-type import
-and leaves those separate inventory/audit findings explicit. They require cleanup
-before calling the whole architecture baseline clean or starting release acceptance.
-Their files and the scan itself match the preceding commit exactly after newline
-normalization; hashes are saved in `phase4c2b-architecture-baseline.json`, and the
-scan result in `phase4c2b-architecture.log`.
+The phase 4C2b wider architecture scan had 20 passes and three failures in unchanged
+inventory/audit files. [Phase 5 baseline cleanup](ARCHITECTURE_BASELINE_R10.md)
+resolves those boundaries, including the shifts route revealed by the full scan.
+The original 23 assertions now pass unchanged. The earlier baseline hashes/logs
+remain historical evidence rather than current release exceptions.
 
 Hosted backup/restore rehearsal, copied-data effective-access comparison and
 separate staging/production release gates remain. Current-supervisor portfolio

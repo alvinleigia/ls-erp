@@ -1,7 +1,7 @@
 import type { AppointmentOrderStatus, Prisma } from "@prisma/client"
 import type { BusinessActor } from "@/platform/policy"
 
-import { postBookingStock } from "@/modules/inventory/stock-service"
+import { postBookingStock } from "@/modules/inventory/booking-stock"
 
 type ProductQtyLine = {
   productId: string

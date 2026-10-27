@@ -4,8 +4,7 @@ import { BusinessError, type BusinessActor } from "../policy"
 import { authorizeBusinessOperation } from "../access/operation"
 import { auditScope, securityEventSql } from "./policy"
 import { auditChanges, redactAudit } from "./format"
-import { startOfBusinessDate } from "@/lib/business-time"
-import { addDaysToDateKey } from "@/application/dashboard/period"
+import { startOfBusinessDate, addDaysToDateKey } from "@/lib/business-time"
 import type { AuditLogReportRow, AuditLogReportResponse, AuditLogDetail, ReportDateContext } from "@/types/reports"
 
 export const auditQuerySchema = z.object({
