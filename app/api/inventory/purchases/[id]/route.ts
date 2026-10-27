@@ -1,4 +1,4 @@
-import { updatePurchase, serializePurchaseOrder } from "@/modules/inventory/purchase-service"
+import { updatePurchase, serializePurchaseOrder, getPurchase } from "@/modules/inventory/purchase-service"
 import { withInventoryApi } from "@/modules/inventory/api"
 import { BusinessError, type BusinessActor } from "@/platform/policy"
 import { NextResponse } from "next/server"
@@ -49,4 +49,9 @@ async function handlePATCH(
 export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
   const { id } = await context.params
   return withInventoryApi(request, "inventoryPurchases", "edit", actor => handlePATCH(request, actor, context), id)
+}
+
+export async function GET(request: Request, context: { params: Promise<{ id: string }> }) {
+  const { id } = await context.params
+  return withInventoryApi(request,"inventoryPurchases","read",async actor=>NextResponse.json({item:serializePurchaseOrder(await getPurchase(actor,id))}),id)
 }

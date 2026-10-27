@@ -1,4 +1,4 @@
-import { createProduct, listProducts, productListSchema, serializeProduct } from "@/modules/inventory/product-service"
+import { createProduct, listProducts, productListSchema } from "@/modules/inventory/product-service"
 import { withInventoryApi } from "@/modules/inventory/api"
 import { BusinessError, type BusinessActor } from "@/platform/policy"
 import { NextResponse } from "next/server"
@@ -18,7 +18,6 @@ async function handleGET(request: Request, actor: BusinessActor) {
   const logContext = createApiLogContext(request)
   logApiRequestStart(logContext, request)
 
-  const { tenantId } = actor
 
   const url = new URL(request.url)
   const parsed = productListSchema.safeParse(Object.fromEntries(url.searchParams.entries()))
@@ -32,7 +31,7 @@ async function handleGET(request: Request, actor: BusinessActor) {
   }
 
   try {
-    const result = await listProducts(tenantId, parsed.data)
+    const result = await listProducts(actor, parsed.data)
     const { page, pageSize, total } = result
     const response = NextResponse.json(result)
     logApiRequestSuccess(logContext, 200, { page, pageSize, total })
@@ -69,7 +68,7 @@ async function handlePOST(request: Request, actor: BusinessActor) {
   try {
     const item = await createProduct(actor, parsed.data)
 
-    const response = NextResponse.json({ item: serializeProduct(item) }, { status: 201 })
+    const response = NextResponse.json({ item }, { status: 201 })
     logApiRequestSuccess(logContext, 201, { productId: item.id })
     return withRequestId(response, logContext.requestId)
   } catch (error) {

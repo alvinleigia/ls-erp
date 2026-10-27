@@ -1,5 +1,11 @@
+import { createInventoryCategory, updateInventoryCategory } from "@/modules/inventory/category-service"
+import { createSupplier, updateSupplier } from "@/modules/inventory/supplier-service"
+import { officeBoundaryError } from "@/platform/companies/record-office"
 import { withBusinessApi, readJson } from "@/platform/business-api"
-import { BusinessError } from "@/platform/policy"
+import { createProduct, updateProduct } from "@/modules/inventory/product-service"
+import { createPurchase } from "@/modules/inventory/purchase-service"
+import { inventoryRead } from "@/modules/inventory/office"
+import { BusinessError, type BusinessActor } from "@/platform/policy"
 import { requireBusinessModule } from "@/platform/module-server"
 import { randomUUID } from "crypto"
 import { NextResponse } from "next/server"
@@ -13,7 +19,6 @@ import {
   LeaveDefinitionType,
   LeaveGroupAssignmentMode,
   LeaveGroupStatus,
-  PurchaseOrderStatus,
   Role,
   ServiceType,
   SupplierStatus,
@@ -656,22 +661,13 @@ const seedServiceCatalog = async (tenantId: string, tenantSlug: string) => {
   return { count: touched }
 }
 
-const seedInventoryCatalog = async (tenantId: string) => {
+const seedInventoryCatalog = async (actor: BusinessActor) => {
+  const { tenantId } = actor
   const categoryByName = new Map<string, string>()
   for (const item of inventoryCategorySeeds) {
-    const category = await prisma.inventoryCategory.upsert({
-      where: { tenantId_name: { tenantId: tenantId, name: item.name } },
-      update: {
-        description: item.description,
-        status: InventoryCategoryStatus.ACTIVE,
-      },
-      create: {
-        tenantId: tenantId,
-        name: item.name,
-        description: item.description,
-        status: InventoryCategoryStatus.ACTIVE,
-      },
-    })
+    const existing = await prisma.inventoryCategory.findUnique({where:{tenantId_name:{tenantId,name:item.name}},select:{id:true}})
+    const data={name:item.name,description:item.description,status:InventoryCategoryStatus.ACTIVE}
+    const category=existing?await updateInventoryCategory(actor,existing.id,data):await createInventoryCategory(actor,data)
     categoryByName.set(item.name, category.id)
   }
 
@@ -680,24 +676,8 @@ const seedInventoryCatalog = async (tenantId: string) => {
     const existing = await prisma.supplier.findFirst({
       where: { tenantId: tenantId, name: item.name },
     })
-    const supplier = existing
-      ? await prisma.supplier.update({
-          where: { id: existing.id },
-          data: {
-            email: item.email,
-            phone: item.phone,
-            status: SupplierStatus.ACTIVE,
-          },
-        })
-      : await prisma.supplier.create({
-          data: {
-            tenantId: tenantId,
-            name: item.name,
-            email: item.email,
-            phone: item.phone,
-            status: SupplierStatus.ACTIVE,
-          },
-        })
+    const data={name:item.name,email:item.email,phone:item.phone,status:SupplierStatus.ACTIVE,isTaxRegistered:false}
+    const supplier=existing?await updateSupplier(actor,existing.id,data):await createSupplier(actor,data)
     supplierByName.set(item.name, supplier.id)
   }
 
@@ -715,151 +695,28 @@ const seedInventoryCatalog = async (tenantId: string) => {
     const categoryId = categoryByName.get(item.categoryName)
     const supplierId = supplierByName.get(item.supplierName)
     if (!categoryId || !supplierId) continue
-    const product = await prisma.inventoryProduct.upsert({
-      where: { tenantId_sku: { tenantId: tenantId, sku: item.sku } },
-      update: {
-        tenantId: tenantId,
-        name: item.name,
-        categoryId,
-        status: InventoryProductStatus.ACTIVE,
-        costPriceCents: item.costPriceCents,
-        mrpCents: item.mrpCents,
-        reorderPoint: item.reorderPoint,
-        reorderQty: item.reorderQty,
-        onHandQty: item.initialQty,
-      },
-      create: {
-        tenantId: tenantId,
-        sku: item.sku,
-        name: item.name,
-        categoryId,
-        status: InventoryProductStatus.ACTIVE,
-        costPriceCents: item.costPriceCents,
-        mrpCents: item.mrpCents,
-        reorderPoint: item.reorderPoint,
-        reorderQty: item.reorderQty,
-        onHandQty: item.initialQty,
-      },
-    })
+    const existing = await prisma.inventoryProduct.findUnique({ where: { tenantId_sku: { tenantId, sku: item.sku } },select:{id:true} })
+    const taxIds = item.taxNames.map(name=>taxByName.get(name)).filter((id): id is string=>!!id)
+    const shared = { name:item.name, categoryId, status:InventoryProductStatus.ACTIVE, mrpCents:item.mrpCents, taxIds,
+      supplierLinks:[{supplierId,supplierCostCents:item.costPriceCents,isPreferred:true}] }
+    if (existing) await updateProduct(actor,existing.id,shared)
+    else await createProduct(actor,{...shared,sku:item.sku,unit:"unit",costPriceCents:item.costPriceCents,onHandQty:item.initialQty,reorderPoint:item.reorderPoint,reorderQty:item.reorderQty})
 
-    await prisma.inventoryProductSupplier.upsert({
-      where: { productId_supplierId: { productId: product.id, supplierId } },
-      update: {
-        supplierCostCents: item.costPriceCents,
-        isPreferred: true,
-      },
-      create: {
-        productId: product.id,
-        supplierId,
-        supplierCostCents: item.costPriceCents,
-        isPreferred: true,
-      },
-    })
-
-    const taxIds = item.taxNames
-      .map((name) => taxByName.get(name))
-      .filter((id): id is string => Boolean(id))
-    await prisma.inventoryProductTax.deleteMany({ where: { productId: product.id } })
-    if (taxIds.length > 0) {
-      await prisma.inventoryProductTax.createMany({
-        data: taxIds.map((taxId) => ({ productId: product.id, taxId })),
-      })
-    }
     touched += 1
   }
   return { count: touched }
 }
 
-const seedPurchases = async (tenantId: string) => {
-  const supplier = await prisma.supplier.findFirst({
-    where: { tenantId: tenantId, name: supplierSeeds[0].name },
-  })
-  if (!supplier) {
-    throw new Error("Supplier seeds are missing. Seed inventory catalog first.")
-  }
-
-  const products = await prisma.inventoryProduct.findMany({
-    where: {
-      tenantId: tenantId,
-      sku: { in: [productSeeds[0].sku, productSeeds[1].sku] },
-    },
-    select: { id: true, sku: true },
-  })
-  if (products.length < 2) {
-    throw new Error("Product seeds are missing. Seed inventory catalog first.")
-  }
-  const bySku = new Map(products.map((product) => [product.sku, product.id]))
-
-  const orderNumber = "SEED-PO-001"
-  const existing = await prisma.purchaseOrder.findUnique({
-    where: { tenantId_orderNumber: { tenantId: tenantId, orderNumber } },
-    select: { id: true },
-  })
-  if (existing) {
-    return { count: 1 }
-  }
-
-  const lineInputs = [
-    { sku: productSeeds[0].sku, quantity: 20, unitCostCents: 900, taxPercent: 5 },
-    { sku: productSeeds[1].sku, quantity: 15, unitCostCents: 700, taxPercent: 5 },
-  ]
-  const lines = lineInputs.flatMap((line) => {
-    const productId = bySku.get(line.sku)
-    if (!productId) return []
-    const lineSubtotalCents = line.quantity * line.unitCostCents
-    const lineTaxCents = Math.round((lineSubtotalCents * line.taxPercent) / 100)
-    return [{
-      productId,
-      quantity: line.quantity,
-      receivedQty: line.quantity,
-      unitCostCents: line.unitCostCents,
-      taxPercent: line.taxPercent,
-      lineSubtotalCents,
-      lineTaxCents,
-      lineTotalCents: lineSubtotalCents + lineTaxCents,
-    }]
-  })
-  const subtotalCents = lines.reduce((sum, line) => sum + line.lineSubtotalCents, 0)
-  const taxCents = lines.reduce((sum, line) => sum + line.lineTaxCents, 0)
-
-  const order = await prisma.purchaseOrder.create({
-    data: {
-      tenantId: tenantId,
-      orderNumber,
-      supplierId: supplier.id,
-      status: PurchaseOrderStatus.RECEIVED,
-      orderDate: new Date(),
-      expectedDate: new Date(),
-      receivedAt: new Date(),
-      subtotalCents,
-      taxCents,
-      totalCents: subtotalCents + taxCents,
-      items: { create: lines },
-    },
-    include: { items: true },
-  })
-
-  await prisma.$transaction(async (tx) => {
-    for (const item of order.items) {
-      await tx.inventoryProduct.update({
-        where: { id: item.productId },
-        data: { onHandQty: { increment: item.receivedQty } },
-      })
-      await tx.inventoryStockMovement.create({
-        data: {
-          tenantId: tenantId,
-          productId: item.productId,
-          orderItemId: item.id,
-          type: "PURCHASE_RECEIPT",
-          quantityDelta: item.receivedQty,
-          unitCostCents: item.unitCostCents,
-          note: `Seed purchase ${order.orderNumber}`,
-        },
-      })
-    }
-  })
-
-  return { count: 1 }
+const seedPurchases = async (actor: BusinessActor) => {
+  const { tenantId } = actor
+  const [context] = await inventoryRead(actor,"inventoryProducts",tx=>tx.$queryRaw<{officeId:string}[]>`SELECT app.inventory_creation_office(${tenantId},'inventoryPurchases') AS "officeId"`)
+  const existing = await prisma.purchaseOrder.findFirst({where:{tenantId,officeId:context.officeId,notes:"Sample inventory purchase"},select:{id:true}})
+  if (existing) return { count:1 }
+  const supplier = await prisma.supplier.findFirst({where:{tenantId,name:supplierSeeds[0].name},select:{id:true}})
+  const products = await prisma.inventoryProduct.findMany({where:{tenantId,sku:{in:[productSeeds[0].sku,productSeeds[1].sku]}},select:{id:true,sku:true}})
+  if (!supplier || products.length!==2) throw new BusinessError(409,"Seed inventory catalog first.")
+  await createPurchase(actor,{supplierId:supplier.id,orderDate:new Date().toISOString().slice(0,10),status:"RECEIVED",notes:"Sample inventory purchase",items:products.map(p=>({productId:p.id,quantity:p.sku===productSeeds[0].sku?20:15,unitCostCents:p.sku===productSeeds[0].sku?900:700}))})
+  return { count:1 }
 }
 
 const seedCoupons = async (tenantId: string) => {
@@ -2545,7 +2402,7 @@ const clearModulesData = async (tenantId: string, modules: Set<ClearModule>) => 
   return { deleted, preservedAdmins }
 }
 
-async function handlePOST(request: Request) {
+async function handlePOST(request: Request, actor: BusinessActor) {
   const logContext = createApiLogContext(request)
   logApiRequestStart(logContext, request)
 
@@ -2702,9 +2559,9 @@ async function handlePOST(request: Request) {
     } else if (group === "serviceCatalog") {
       summary.serviceCatalog = (await seedServiceCatalog(tenantId, tenantSlug)).count
     } else if (group === "inventoryCatalog") {
-      summary.inventoryCatalog = (await seedInventoryCatalog(tenantId)).count
+      summary.inventoryCatalog = (await seedInventoryCatalog(actor)).count
     } else if (group === "purchases") {
-      summary.purchases = (await seedPurchases(tenantId)).count
+      summary.purchases = (await seedPurchases(actor)).count
     } else if (group === "leaves") {
       summary.leaves = (await seedLeaves(tenantId, tenantSlug)).count
     } else if (group === "shifts") {
@@ -2734,6 +2591,8 @@ async function handlePOST(request: Request) {
     logApiRequestSuccess(logContext, 200, { action: "seed", groups: Array.from(done) })
     return withRequestId(response, logContext.requestId)
   } catch (error) {
+    if (error instanceof BusinessError) throw error
+    const boundary=officeBoundaryError(error);if(boundary)throw boundary
     logApiRequestError(logContext, error, 500)
     const response = NextResponse.json({ error: "Unable to process seed request." }, { status: 500 })
     return withRequestId(response, logContext.requestId)
@@ -2767,6 +2626,6 @@ export async function POST(request: Request) {
       if (touchesServices) await requireBusinessModule(prisma, actor.tenantId, "services")
       if (touchesInventory) await requireBusinessModule(prisma, actor.tenantId, "inventory")
     }
-    return handlePOST(request)
+    return handlePOST(request,actor)
   })
 }

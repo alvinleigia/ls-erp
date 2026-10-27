@@ -163,7 +163,8 @@ export async function archiveSupplier(actor: BusinessActor, id: string) {
       where: { supplierId: id, tenantId },
     })
 
-    if (linkedProducts > 0 || linkedPurchases > 0) {
+    const [integrity] = await tx.$queryRaw<{ used: boolean }[]>`SELECT app.inventory_supplier_referenced(${tenantId},${id}) used`
+    if (integrity.used) {
       await tx.supplier.updateMany({
         where: { id, tenantId },
         data: { status: "INACTIVE" },
@@ -171,6 +172,6 @@ export async function archiveSupplier(actor: BusinessActor, id: string) {
     } else {
       await tx.supplier.deleteMany({ where: { id, tenantId } })
     }
-    return { linkedProducts, linkedPurchases }
+    return { linkedProducts, linkedPurchases, archived: integrity.used }
   })
 }

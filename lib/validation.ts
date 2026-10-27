@@ -500,6 +500,7 @@ export const createInventoryProductSchema = z.object({
 
 export const updateInventoryProductSchema = createInventoryProductSchema
   .partial()
+  .extend({ officeId: z.string().trim().min(1).max(160).optional(), stockVersion: z.number().int().min(0).optional() })
   .refine((value) => Object.keys(value).length > 0, {
     message: "At least one field is required.",
   })

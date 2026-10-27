@@ -1,3 +1,4 @@
+import { savedBookingProducts } from "./saved-products"
 import { prisma } from "@/lib/prisma"
 import type { DocumentBranding } from "@/platform/branding/types"
 import { downloadDocumentLogo } from "@/platform/branding/storage"
@@ -13,8 +14,9 @@ import { bookingWriteOffice } from "./office"
 
 // Both delivery paths use the same saved financial snapshot; catalog changes never reprice it.
 async function invoiceSource(tenantId: string, id: string) {
-  const order = await prisma.appointmentOrder.findFirst({ where: { tenantId, id }, include: appointmentOrderInclude })
-  if (!order) throw new BusinessError(404, "Appointment order not found.")
+  const source = await prisma.appointmentOrder.findFirst({ where: { tenantId, id }, include: {...appointmentOrderInclude,productLines:false} })
+  if (!source) throw new BusinessError(404, "Appointment order not found.")
+  const order = (await savedBookingProducts(prisma,tenantId,[source]))[0]
   const [settings, tenant] = await Promise.all([
     prisma.appSetting.findUnique({ where: { tenantId }, select: {
       locale: true, currency: true, currencySymbolPlacement: true, numberFormat: true,

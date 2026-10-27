@@ -183,7 +183,7 @@ export default function AppointmentCouponsPage() {
         categoryAccess ? fetch("/api/service-categories?page=1&pageSize=100&status=ACTIVE&sort=name&order=asc", {
           cache: "no-store",
         }) : Promise.resolve(new Response(JSON.stringify({ items: [] }), { status: 200 })),
-        productAccess ? fetch("/api/inventory/products?page=1&pageSize=100&status=ACTIVE&sort=name&order=asc", {
+        productAccess ? fetch("/api/inventory/catalog-choices?page=1&pageSize=100&status=ACTIVE&sort=name&order=asc", {
           cache: "no-store",
         }) : Promise.resolve(new Response(JSON.stringify({ items: [] }), { status: 200 })),
       ])

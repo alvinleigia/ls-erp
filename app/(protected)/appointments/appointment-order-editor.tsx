@@ -313,7 +313,7 @@ export function AppointmentOrderEditor({ mode, appointmentId }: AppointmentOrder
         servicesAllowed ? fetch("/api/services?status=ACTIVE&page=1&pageSize=100&sort=name&order=asc", {
           cache: "no-store",
         }) : Promise.resolve(new Response(JSON.stringify({ items: [] }), { status: 200 })),
-        productsAllowed ? fetch("/api/inventory/products?status=ACTIVE&page=1&pageSize=100&sort=name&order=asc", {
+        productsAllowed ? fetch("/api/inventory/catalog-choices?status=ACTIVE&page=1&pageSize=100&sort=name&order=asc", {
           cache: "no-store",
         }) : Promise.resolve(new Response(JSON.stringify({ items: [] }), { status: 200 })),
         couponsAllowed ? fetch("/api/appointments/coupons?page=1&pageSize=100&active=true", {

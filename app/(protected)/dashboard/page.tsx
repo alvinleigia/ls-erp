@@ -36,6 +36,7 @@ import { SalesWidgets } from "@/application/dashboard/sales-widgets"
 import type { SalesDashboard } from "@/application/dashboard/types"
 
 type DashboardSummary = {
+  stockOffice: {name:string;companyName:string;active:boolean}|null
   sales: SalesDashboard
   visibility: {
     appointments: boolean
@@ -477,7 +478,7 @@ export default function DashboardPage() {
             </table>
           </div></Section>}
 
-        {summary.visibility.inventory && <Section title="Low stock alerts" description="Products at or below reorder point"><div className="space-y-3">
+        {summary.visibility.inventory && <Section title="Low stock alerts" description={summary.stockOffice ? `Stock office: ${summary.stockOffice.companyName} / ${summary.stockOffice.name}${summary.stockOffice.active ? "" : " (Closed)"}. Products at or below reorder point.` : "Products at or below reorder point"}><div className="space-y-3">
             {(summary?.lowStock ?? []).length === 0 ? (
               <div className="text-sm text-muted-foreground">No low stock items.</div>
             ) : (

@@ -1,5 +1,7 @@
 "use client"
 
+import { InventoryCreationOffice } from "@/components/inventory/office-notice"
+import { useCreationOfficeSnapshot } from "@/platform/companies/creation-snapshot"
 import { PurchaseView } from "@/modules/inventory/record-view"
 
 import { Select, Textarea } from "@/components/erp/controls"
@@ -73,6 +75,7 @@ export default function InventoryPurchasesPage() {
   const canReceiveStock = can("inventoryProducts.edit")
   const canReceive = canEdit && canReceiveStock
 
+  const [officeId,setOfficeId] = React.useState("")
   const [items, setItems] = React.useState<PurchaseOrderRow[]>([])
   const [totalRows, setTotalRows] = React.useState(0)
   const [loading, setLoading] = React.useState(true)
@@ -85,6 +88,9 @@ export default function InventoryPurchasesPage() {
   const [receiving, setReceiving] = React.useState(false)
   const [viewing, setViewing] = React.useState<PurchaseOrderRow | null>(null)
   const [formOpen, setFormOpen] = React.useState(false)
+  const creationHeaders = useCreationOfficeSnapshot(formOpen)
+  const [capturedOffice,setCapturedOffice] = React.useState<string>("")
+  React.useEffect(()=>{if(formOpen)void creationHeaders().then(h=>setCapturedOffice(h["x-office-id"] || "")).catch(()=>setCapturedOffice(""))},[formOpen,creationHeaders])
   const [formError, setFormError] = React.useState("")
   const [saving, setSaving] = React.useState(false)
   const [formValues, setFormValues] = React.useState<PurchaseOrderFormValues>(defaultValues)
@@ -125,6 +131,7 @@ export default function InventoryPurchasesPage() {
       const params = new URLSearchParams()
       params.set("page", String(pagination.pageIndex + 1))
       params.set("pageSize", String(pagination.pageSize))
+      if (officeId) params.set("officeId",officeId)
       if (statusFilter !== "all") params.set("status", statusFilter)
       if (search.trim()) params.set("q", search.trim())
       if (sorting[0]) {
@@ -132,6 +139,7 @@ export default function InventoryPurchasesPage() {
         params.set("order", sorting[0].desc ? "desc" : "asc")
       }
       const response = await fetch(`/api/inventory/purchases?${params.toString()}`, { signal })
+      if (signal.aborted) return
       if (!response.ok) {
         toast.error("Unable to load purchase orders.")
         setItems([])
@@ -144,8 +152,8 @@ export default function InventoryPurchasesPage() {
       setItems(data.items)
       setTotalRows(data.total)
       setLoading(false)
-    } catch { if (!signal.aborted) toast.error("Unable to load records. Please refresh.") } finally { if (!signal.aborted) setLoading(false) }
-  }, [pagination.pageIndex, pagination.pageSize, search, sorting, statusFilter])
+    } catch { if (!signal.aborted) {setItems([]);setTotalRows(0);toast.error("Unable to load records. Please refresh.")} } finally { if (!signal.aborted) setLoading(false) }
+  }, [pagination.pageIndex, pagination.pageSize, search, sorting, statusFilter, officeId])
 
   React.useEffect(() => {
     void loadItems()
@@ -187,7 +195,7 @@ export default function InventoryPurchasesPage() {
       }
       const response = await fetch("/api/inventory/purchases", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...await creationHeaders() },
         body: JSON.stringify(payload),
       })
       if (!response.ok) {
@@ -206,7 +214,7 @@ export default function InventoryPurchasesPage() {
   }
 
   const markReceived = React.useCallback(async (order: PurchaseOrderRow) => {
-    if (order.status === "RECEIVED") return
+    if (order.status === "RECEIVED" || !order.office.active) return
     setReceiving(true)
     try {
       const response = await fetch(`/api/inventory/purchases/${order.id}`, {
@@ -228,6 +236,7 @@ export default function InventoryPurchasesPage() {
 
   const columns = React.useMemo<ColumnDef<PurchaseOrderRow>[]>(
     () => [
+      {id:"office",header:"Office",cell:({row})=>`${row.original.office.name}${row.original.office.active ? "" : " (Closed)"}`},
       {
         accessorKey: "orderNumber",
         cell: ({ row }) => <button type="button" className="font-medium underline underline-offset-4" onClick={() => setViewing(row.original)}>{row.original.orderNumber}</button>,
@@ -270,7 +279,7 @@ export default function InventoryPurchasesPage() {
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
               <DropdownMenuItem
-                disabled={!canReceive || row.original.status === "RECEIVED"}
+                disabled={!canReceive || !row.original.office.active || row.original.status === "RECEIVED"}
                 onSelect={() => setReceiveTarget(row.original)}
               >
                 Mark as received
@@ -315,17 +324,17 @@ export default function InventoryPurchasesPage() {
         </Button>} />
 
       <Surface>
-      <TableToolbar table={table} searchPlaceholder="Search by PO number or supplier"><Select aria-label="Status filter" value={statusFilter} onValueChange={value => { setStatusFilter(value); setPagination(prev => ({ ...prev, pageIndex: 0 })) }}><option value="all">All statuses</option><option value="DRAFT">Draft</option><option value="ORDERED">Ordered</option><option value="RECEIVED">Received</option><option value="CANCELED">Canceled</option></Select><Button type="button" variant="outline" disabled={loading} onClick={() => void loadItems()}>Refresh</Button></TableToolbar>
+      <TableToolbar table={table} searchPlaceholder="Search by PO number or supplier"><div className="w-full sm:w-56"><RecordSelect id="purchase-office" endpoint="/api/inventory/office-choices?resource=inventoryPurchases" value={officeId} onChange={value=>{setOfficeId(value);setPagination(p=>({...p,pageIndex:0}))}} placeholder="All accessible offices" /></div><Button variant="ghost" onClick={()=>setOfficeId("")}>All offices</Button><Select aria-label="Status filter" value={statusFilter} onValueChange={value => { setStatusFilter(value); setPagination(prev => ({ ...prev, pageIndex: 0 })) }}><option value="all">All statuses</option><option value="DRAFT">Draft</option><option value="ORDERED">Ordered</option><option value="RECEIVED">Received</option><option value="CANCELED">Canceled</option></Select><Button type="button" variant="outline" disabled={loading} onClick={() => void loadItems()}>Refresh</Button></TableToolbar>
       <DataTable table={table} loading={loading} emptyMessage="No purchase orders found." />
       <TablePagination table={table} totalRows={totalRows} loading={loading} />
       </Surface>
 
-      {receiveTarget && <ConfirmAction title="Receive purchase order" description={`Receive ${receiveTarget.orderNumber}? This adds the ordered quantities to stock.`} label="Receive stock" busy={receiving} onCancel={() => setReceiveTarget(null)} onConfirm={() => void markReceived(receiveTarget)} />}
+      {receiveTarget && <ConfirmAction title="Receive purchase order" description={`Receive ${receiveTarget.orderNumber}? This adds the ordered quantities to ${receiveTarget.office.companyName} / ${receiveTarget.office.name}.`} label="Receive stock" busy={receiving} onCancel={() => setReceiveTarget(null)} onConfirm={() => void markReceived(receiveTarget)} />}
 
-      {viewing && <PurchaseView item={viewing} onClose={() => setViewing(null)} formatMoney={formatMoney} formatDate={formatDate} actions={canReceive && viewing.status !== "RECEIVED" ? <Button onClick={() => { setReceiveTarget(viewing); setViewing(null) }}>Mark as received</Button> : undefined} />}
+      {viewing && <PurchaseView item={viewing} onClose={() => setViewing(null)} formatMoney={formatMoney} formatDate={formatDate} actions={canReceive && viewing.office.active && viewing.status !== "RECEIVED" ? <Button onClick={() => { setReceiveTarget(viewing); setViewing(null) }}>Mark as received</Button> : undefined} />}
 
       {formOpen && <DraftPanel error={formError} fingerprint={formValues} title="New purchase order" description="Enter purchase order details in the sections below." onClose={() => setFormOpen(false)} onSubmit={() => void save()} saving={saving} disabled={!canCreate} saveLabel="Create purchase order">
-          <div className="space-y-5"><Section title="Order details">
+          <div className="space-y-5"><InventoryCreationOffice headers={creationHeaders} resource="inventoryPurchases" /><Section title="Order details">
             <div className="grid gap-3 sm:grid-cols-2">
               <FormField id="po-supplier" label="Supplier">
                 <RecordSelect
@@ -412,7 +421,8 @@ export default function InventoryPurchasesPage() {
                       id={`po-item-product-${index}`}
                       value={item.productId}
                       placeholder="Select product"
-                      endpoint="/api/inventory/products?status=ACTIVE"
+                      endpoint={`/api/inventory/products?status=ACTIVE&officeId=${encodeURIComponent(capturedOffice)}`}
+                      disabled={!capturedOffice}
                       onChange={(event) =>
                         setFormValues((prev) => ({
                           ...prev,

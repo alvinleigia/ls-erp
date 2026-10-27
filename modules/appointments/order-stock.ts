@@ -1,7 +1,7 @@
 import type { AppointmentOrderStatus, Prisma } from "@prisma/client"
 import type { BusinessActor } from "@/platform/policy"
 
-import { applyInventoryStockDelta } from "@/modules/inventory/stock-service"
+import { postBookingStock } from "@/modules/inventory/stock-service"
 
 type ProductQtyLine = {
   productId: string
@@ -72,15 +72,4 @@ export const applyStockDelta = (params: {
   orderId: string
   tenantId: string
   actor: BusinessActor
-}) => applyInventoryStockDelta({
-  tx: params.tx,
-  deltaByProduct: params.deltaByProduct,
-  tenantId: params.tenantId,
-  actor: params.actor,
-  movement: delta => ({
-    type: delta < 0 ? "BOOKING_PRODUCT_SALE" : "BOOKING_PRODUCT_RESTOCK",
-    note: delta < 0
-      ? `Booking order ${params.orderId} stock deduction`
-      : `Booking order ${params.orderId} stock restore`,
-  }),
-})
+}) => postBookingStock(params)

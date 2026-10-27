@@ -1,3 +1,4 @@
+import type { RecordOffice } from "@/types/companies"
 import type { InventoryUnit } from "@/lib/constants/inventory"
 
 export type InventoryCategoryStatus = "ACTIVE" | "INACTIVE"
@@ -65,6 +66,9 @@ export type ProductSupplierFormLink = {
 }
 
 export type InventoryProductRow = {
+  officeId: string
+  office: RecordOffice
+  stockVersion: number
   id: string
   sku: string
   name: string
@@ -113,6 +117,8 @@ export type PurchaseOrderItemRow = {
 }
 
 export type PurchaseOrderRow = {
+  officeId: string
+  office: RecordOffice
   notes?: string | null
   id: string
   orderNumber: string

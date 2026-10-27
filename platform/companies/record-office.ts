@@ -6,6 +6,20 @@ export function officeBoundaryError(error: unknown): BusinessError | null {
   const value = error as { message?: string; meta?: { database_error?: string; driverAdapterError?: { cause?: { originalMessage?: string } } } }
   const message = [value?.message, value?.meta?.database_error, value?.meta?.driverAdapterError?.cause?.originalMessage].filter(Boolean).join(" ")
   const messages: readonly [string, number][] = [
+    ["Inventory office access is not permitted", 403],
+    ["Inventory stock office selection is required", 403],
+    ["Inventory source access is not permitted", 403],
+    ["Inventory booking posting is not permitted", 403],
+    ["Inventory receipt posting is not permitted", 403],
+    ["Stock changed; refresh before saving", 409],
+    ["Insufficient stock in the source office", 409],
+    ["Inventory source identity and prices are immutable", 400],
+    ["Inventory stock source is not permitted", 400],
+    ["Inventory stock values must be nonnegative", 400],
+    ["Inventory financial sources cannot be deleted", 409],
+    ["Referenced inventory products must be archived", 409],
+    ["Receipt stock must be posted with its source", 409],
+    ["Booking stock must be posted with its source", 409],
     ["Booking choices access is not permitted", 403],
     ["Booking staff source not found", 404],
     ["Invalid booking staff selection", 400],

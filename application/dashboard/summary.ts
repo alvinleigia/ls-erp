@@ -57,7 +57,7 @@ export async function dashboardSummary(actor: BusinessActor, options: {
   const { visible: canReadBookings, periodOrders, todayOrders, periodAppointments, todayAppointments, distinctCustomers, upcomingAppointments, appointmentStatusRows, topServiceLines, staffRangeAppointments } = bookings
   const { visible: canReadLeaves, pendingLeaves } = workforce
   const { visible: canReadServices, activeServices } = services
-  const { visible: canReadStock, lowStockProducts } = inventory
+  const { visible: canReadStock, lowStockProducts, office: stockOffice } = inventory
 
   const rangeDays = Math.max(
     1,
@@ -169,6 +169,7 @@ export async function dashboardSummary(actor: BusinessActor, options: {
       serviceName: row.service.name,
       priceCents: row.service.priceCents,
     })),
+    stockOffice,
     lowStock: lowStockProducts.map((row) => ({
       id: row.id,
       sku: row.sku,

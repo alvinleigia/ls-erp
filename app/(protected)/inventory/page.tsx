@@ -1,5 +1,9 @@
 "use client"
 
+import { InventoryCreationOffice } from "@/components/inventory/office-notice"
+import { useCreationOfficeSnapshot } from "@/platform/companies/creation-snapshot"
+import { RecordSelect } from "@/components/erp/record-select"
+import type { RecordOffice } from "@/types/companies"
 import { Select } from "@/components/erp/controls"
 
 import { ProductView } from "@/modules/inventory/record-view"
@@ -53,6 +57,8 @@ export default function InventoryProductsPage() {
   const canEdit = useCurrentResourceAction("edit")
   const canArchive = useCurrentResourceAction("archive")
 
+  const [officeId,setOfficeId] = React.useState("")
+  const [stockContext,setStockContext] = React.useState<RecordOffice|null>(null)
   const [items, setItems] = React.useState<InventoryProductRow[]>([])
   const [taxes, setTaxes] = React.useState<TaxRow[]>([])
   const [loading, setLoading] = React.useState(true)
@@ -82,6 +88,7 @@ export default function InventoryProductsPage() {
   const [formValues, setFormValues] = React.useState<InventoryProductFormValues>(
     defaultInventoryProductFormValues
   )
+  const creationHeaders = useCreationOfficeSnapshot(formOpen && !editing)
   const [formError, setFormError] = React.useState("")
   const [saving, setSaving] = React.useState(false)
   const [deleteOpen, setDeleteOpen] = React.useState(false)
@@ -111,6 +118,7 @@ export default function InventoryProductsPage() {
       const params = new URLSearchParams()
       params.set("page", String(pagination.pageIndex + 1))
       params.set("pageSize", String(pagination.pageSize))
+      if (officeId) params.set("officeId",officeId)
       if (statusFilter !== "all") params.set("status", statusFilter)
       if (search.trim()) params.set("q", search.trim())
       if (sorting[0]) {
@@ -119,20 +127,24 @@ export default function InventoryProductsPage() {
       }
 
       const response = await fetch(`/api/inventory/products?${params.toString()}`, { signal })
+      if (signal.aborted) return
       if (!response.ok) {
-        toast.error("Unable to load products.")
+        const error = await response.json().catch(()=>({}))
+        setStockContext(null)
+        toast.error(error.error || "Unable to load products.")
         setItems([])
         setTotalRows(0)
         setLoading(false)
         return
       }
-      const data = (await response.json()) as ListResponse<InventoryProductRow>
+      const data = (await response.json()) as ListResponse<InventoryProductRow> & {office:RecordOffice}
       if (signal.aborted) return
+      setStockContext(data.office)
       setItems(data.items)
       setTotalRows(data.total)
       setLoading(false)
-    } catch { if (!signal.aborted) toast.error("Unable to load records. Please refresh.") } finally { if (!signal.aborted) setLoading(false) }
-  }, [pagination.pageIndex, pagination.pageSize, search, sorting, statusFilter])
+    } catch { if (!signal.aborted) { setItems([]);setTotalRows(0);setStockContext(null);toast.error("Unable to load records. Please refresh.") } } finally { if (!signal.aborted) setLoading(false) }
+  }, [pagination.pageIndex, pagination.pageSize, search, sorting, statusFilter, officeId])
 
   React.useEffect(() => {
     void loadProducts()
@@ -214,6 +226,7 @@ export default function InventoryProductsPage() {
     try {
       clearErrors()
       const payload = {
+        ...(editing ? {officeId:editing.officeId,stockVersion:editing.stockVersion} : {}),
         sku: formValues.sku,
         name: formValues.name,
         description: formValues.description,
@@ -243,7 +256,7 @@ export default function InventoryProductsPage() {
         editing ? `/api/inventory/products/${editing.id}` : "/api/inventory/products",
         {
           method: editing ? "PATCH" : "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", ...(!editing ? await creationHeaders() : {}) },
           body: JSON.stringify(payload),
         }
       )
@@ -373,7 +386,7 @@ export default function InventoryProductsPage() {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem disabled={!canEdit} onSelect={() => openEdit(row.original)}>
+              <DropdownMenuItem disabled={!canEdit || !row.original.office.active} onSelect={() => openEdit(row.original)}>
                 Edit
               </DropdownMenuItem>
               <DropdownMenuItem
@@ -414,19 +427,21 @@ export default function InventoryProductsPage() {
 
   return (
     <div className={pageClass}>
-      <PageHeader title="Inventory products" description="Track products, supplier mapping, taxes, and stock levels." actions={<Button disabled={!canCreate} onClick={openCreate}>New product</Button>} />
+      <PageHeader title="Inventory products" description="Shared product catalogue with stock and costs per office." actions={<Button disabled={!canCreate} onClick={openCreate}>New product</Button>} />
 
       <Surface>
-      <TableToolbar table={table} searchPlaceholder="Search products by name/SKU"><Select aria-label="Status filter" value={statusFilter} onValueChange={value => { setStatusFilter(value); setPagination(prev => ({ ...prev, pageIndex: 0 })) }}><option value="all">All statuses</option><option value="ACTIVE">Active</option><option value="INACTIVE">Inactive</option></Select><Button type="button" variant="outline" disabled={loading} onClick={() => void loadProducts()}>Refresh</Button></TableToolbar>
+      <p className="mb-3 text-sm text-muted-foreground">{stockContext ? `Stock office: ${stockContext.companyName} / ${stockContext.name}${stockContext.active ? "" : " (Closed; read only)"}` : "Choose an accessible workspace office to view stock."}</p>
+      <TableToolbar table={table} searchPlaceholder="Search products by name/SKU"><div className="w-full sm:w-56"><RecordSelect id="inventory-office" endpoint="/api/inventory/office-choices?resource=inventoryProducts" value={officeId} onChange={value=>{setOfficeId(value);setPagination(p=>({...p,pageIndex:0}))}} placeholder="Stock office" /></div><Button variant="ghost" onClick={()=>setOfficeId("")}>Workspace office</Button><Select aria-label="Status filter" value={statusFilter} onValueChange={value => { setStatusFilter(value); setPagination(prev => ({ ...prev, pageIndex: 0 })) }}><option value="all">All statuses</option><option value="ACTIVE">Active</option><option value="INACTIVE">Inactive</option></Select><Button type="button" variant="outline" disabled={loading} onClick={() => void loadProducts()}>Refresh</Button></TableToolbar>
       <DataTable table={table} loading={loading} emptyMessage="No products found." />
       <TablePagination table={table} totalRows={totalRows} loading={loading} />
       </Surface>
 
       {deleteOpen && deleteTarget && <ConfirmAction title="Delete product" description={`Delete "${deleteTarget.name}"? If this record is in use, it will be made inactive instead.`} label="Delete" destructive busy={deleting} onCancel={() => { setDeleteOpen(false); setDeleteTarget(null) }} onConfirm={() => void removeProduct()} />}
 
-      {viewing && <ProductView item={viewing} onClose={() => setViewing(null)} onEdit={canEdit ? () => openEdit(viewing) : undefined} formatMoney={formatMoney} taxNames={taxes.filter(tax => viewing.taxIds.includes(tax.id)).map(tax => tax.name)} />}
+      {viewing && <ProductView item={viewing} onClose={() => setViewing(null)} onEdit={canEdit && viewing.office.active ? () => openEdit(viewing) : undefined} formatMoney={formatMoney} taxNames={taxes.filter(tax => viewing.taxIds.includes(tax.id)).map(tax => tax.name)} />}
 
-      {formOpen && <DraftPanel error={formError} fingerprint={formValues} title={editing ? "Edit product" : "New product"} description="Update product details in the sections below." onClose={() => setFormOpen(false)} onSubmit={() => void save()} saving={saving} disabled={!(editing ? canEdit : canCreate)} saveLabel={editing ? "Save changes" : "Create product"}>
+      {formOpen && <DraftPanel error={formError} fingerprint={formValues} title={editing ? "Edit product" : "New product"} description={editing ? `Catalogue details apply across offices. Stock office: ${editing.office.companyName} / ${editing.office.name}` : "Opening stock uses the workspace office captured when this form opens."} onClose={() => setFormOpen(false)} onSubmit={() => void save()} saving={saving} disabled={!(editing ? canEdit && editing.office.active : canCreate)} saveLabel={editing ? "Save changes" : "Create product"}>
+          {!editing && <InventoryCreationOffice headers={creationHeaders} resource="inventoryProducts" />}
           <div className="flex-1 overflow-y-auto px-1">
             <ProductFormFields
               values={formValues}

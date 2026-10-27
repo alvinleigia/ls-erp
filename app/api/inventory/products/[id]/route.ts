@@ -1,4 +1,4 @@
-import { updateProduct, archiveProduct, serializeProduct } from "@/modules/inventory/product-service"
+import { updateProduct, archiveProduct, getProduct } from "@/modules/inventory/product-service"
 import { withInventoryApi } from "@/modules/inventory/api"
 import { BusinessError, type BusinessActor } from "@/platform/policy"
 import { NextResponse } from "next/server"
@@ -35,7 +35,7 @@ async function handlePATCH(
 
     const item = await updateProduct(actor, id, parsed.data)
 
-    const response = NextResponse.json({ item: item ? { ...item, ...serializeProduct(item) } : null })
+    const response = NextResponse.json({ item })
     logApiRequestSuccess(logContext, 200, { itemId: id })
     return withRequestId(response, logContext.requestId)
   } catch (error) {
@@ -76,4 +76,9 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
 export async function DELETE(request: Request, context: { params: Promise<{ id: string }> }) {
   const { id } = await context.params
   return withInventoryApi(request, "inventoryProducts", "archive", actor => handleDELETE(request, actor, context), id)
+}
+
+export async function GET(request: Request, context: { params: Promise<{ id: string }> }) {
+  const { id } = await context.params
+  return withInventoryApi(request,"inventoryProducts","read",async actor=>NextResponse.json({item:await getProduct(actor,id,new URL(request.url).searchParams.get("officeId") ?? undefined)}),id)
 }

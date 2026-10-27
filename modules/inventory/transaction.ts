@@ -1,3 +1,4 @@
+import { inventoryError } from "./office"
 import { Prisma } from "@prisma/client"
 import { authorizeBusinessOperation } from "@/platform/access/operation"
 import { tenantOperationTransaction } from "@/platform/transactions/tenant-operation"
@@ -25,6 +26,7 @@ export function inventoryMutation<T>(identity: BusinessActor, resource: Inventor
     // waited behind a receipt or an administrative correction.
     if (input.id) await tx.$queryRaw(Prisma.sql`SELECT id FROM ${Prisma.raw(`"${tables[resource]}"`)} WHERE "tenantId"=${identity.tenantId} AND id=${input.id} FOR UPDATE`)
     const actor = await authorizeBusinessOperation(tx, identity, `${resource}.${action}`, ["inventory"])
+    await tx.$executeRaw`SELECT set_config('app.inventory_operation', ${`${resource}.${action}`}, true)`
     const before = input.id ? await snapshot(tx, actor.tenantId, resource, input.id) : null
     if (input.id && !before) throw new BusinessError(404, "Inventory record not found.")
     if (resource !== "inventoryPurchases" && input.status !== undefined && input.status !== (before?.status ?? "ACTIVE")) requirePermission(actor, `${resource}.archive`)
@@ -35,8 +37,9 @@ export function inventoryMutation<T>(identity: BusinessActor, resource: Inventor
     await recordDomainAuditEvent(tx, {
       tenantId: actor.tenantId, actorUserId: actor.userId, actorRole: actor.role, requestId: actor.requestId,
       event: `inventory.${resource}.${action}`, entityType: resource, entityId: id,
+      ...(resource === "inventoryPurchases" ? { metadata: { officeId: ((after ?? before) as { officeId: string }).officeId, officeFamily: "inventory" } } : {}),
       ...(before ? { before: json(before) } : {}), ...(after ? { after: json(after) } : {}),
     })
     return result
-  })
+  }).catch(inventoryError)
 }

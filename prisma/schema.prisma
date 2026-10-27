@@ -839,6 +839,9 @@ model Organization {
 }
 
 model Tenant {
+  officeStocks InventoryOfficeStock[]
+  bookingStock InventoryBookingStock[]
+  receiptStock InventoryReceiptStock[]
   workplacePolicies StaffWorkplacePolicy[]
   companies BusinessCompany[]
   offices BusinessOffice[]
@@ -948,6 +951,10 @@ model BusinessCompany {
 }
 
 model BusinessOffice {
+  stockBalances InventoryOfficeStock[]
+  stockMovements InventoryStockMovement[]
+  purchaseOrders PurchaseOrder[]
+  bookingStock InventoryBookingStock[]
   appointments Appointment[]
   bookingOrders AppointmentOrder[]
   dailyOverrides StaffShiftOverride[]
@@ -1301,6 +1308,8 @@ model Appointment {
 }
 
 model AppointmentOrder {
+  inventoryStock InventoryBookingStock[]
+  inventoryMovements InventoryStockMovement[]
   officeId String @default(dbgenerated("app.creation_office_id()"))
   office BusinessOffice @relation(fields: [tenantId, officeId], references: [tenantId, id], onDelete: NoAction)
   @@index([tenantId, officeId])
@@ -2109,18 +2118,14 @@ model Supplier {
 
 model InventoryProduct {
   id                           String                        @id @default(cuid())
-  tenantId                     String?
+  tenantId                     String
   sku                          String
   name                         String
   description                  String?
   unit                         String                        @default("unit")
   categoryId                   String
   status                       InventoryProductStatus        @default(ACTIVE)
-  costPriceCents               Int                           @default(0)
   mrpCents                     Int                           @default(0)
-  reorderPoint                 Int                           @default(0)
-  reorderQty                   Int                           @default(0)
-  onHandQty                    Int                           @default(0)
   isPhysical                   Boolean                       @default(true)
   category                     InventoryCategory             @relation(fields: [categoryId], references: [id], onDelete: Restrict)
   suppliers                    InventoryProductSupplier[]
@@ -2130,14 +2135,16 @@ model InventoryProduct {
   stockMovements               InventoryStockMovement[]
   createdAt                    DateTime                      @default(now())
   updatedAt                    DateTime                      @updatedAt
-  tenant                       Tenant?                       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant                       Tenant                       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@unique([tenantId, sku])
+  @@unique([tenantId, id])
+  officeStocks InventoryOfficeStock[]
+  bookingStock InventoryBookingStock[]
   @@index([tenantId])
   @@index([name])
   @@index([status])
   @@index([categoryId])
-  @@index([onHandQty])
 }
 
 model InventoryProductSupplier {
@@ -2171,8 +2178,11 @@ model InventoryProductTax {
 }
 
 model PurchaseOrder {
+  officeId String @default(dbgenerated("app.creation_office_id()"))
+  office BusinessOffice @relation(fields: [tenantId, officeId], references: [tenantId, id], onDelete: NoAction)
+  @@index([tenantId, officeId])
   id            String              @id @default(cuid())
-  tenantId      String?
+  tenantId      String
   orderNumber   String
   supplierId    String
   status        PurchaseOrderStatus @default(DRAFT)
@@ -2187,7 +2197,7 @@ model PurchaseOrder {
   items         PurchaseOrderItem[]
   createdAt     DateTime            @default(now())
   updatedAt     DateTime            @updatedAt
-  tenant        Tenant?             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant        Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@unique([tenantId, orderNumber])
   @@index([tenantId])
@@ -2197,6 +2207,7 @@ model PurchaseOrder {
 }
 
 model PurchaseOrderItem {
+  postedStock InventoryReceiptStock?
   id                String                   @id @default(cuid())
   orderId           String
   productId         String
@@ -2218,8 +2229,13 @@ model PurchaseOrderItem {
 }
 
 model InventoryStockMovement {
+  officeId String
+  office BusinessOffice @relation(fields: [tenantId, officeId], references: [tenantId, id], onDelete: NoAction)
+  bookingOrderId String?
+  bookingOrder AppointmentOrder? @relation(fields: [bookingOrderId], references: [id], onDelete: Restrict)
+  @@index([tenantId, officeId])
   id            String             @id @default(cuid())
-  tenantId      String?
+  tenantId      String
   productId     String
   orderItemId   String?
   type          StockMovementType
@@ -2230,7 +2246,7 @@ model InventoryStockMovement {
   product       InventoryProduct   @relation(fields: [productId], references: [id], onDelete: Restrict)
   orderItem     PurchaseOrderItem? @relation(fields: [orderItemId], references: [id], onDelete: SetNull)
   createdAt     DateTime           @default(now())
-  tenant        Tenant?            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant        Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@index([tenantId])
   @@index([productId])
@@ -2925,4 +2941,43 @@ model RecordSharingGrant {
   @@unique([policyId, teamId])
   @@index([tenantId, userId, policyId])
   @@index([tenantId, teamId, policyId])
+}
+
+model InventoryOfficeStock {
+  tenantId String
+  officeId String
+  productId String
+  onHandQty Int @default(0)
+  costPriceCents Int @default(0)
+  reorderPoint Int @default(0)
+  reorderQty Int @default(0)
+  version Int @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  office BusinessOffice @relation(fields: [tenantId, officeId], references: [tenantId, id], onDelete: NoAction)
+  product InventoryProduct @relation(fields: [tenantId, productId], references: [tenantId, id], onDelete: Cascade)
+  @@id([officeId, productId])
+  @@index([tenantId, officeId])
+}
+model InventoryBookingStock {
+  tenantId String
+  officeId String
+  orderId String
+  productId String
+  quantity Int @default(0)
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  office BusinessOffice @relation(fields: [tenantId, officeId], references: [tenantId, id], onDelete: NoAction)
+  order AppointmentOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product InventoryProduct @relation(fields: [tenantId, productId], references: [tenantId, id], onDelete: Restrict)
+  @@id([orderId, productId])
+  @@index([tenantId, officeId])
+}
+model InventoryReceiptStock {
+  itemId String @id
+  tenantId String
+  quantity Int @default(0)
+  item PurchaseOrderItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  @@index([tenantId])
 }

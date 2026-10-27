@@ -1,7 +1,8 @@
 import { inventoryMutation } from "./transaction"
 import { Prisma } from "@prisma/client"
 import { z } from "zod"
-import { prisma } from "@/lib/prisma"
+import { inventoryRead, stockOffice, inventoryOfficeLabel } from "./office"
+import type { RecordOffice } from "@/types/companies"
 import { inventoryProductStatusSchema, type CreateInventoryProductInput, type UpdateInventoryProductInput } from "@/lib/validation"
 import { BusinessError, type BusinessActor } from "@/platform/policy"
 
@@ -24,21 +25,19 @@ export const productListSchema = z.object({
   q: z.string().trim().optional(),
   status: inventoryProductStatusSchema.optional(),
   categoryId: z.string().trim().optional(),
+  officeId: z.string().trim().min(1).max(160).optional(),
 })
 
 
-const productSelect = {
+const productSelect = (officeId: string) => ({
+  officeStocks: { where: { officeId }, select: { onHandQty: true, costPriceCents: true, reorderPoint: true, reorderQty: true, version: true } },
   id: true,
   sku: true,
   name: true,
   description: true,
   unit: true,
   status: true,
-  costPriceCents: true,
   mrpCents: true,
-  reorderPoint: true,
-  reorderQty: true,
-  onHandQty: true,
   isPhysical: true,
   createdAt: true,
   category: { select: { id: true, name: true } },
@@ -55,20 +54,21 @@ const productSelect = {
       supplier: { select: { name: true } },
     },
   },
-} satisfies Prisma.InventoryProductSelect
+} satisfies Prisma.InventoryProductSelect)
 
-export const serializeProduct = (item: Prisma.InventoryProductGetPayload<{ select: typeof productSelect }>) => ({
+const serializeProduct = (item: Prisma.InventoryProductGetPayload<{ select: ReturnType<typeof productSelect> }>, office: RecordOffice) => ({
+  office, officeId: office.id, stockVersion: item.officeStocks[0]?.version ?? 0,
   id: item.id,
   sku: item.sku,
   name: item.name,
   description: item.description,
   unit: item.unit,
   status: item.status,
-  costPriceCents: item.costPriceCents,
+  costPriceCents: item.officeStocks[0]?.costPriceCents ?? 0,
   mrpCents: item.mrpCents,
-  reorderPoint: item.reorderPoint,
-  reorderQty: item.reorderQty,
-  onHandQty: item.onHandQty,
+  reorderPoint: item.officeStocks[0]?.reorderPoint ?? 0,
+  reorderQty: item.officeStocks[0]?.reorderQty ?? 0,
+  onHandQty: item.officeStocks[0]?.onHandQty ?? 0,
   isPhysical: item.isPhysical,
   createdAt: item.createdAt.toISOString(),
   category: item.category,
@@ -121,45 +121,30 @@ async function validateProductRelations(tx: Prisma.TransactionClient, tenantId: 
 
 }
 
-// Called within the authorized inventory API tenant context.
-export async function listProducts(tenantId: string, query: z.infer<typeof productListSchema>) {
-  if (!tenantId) throw new BusinessError(403, "Tenant context is required.")
-  const { page, pageSize, sort, order, q, status, categoryId } = query
-  const skip = (page - 1) * pageSize
-  const sortDirection = order ?? "asc"
-  const orderBy =
-    sort === "category"
-      ? { category: { name: sortDirection } }
-      : sort
-        ? { [sort]: sortDirection }
-        : { createdAt: "desc" as const }
-  const where: Prisma.InventoryProductWhereInput = {
-    tenantId,
-    ...(q
-      ? {
-          OR: [
-            { name: { contains: q, mode: "insensitive" } },
-            { sku: { contains: q, mode: "insensitive" } },
-            { description: { contains: q, mode: "insensitive" } },
-          ],
-        }
-      : {}),
-    ...(status ? { status } : {}),
-    ...(categoryId ? { categoryId } : {}),
-  }
-
-  const [total, items] = await prisma.$transaction([
-    prisma.inventoryProduct.count({ where }),
-    prisma.inventoryProduct.findMany({
-      where,
-      orderBy,
-      skip,
-      take: pageSize,
-      select: productSelect,
-    }),
-  ])
-
-  return { items: items.map(serializeProduct), page, pageSize, total, totalPages: Math.max(1, Math.ceil(total / pageSize)) }
+export async function readProduct(tx: Prisma.TransactionClient, tenantId: string, id: string, officeId: string) {
+  const item = await tx.inventoryProduct.findFirst({ where: { tenantId, id }, select: productSelect(officeId) })
+  if (!item) throw new BusinessError(404, "Product not found.")
+  return serializeProduct(item, await inventoryOfficeLabel(tx, tenantId, officeId))
+}
+export function getProduct(actor: BusinessActor, id: string, officeId?: string) {
+  return inventoryRead(actor, "inventoryProducts", async tx => readProduct(tx, actor.tenantId, id, await stockOffice(tx, actor.tenantId, officeId)))
+}
+export function listProducts(actor: BusinessActor, query: z.infer<typeof productListSchema>) {
+  return inventoryRead(actor, "inventoryProducts", async tx => {
+    const { page, pageSize, sort, q, status, categoryId } = query
+    const officeId = await stockOffice(tx, actor.tenantId, query.officeId)
+    const office = await inventoryOfficeLabel(tx, actor.tenantId, officeId)
+    const where = Prisma.sql`p."tenantId"=${actor.tenantId}
+      ${q ? Prisma.sql`AND (p.name ILIKE ${'%'+q+'%'} OR p.sku ILIKE ${'%'+q+'%'} OR p.description ILIKE ${'%'+q+'%'})` : Prisma.empty}
+      ${status ? Prisma.sql`AND p.status::text=${status}` : Prisma.empty}
+      ${categoryId ? Prisma.sql`AND p."categoryId"=${categoryId}` : Prisma.empty}`
+    const column = sort === "category" ? 'c.name' : sort === "onHandQty" || sort === "costPriceCents" ? `COALESCE(s."${sort}",0)` : `p."${sort ?? 'createdAt'}"`
+    const [count] = await tx.$queryRaw<{ total: number }[]>`SELECT count(*)::integer total FROM "InventoryProduct" p WHERE ${where}`
+    const ids = await tx.$queryRaw<{ id: string }[]>`SELECT p.id FROM "InventoryProduct" p JOIN "InventoryCategory" c ON c.id=p."categoryId" LEFT JOIN "InventoryOfficeStock" s ON s."tenantId"=p."tenantId" AND s."productId"=p.id AND s."officeId"=${officeId} WHERE ${where} ORDER BY ${Prisma.raw(column)} ${Prisma.raw(query.order ?? (sort ? "asc" : "desc"))},p.id LIMIT ${pageSize} OFFSET ${(page-1)*pageSize}`
+    const products = await tx.inventoryProduct.findMany({ where: { tenantId: actor.tenantId, id: { in: ids.map(r=>r.id) } }, select: productSelect(officeId) })
+    const byId = new Map(products.map(p=>[p.id,p]))
+    return { items: ids.map(r=>serializeProduct(byId.get(r.id)!,office)), office, page, pageSize, total: count.total, totalPages: Math.max(1,Math.ceil(count.total/pageSize)) }
+  })
 }
 
 // Called within the authorized inventory API tenant context.
@@ -186,11 +171,7 @@ export async function createProduct(actor: BusinessActor, data: CreateInventoryP
         unit: data.unit ?? "unit",
         categoryId: data.categoryId,
         status: data.status ?? "ACTIVE",
-        costPriceCents: data.costPriceCents,
         mrpCents: data.mrpCents,
-        reorderPoint: data.reorderPoint ?? 0,
-        reorderQty: data.reorderQty ?? 0,
-        onHandQty: data.onHandQty ?? 0,
         isPhysical: data.isPhysical ?? true,
         taxes: data.taxIds.length
           ? {
@@ -210,11 +191,12 @@ export async function createProduct(actor: BusinessActor, data: CreateInventoryP
           }
           : undefined,
       },
-      select: productSelect,
+      select: { id: true },
     })
 
-    if (item.onHandQty) await tx.inventoryStockMovement.create({ data: { tenantId, productId: item.id, type: "ADJUSTMENT_ADD", quantityDelta: item.onHandQty, note: "Opening stock" } })
-    return item
+    const [context] = await tx.$queryRaw<{ id: string }[]>`SELECT app.inventory_creation_office(${tenantId},'inventoryProducts') id`
+    await tx.$queryRaw`SELECT app.inventory_set_stock(${tenantId},${context.id},${item.id},${data.onHandQty ?? 0}::integer,${data.costPriceCents}::integer,${data.reorderPoint ?? 0}::integer,${data.reorderQty ?? 0}::integer,0,${actor.requestId ?? null})`
+    return readProduct(tx,tenantId,item.id,context.id)
   })
 }
 
@@ -222,7 +204,9 @@ export async function createProduct(actor: BusinessActor, data: CreateInventoryP
 export async function updateProduct(actor: BusinessActor, id: string, data: UpdateInventoryProductInput) {
   return inventoryMutation(actor, "inventoryProducts", "edit", { id, status: data.status }, async (tx, actor) => {
     const { tenantId } = actor
-    const previous = await tx.inventoryProduct.findFirstOrThrow({ where: { tenantId, id }, select: { onHandQty: true } })
+    const changesStock = [data.onHandQty,data.costPriceCents,data.reorderPoint,data.reorderQty].some(v=>v!==undefined)
+    if (changesStock && (!data.officeId || data.stockVersion === undefined)) throw new BusinessError(400,"Stock changes require the saved office and stock version. Refresh before saving.")
+    const officeId = await stockOffice(tx,tenantId,data.officeId)
 
     if (data.sku?.trim()) {
       const existing = await tx.inventoryProduct.findUnique({
@@ -247,13 +231,7 @@ export async function updateProduct(actor: BusinessActor, id: string, data: Upda
         ...(data.unit ? { unit: data.unit } : {}),
         ...(data.categoryId ? { categoryId: data.categoryId } : {}),
         ...(data.status ? { status: data.status } : {}),
-        ...(typeof data.costPriceCents === "number"
-          ? { costPriceCents: data.costPriceCents }
-          : {}),
         ...(typeof data.mrpCents === "number" ? { mrpCents: data.mrpCents } : {}),
-        ...(typeof data.reorderPoint === "number" ? { reorderPoint: data.reorderPoint } : {}),
-        ...(typeof data.reorderQty === "number" ? { reorderQty: data.reorderQty } : {}),
-        ...(typeof data.onHandQty === "number" ? { onHandQty: data.onHandQty } : {}),
         ...(typeof data.isPhysical === "boolean" ? { isPhysical: data.isPhysical } : {}),
       },
     })
@@ -288,14 +266,8 @@ export async function updateProduct(actor: BusinessActor, id: string, data: Upda
       }
     }
 
-    if (data.onHandQty !== undefined && data.onHandQty !== previous.onHandQty) {
-      const delta = data.onHandQty - previous.onHandQty
-      await tx.inventoryStockMovement.create({ data: { tenantId, productId: id, quantityDelta: delta, type: delta > 0 ? "ADJUSTMENT_ADD" : "ADJUSTMENT_SUB", note: "Stock count correction" } })
-    }
-    return tx.inventoryProduct.findFirst({
-      where: { id, tenantId },
-      select: productSelect,
-    })
+    if (changesStock) await tx.$queryRaw`SELECT app.inventory_set_stock(${tenantId},${officeId},${id},${data.onHandQty ?? null}::integer,${data.costPriceCents ?? null}::integer,${data.reorderPoint ?? null}::integer,${data.reorderQty ?? null}::integer,${data.stockVersion!}::integer,${actor.requestId ?? null})`
+    return readProduct(tx,tenantId,id,officeId)
   })
 }
 
@@ -311,7 +283,8 @@ export async function archiveProduct(actor: BusinessActor, id: string) {
       where: { productId: id, tenantId },
     })
 
-    if (linkedPurchases > 0 || hasStockMovements > 0) {
+    const [integrity] = await tx.$queryRaw<{ used: boolean }[]>`SELECT app.inventory_product_referenced(${tenantId},${id}) used`
+    if (integrity.used) {
       await tx.inventoryProduct.updateMany({
         where: { id, tenantId },
         data: { status: "INACTIVE" },
@@ -320,6 +293,6 @@ export async function archiveProduct(actor: BusinessActor, id: string) {
       await tx.inventoryProduct.deleteMany({ where: { id, tenantId } })
     }
 
-    return { linkedPurchases, hasStockMovements }
+    return { linkedPurchases, hasStockMovements, archived: integrity.used }
   })
 }

@@ -1,3 +1,4 @@
+import { savedBookingProducts } from "./saved-products"
 import { bookingCreationOffice, bookingWriteOffice, bookingOfficeLabels } from "./office"
 import type { Prisma } from "@prisma/client"
 import { readDocumentBranding } from "@/platform/branding/read"
@@ -21,10 +22,10 @@ export async function listOrders(tenantId: string, input: OrderListInput) {
   const where: Prisma.AppointmentOrderWhereInput = { tenantId, status, ...(officeId ? { officeId } : {}), ...(staffId ? { lines: { some: { staffProfile: { userId: staffId } } } } : {}), ...(customerId ? { customerId } : {}) }
   const [total, rows] = await prisma.$transaction([
     prisma.appointmentOrder.count({ where }),
-    prisma.appointmentOrder.findMany({ where, include: appointmentOrderInclude,
+    prisma.appointmentOrder.findMany({ where, include: {...appointmentOrderInclude,productLines:false},
       orderBy: [{ updatedAt: "desc" }, { id: "asc" }], skip: (page - 1) * pageSize, take: pageSize }),
   ])
-  return { items: (await bookingOfficeLabels(prisma, tenantId, rows)).map(serializeAppointmentOrder), page, pageSize, total, totalPages: Math.max(1, Math.ceil(total / pageSize)) }
+  return { items: (await bookingOfficeLabels(prisma, tenantId, await savedBookingProducts(prisma,tenantId,rows))).map(serializeAppointmentOrder), page, pageSize, total, totalPages: Math.max(1, Math.ceil(total / pageSize)) }
 }
 
 export async function createOrder(actor: BusinessActor, input: AppointmentOrderCreateInput) {

@@ -1,5 +1,6 @@
 "use client"
 
+import { useCreationOfficeSnapshot } from "@/platform/companies/creation-snapshot"
 import * as React from "react"
 import { toast } from "sonner"
 
@@ -35,6 +36,7 @@ const moduleGroups = [
 type ModuleGroupKey = (typeof moduleGroups)[number]["key"]
 
 export default function SeedsPage() {
+  const creationHeaders = useCreationOfficeSnapshot()
   const [selected, setSelected] = React.useState<Record<SeedGroupKey, boolean>>({
     taxes: true,
     users: true,
@@ -119,7 +121,7 @@ export default function SeedsPage() {
       const timeoutId = window.setTimeout(() => controller.abort(), 180000)
       const response = await fetch("/api/seeds", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...await creationHeaders() },
         signal: controller.signal,
         body: JSON.stringify({
           action: "seed",

@@ -1,164 +1,127 @@
-# R10: Inventory transaction and office-stock work
+# R10: Inventory office stock (phase 2D6B2, local)
 
-## Phase 2D6A: transaction and audit foundation (local)
+## Current boundary
 
-All Inventory category, supplier, product and purchase mutations now refresh
-account status, module activation, action profiles and record rules inside their
-write transaction, after acquiring the shared operation lock and any source row
-lock. Create/edit/archive remain distinct actions. Catalogue status changes and purchase
-receipts recheck their secondary Archive/stock Edit requirements against the
-current source and current permissions.
+Product identity, MRP, categories, taxes and supplier mappings remain shared
+within the tenant. Operational quantities, cost and reorder settings live in
+`InventoryOfficeStock`, with one versioned balance per office/product. The old
+four global stock columns have been removed; there is no dual write, runtime
+compatibility flag or tenant-specific override.
 
-Inventory, scheduling, booking stock work and account-security writes coordinate
-through the same stable lock. `platform/transactions/tenant-operation.ts` owns
-that shared transaction primitive; the scheduling service retains its domain
-entry point and the existing native R10 lock identity. Stock work nested in a
-booking transaction reuses the same connection and reentrant lock. Independent
-stock writers cannot oversell after reading the same preflight quantity.
+Product lists, details and sorting/paging resolve an accessible explicit office,
+or the user's persisted workspace office. A missing balance in that permitted
+office is a genuine zero/version 0. Missing or denied context returns an error;
+it never becomes a fabricated zero or an all-office aggregate. Closed offices
+remain readable. Office choices use Inventory's own Read permission, without
+delegating Appointments or directory administration.
 
-Mutations commit the source, product relations, purchase items, receipt quantities,
-stock movements and mandatory before/after audit together. An audit failure now
-rolls back the business change rather than leaving an unaudited success. Product
-snapshots include supplier/tax links; purchase snapshots include line items.
-Existing event names and actor/request identities are preserved.
+The stock dashboard names and uses the permitted persisted office only and is unavailable
+when that context is missing. Shared catalogue choices for bookings/coupons carry
+identity, MRP and tax references, without office costs, counts or reorder data.
 
-New opening quantities and manual stock-count corrections append signed stock
-movements in the same transaction. Existing movement rows are not rewritten and
-missing historical movements are not invented. Repeated or concurrent receipt
-commands retain cumulative received quantities and do not double-count stock.
-Purchase-number allocation and duplicate checks run inside the serialized write.
+## Mutations and financial sources
 
-This phase has no schema or data migration. It adds no runtime compatibility
-adapter, role fallback or permission override. Existing client records, ownership,
-permissions and historical stock quantities are unchanged. Work remains local on
-staging; no hosted database, tenant or deployment was modified.
+Every Inventory mutation retains the phase 2D6A transaction boundary: current
+account, profile actions, Read bounds and activation are refreshed after the
+shared tenant operation lock. Product relationships and mandatory catalogue or
+purchase audits commit with the source. Product catalogue audits no longer carry
+private office stock values; stock commands write separate complete office audits.
 
-## Phase 2D6B1: native stock migration rehearsal (local candidate)
+New product and purchase forms capture office/preference version when opened.
+The form displays that destination, and a changed workspace preference rejects
+creation with a conflict. Stock edits send the saved office and stock version;
+a receipt or another correction makes a stale count fail without changing either
+stock or shared catalogue metadata. Browsing another office does not change the
+creation workspace. Closed-office forms suppress stock mutations.
 
-`prisma/pending/inventory-office-stock.sql` contains the proposed atomic native
-cutover. It deliberately lives outside `prisma/migrations`: the active Prisma
-schema and Inventory services still use tenant-wide stock. Ordinary migration or
-deployment commands cannot apply this candidate. Promote it only with the
-matching runtime/schema change and its passing integration/browser checks.
-There is no runtime dual-write or compatibility adapter.
+Purchases have immutable native offices and frozen financial inputs. Their
+children, receipts and audits inherit the source office. Receiving uses a private
+posted allocation and the saved office, even after a workspace change. Reopening
+or replaying Received does not add quantities again. Product count/cost changes,
+movements, received quantities, allocations and strict stock audits all roll back
+if any required write fails. Runtime callers cannot forge balances or movements
+with independent ordinary table writes.
 
-The candidate separates shared catalogue identity/MRP from office quantity,
-cost and reorder settings in `InventoryOfficeStock`. A monotonically increasing
-stock version protects count corrections. Each existing product moves once to
-its initial office with its exact saved operational values and timestamps. The
-four old product stock columns are removed in the candidate schema. Historical
-movement sums never replace the authoritative saved quantity, and opening stock
-is not copied into every office or invented as new movement history.
+Booking sales/restores similarly derive canonical quantities from the saved
+booking and private allocation. A caller's delta map can identify a no-op but
+cannot determine the amount or destination. Deferred constraints reject source
+changes that omit stock posting. Concurrent operations cannot consume stock from
+another office or oversell after reading the same preflight quantity.
 
-Purchases receive immutable native offices; their children and receipt history
-follow the source. Typed booking links are added to movements only when an exact
-known note, tenant and product agree. Other old notes remain unchanged and
-unlinked. Existing prices, invoice branding, financial snapshots, IDs, timestamps,
-assignments, access rules and grants are preserved. Historical product audits
-containing operational values keep their full snapshots, with initial-office
-metadata protecting those values. Shared catalogue audits after cutover must
-exclude office stock data.
+Saved purchase labels and booking financial product lines use minimal protected
+source projections. Purchase-only users retain saved line labels without gaining
+catalogue/stock Read. Invoices retain their saved product lines and prices when
+Inventory is disabled. No current stock or catalogue price is exposed by those
+financial projections. Two existing child tenant policies now check canonical
+tenant/source ancestry; optional catalogue Read no longer decides financial visibility.
+Office/source policies and native write guards remain mandatory.
 
-Private booking/receipt allocation rows record quantities already posted. They
-are initialized from saved sources without moving stock again. Public native
-commands derive their amounts from canonical saved sources, under the shared
-operation lock; no caller-supplied delta map is authoritative. Booking edits and
-cancellations debit/restore the saved office even after a workspace change.
-Receipts use the protected posted quantity, reject tampered received quantities,
-and cannot be replayed to add stock twice. Deferred constraints reject business
-source changes that omit the matching stock posting. Saved purchase inputs and
-office identities are immutable.
+Protected boolean reference checks and purchase-number allocation include hidden
+sources without returning their identifiers or counts. Office stock configuration
+is an association even at zero count: referenced products become inactive rather
+than erasing balances, costs or reorder settings. Archive-only profiles can perform
+that status transition without receiving Edit authority.
 
-Office balances, private allocations and movement history cannot be written
-directly by the ordinary runtime role. Native commands recheck current account,
-profile action, Read limit, activation and office access after taking the lock.
-Stock changes and mandatory complete stock audits commit or roll back together.
-Closed offices retain authorized history but reject writes. Read helpers require
-an accessible explicit/persisted office; missing context is not a zero balance.
-Protected reference and number projections prevent hidden office rows from
-being mistaken for unused products or unused purchase numbers.
+Sample inventory/purchase creation uses the same business services and captured
+office. Repeating those sample commands preserves existing product quantities and
+does not receive the same sample purchase again. Destructive seed maintenance is
+still subject to native financial-history deletion guards; no reset bypass is
+introduced by this change.
 
-Preflight rejects conflicting tenant/source relations, invalid quantities and
-stock-impacting historical bookings outside the initial office. Those balances
-need explicit reconciliation rather than guessed distribution. Missing tenant
-identities are inferred only from agreeing canonical relations. A forced late
-rollback is rehearsed before the successful local candidate application.
+## Migration and preservation
 
-The rehearsal command creates disposable local PostgreSQL, applies/verifies all
-128 prior migrations, then exercises the pending SQL with a non-owner runtime
-role. It changes neither the actual migration ledger nor hosted environments:
+Migration 129, `20261027000100_inventory_office_stock`, promotes the SQL rehearsed
+in phase 2D6B1 into the deployable migration sequence with its matching Prisma,
+service and UI changes. The pending candidate file has been retired.
+
+Each existing product's authoritative saved stock/cost/reorder values move once
+to its initial office, retaining timestamps. Incomplete movement sums never
+replace the saved quantity, and stock is not copied into every office. Existing
+booking/receipt allocations are initialized from saved source quantities without
+moving stock again. Exact known booking notes may acquire validated typed links;
+other old notes remain intact and unlinked. No old movement is invented or repriced.
+
+Migration preflight rejects conflicting tenant/source relations, invalid saved
+quantities or stock-impacting historical bookings outside the initial office.
+Missing tenant identities are inferred only from agreeing canonical relations.
+IDs, assignments, access rules, grants, financial/branding snapshots and old audit
+contents remain intact. Operational old audits acquire initial-office metadata
+so their stock values cannot leak to another office. The two child ancestry
+policy changes above are explicit; other prior policies/functions/grants remain
+unchanged. Forced late rollback and snapshot reconstruction verify preservation
+across all 128 preceding tables before the successful local migration.
+
+This implementation remains local on `staging`. No hosted migration, client data
+change, push or deployment has been performed.
+
+## Verification
 
 ```powershell
 npm.cmd run test:inventory-office-rehearsal
-```
-
-Verified locally on 2026-10-27: all 18 candidate migration/native checks passed,
-including exact preservation across the 128 prior tables, forced rollback,
-missing-tenant inference, typed/unlinked history, office privacy, receipt replay,
-concurrent oversell, saved-office restores, deferred source proofs, closed offices,
-creation versions, current access revocation after a lock wait, and complete audit
-failure rollback. The unchanged active Inventory/booking suite also passed all
-85 tests without skips. TypeScript, changed-file ESLint and whitespace checks
-passed. The candidate has no application/UI deployment to browser-test yet.
-
-### Next: phase 2D6B2 runtime cutover
-
-The candidate is not completed Inventory office isolation in the application.
-The next atomic implementation must:
-
-- Update Prisma models and replace all global product stock reads/writes with
-  office balances and native posting, including booking adapters, receipts,
-  product DTOs, list sorting/paging, dashboard data and authorized seed tools.
-- Require explicit saved `officeId`/`stockVersion` for corrections; capture office
-  and preference version for product/purchase creation. Edits use source offices.
-- Add office browsing/labels, creation headers and source-aware product choices
-  to forms; closed offices must not advertise mutations. Do not reuse appointment
-  permissions as an Inventory office picker permission.
-- Partition purchase audits by source office, use protected integrity checks for
-  product/supplier archives, and map native errors into clear 400/403/409 results.
-- Add API and real-sign-in browser tests across offices, update old fixtures
-  explicitly, and verify reports/history/exports. Promote this SQL to the next
-  numbered migration only with that complete service/schema switch.
-
-## Phase 2D6B: release prerequisites
-
-Stock is still tenant-wide in the current schema. This phase is a prerequisite,
-not completed Inventory office isolation. Before an office-stock release:
-
-- Keep shared product definitions, categories and supplier configuration explicit.
-  Separate office balances and operational stock/cost/reorder values from shared
-  product identity rather than duplicating the product catalogue per office.
-- Give purchase roots immutable offices; items, receipts, movements and audit
-  history inherit their canonical source. Booking sales/restores use the saved
-  booking office, never a changed workspace preference.
-- Move authoritative current quantities into the tenant's initial office without
-  changing amounts, IDs, assignments or frozen prices. Do not reconstruct balances
-  from incomplete historical movements or copy one balance into every office.
-- Apply the same native office boundary to stock reads/writes, receipts, selectors,
-  dashboards, history and archives. Stock conflicts remain enforceable without
-  exposing another office's records.
-- Align forms with captured creation context and saved-source edits; distinguish
-  unavailable stock context from a genuine zero balance. Rehearse rollback and
-  exact preservation before any hosted cutover.
-
-## Local verification
-
-```powershell
+npm.cmd run test:inventory-offices
 npm.cmd run test:inventory-transactions
-npm.cmd run test:inventory-transactions:browser
 node scripts/test-sales-orders.cjs --availability-boundary
 npm.cmd run build
+node scripts/test-sales-orders.cjs --inventory --browser-only
 ```
 
-Tests run only against disposable local PostgreSQL. They cover every Inventory
-mutation's audit rollback, signed stock corrections, movement failure, receipt
-idempotency, duplicate numbering, current Archive and action checks after waits,
-module/account revocation and forged service identity. The browser uses real
-synthetic tenant sign-ins; no client credentials or client records are used.
+Tests use disposable local PostgreSQL with a non-owner RLS runtime role. Browser
+checks use real synthetic tenant logins against a local production build, never
+client accounts. Migration/native checks cover rollback, source preservation,
+missing-tenant inference, typed/unlinked history, office privacy, stale counts,
+receipt replay, concurrent oversell, source proofs, closed offices, permission
+revocation after a lock wait and mandatory audit failure rollback. API checks add
+explicit office/version requirements, minimal purchase Read, sample replay and
+separate Archive authority. Browser flows exercise saved-office edits/receipts,
+office filters, stale creation rejection, signed movements and current grants.
 
-Verified locally on 2026-10-26: 85 Inventory/booking tests and 176 scheduling/
-booking/workforce regressions passed without skips (198 distinct tests across
-the overlapping suites). The real-sign-in Chrome flow passed receipt replay,
-manager stock correction, signed movements, audit snapshots and current profile
-revocation. Its Inventory screenshot was inspected. Production build, TypeScript,
-changed-file ESLint (zero warnings) and whitespace checks passed.
+Verified locally on 2026-10-27: 18 migration/native checks, seven multi-office
+API checks, 85 Inventory/booking regressions and 176 broader scheduling/workforce
+checks passed without skips (the regression suites overlap). Two real-sign-in
+Chrome flows passed; stock table/dashboard, saved-source purchase and stale-office form
+screenshots were inspected. Production build, TypeScript, changed-file ESLint
+and whitespace checks passed.
+
+Broader R10 operational/report/workspace integration and external collaborator
+release gates remain pending. Completing this Inventory slice is not approval to
+apply the full R10 release to hosted staging or production.

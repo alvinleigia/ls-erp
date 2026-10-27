@@ -1,7 +1,6 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
-// Pending cutover only: raw native tests do not run the old Prisma services on
-// the proposed schema, and never load local/hosted environment files.
-const assert=require('node:assert/strict'),fs=require('node:fs'),{Client}=require('pg')
+// Native migration preservation and non-owner stock checks. Disposable local DB only.
+const assert=require('node:assert/strict'),fs=require('node:fs'),{Client}=require('pg'),{createHash}=require('node:crypto')
 const url=new URL(process.env.CRM_TEST_DATABASE_URL||'http://invalid')
 assert.equal(process.env.R5_HISTORICAL_CONTAINER,'1');assert.equal(url.hostname,'127.0.0.1');assert.equal(url.pathname,'/ls_salon_crm_test')
 const db=new Client({connectionString:url.toString()});url.username='crm_test_runtime';url.password=''
@@ -44,8 +43,9 @@ async function main(){
    await q('INSERT INTO "TenantUserAccess"("tenantId","userId",rules,"updatedAt") VALUES($1,$2,$3,now())',[t,user,Object.fromEntries(permissions.map(p=>[p,'ALL']))])
   }
   for(const [user,offices]of [[admin,[initial,second]],[east,[initial]],[west,[second]],[both,[initial,second]],[plain,[initial]]]){
-   await q('INSERT INTO "BusinessOfficePolicy"("tenantId","userId","creationOfficeId",version,"updatedAt") VALUES($1,$2,$3,5,now())',[t,user,offices[0]])
-   for(const office of offices)await q('INSERT INTO "BusinessOfficeGrant"("tenantId","userId","officeId") VALUES($1,$2,$3)',[t,user,office])
+   await q('INSERT INTO "BusinessOfficePolicy"("tenantId","userId","creationOfficeId",version,"updatedAt") VALUES($1,$2,$3,5,now()) ON CONFLICT("tenantId","userId") DO UPDATE SET "creationOfficeId"=excluded."creationOfficeId",version=5',[t,user,offices[0]])
+   await q('DELETE FROM "BusinessOfficeGrant" WHERE "tenantId"=$1 AND "userId"=$2',[t,user])
+   for(const office of offices)await q('INSERT INTO "BusinessOfficeGrant"("tenantId","userId","officeId") VALUES($1,$2,$3) ON CONFLICT DO NOTHING',[t,user,office])
   }
   await q('INSERT INTO "InventoryCategory"(id,"tenantId",name,"updatedAt") VALUES($1,$2,\'Saved category\',\'2020-01-02\')',[t+'_category',t])
   await q('INSERT INTO "Supplier"(id,"tenantId",name,"updatedAt") VALUES($1,$2,\'Saved supplier\',\'2020-01-02\')',[supplier,t])
@@ -63,7 +63,7 @@ async function main(){
   const capture=async()=>{const rows={};for(const table of tables)rows[table]=(await q(`SELECT to_jsonb(r) row FROM "${table}" r ORDER BY to_jsonb(r)::text COLLATE "C"`)).rows.map(r=>r.row);return rows}
   const policies=async()=>(await q("SELECT * FROM pg_policies WHERE schemaname='public' ORDER BY tablename,policyname")).rows
   const functions=async()=>(await q("SELECT p.oid,pg_get_functiondef(p.oid) definition,p.proacl FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='app' ORDER BY p.oid")).rows
-  const before=await capture(),oldPolicies=await policies(),oldFunctions=await functions(),ledger=(await q('SELECT * FROM "_prisma_migrations" ORDER BY id')).rows,sql=fs.readFileSync('prisma/pending/inventory-office-stock.sql','utf8')
+  const before=await capture(),oldPolicies=await policies(),oldFunctions=await functions(),ledger=(await q('SELECT * FROM "_prisma_migrations" ORDER BY id')).rows,sql=fs.readFileSync('prisma/migrations/20261027000100_inventory_office_stock/migration.sql','utf8')
   await check('historical reconciliation failures abort without changing data',async()=>{
    for(const [change,undo,error]of [
     ['UPDATE "InventoryProduct" SET "onHandQty"=-1 WHERE id=$1','UPDATE "InventoryProduct" SET "onHandQty"=17 WHERE id=$1',/quantities require reconciliation/],
@@ -94,7 +94,8 @@ async function main(){
    for(const row of expected.AuditLog)if(row.entityType==='inventoryPurchases'||(row.entityType==='inventoryProducts'&&['onHandQty','costPriceCents','reorderPoint','reorderQty'].some(k=>Object.hasOwn(row.before||{},k)||Object.hasOwn(row.after||{},k))))row.metadata={...row.metadata,officeId:initials.get(row.tenantId),officeFamily:'inventory'}
    const stable=x=>Array.isArray(x)?x.map(stable):x&&typeof x==='object'?Object.fromEntries(Object.keys(x).sort().map(k=>[k,stable(x[k])])):x,norm=x=>x.map(v=>JSON.stringify(stable(v))).sort(),after=await capture()
    for(const table of tables)assert.deepEqual(norm(after[table]),norm(expected[table]),table)
-   for(const policy of oldPolicies)assert.deepEqual((await policies()).find(p=>p.tablename===policy.tablename&&p.policyname===policy.policyname),policy)
+   for(const policy of oldPolicies)if(!(['PurchaseOrderItem','AppointmentOrderProductLine'].includes(policy.tablename)&&policy.policyname==='tenant_isolation'))assert.deepEqual((await policies()).find(p=>p.tablename===policy.tablename&&p.policyname===policy.policyname),policy)
+   const ancestry=(await policies()).find(p=>p.tablename==='PurchaseOrderItem'&&p.policyname==='tenant_isolation');assert.match(ancestry.qual,/inventory_purchase_link_in_tenant/);assert.equal(ancestry.permissive,'PERMISSIVE');assert.match((await policies()).find(p=>p.tablename==='AppointmentOrderProductLine'&&p.policyname==='tenant_isolation').qual,/inventory_booking_link_in_tenant/)
    const currentFunctions=await functions();for(const fn of oldFunctions)assert.deepEqual(currentFunctions.find(f=>f.oid===fn.oid),fn)
    const balance=await stock();assert.equal(balance.onHandQty,17);assert.equal(balance.costPriceCents,100);assert.equal(balance.reorderPoint,6);assert.equal(balance.reorderQty,10);assert.equal(balance.updatedAt.toISOString(),'2020-01-02T00:00:00.000Z');assert.equal(await stock(second),undefined)
    assert.equal((await q('SELECT quantity FROM "InventoryBookingStock" WHERE "orderId"=$1',[booking])).rows[0].quantity,3)
@@ -207,7 +208,7 @@ async function main(){
   await check('create-only product access captures office/version and cannot become stock Edit',async()=>{
    const creator=t+'_creator',role=t+'_creator_role',created=t+'_created_product',createPermissions=['inventoryProducts.read','inventoryProducts.create']
    await q('INSERT INTO "User"(id,"tenantId",email,role,"updatedAt") VALUES($1,$2,$1||\'@example.test\',\'MANAGER\',now())',[creator,t])
-   await q('INSERT INTO "TenantAccessRole"(id,"tenantId",name,"nameKey",permissions,"updatedAt") VALUES($1,$2,$1,$1,$3,now())',[role,t,createPermissions]);await q('INSERT INTO "TenantRoleAssignment"("tenantId","userId","roleId","updatedAt") VALUES($1,$2,$3,now())',[t,creator,role]);await q('INSERT INTO "TenantUserAccess"("tenantId","userId",rules,"updatedAt") VALUES($1,$2,$3,now())',[t,creator,Object.fromEntries(createPermissions.map(p=>[p,'ALL']))]);await q('INSERT INTO "BusinessOfficePolicy"("tenantId","userId","creationOfficeId",version,"updatedAt") VALUES($1,$2,$3,5,now())',[t,creator,initial]);await q('INSERT INTO "BusinessOfficeGrant"("tenantId","userId","officeId") VALUES($1,$2,$3)',[t,creator,initial])
+   await q('INSERT INTO "TenantAccessRole"(id,"tenantId",name,"nameKey",permissions,"updatedAt") VALUES($1,$2,$1,$1,$3,now())',[role,t,createPermissions]);await q('INSERT INTO "TenantRoleAssignment"("tenantId","userId","roleId","updatedAt") VALUES($1,$2,$3,now())',[t,creator,role]);await q('INSERT INTO "TenantUserAccess"("tenantId","userId",rules,"updatedAt") VALUES($1,$2,$3,now())',[t,creator,Object.fromEntries(createPermissions.map(p=>[p,'ALL']))]);await q('INSERT INTO "BusinessOfficePolicy"("tenantId","userId","creationOfficeId",version,"updatedAt") VALUES($1,$2,$3,5,now()) ON CONFLICT("tenantId","userId") DO UPDATE SET "creationOfficeId"=excluded."creationOfficeId",version=5',[t,creator,initial]);await q('INSERT INTO "BusinessOfficeGrant"("tenantId","userId","officeId") VALUES($1,$2,$3) ON CONFLICT DO NOTHING',[t,creator,initial])
    const create=(id,version)=>transaction(creator,async c=>{await c.query('INSERT INTO "InventoryProduct"(id,"tenantId",sku,name,"categoryId","updatedAt") VALUES($1,$2,$1,$1,$3,now())',[id,t,t+'_category']);await c.query('SELECT app.inventory_set_stock($1,$2,$3,3,100,2,5,0)',[t,initial,id])},{inventoryOp:'inventoryProducts.create',version})
    await assert.rejects(create(created+'_stale',4),/Office context changed/);assert.equal((await q('SELECT id FROM "InventoryProduct" WHERE id=$1',[created+'_stale'])).rows.length,0)
    await create(created,5);assert.equal((await q('SELECT "onHandQty" FROM "InventoryOfficeStock" WHERE "productId"=$1',[created])).rows[0].onHandQty,3)
@@ -223,7 +224,9 @@ async function main(){
    await assert.rejects(transaction(plain,c=>c.query('SELECT app.inventory_next_purchase_number($1)',[t])),/not permitted/)
    assert.deepEqual((await q('SELECT * FROM "_prisma_migrations" ORDER BY id')).rows,ledger)
   })
-  console.log(`Pending Inventory office migration: ${count} checks passed. Candidate only; deployed migrations, runtime schema, hosted data and migration ledger unchanged.`)
+  const name='20261027000100_inventory_office_stock'
+  await q('INSERT INTO "_prisma_migrations"(id,checksum,migration_name,finished_at) VALUES($1,$2,$1,now())',[name,createHash('sha256').update(sql).digest('hex')])
+  console.log(`Inventory office migration: ${count} preservation/native checks passed; prior source values, policies/functions/grants and rollback verified. Local disposable database only.`)
  }finally{await runtime.end();await db.end()}
 }
 main().catch(e=>{console.error(e);process.exitCode=1})

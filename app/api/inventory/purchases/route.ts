@@ -18,7 +18,6 @@ async function handleGET(request: Request, actor: BusinessActor) {
   const logContext = createApiLogContext(request)
   logApiRequestStart(logContext, request)
 
-  const { tenantId } = actor
 
   const url = new URL(request.url)
   const parsed = purchaseListSchema.safeParse(Object.fromEntries(url.searchParams.entries()))
@@ -32,7 +31,7 @@ async function handleGET(request: Request, actor: BusinessActor) {
   }
 
   try {
-    const result = await listPurchases(tenantId, parsed.data)
+    const result = await listPurchases(actor, parsed.data)
     const { page, pageSize, total } = result
     const response = NextResponse.json(result)
     logApiRequestSuccess(logContext, 200, { page, pageSize, total })

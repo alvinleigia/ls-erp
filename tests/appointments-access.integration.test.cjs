@@ -54,7 +54,7 @@ before(async()=>{
 after(async()=>{
  for(const tenant of [a,b]){
   await root.query('DELETE FROM "InventoryProductTax" WHERE "productId" IN (SELECT id FROM "InventoryProduct" WHERE "tenantId"=$1)',[tenant])
-  for(const table of ['Appointment','AppointmentOrder','InventoryStockMovement','InventoryProduct','InventoryCategory','Service','ServiceCategory','RealEstateProjectStatus','RealEstatePropertyCategory','RealEstateBuyingTimeframe'])await root.query(`DELETE FROM "${table}" WHERE "tenantId"=$1`,[tenant])
+  for(const table of ['InventoryStockMovement','Appointment','AppointmentOrder','InventoryProduct','InventoryCategory','Service','ServiceCategory','RealEstateProjectStatus','RealEstatePropertyCategory','RealEstateBuyingTimeframe'])await root.query(`DELETE FROM "${table}" WHERE "tenantId"=$1`,[tenant])
  }
  await root.query('DELETE FROM "TenantRoleAssignment" WHERE "tenantId"=$1',[a]);await root.query('DELETE FROM "Tenant" WHERE id IN ($1,$2)',[a,b]);await root.end();await prisma.$disconnect();await global.prismaPool?.end()
 })
@@ -416,7 +416,7 @@ test('concurrent edits and bulk moves coordinate with creates, and repeated canc
 const newOrderPayload=(day='2039-05-01',extra={})=>({...bookingPayload(),appointmentDate:day,appointmentStartAt:`${day}T10:00:00Z`,status:'CONFIRMED',...extra})
 const stockProduct=a+'_stock_product'
 const productLine=(quantity=1)=>({productId:stockProduct,quantity,unitPriceCents:2000,discountType:'NONE',discountValue:0,taxIds:[],taxMode:'EXCLUSIVE'})
-const stockQty=async()=>Number((await root.query('SELECT "onHandQty" FROM "InventoryProduct" WHERE id=$1',[stockProduct])).rows[0].onHandQty)
+const stockQty=async()=>Number((await root.query('SELECT "onHandQty" FROM "InventoryOfficeStock" WHERE "productId"=$1',[stockProduct])).rows[0].onHandQty)
 const orderCounts=async()=> (await root.query(`SELECT
  (SELECT count(*)::int FROM "AppointmentOrder" WHERE "tenantId"=$1) orders,
  (SELECT count(*)::int FROM "Appointment" WHERE "tenantId"=$1) appointments,
@@ -426,7 +426,8 @@ const orderCounts=async()=> (await root.query(`SELECT
 test('confirmed order creation commits linked slots, totals, stock and exactly one audit together',async()=>{
  await root.query(`INSERT INTO "TenantModule" ("tenantId",key,allowed,enabled,"updatedAt") VALUES ($1,'inventory',true,true,now())`,[a])
  await root.query(`INSERT INTO "InventoryCategory" (id,"tenantId",name,"updatedAt") VALUES ($1,$2,'Order stock',now())`,[a+'_stock_category',a])
- await root.query(`INSERT INTO "InventoryProduct" (id,"tenantId","categoryId",sku,name,"mrpCents","onHandQty","updatedAt") VALUES ($1,$2,$3,'ORDER-STOCK','Order stock',2000,10,now())`,[stockProduct,a,a+'_stock_category'])
+ await root.query(`INSERT INTO "InventoryProduct" (id,"tenantId","categoryId",sku,name,"mrpCents","updatedAt") VALUES ($1,$2,$3,'ORDER-STOCK','Order stock',2000,now())`,[stockProduct,a,a+'_stock_category'])
+ await root.query('INSERT INTO "InventoryOfficeStock"("tenantId","officeId","productId","onHandQty","updatedAt") SELECT $1,id,$2,10,now() FROM "BusinessOffice" WHERE "tenantId"=$1 AND "isInitial"',[a,stockProduct])
  for(const profile of [`staff_${suffix}`,a+'_profile2'])for(let day=1;day<=9;day++) {
   const date=`2039-05-0${day}`
   await root.query(`INSERT INTO "StaffFlexibleAvailability" (id,"staffProfileId",date,"startTime","endTime","sortOrder","updatedAt") VALUES ($1,$2,$3,'09:00','17:00',0,now())`,[`${profile}_${date}`,profile,date])
@@ -489,13 +490,13 @@ test('order stock rejection and audit failure roll back order, linked appointmen
 
 test('stock deductions from independent transactions cannot oversell after both read the same balance',async()=>{
  const {applyInventoryStockDelta}=require('../modules/inventory/stock-service.ts')
- await root.query('UPDATE "InventoryProduct" SET "onHandQty"=1 WHERE id=$1',[stockProduct])
+ await root.query('UPDATE "InventoryOfficeStock" SET "onHandQty"=1 WHERE "productId"=$1',[stockProduct])
  let reads=0,release;const bothRead=new Promise(resolve=>{release=resolve})
  const actor={tenantId:a,userId:a+'_admin',role:'ADMIN'}
  const consume=()=>runWithTenantDbContext(a,()=>prisma.$transaction(async tx=>{
-  const preflight=await tx.inventoryProduct.findUnique({where:{id:stockProduct},select:{onHandQty:true}})
+  const preflight=(await root.query('SELECT "onHandQty" FROM "InventoryOfficeStock" WHERE "productId"=$1',[stockProduct])).rows[0]
   assert.equal(preflight.onHandQty,1);if(++reads===2)release();await bothRead
-  await applyInventoryStockDelta({actor,tenantId:a,tx,deltaByProduct:new Map([[stockProduct,-1]]),movement:()=>({type:'BOOKING_PRODUCT_SALE',note:'Concurrent stock test'})})
+  await applyInventoryStockDelta({officeId:(await root.query('SELECT id FROM "BusinessOffice" WHERE "tenantId"=$1 AND "isInitial"',[a])).rows[0].id,actor,tenantId:a,tx,deltaByProduct:new Map([[stockProduct,-1]]),movement:()=>({type:'BOOKING_PRODUCT_SALE',note:'Concurrent stock test'})})
  }))
  const before=(await orderCounts()).movements
  const results=await Promise.allSettled([consume(),consume()])
@@ -547,7 +548,7 @@ test('order confirmation and metadata edits preserve line identities, appointmen
   const date=`2039-06-${String(day).padStart(2,'0')}`
   await root.query(`INSERT INTO "StaffFlexibleAvailability" (id,"staffProfileId",date,"startTime","endTime","sortOrder","updatedAt") VALUES ($1,$2,$3,'09:00','17:00',0,now())`,[`${profile}_${date}`,profile,date])
  }
- await root.query('UPDATE "InventoryProduct" SET "onHandQty"=10 WHERE id=$1',[stockProduct])
+ await root.query('UPDATE "InventoryOfficeStock" SET "onHandQty"=10 WHERE "productId"=$1',[stockProduct])
  const draft=(await ok(await call('/orders','POST',newOrderPayload('2039-06-01',{status:'DRAFT',productLines:[productLine(2)]})),201)).order
  editingOrder=(await ok(await patchOrder(draft.id,{status:'CONFIRMED'}))).order
  assert.equal(editingOrder.lines[0].id,draft.lines[0].id);assert.equal(editingOrder.productLines[0].id,draft.productLines[0].id)

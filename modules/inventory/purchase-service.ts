@@ -1,7 +1,8 @@
 import { inventoryMutation } from "./transaction"
 import { Prisma } from "@prisma/client"
 import { z } from "zod"
-import { prisma } from "@/lib/prisma"
+import { inventoryRead, inventoryOfficeLabel } from "./office"
+import type { RecordOffice } from "@/types/companies"
 import { purchaseOrderStatusSchema, type CreatePurchaseOrderInput, type UpdatePurchaseOrderInput } from "@/lib/validation"
 import { BusinessError, type BusinessActor } from "@/platform/policy"
 import { requirePermission } from "@/platform/access/policy"
@@ -14,14 +15,18 @@ export const purchaseListSchema = z.object({
   q: z.string().trim().optional(),
   status: purchaseOrderStatusSchema.optional(),
   supplierId: z.string().trim().optional(),
+  officeId: z.string().trim().min(1).max(160).optional(),
 })
 
 
 const toDateOnly = (value: string) => new Date(`${value}T00:00:00.000Z`)
 
-export const serializePurchaseOrder = (order: Prisma.PurchaseOrderGetPayload<{ select: typeof purchaseOrderSelect }>) => ({
+type BasePurchase = Prisma.PurchaseOrderGetPayload<{select:typeof purchaseOrderSelect}>
+type LabelledPurchase = BasePurchase & {office:RecordOffice;items:(BasePurchase["items"][number] & {product:{id:string;sku:string;name:string}})[]}
+export const serializePurchaseOrder = (order: LabelledPurchase) => ({
   id: order.id,
   notes: order.notes,
+  officeId: order.officeId, office: order.office,
   orderNumber: order.orderNumber,
   supplier: order.supplier,
   status: order.status,
@@ -35,6 +40,7 @@ export const serializePurchaseOrder = (order: Prisma.PurchaseOrderGetPayload<{ s
 })
 
 const purchaseOrderSelect = {
+  officeId: true,
   id: true,
   orderNumber: true,
   status: true,
@@ -57,36 +63,30 @@ const purchaseOrderSelect = {
       lineTaxCents: true,
       lineTotalCents: true,
       productId: true,
-      product: { select: { id: true, sku: true, name: true } },
     },
   },
 } satisfies Prisma.PurchaseOrderSelect
 
-// Receipt quantities are cumulative. Never clear them when a status is reopened.
-async function receivePurchaseItems(tx: Prisma.TransactionClient, tenantId: string, order: {
-  id: string; orderNumber: string;
-  items: { id: string; productId: string; quantity: number; receivedQty: number; unitCostCents: number }[];
-}, createdReceived = false) {
-  const movements: Prisma.InventoryStockMovementCreateManyInput[] = []
-  for (const item of [...order.items].sort((a, b) => a.productId.localeCompare(b.productId))) {
-    const quantityDelta = createdReceived ? item.quantity : item.quantity - item.receivedQty
-    if (quantityDelta <= 0) continue
-    // Creation can write the received quantity with the new line; updates amend it.
-    if (!createdReceived) await tx.purchaseOrderItem.update({ where: { id: item.id, order: { tenantId } }, data: { receivedQty: item.quantity } })
-    await tx.inventoryProduct.update({ where: { id: item.productId, tenantId }, data: {
-      onHandQty: { increment: quantityDelta }, costPriceCents: item.unitCostCents,
-    } })
-    movements.push({
-      tenantId, productId: item.productId, orderItemId: item.id, type: "PURCHASE_RECEIPT",
-      quantityDelta, unitCostCents: item.unitCostCents, note: `Purchase receipt ${order.orderNumber}`,
-    })
-  }
-  if (movements.length) await tx.inventoryStockMovement.createMany({ data: movements })
+async function labelPurchases(tx: Prisma.TransactionClient, tenantId: string, orders: BasePurchase[]): Promise<LabelledPurchase[]> {
+  const ids=orders.flatMap(o=>o.items.map(i=>i.id))
+  const labels=await tx.$queryRaw<{itemId:string;product:{id:string;sku:string;name:string}}[]>`SELECT * FROM app.inventory_purchase_product_labels(${tenantId},${ids}::text[])`
+  const byId=new Map(labels.map(l=>[l.itemId,l.product]))
+  return Promise.all(orders.map(async o=>({...o,office:await inventoryOfficeLabel(tx,tenantId,o.officeId,"inventoryPurchases"),items:o.items.map(i=>{
+    const product=byId.get(i.id)
+    if(!product)throw new BusinessError(409,"Purchase visibility changed. Refresh before continuing.")
+    return {...i,product}
+  })})))
 }
+async function readPurchase(tx: Prisma.TransactionClient, tenantId: string, id: string) {
+  const order = await tx.purchaseOrder.findUniqueOrThrow({ where: { tenantId,id },select: purchaseOrderSelect })
+  return (await labelPurchases(tx,tenantId,[order]))[0]
+}
+export function getPurchase(actor: BusinessActor,id: string) { return inventoryRead(actor,"inventoryPurchases",tx=>readPurchase(tx,actor.tenantId,id)) }
 
 // Call within the authorized inventory API tenant context.
-export async function listPurchases(tenantId: string, query: z.infer<typeof purchaseListSchema>) {
-  if (!tenantId) throw new BusinessError(403, "Tenant context is required.")
+export async function listPurchases(actor: BusinessActor, query: z.infer<typeof purchaseListSchema>) {
+  const { tenantId } = actor
+  return inventoryRead(actor,"inventoryPurchases",async tx=>{
   const { page, pageSize, sort, order, q, status, supplierId } = query
   const skip = (page - 1) * pageSize
   const orderBy = sort
@@ -94,6 +94,7 @@ export async function listPurchases(tenantId: string, query: z.infer<typeof purc
     : { createdAt: "desc" as const }
   const where: Prisma.PurchaseOrderWhereInput = {
     tenantId,
+    ...(query.officeId ? { officeId: query.officeId } : {}),
     ...(q
       ? {
           OR: [
@@ -106,33 +107,21 @@ export async function listPurchases(tenantId: string, query: z.infer<typeof purc
     ...(supplierId ? { supplierId } : {}),
   }
 
-  const [total, items] = await prisma.$transaction([
-    prisma.purchaseOrder.count({ where }),
-    prisma.purchaseOrder.findMany({
-      where,
-      orderBy,
-      skip,
-      take: pageSize,
-      select: purchaseOrderSelect,
-    }),
-  ])
-
-  return { items: items.map(serializePurchaseOrder), page, pageSize, total, totalPages: Math.max(1, Math.ceil(total / pageSize)) }
+  const total = await tx.purchaseOrder.count({ where })
+  const items = await tx.purchaseOrder.findMany({where,orderBy,skip,take:pageSize,select:purchaseOrderSelect})
+  const labelled = await labelPurchases(tx,tenantId,items)
+  return { items: labelled.map(serializePurchaseOrder), page, pageSize, total, totalPages: Math.max(1, Math.ceil(total / pageSize)) }
+  })
 }
 
 export async function createPurchase(actor: BusinessActor, data: CreatePurchaseOrderInput) {
   return inventoryMutation(actor, "inventoryPurchases", "create", { status: data.status }, async (tx, actor) => {
     const { tenantId } = actor
 
+    requirePermission(actor,"inventoryProducts.read")
     if (data.status === "RECEIVED") requirePermission(actor, "inventoryProducts.edit")
-    const today = new Date().toISOString().slice(0, 10).replaceAll("-", "")
-    const runningCount = await tx.purchaseOrder.count({
-      where: {
-        tenantId,
-        createdAt: { gte: new Date(`${new Date().toISOString().slice(0, 10)}T00:00:00.000Z`) },
-      },
-    })
-    const orderNumber = `PO-${today}-${String(runningCount + 1).padStart(4, "0")}`
+    const [number] = await tx.$queryRaw<{ value:string }[]>`SELECT app.inventory_next_purchase_number(${tenantId}) value`
+    const orderNumber = number.value
 
     const productIds = [...new Set(data.items.map((item) => item.productId))]
     const products = await tx.inventoryProduct.findMany({
@@ -175,7 +164,7 @@ export async function createPurchase(actor: BusinessActor, data: CreatePurchaseO
         lineSubtotalCents,
         lineTaxCents,
         lineTotalCents,
-        receivedQty: data.status === "RECEIVED" ? quantity : 0,
+        receivedQty: 0,
       }
     })
 
@@ -212,8 +201,8 @@ export async function createPurchase(actor: BusinessActor, data: CreatePurchaseO
       },
       select: purchaseOrderSelect,
     })
-    if (initialStatus === "RECEIVED") await receivePurchaseItems(tx, tenantId, order, true)
-    return order
+    if (initialStatus === "RECEIVED") await tx.$executeRaw`SELECT app.inventory_post_receipt(${tenantId},${order.id},${actor.requestId ?? null})`
+    return readPurchase(tx,tenantId,order.id)
   })
 }
 
@@ -233,7 +222,7 @@ export async function updatePurchase(actor: BusinessActor, id: string, data: Upd
         ...(shouldReceive ? { receivedAt: new Date() } : {}),
       }
     })
-    if (shouldReceive) await receivePurchaseItems(tx, tenantId, existing)
-    return tx.purchaseOrder.findUniqueOrThrow({ where: { id, tenantId }, select: purchaseOrderSelect })
+    if (shouldReceive) await tx.$executeRaw`SELECT app.inventory_post_receipt(${tenantId},${id},${actor.requestId ?? null})`
+    return readPurchase(tx,tenantId,id)
   })
 }

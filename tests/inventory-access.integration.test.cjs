@@ -27,7 +27,8 @@ const { prisma, runWithTenantDbContext } = require("../lib/prisma.ts")
 const { allPermissions, workspaceRead } = require("../platform/access/catalog.ts")
 const { satisfies } = require("../platform/access/policy.ts")
 const { inventoryNavigation } = require("../application/navigation.ts")
-const { applyStockDelta } = require("../modules/appointments/order-stock.ts")
+const { applyInventoryStockDelta: adjustStock } = require("../modules/inventory/stock-service.ts")
+const applyStockDelta = async params => adjustStock({ ...params, officeId: (await root.query('SELECT id FROM "BusinessOffice" WHERE "tenantId"=$1 AND "isInitial"',[params.tenantId])).rows[0]?.id })
 const { resolveOrderData } = require("../modules/appointments/order-resolution.ts")
 const seedRoute = require("../app/api/seeds/route.ts")
 const bookingOrders = require("../app/api/appointments/orders/route.ts")
@@ -40,10 +41,20 @@ const tenantA = `inventory_a_${suffix}`, tenantB = `inventory_b_${suffix}`
 const roleId = `inventory_role_${suffix}`
 const session = (tenantId = tenantA, role = "ADMIN") => ({ user: { tenantId, role, id: `${tenantId}_${role.toLowerCase()}` } })
 const request = (method, body, tenantId = tenantA, endpoint = "/inventory/categories") => new Request(`http://${tenantId}.localhost/api${endpoint}`, {
-  method, headers: { host: `${tenantId}.localhost`, "Content-Type": "application/json" }, ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+  method, headers: { host: `${tenantId}.localhost`, "Content-Type": "application/json" }, ...(body !== undefined && method !== "GET" ? { body: JSON.stringify(body) } : {}),
 })
-const invoke = (name, method, body, id, tenant = tenantA, role = "ADMIN") => sessions.run(session(tenant, role), () =>
-  (id ? routes[name].detail : routes[name].list)[method](request(method, body, tenant, `/inventory/${name}`), { params: Promise.resolve({ id }) }))
+const invoke = async (name, method, body, id, tenant = tenantA, role = "ADMIN") => {
+  const policy=(await root.query('SELECT "creationOfficeId",version FROM "BusinessOfficePolicy" WHERE "tenantId"=$1 AND "userId"=$2',[tenant,`${tenant}_${role.toLowerCase()}`])).rows[0]
+  const req=request(method,body,tenant,`/inventory/${name}`)
+  if(policy?.creationOfficeId){req.headers.set('x-office-id',policy.creationOfficeId);req.headers.set('x-office-version',String(policy.version))}
+  if(name==='products'&&method==='PATCH'&&body&&['onHandQty','costPriceCents','reorderPoint','reorderQty'].some(k=>body[k]!==undefined)){
+    const officeId=body.officeId??policy?.creationOfficeId
+    const balance=(await root.query('SELECT version FROM "InventoryOfficeStock" WHERE "officeId"=$1 AND "productId"=$2',[officeId,id])).rows[0]
+    body={...body,officeId,stockVersion:body.stockVersion??balance?.version??0}
+    return sessions.run(session(tenant,role),()=>routes[name].detail[method](new Request(req,{body:JSON.stringify(body)}),{params:Promise.resolve({id})}))
+  }
+  return sessions.run(session(tenant,role),()=>(id?routes[name].detail:routes[name].list)[method](req,{params:Promise.resolve({id})}))
+}
 const permissions = values => root.query('UPDATE "TenantAccessRole" SET permissions=$1 WHERE id=$2', [values, roleId])
 const flag = (enabled, allowed = true) => root.query('UPDATE "TenantModule" SET enabled=$1,allowed=$2 WHERE "tenantId"=$3 AND key=\'inventory\'', [enabled, allowed, tenantA])
 async function ok(response, status = 200) { const data = await response.json(); assert.equal(response.status, status, JSON.stringify({ data, errors })); return data }
@@ -134,7 +145,7 @@ test("purchase receiving requires stock edit and changes stock exactly once on r
   await permissions(["inventoryPurchases.read", "inventoryPurchases.edit", "inventoryProducts.read", "inventoryProducts.edit"])
   await ok(await invoke("purchases", "PATCH", { status: "RECEIVED" }, purchase.id, tenantA, "MANAGER"))
   await ok(await invoke("purchases", "PATCH", { status: "RECEIVED" }, purchase.id, tenantA, "MANAGER"))
-  assert.equal((await root.query('SELECT "onHandQty" FROM "InventoryProduct" WHERE id=$1', [product.id])).rows[0].onHandQty, 7)
+  assert.equal((await root.query('SELECT "onHandQty" FROM "InventoryOfficeStock" WHERE "productId"=$1', [product.id])).rows[0].onHandQty, 7)
 })
 
 test("disabled inventory blocks product resolution and stock changes without touching stock", async () => {
@@ -146,7 +157,7 @@ test("disabled inventory blocks product resolution and stock changes without tou
     // Service-only/no-op stock operations need no inventory activation.
     await prisma.$transaction(tx => applyStockDelta({ tx, actor, tenantId: tenantA, orderId: "test", deltaByProduct: new Map() }))
   })
-  assert.equal((await root.query('SELECT "onHandQty" FROM "InventoryProduct" WHERE id=$1', [product.id])).rows[0].onHandQty, 7)
+  assert.equal((await root.query('SELECT "onHandQty" FROM "InventoryOfficeStock" WHERE "productId"=$1', [product.id])).rows[0].onHandQty, 7)
   await flag(true)
   await runWithTenantDbContext(tenantA, () => assert.rejects(prisma.$transaction(tx => applyStockDelta({ tx, actor: { ...actor, permissions: ["inventoryProducts.read"] }, tenantId: tenantA, orderId: "test", deltaByProduct: new Map([[product.id, -1]]) })), error => error.status === 403))
 })
@@ -154,28 +165,29 @@ test("disabled inventory blocks product resolution and stock changes without tou
 test("stock deduction/restoration is transactional for an authorized appointment operation", async () => {
   const actor = { tenantId: tenantA, userId: `${tenantA}_admin`, role: "ADMIN" }
   for (const delta of [-1, 1]) await runWithTenantDbContext(tenantA, () => prisma.$transaction(tx => applyStockDelta({ tx, actor, tenantId: tenantA, orderId: "test", deltaByProduct: new Map([[product.id, delta]]) })))
-  assert.equal((await root.query('SELECT "onHandQty" FROM "InventoryProduct" WHERE id=$1', [product.id])).rows[0].onHandQty, 7)
+  assert.equal((await root.query('SELECT "onHandQty" FROM "InventoryOfficeStock" WHERE "productId"=$1', [product.id])).rows[0].onHandQty, 7)
 })
 
 test("shared stock service accepts non-booking movements and rolls back with its caller", async () => {
   const { applyInventoryStockDelta, StockConflictError } = require("../modules/inventory/stock-service.ts")
   const actor = { tenantId: tenantA, userId: `${tenantA}_admin`, role: "ADMIN" }
-  const note = "Operational stock check"
+  const note = "Stock adjustment"
   const movement = delta => ({ type: delta < 0 ? "ADJUSTMENT_SUB" : "ADJUSTMENT_ADD", note })
-  const apply = (delta, extra = {}) => runWithTenantDbContext(tenantA, () => prisma.$transaction(tx =>
-    applyInventoryStockDelta({ tx, actor, tenantId: tenantA, deltaByProduct: new Map([[product.id, delta]]), movement, ...extra })))
+  const apply = (delta, extra = {}) => runWithTenantDbContext(tenantA, () => prisma.$transaction(async tx =>
+    applyInventoryStockDelta({ officeId:(await root.query('SELECT id FROM "BusinessOffice" WHERE "tenantId"=$1 AND "isInitial"',[tenantA])).rows[0].id, tx, actor, tenantId: tenantA, deltaByProduct: new Map([[product.id, delta]]), movement, ...extra })))
+  const originalCount=(await root.query('SELECT count(*)::int n FROM "InventoryStockMovement" WHERE "tenantId"=$1 AND note=$2',[tenantA,note])).rows[0].n
   await apply(-1)
   await apply(1)
-  const rows = (await root.query('SELECT type,"quantityDelta",note FROM "InventoryStockMovement" WHERE "tenantId"=$1 AND note=$2 ORDER BY "quantityDelta"', [tenantA, note])).rows
-  assert.deepEqual(rows, [{ type: "ADJUSTMENT_SUB", quantityDelta: -1, note }, { type: "ADJUSTMENT_ADD", quantityDelta: 1, note }])
+  const rows = (await root.query('SELECT type,"quantityDelta",note FROM "InventoryStockMovement" WHERE "tenantId"=$1 AND note=$2 ORDER BY "createdAt" DESC,id DESC LIMIT 2', [tenantA, note])).rows
+  assert.deepEqual(rows.sort((a,b)=>a.quantityDelta-b.quantityDelta), [{ type: "ADJUSTMENT_SUB", quantityDelta: -1, note }, { type: "ADJUSTMENT_ADD", quantityDelta: 1, note }])
   await assert.rejects(apply(-100), error => error instanceof StockConflictError)
   await assert.rejects(apply(-1, { tenantId: tenantB }), error => error.status === 403)
   await assert.rejects(runWithTenantDbContext(tenantA, () => prisma.$transaction(async tx => {
-    await applyInventoryStockDelta({ tx, actor, tenantId: tenantA, deltaByProduct: new Map([[product.id, -1]]), movement })
+    await applyInventoryStockDelta({officeId:(await root.query('SELECT id FROM "BusinessOffice" WHERE "tenantId"=$1 AND "isInitial"',[tenantA])).rows[0].id, tx, actor, tenantId: tenantA, deltaByProduct: new Map([[product.id, -1]]), movement })
     throw new Error("Source record failed")
   })), /Source record failed/)
-  assert.equal((await root.query('SELECT "onHandQty" FROM "InventoryProduct" WHERE id=$1', [product.id])).rows[0].onHandQty, 7)
-  assert.equal((await root.query('SELECT count(*)::int n FROM "InventoryStockMovement" WHERE "tenantId"=$1 AND note=$2', [tenantA, note])).rows[0].n, 2)
+  assert.equal((await root.query('SELECT "onHandQty" FROM "InventoryOfficeStock" WHERE "productId"=$1', [product.id])).rows[0].onHandQty, 7)
+  assert.equal((await root.query('SELECT count(*)::int n FROM "InventoryStockMovement" WHERE "tenantId"=$1 AND note=$2', [tenantA, note])).rows[0].n, originalCount+2)
 })
 
 test("maintenance cannot bypass module activation or restricted roles", async () => {
@@ -232,7 +244,7 @@ test("catalog keeps shared relationship validation, duplicate protection and bou
   const result = await ok(await sessions.run(session(), () => routes.products.list.GET(request("GET", undefined, tenantA, "/inventory/products?pageSize=1&sort=name&order=asc&q=Catalog"))))
   assert.equal(result.total, 2); assert.equal(result.items.length, 1); assert.equal(result.items[0].name, "Catalog B")
   await ok(await invoke("products", "DELETE", undefined, item.id))
-  assert.equal((await root.query('SELECT count(*)::int n FROM "InventoryProduct" WHERE id=$1', [item.id])).rows[0].n, 0)
+  assert.equal((await root.query('SELECT status FROM "InventoryProduct" WHERE id=$1', [item.id])).rows[0].status, "INACTIVE")
 })
 
 test("concurrent purchase receipts and reopened statuses never receive the same quantity twice", async () => {
@@ -265,11 +277,11 @@ test("concurrent purchase receipts and reopened statuses never receive the same 
     const received = (await ok(await invoke("purchases", "PATCH", { status: "RECEIVED", notes: "Retain receipt" }, order.id))).item
     assert.equal(received.items[0].receivedQty, 3); assert.equal(received.notes, "Retain receipt")
   }
-  assert.equal((await root.query('SELECT "onHandQty" FROM "InventoryProduct" WHERE id=$1', [item.id])).rows[0].onHandQty, 3)
+  assert.equal((await root.query('SELECT "onHandQty" FROM "InventoryOfficeStock" WHERE "productId"=$1', [item.id])).rows[0].onHandQty, 3)
   assert.equal((await root.query('SELECT count(*)::int n FROM "InventoryStockMovement" WHERE "productId"=$1', [item.id])).rows[0].n, 1)
   const direct = (await ok(await invoke("purchases", "POST", { ...body, status: "RECEIVED" }), 201)).item
   assert.equal(direct.items[0].receivedQty, 3)
-  assert.equal((await root.query('SELECT "onHandQty" FROM "InventoryProduct" WHERE id=$1', [item.id])).rows[0].onHandQty, 6)
+  assert.equal((await root.query('SELECT "onHandQty" FROM "InventoryOfficeStock" WHERE "productId"=$1', [item.id])).rows[0].onHandQty, 6)
   assert.equal((await invoke("purchases", "PATCH", { status: "RECEIVED" }, order.id, tenantB)).status, 404)
 })
 
@@ -318,8 +330,8 @@ test("supplier partial edits, search and referenced archives retain purchase lin
 // Inventory's transaction boundary must contain source writes, child rows,
 // stock movements and its mandatory audit together.
 async function inventorySnapshot(){
- const tables=['InventoryCategory','Supplier','InventoryProduct','PurchaseOrder','InventoryStockMovement','AuditLog'];
- const rows=await Promise.all(tables.map(table=>root.query(`SELECT to_jsonb(r) row FROM "${table}" r WHERE "tenantId"=$1 ORDER BY id`,[tenantA]).then(r=>r.rows)));
+ const tables=['InventoryCategory','Supplier','InventoryProduct','PurchaseOrder','InventoryStockMovement','AuditLog','InventoryOfficeStock','InventoryBookingStock','InventoryReceiptStock'];
+ const rows=await Promise.all(tables.map(table=>root.query(`SELECT to_jsonb(r) row FROM "${table}" r WHERE "tenantId"=$1 ORDER BY to_jsonb(r)::text`,[tenantA]).then(r=>r.rows)));
  rows.push((await root.query('SELECT to_jsonb(i) row FROM "PurchaseOrderItem" i JOIN "PurchaseOrder" o ON o.id=i."orderId" WHERE o."tenantId"=$1 ORDER BY i.id',[tenantA])).rows);return rows;
 }
 const stockItemBody=(sku,extra={})=>({sku,name:sku,categoryId:category.id,costPriceCents:100,mrpCents:150,...extra});
@@ -348,7 +360,9 @@ test('stock corrections have signed movements and include relation snapshots in 
  const moves=(await root.query('SELECT type,"quantityDelta",note FROM "InventoryStockMovement" WHERE "productId"=$1 ORDER BY "createdAt",id',[proofStock.id])).rows;
  assert.deepEqual(moves.map(m=>m.quantityDelta),[5,3,-2]);assert.deepEqual(moves.map(m=>m.type),['ADJUSTMENT_ADD','ADJUSTMENT_ADD','ADJUSTMENT_SUB']);
  const audit=(await root.query(`SELECT "before","after" FROM "AuditLog" WHERE "entityId"=$1 AND event='inventory.inventoryProducts.edit' ORDER BY "createdAt"`,[proofStock.id])).rows;
- assert.equal(audit[0].before.onHandQty,5);assert.equal(audit[0].after.onHandQty,8);assert.equal(audit[0].after.suppliers[0].supplierId,supplier.id);
+ assert.equal(audit[0].before.onHandQty,undefined);assert.equal(audit[0].after.onHandQty,undefined);assert.equal(audit[0].after.suppliers[0].supplierId,supplier.id);
+ const stockAudit=(await root.query(`SELECT before,after FROM "AuditLog" WHERE "entityId"=$1 AND event='inventory.stock.updated' ORDER BY "createdAt"`,[proofStock.id])).rows;
+ assert.equal(stockAudit[1].before.onHandQty,5);assert.equal(stockAudit[1].after.onHandQty,8);
  const fn='inventory_movement_'+suffix;await root.query(`CREATE FUNCTION ${fn}() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW."tenantId"='${tenantA}' AND NEW.note='Stock count correction' THEN RAISE EXCEPTION 'Movement write failed';END IF;RETURN NEW;END $$;CREATE TRIGGER ${fn} BEFORE INSERT ON "InventoryStockMovement" FOR EACH ROW EXECUTE FUNCTION ${fn}()`);
  try{const before=await inventorySnapshot();await ok(await invoke('products','PATCH',{onHandQty:9},proofStock.id),500);assert.deepEqual(await inventorySnapshot(),before)}finally{await root.query(`DROP TRIGGER ${fn} ON "InventoryStockMovement";DROP FUNCTION ${fn}()`)}
 })

@@ -1,3 +1,4 @@
+import { savedBookingProducts } from "./saved-products"
 import { bookingWriteOffice, bookingOfficeLabels } from "./office"
 import type { Appointment, Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
@@ -21,9 +22,9 @@ const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
 const auditValue = (value: unknown) => JSON.parse(JSON.stringify(value))
 
 export async function readOrder(db: Prisma.TransactionClient, tenantId: string, id: string) {
-  const order = await db.appointmentOrder.findFirst({ where: { tenantId, id }, include: appointmentOrderInclude })
+  const order = await db.appointmentOrder.findFirst({ where: { tenantId, id }, include: {...appointmentOrderInclude,productLines:false} })
   if (!order) throw new BusinessError(404, "Appointment order not found.")
-  return order
+  return (await savedBookingProducts(db,tenantId,[order]))[0]
 }
 export async function getOrder(tenantId: string, id: string) {
   return { order: serializeAppointmentOrder((await bookingOfficeLabels(prisma, tenantId, [await readOrder(prisma, tenantId, id)]))[0]) }

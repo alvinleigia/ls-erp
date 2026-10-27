@@ -3,73 +3,38 @@ import { authorizeBusinessOperation } from "@/platform/access/operation"
 import { lockTenantOperations } from "@/platform/transactions/tenant-operation"
 import { requirePermission } from "@/platform/access/policy"
 import { BusinessError, type BusinessActor } from "@/platform/policy"
+import { inventoryError } from "./office"
+import { officeBoundaryError } from "@/platform/companies/record-office"
 
 export class StockConflictError extends Error {
-  constructor(message: string) {
-    super(message)
-    this.name = "StockConflictError"
-  }
+  constructor(message: string) { super(message); this.name = "StockConflictError" }
 }
-
-// The caller owns the transaction so stock and its source record commit together.
-export const applyInventoryStockDelta = async (params: {
-  tx: Prisma.TransactionClient
-  deltaByProduct: Map<string, number>
-  movement: (delta: number) => Pick<Prisma.InventoryStockMovementCreateManyInput, "type" | "note">
-  tenantId: string
-  actor: BusinessActor
-}) => {
-  const { tx, deltaByProduct, tenantId } = params
-  if (!deltaByProduct.size) return
-  if (params.actor.tenantId !== tenantId) throw new BusinessError(403, "Inventory access is required for stock changes.")
-  requirePermission(params.actor, "inventoryProducts.edit")
-  await lockTenantOperations(tx, tenantId)
-  await authorizeBusinessOperation(tx, params.actor, "inventoryProducts.edit", ["inventory"])
-
-  const productIds = [...deltaByProduct.keys()]
-  const products = await tx.inventoryProduct.findMany({
-    where: { tenantId, id: { in: productIds } },
-    select: { id: true, name: true, onHandQty: true },
-  })
-  const productMap = new Map(products.map((product) => [product.id, product]))
-
-  productIds.forEach((productId) => {
-    const product = productMap.get(productId)
-    const delta = deltaByProduct.get(productId) ?? 0
-    if (!product) {
-      throw new StockConflictError(`Product not found for stock update (${productId}).`)
+async function stockAuthority(tx: Prisma.TransactionClient, actor: BusinessActor, tenantId: string) {
+  if (actor.tenantId !== tenantId) throw new BusinessError(403,"Inventory access is required for stock changes.")
+  requirePermission(actor,"inventoryProducts.edit")
+  await lockTenantOperations(tx,tenantId)
+  await authorizeBusinessOperation(tx,actor,"inventoryProducts.edit",["inventory"])
+}
+// The delta map only identifies a no-op. Native posting derives actual amounts
+// from the saved booking and private allocation, in its immutable source office.
+export async function postBookingStock(params: { tx: Prisma.TransactionClient; actor: BusinessActor; tenantId: string; orderId: string; deltaByProduct: Map<string,number> }) {
+  if (!params.deltaByProduct.size) return
+  try {
+    await stockAuthority(params.tx,params.actor,params.tenantId)
+    await params.tx.$executeRaw`SELECT app.inventory_post_booking(${params.tenantId},${params.orderId},${params.actor.requestId ?? null})`
+  } catch(error) { inventoryError(error) }
+}
+// Explicit office adjustments are independent of booking/receipt workflows.
+export async function applyInventoryStockDelta(params: { tx: Prisma.TransactionClient; actor: BusinessActor; tenantId: string; officeId: string; deltaByProduct: Map<string,number> }) {
+  if (!params.deltaByProduct.size) return
+  try {
+    await stockAuthority(params.tx,params.actor,params.tenantId)
+    for (const [productId,delta] of [...params.deltaByProduct].sort(([a],[b])=>a.localeCompare(b))) {
+      if (delta) await params.tx.$executeRaw`SELECT app.inventory_adjust_stock(${params.tenantId},${params.officeId},${productId},${delta}::integer,${params.actor.requestId ?? null})`
     }
-    if (product.onHandQty + delta < 0) {
-      throw new StockConflictError(
-        `Insufficient stock for product "${product.name}". Available: ${product.onHandQty}.`
-      )
-    }
-  })
-
-  // A conditional increment is checked by Postgres against the latest locked row.
-  // Stable ordering also avoids deadlocks when two orders touch the same products.
-  for (const productId of [...productIds].sort()) {
-    const delta = deltaByProduct.get(productId) ?? 0
-    if (!delta) continue
-    const updated = await tx.inventoryProduct.updateMany({
-      where: { id: productId, tenantId, ...(delta < 0 ? { onHandQty: { gte: -delta } } : {}) },
-      data: { onHandQty: { increment: delta } },
-    })
-    if (updated.count !== 1) throw new StockConflictError("Stock changed or is insufficient. Refresh before saving.")
+  } catch(error) {
+    const mapped = officeBoundaryError(error)
+    if (mapped?.status === 409) throw new StockConflictError(mapped.message)
+    throw mapped ?? error
   }
-
-  await tx.inventoryStockMovement.createMany({
-    data: productIds
-      .map((productId) => {
-        const delta = deltaByProduct.get(productId) ?? 0
-        if (delta === 0) return null
-        return {
-          tenantId,
-          productId,
-          quantityDelta: delta,
-          ...params.movement(delta),
-        } as const
-      })
-      .filter((item): item is NonNullable<typeof item> => Boolean(item)),
-  })
 }

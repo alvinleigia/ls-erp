@@ -1,5 +1,4 @@
--- Phase 2D6B1 rehearsal candidate. NOT part of prisma migrate deploy.
--- Promote only with the matching Prisma/service/UI cutover, after its tests pass.
+-- Atomic Inventory office ownership and canonical stock posting.
 BEGIN;
 DO $$ BEGIN
  IF NOT EXISTS(SELECT 1 FROM pg_roles WHERE rolname=current_user AND (rolsuper OR rolbypassrls)) THEN RAISE EXCEPTION 'Inventory ownership requires BYPASSRLS'; END IF;
@@ -65,7 +64,7 @@ INSERT INTO "InventoryReceiptStock" SELECT i.id,o."tenantId",i."receivedQty" FRO
 ALTER TABLE "InventoryProduct" DROP COLUMN "onHandQty",DROP COLUMN "costPriceCents",DROP COLUMN "reorderPoint",DROP COLUMN "reorderQty";
 
 CREATE FUNCTION app.inventory_capability(t text,p text) RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path=pg_catalog,public,app SET row_security=off AS $$
- SELECT t=nullif(current_setting('app.tenant_id',true),'') AND p=ANY(ARRAY['inventoryProducts.read','inventoryProducts.create','inventoryProducts.edit','inventoryProducts.archive','inventoryPurchases.read','inventoryPurchases.create','inventoryPurchases.edit']) AND EXISTS(
+ SELECT t=nullif(current_setting('app.tenant_id',true),'') AND p=ANY(ARRAY['inventorySuppliers.read','inventorySuppliers.archive','inventoryProducts.read','inventoryProducts.create','inventoryProducts.edit','inventoryProducts.archive','inventoryPurchases.read','inventoryPurchases.create','inventoryPurchases.edit']) AND EXISTS(
  SELECT 1 FROM public."User" u JOIN public."Tenant" tenant ON tenant.id=u."tenantId" JOIN public."TenantModule" m ON m."tenantId"=tenant.id AND m.key='inventory' AND m.allowed AND m.enabled WHERE tenant.id=t AND tenant.status='ACTIVE' AND u.id=nullif(current_setting('app.actor_id',true),'') AND u.status='ACTIVE' AND u.role IN ('ADMIN','MANAGER','STAFF') AND (u.role='ADMIN' OR EXISTS(
  SELECT 1 FROM public."TenantUserAccess" policy WHERE policy."tenantId"=t AND policy."userId"=u.id AND policy.rules->>p='ALL' AND policy.rules->>(split_part(p,'.',1)||'.read')='ALL'
  AND EXISTS(SELECT 1 FROM public."TenantRoleAssignment" a JOIN public."TenantAccessRole" r ON r."tenantId"=a."tenantId" AND r.id=a."roleId" AND NOT r.archived WHERE a."tenantId"=t AND a."userId"=u.id AND p=ANY(r.permissions))
@@ -81,6 +80,12 @@ $$;
 CREATE FUNCTION app.inventory_purchase_read(k text) RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path=pg_catalog,public,app SET row_security=off AS $$
  SELECT EXISTS(SELECT 1 FROM public."PurchaseOrder" o WHERE o.id=k AND app.inventory_office_read(o."tenantId",o."officeId",'inventoryPurchases'))
 $$;
+-- Tenant ancestry must not depend on an optional catalogue Read grant. Office
+-- visibility and write authority remain separate mandatory guards below.
+CREATE FUNCTION app.inventory_purchase_link_in_tenant(k text,p text) RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path=pg_catalog,public,app SET row_security=off AS $$
+ SELECT current_setting('app.rls_bypass',true)='on' OR EXISTS(SELECT 1 FROM public."PurchaseOrder" o JOIN public."InventoryProduct" product ON product.id=p AND product."tenantId"=o."tenantId" WHERE o.id=k AND o."tenantId"=nullif(current_setting('app.tenant_id',true),'') AND app.inventory_purchase_read(k))
+$$;
+ALTER POLICY tenant_isolation ON "PurchaseOrderItem" USING(app.inventory_purchase_link_in_tenant("orderId","productId")) WITH CHECK(app.inventory_purchase_link_in_tenant("orderId","productId"));
 CREATE FUNCTION app.inventory_creation_office(t text,resource text) RETURNS text LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path=pg_catalog,public,app SET row_security=off AS $$
 DECLARE o text:=app.creation_office_id();u text:=nullif(current_setting('app.actor_id',true),''); BEGIN
  IF resource NOT IN ('inventoryProducts','inventoryPurchases') OR NOT COALESCE(app.inventory_capability(t,resource||'.create'),false) OR o IS NULL OR nullif(current_setting('app.office_version',true),'') IS NULL THEN RAISE EXCEPTION 'Select an office and reload the creation form' USING ERRCODE='42501';END IF;
@@ -190,6 +195,7 @@ DECLARE r jsonb;prior jsonb;t text;o text;resource text;permission text;fresh bo
  ELSE SELECT p."tenantId",p."officeId",p.xmin::text::bigint=mod(txid_current(),4294967296) INTO t,o,fresh FROM public."PurchaseOrder" p WHERE p.id=r->>'orderId';resource:='inventoryPurchases';END IF;
  PERFORM pg_advisory_xact_lock(hashtextextended('workforce-schedules:'||t,0));
  permission:=resource||CASE TG_OP WHEN 'INSERT' THEN '.create' WHEN 'DELETE' THEN '.archive' ELSE '.edit' END;
+ IF TG_TABLE_NAME='InventoryProduct' AND TG_OP='UPDATE' AND current_setting('app.inventory_operation',true)='inventoryProducts.archive' AND r->>'status'='INACTIVE' AND (r-ARRAY['status','updatedAt'])=(prior-ARRAY['status','updatedAt']) THEN permission:='inventoryProducts.archive';END IF;
  IF TG_TABLE_NAME='PurchaseOrderItem' THEN permission:=CASE WHEN fresh AND current_setting('app.inventory_operation',true)='inventoryPurchases.create' AND (TG_OP='INSERT' OR (TG_OP='UPDATE' AND (r-ARRAY['receivedQty','updatedAt'])=(prior-ARRAY['receivedQty','updatedAt']))) THEN 'inventoryPurchases.create' ELSE 'inventoryPurchases.edit' END;END IF;
  IF t IS NULL OR NOT COALESCE(app.inventory_capability(t,permission),false) OR (o IS NOT NULL AND NOT COALESCE(app.business_office_allowed(t,o,nullif(current_setting('app.actor_id',true),'')),false)) THEN RAISE EXCEPTION 'Inventory source access is not permitted' USING ERRCODE='42501';END IF;
  IF TG_OP='UPDATE' AND (r->>'id' IS DISTINCT FROM prior->>'id' OR (TG_TABLE_NAME IN ('InventoryProduct','PurchaseOrder') AND r->>'tenantId' IS DISTINCT FROM prior->>'tenantId') OR (TG_TABLE_NAME='PurchaseOrder' AND (r-ARRAY['updatedAt','status','expectedDate','notes','receivedAt']) IS DISTINCT FROM (prior-ARRAY['updatedAt','status','expectedDate','notes','receivedAt'])) OR (TG_TABLE_NAME='PurchaseOrderItem' AND (r-ARRAY['receivedQty','updatedAt']) IS DISTINCT FROM (prior-ARRAY['receivedQty','updatedAt']))) THEN RAISE EXCEPTION 'Inventory source identity and prices are immutable' USING ERRCODE='23514';END IF;
@@ -230,6 +236,38 @@ DECLARE prefix text:='PO-'||to_char(timezone('UTC',now()),'YYYYMMDD')||'-';next_
 END $$;
 CREATE FUNCTION app.inventory_product_referenced(t text,p text) RETURNS boolean LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path=pg_catalog,public,app SET row_security=off AS $$
 BEGIN IF NOT COALESCE(app.inventory_capability(t,'inventoryProducts.archive'),false) OR NOT EXISTS(SELECT 1 FROM public."InventoryProduct" WHERE "tenantId"=t AND id=p) THEN RAISE EXCEPTION 'Inventory source access is not permitted' USING ERRCODE='42501';END IF;
- RETURN EXISTS(SELECT 1 FROM public."InventoryStockMovement" WHERE "tenantId"=t AND "productId"=p) OR EXISTS(SELECT 1 FROM public."PurchaseOrderItem" i JOIN public."PurchaseOrder" o ON o.id=i."orderId" WHERE o."tenantId"=t AND i."productId"=p) OR EXISTS(SELECT 1 FROM public."AppointmentOrderProductLine" l JOIN public."AppointmentOrder" o ON o.id=l."orderId" WHERE o."tenantId"=t AND l."productId"=p) OR EXISTS(SELECT 1 FROM public."InventoryOfficeStock" WHERE "tenantId"=t AND "productId"=p AND "onHandQty"<>0);
+ RETURN EXISTS(SELECT 1 FROM public."InventoryStockMovement" WHERE "tenantId"=t AND "productId"=p) OR EXISTS(SELECT 1 FROM public."PurchaseOrderItem" i JOIN public."PurchaseOrder" o ON o.id=i."orderId" WHERE o."tenantId"=t AND i."productId"=p) OR EXISTS(SELECT 1 FROM public."AppointmentOrderProductLine" l JOIN public."AppointmentOrder" o ON o.id=l."orderId" WHERE o."tenantId"=t AND l."productId"=p) OR EXISTS(SELECT 1 FROM public."InventoryOfficeStock" WHERE "tenantId"=t AND "productId"=p);
+END $$;
+CREATE FUNCTION app.inventory_adjust_stock(t text,o text,p text,delta integer,request_id text DEFAULT NULL) RETURNS void LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path=pg_catalog,public,app SET row_security=off AS $$
+BEGIN
+ PERFORM pg_advisory_xact_lock(hashtextextended('workforce-schedules:'||t,0));
+ IF NOT COALESCE(app.inventory_capability(t,'inventoryProducts.edit') AND app.business_office_allowed(t,o,nullif(current_setting('app.actor_id',true),'')),false) THEN RAISE EXCEPTION 'Inventory office access is not permitted' USING ERRCODE='42501';END IF;
+ IF delta<>0 THEN PERFORM app.inventory_move(t,o,p,delta,CASE WHEN delta>0 THEN 'ADJUSTMENT_ADD'::"StockMovementType" ELSE 'ADJUSTMENT_SUB'::"StockMovementType" END,NULL,'Stock adjustment',NULL,NULL,request_id);END IF;
+END $$;
+CREATE FUNCTION app.inventory_supplier_referenced(t text,k text) RETURNS boolean LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path=pg_catalog,public,app SET row_security=off AS $$
+BEGIN
+ IF NOT COALESCE(app.inventory_capability(t,'inventorySuppliers.archive'),false) THEN RAISE EXCEPTION 'Inventory source access is not permitted' USING ERRCODE='42501';END IF;
+ RETURN EXISTS(SELECT 1 FROM public."PurchaseOrder" WHERE "tenantId"=t AND "supplierId"=k) OR EXISTS(SELECT 1 FROM public."InventoryProductSupplier" l JOIN public."InventoryProduct" p ON p.id=l."productId" WHERE p."tenantId"=t AND l."supplierId"=k);
+END $$;
+CREATE FUNCTION app.inventory_office_choices(t text,resource text,selected_id text,q text,take_count integer,skip_count integer) RETURNS jsonb LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path=pg_catalog,public,app SET row_security=off AS $$
+DECLARE result jsonb; BEGIN
+ IF resource NOT IN ('inventoryProducts','inventoryPurchases') OR NOT COALESCE(app.inventory_capability(t,resource||'.read'),false) OR take_count NOT BETWEEN 1 AND 100 OR skip_count<0 OR length(q)>160 THEN RAISE EXCEPTION 'Inventory office access is not permitted' USING ERRCODE='42501';END IF;
+ WITH choices AS (SELECT b.id,b.name,c.name "companyName",NOT b.archived AND NOT c.archived active FROM public."BusinessOffice" b JOIN public."BusinessCompany" c ON c.id=b."companyId" AND c."tenantId"=b."tenantId" WHERE b."tenantId"=t AND app.inventory_office_read(t,b.id,resource)), filtered AS (SELECT * FROM choices WHERE name ILIKE '%'||q||'%' OR "companyName" ILIKE '%'||q||'%')
+ SELECT jsonb_build_object('total',(SELECT count(*) FROM filtered),'selected',(SELECT to_jsonb(c) FROM choices c WHERE id=selected_id),'items',COALESCE((SELECT jsonb_agg(to_jsonb(c)) FROM (SELECT * FROM filtered ORDER BY name,id LIMIT take_count OFFSET skip_count) c),'[]'::jsonb)) INTO result;
+ RETURN result;
+END $$;
+CREATE FUNCTION app.inventory_purchase_product_labels(t text,ids text[]) RETURNS TABLE("itemId" text,product jsonb) LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path=pg_catalog,public,app SET row_security=off AS $$
+BEGIN
+ IF NOT COALESCE(app.inventory_capability(t,'inventoryPurchases.read'),false) OR cardinality(ids)>10000 THEN RAISE EXCEPTION 'Inventory source access is not permitted' USING ERRCODE='42501';END IF;
+ RETURN QUERY SELECT i.id,jsonb_build_object('id',p.id,'sku',p.sku,'name',p.name) FROM public."PurchaseOrderItem" i JOIN public."PurchaseOrder" o ON o.id=i."orderId" JOIN public."InventoryProduct" p ON p.id=i."productId" AND p."tenantId"=o."tenantId" WHERE o."tenantId"=t AND i.id=ANY(ids) AND app.inventory_office_read(t,o."officeId",'inventoryPurchases');
+END $$;
+CREATE FUNCTION app.inventory_booking_link_in_tenant(k text,p text) RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path=pg_catalog,public,app SET row_security=off AS $$
+ SELECT current_setting('app.rls_bypass',true)='on' OR EXISTS(SELECT 1 FROM public."AppointmentOrder" o JOIN public."InventoryProduct" product ON product.id=p AND product."tenantId"=o."tenantId" WHERE o.id=k AND o."tenantId"=nullif(current_setting('app.tenant_id',true),'') AND app.booking_order_read(k))
+$$;
+ALTER POLICY tenant_isolation ON "AppointmentOrderProductLine" USING(app.inventory_booking_link_in_tenant("orderId","productId")) WITH CHECK(app.inventory_booking_link_in_tenant("orderId","productId"));
+CREATE FUNCTION app.booking_saved_product_lines(t text,ids text[]) RETURNS TABLE("orderId" text,line jsonb) LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path=pg_catalog,public,app SET row_security=off AS $$
+BEGIN
+ IF NOT COALESCE(app.booking_capability(t,'appointments.read'),false) OR cardinality(ids)>100 THEN RAISE EXCEPTION 'Booking office access is not permitted' USING ERRCODE='42501';END IF;
+ RETURN QUERY SELECT l."orderId",to_jsonb(l)||jsonb_build_object('product',jsonb_build_object('id',p.id,'sku',p.sku,'name',p.name)) FROM public."AppointmentOrderProductLine" l JOIN public."AppointmentOrder" o ON o.id=l."orderId" JOIN public."InventoryProduct" p ON p.id=l."productId" AND p."tenantId"=o."tenantId" WHERE o."tenantId"=t AND o.id=ANY(ids) AND app.booking_office_read(t,o."officeId") ORDER BY l."orderId",l."sortOrder",l.id;
 END $$;
 COMMIT;

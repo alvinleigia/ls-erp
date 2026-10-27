@@ -1,3 +1,32 @@
+## R10 - Inventory office-stock runtime cutover (phase 2D6B2, local)
+
+The phase 2D6B1 candidate is promoted to migration 129 with matching Prisma,
+services and forms; the old pending SQL is retired. Shared catalogue definitions
+remain tenant-wide, while count/cost/reorder values are office balances. Product
+lists/details/sorting, stock corrections and dashboards use explicit permitted
+offices. Purchases and booking stock use their immutable saved source offices;
+private allocations and deferred proofs prevent duplicate or missing posting.
+
+New forms capture office/preference version; corrections use saved stock versions.
+Office labels/filters and closed-office controls follow Inventory Read directly.
+Minimal purchase/booking financial projections preserve saved labels, product
+lines and prices without delegating catalogue access or current stock. Two child
+tenant policies now use canonical ancestry; unrelated policies/functions/grants,
+old source values and audit contents survive the rehearsed conversion. Archive
+is separate from Edit and retains zero-count office configuration. Sample tools
+use ordinary authorized posting and preserve quantities on repeat runs.
+
+This work is local on staging. No hosted migration, client data change, push or
+deployment is included. Remaining operational/report/workspace integration and
+external collaborator release work remain pending. See the current
+[Inventory stock contract](INVENTORY_STOCK_R10.md).
+
+Verification passed: 18 migration/native checks, seven multi-office API checks,
+85 Inventory/booking and 176 broader scheduling/workforce regression checks
+(overlapping suites), plus two real-sign-in Chrome flows. Stock/source-office/
+stale-draft/dashboard screenshots were inspected. Production build, TypeScript, changed-file
+ESLint and whitespace checks passed. No skipped checks were counted as passing.
+
 ## R10 - Inventory office-stock migration rehearsal (phase 2D6B1, local candidate)
 
 A pending native cutover separates shared catalogue identity from office balances,
