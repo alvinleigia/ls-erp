@@ -82,6 +82,7 @@ and whitespace checks passed. Evidence logs are retained locally under
 
 Phase 2D7B now adds the closed composed audit family registry and report review
 (`AUDIT_REPORTS_R10.md`), with the source inventory in `RESOURCE_BOUNDARIES_R10.md`.
-The exhaustive cross-module executable ownership registry, user/workspace UI and
-collaborator release work remain later gates. Completing
+Phase 2D7C now adds the executable ownership contracts and readiness review in
+`RESOURCE_OWNERSHIP_R10.md`. User/workspace UI and collaborator release work remain
+later gates. Completing
 this coupon report is not evidence that every report or workspace control is ready.

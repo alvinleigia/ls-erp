@@ -6,7 +6,7 @@ import { resourceRecordPolicies } from "./resource-policy"
 export const recordScopes = ["NONE", "OWN", "RELATED", "ASSIGNED", "MANAGED_TEAMS", "REPORTS", "ACTIVE", "BUSINESS", "ALL"] as const
 export type RecordScope = typeof recordScopes[number]
 export type RecordRules = Partial<Record<Permission, RecordScope>>
-export const scopeNames: Record<RecordScope, string> = { NONE: "No access", OWN: "Own / directly assigned", RELATED: "Own and assigned context", ASSIGNED: "Assigned active records", MANAGED_TEAMS: "Own and managed teams", REPORTS: "Reporting staff", ACTIVE: "Active records", BUSINESS: "Business events", ALL: "All tenant records" }
+export const scopeNames: Record<RecordScope, string> = { NONE: "No access", OWN: "Own / directly assigned", RELATED: "Own and assigned context", ASSIGNED: "Assigned active records", MANAGED_TEAMS: "Own and managed teams", REPORTS: "Reporting staff", ACTIVE: "Active records", BUSINESS: "Business events", ALL: "All accessible records" }
 export function supportedScopes(resource: Resource): readonly RecordScope[] {
   if (resource === "auditLogs") return ["NONE", "BUSINESS", "ALL"]
   if (resource === "quotationTemplates") return ["NONE", "ACTIVE", "ALL"]

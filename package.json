@@ -74,6 +74,8 @@
     "test:flexible-plan-offices": "node scripts/test-sales-orders.cjs --flexible-plan-offices",
     "test:daily-roster-offices": "node scripts/test-sales-orders.cjs --daily-roster-offices",
     "test:inventory-office-rehearsal": "node scripts/test-sales-orders.cjs --inventory-offices --migration-only",
+    "test:resource-contracts": "node scripts/test-sales-orders.cjs --resource-contracts",
+    "test:resource-contracts:browser": "node scripts/test-sales-orders.cjs --resource-contracts --browser-only",
     "test:audit-reports": "node scripts/test-sales-orders.cjs --audit-reports",
     "test:audit-reports:browser": "node scripts/test-sales-orders.cjs --audit-reports --browser-only",
     "test:coupon-report": "node scripts/test-sales-orders.cjs --coupon-report",

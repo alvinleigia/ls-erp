@@ -74,8 +74,9 @@ through migration 129. This Inventory slice is local and unreleased.
 Phase 2D7A scopes the coupon report to readable booking sources; phase 2D7B
 adds the closed composed audit registry, current report authorization and source
 boundary inventory. See [audit report contract](AUDIT_REPORTS_R10.md) and
-[resource boundary inventory](RESOURCE_BOUNDARIES_R10.md). The exhaustive
-cross-module ownership registry and final workspace/user controls remain pending.
+[resource boundary inventory](RESOURCE_BOUNDARIES_R10.md). Phase 2D7C now adds the exhaustive executable resource/model contracts and
+[workspace readiness review](RESOURCE_OWNERSHIP_R10.md). Membership/provisioning/
+workspace UI remains pending.
 Remaining operational families, assignment selectors and workspace
 controls remain prerequisites before exposing office controls or deploying the
 office-isolation release.

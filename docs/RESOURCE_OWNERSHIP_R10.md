@@ -1,0 +1,118 @@
+# R10 phase 2D7C: executable ownership contracts and workspace readiness
+
+Implemented locally on `staging`. No migration, backfill, permission rewrite,
+hosted change, push or deployment is included. The workspace selector and office
+membership editor remain gated for the next UI slice.
+
+## One registration contract
+
+`platform/access/resource-registry.ts` registers all **50 permission resources**.
+Each contract supplies its existing record-policy family and classifies its
+canonical models as shared, security, native office, inherited source, personal,
+composed or explicitly split. Roots/children use generated Prisma model names.
+Source references use registered resource keys. All **131 Prisma schema models** must be represented by a resource contract or one of 11 explicit
+infrastructure classifications (authentication, tenant boundary/security,
+control plane or source-sharing security). Adding a model/resource without
+reviewing its classification fails TypeScript and admission checks.
+
+A model can participate in more than one view: a personal leave request and an
+approval view share a source; a dashboard composes existing roots. This does not
+grant access to all fields or rows of that model. Infrastructure classification
+also grants no query or bypass permission.
+
+The existing public policy map is now derived from this registry. There is no
+second static scope map or runtime migration fallback. Existing record limits,
+profile permission arrays, module activation, responsibility/team rules,
+Restricted sharing and tenant boundaries are unchanged. Source references explain
+**ownership**, not an automatic requirement to browse a parent directory and not
+a grant to its records. Personal approval and neutral integrity projections keep
+their dedicated existing adapters.
+
+## Executable consumers
+
+- The scope engine consumes the derived policy families. Supported choices and
+  defaults retain their previous values; missing rules still deny access.
+- Selected-record sharing resolves canonical owners from the contracts. Its
+  actual record model/table and module also come from the same registration.
+  Presentation fields remain explicit for supported record types. Finance and
+  project-membership aliases retain their previous canonical owners.
+- Simple audit families derive their resource Read, owning module and boundary.
+  A split resource requires an explicit component: Inventory stock cannot fall
+  back to shared catalogue history. Composed/security exceptions remain explicit
+  in the closed audit registry, with unchanged audiences and requirements.
+- Profile/record-limit controls display the ownership description. `ALL` is
+  labelled **All accessible records**, rather than implying an office or sharing
+  bypass. Its stored enum value remains `ALL`. Company-directory copy separates
+  membership, business actions and employee workplace placement.
+
+Inventory products explicitly split shared catalogue, office stock/movements,
+booking allocations and purchase allocations. Catalog items distinguish general
+items, project-backed units and bounded availability. Roster registration separates
+office-owned daily changes, personal frozen history, dated placements and composed
+browsing. Financial records keep their canonical source chain.
+
+The registry is not a generic SQL builder. Native RLS, immutable office identity,
+canonical FK ancestry, source adapters and business transitions remain the
+server/database authority. In particular, model registration never permits a
+client to choose a table or submit ownership metadata as authorization.
+
+## Admission and preservation checks
+
+`tests/fixtures/resource-contract-baseline.json` freezes the reviewed pre-refactor
+scope families, sharing definitions/aliases and audit requirements. It contains
+code metadata only, with no tenant rows or credentials. It is not imported by the
+application and must not be regenerated to silence a failure.
+
+`test:resource-contracts` combines registry/schema admission, action policies,
+profile composition, selected sharing and composed-audit regression tests in a
+disposable database. Schema checks require forced RLS for every registered
+business model, non-null office/FK identity for native office roots, and actual
+FK ancestry for inherited sources/children. Tables with broad tenant policies
+retain restrictive guards; new private stock tables instead have an exact bounded
+Read policy plus maintenance bypass and no broader permissive Read policy.
+These checks supplement each module's positive/negative behavioral tests.
+
+The separate native office suite verifies actual cross-office records, source
+inheritance, closed history, current revocation and unchanged access relationships.
+`test:resource-contracts:browser` uses a real isolated tenant sign-in to inspect
+profile and record-limit descriptions, responsive controls and unsaved scope
+changes; cancellation leaves stored assignments/rules/profile counts unchanged.
+It also checks the directory explanation and makes no business writes.
+
+Verified locally on 2026-10-27: 46 consolidated contract/profile/sharing/audit
+checks, 25 native multi-office checks and the 15 focused unit/access checks
+(overlapping suites) passed. The real-sign-in Chrome flow passed and confirmed
+that unsaved drafts did not change stored policies, assignments or profile counts.
+The disposable 129-migration rehearsal and all 18 Inventory native/preservation
+checks passed. Production build, TypeScript, changed-file ESLint and whitespace
+checks passed. Desktop/mobile screenshots were inspected; the profile table's
+entity column was widened to preserve readable descriptions within local scrolling.
+No skipped checks were counted as passing. Evidence remains under
+`tmp/industry-release` and `test-results/local-access`.
+
+## Workspace UI readiness review
+
+The existing APIs are suitable foundations, but UI controls are not yet released:
+
+1. Add a Tenant Admin office-membership editor using the existing versioned
+   `/api/access/users/:id/offices` API. Keep exact offices, company grants and
+   explicit subsidiary coverage distinct. Read eligibility includes retained
+   closed-office history; creation needs an active permitted office.
+2. Wire initial office access into direct user creation and invitations. The
+   backend already accepts `officeAccess`; the current forms do not collect it.
+   Dated employee workplace placement and leave approval routing remain separate.
+3. Add a self-service creation-office selector through `/api/workspace/offices`
+   and `/api/workspace/office`. It changes only a persisted creation preference,
+   never memberships, Read scope, saved record offices or report population.
+   New drafts capture ID/version on opening; stale saves retain the draft and
+   return 409. Linked work keeps its source office.
+4. Verify the combined controls with multi-office managers, explicit subsidiary
+   grants, custom profiles, revocation, missing placement and closed history.
+   Keep reports/filters based on readable sources, independent of the creation
+   preference. Test keyboard/mobile use and changed preferences in another tab.
+5. Complete the R10 staged release/recovery gates before exposing these changes
+   to hosted tenants. External collaborator accounts remain a later R10 phase.
+
+The next bounded implementation is **phase 2D8A: office membership administration
+UI**, followed by creation/invitation wiring and the workspace selector. This
+review does not authorize bypasses or substitute directory placement for access.

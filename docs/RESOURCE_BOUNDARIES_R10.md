@@ -1,8 +1,10 @@
 # R10 current resource boundary inventory
 
-Phase 2D7B audit/report review inventory. Native ownership and source policies in
-the cited contracts remain authoritative. This document does not replace the
-pending exhaustive executable cross-module registry or authorize workspace UI.
+Phase 2D7B audit/report inventory, now backed by the exhaustive executable
+resource/model contracts in `platform/access/resource-registry.ts` (phase 2D7C).
+Native ownership and source policies remain authoritative. See
+`RESOURCE_OWNERSHIP_R10.md` for consumers, admission checks and the workspace UI
+readiness review. This inventory does not authorize workspace UI.
 Every future module must classify roots, children, shared references, personal
 access, integrity projections, audit copies and composed consumers together.
 
@@ -33,6 +35,6 @@ access, integrity projections, audit copies and composed consumers together.
 | Composed audit list/details | Closed event registry, current family actions/modules and native snapshot source/privacy intersection; no export endpoint | `AUDIT_REPORTS_R10.md` |
 | Conflict, stock and reservation integrity | Protected neutral projections/commands enforce business integrity without exposing hidden source details | `SCHEDULING_PRIVACY_R10.md`, `INVENTORY_STOCK_R10.md` |
 
-This inventory exposes the remaining consolidation boundary rather than adding
-runtime exceptions: keep native canonical source adapters, consolidate their
-registration, then complete and verify user/workspace controls before release.
+The consolidated contracts retain native canonical source adapters and introduce
+no runtime exceptions. Complete and verify membership/provisioning/workspace
+controls and the recovery/release gates before hosting these phases.

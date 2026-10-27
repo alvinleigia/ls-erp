@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { DropdownSelect } from "@/components/ui/dropdown-select"
 import { scopeNames, supportedScopes, type RecordRules, type RecordScope } from "./rules"
+import { ownershipDescription } from "./resource-registry"
 import { accessResources, resourceKeys, type Permission } from "./catalog"
 
 export function ProfilePicker({ id, value, onChange, selected = [], disabled = false }: { id: string; value: string[]; onChange: (ids: string[]) => void; selected?: { id: string; name: string }[]; disabled?: boolean }) {
@@ -15,7 +16,7 @@ export function ProfilePicker({ id, value, onChange, selected = [], disabled = f
 }
 export type UserRecordPolicy = { rules: RecordRules }
 export function RecordPolicyFields({ value, onChange, disabled = false }: { value: UserRecordPolicy; onChange: (patch: Partial<UserRecordPolicy>) => void; disabled?: boolean }) {
-  return <div className="space-y-3"><p className="text-sm text-muted-foreground">Record limits apply across profiles. Every action is also bounded by Read. Profiles must grant the action; selecting a scope alone grants nothing.</p>{resourceKeys.map(resource => <details key={resource} className="rounded-md border p-3"><summary className="cursor-pointer text-sm font-medium">{accessResources[resource].name}</summary><div className="mt-3 grid gap-3 sm:grid-cols-2">{accessResources[resource].actions.map(action => {
+  return <div className="space-y-3"><p className="text-sm text-muted-foreground">Record limits apply across profiles. Every action is also bounded by Read. Profiles must grant the action; selecting a scope alone grants nothing.</p>{resourceKeys.map(resource => <details key={resource} className="rounded-md border p-3"><summary className="cursor-pointer text-sm font-medium">{accessResources[resource].name}</summary><p className="mt-2 text-xs text-muted-foreground">{ownershipDescription(resource)}</p><div className="mt-3 grid gap-3 sm:grid-cols-2">{accessResources[resource].actions.map(action => {
     const permission = (resource + "." + action) as Permission
     const id = "scope-" + resource + "-" + action
     return <div key={permission} className="space-y-1"><Label htmlFor={id}>{action.charAt(0).toUpperCase() + action.slice(1)}</Label><DropdownSelect id={id} label={accessResources[resource].name + ": " + action} disabled={disabled} value={value.rules[permission] ?? "NONE"} options={supportedScopes(resource).map(scope => ({ value: scope, label: scopeNames[scope] }))} onValueChange={scope => onChange({ rules: { ...value.rules, [permission]: scope as RecordScope } })} /></div>

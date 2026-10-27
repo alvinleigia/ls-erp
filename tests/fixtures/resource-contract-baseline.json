@@ -1,0 +1,501 @@
+{
+  "recordPolicies": {
+    "receivables": "sales",
+    "orderPayments": "sales",
+    "unitReservations": "sales",
+    "salesOrders": "sales",
+    "catalogItems": "projects",
+    "dashboard": "sources",
+    "auditLogs": "administrative",
+    "users": "administrative",
+    "assignmentTargets": "directory",
+    "restrictedFields": "shared",
+    "branding": "shared",
+    "teamMembers": "teams",
+    "projectMembers": "projects",
+    "businessSettings": "shared",
+    "taxRates": "shared",
+    "leaveRequests": "personal",
+    "leaveApprovals": "reportingManager",
+    "leaveDefinitions": "shared",
+    "leaveGroups": "shared",
+    "shiftTemplates": "workforce",
+    "shiftSchedules": "workforce",
+    "shiftPlans": "workforce",
+    "shiftRoster": "workforce",
+    "appointments": "operations",
+    "appointmentCoupons": "shared",
+    "services": "shared",
+    "serviceCategories": "shared",
+    "inventoryProducts": "shared",
+    "inventoryCategories": "shared",
+    "inventorySuppliers": "shared",
+    "inventoryPurchases": "operations",
+    "contacts": "sales",
+    "accounts": "sales",
+    "enquiries": "sales",
+    "opportunities": "sales",
+    "activities": "sales",
+    "reports": "reporting",
+    "pipelines": "shared",
+    "configurationPresets": "shared",
+    "leadSources": "shared",
+    "lostReasons": "shared",
+    "activityTypes": "shared",
+    "activityPlans": "shared",
+    "followUpRules": "shared",
+    "teams": "teams",
+    "customFields": "shared",
+    "projects": "projects",
+    "projectSettings": "shared",
+    "quotations": "sales",
+    "quotationTemplates": "shared"
+  },
+  "sharingRecords": {
+    "contacts": {
+      "model": "crmContact",
+      "table": "CrmContact",
+      "label": "Contact",
+      "title": "name",
+      "module": "crm",
+      "owner": "ownerUserId"
+    },
+    "accounts": {
+      "model": "crmAccount",
+      "table": "CrmAccount",
+      "label": "Business account",
+      "title": "name",
+      "module": "crm",
+      "owner": "ownerUserId"
+    },
+    "enquiries": {
+      "model": "crmEnquiry",
+      "table": "CrmEnquiry",
+      "label": "Enquiry",
+      "title": "title",
+      "module": "crm",
+      "owner": "assignedUserId"
+    },
+    "opportunities": {
+      "model": "crmOpportunity",
+      "table": "CrmOpportunity",
+      "label": "Opportunity",
+      "title": "title",
+      "module": "crm",
+      "owner": "assignedUserId"
+    },
+    "activities": {
+      "model": "crmTask",
+      "table": "CrmTask",
+      "label": "Activity",
+      "title": "title",
+      "module": "crm",
+      "owner": "assignedUserId"
+    },
+    "projects": {
+      "model": "realEstateProject",
+      "table": "RealEstateProject",
+      "label": "Project",
+      "title": "name",
+      "module": "realEstate",
+      "owner": null
+    },
+    "quotations": {
+      "model": "crmQuotation",
+      "table": "CrmQuotation",
+      "label": "Quotation",
+      "title": "id",
+      "module": "salesDocuments",
+      "owner": null
+    },
+    "salesOrders": {
+      "model": "salesOrder",
+      "table": "SalesOrder",
+      "label": "Sales order",
+      "title": "title",
+      "module": "salesOrders",
+      "owner": null
+    }
+  },
+  "sharingOwners": {
+    "receivables": "salesOrders",
+    "orderPayments": "salesOrders",
+    "unitReservations": "salesOrders",
+    "salesOrders": "salesOrders",
+    "catalogItems": null,
+    "dashboard": null,
+    "auditLogs": null,
+    "users": null,
+    "assignmentTargets": null,
+    "restrictedFields": null,
+    "branding": null,
+    "businessSettings": null,
+    "taxRates": null,
+    "leaveRequests": null,
+    "leaveApprovals": null,
+    "leaveDefinitions": null,
+    "leaveGroups": null,
+    "shiftTemplates": null,
+    "shiftSchedules": null,
+    "shiftPlans": null,
+    "shiftRoster": null,
+    "appointments": null,
+    "appointmentCoupons": null,
+    "services": null,
+    "serviceCategories": null,
+    "inventoryProducts": null,
+    "inventoryCategories": null,
+    "inventorySuppliers": null,
+    "inventoryPurchases": null,
+    "contacts": "contacts",
+    "accounts": "accounts",
+    "enquiries": "enquiries",
+    "opportunities": "opportunities",
+    "activities": "activities",
+    "reports": null,
+    "pipelines": null,
+    "configurationPresets": null,
+    "leadSources": null,
+    "lostReasons": null,
+    "activityTypes": null,
+    "activityPlans": null,
+    "followUpRules": null,
+    "teams": null,
+    "teamMembers": null,
+    "customFields": null,
+    "projects": "projects",
+    "projectMembers": "projects",
+    "projectSettings": null,
+    "quotations": "quotations",
+    "quotationTemplates": null
+  },
+  "auditFamilies": [
+    {
+      "prefix": "workspace.",
+      "boundary": "security",
+      "adminOnly": true
+    },
+    {
+      "prefix": "structure.",
+      "boundary": "security",
+      "adminOnly": true
+    },
+    {
+      "prefix": "access.",
+      "boundary": "security",
+      "adminOnly": true
+    },
+    {
+      "prefix": "module.",
+      "boundary": "security",
+      "adminOnly": true
+    },
+    {
+      "prefix": "tenant.",
+      "boundary": "security",
+      "adminOnly": true
+    },
+    {
+      "prefix": "organization.",
+      "boundary": "security",
+      "adminOnly": true
+    },
+    {
+      "prefix": "core.invitations.",
+      "boundary": "security",
+      "adminOnly": true
+    },
+    {
+      "prefix": "crm.team.",
+      "boundary": "security",
+      "adminOnly": true
+    },
+    {
+      "prefix": "team.",
+      "boundary": "security",
+      "adminOnly": true
+    },
+    {
+      "prefix": "core.businessSettings.",
+      "boundary": "shared",
+      "read": "businessSettings.read"
+    },
+    {
+      "prefix": "core.taxRates.",
+      "boundary": "shared",
+      "read": "taxRates.read"
+    },
+    {
+      "prefix": "branding.",
+      "boundary": "shared",
+      "read": "branding.read"
+    },
+    {
+      "prefix": "terminology.",
+      "boundary": "shared",
+      "read": "businessSettings.read"
+    },
+    {
+      "prefix": "inventory.inventoryProducts.",
+      "boundary": "shared",
+      "read": "inventoryProducts.read",
+      "modules": [
+        "inventory"
+      ]
+    },
+    {
+      "prefix": "inventory.inventoryCategories.",
+      "boundary": "shared",
+      "read": "inventoryCategories.read",
+      "modules": [
+        "inventory"
+      ]
+    },
+    {
+      "prefix": "inventory.inventorySuppliers.",
+      "boundary": "shared",
+      "read": "inventorySuppliers.read",
+      "modules": [
+        "inventory"
+      ]
+    },
+    {
+      "prefix": "inventory.inventoryPurchases.",
+      "boundary": "source",
+      "read": "inventoryPurchases.read",
+      "modules": [
+        "inventory"
+      ]
+    },
+    {
+      "prefix": "inventory.stock.",
+      "boundary": "source",
+      "read": "inventoryProducts.read",
+      "modules": [
+        "inventory"
+      ]
+    },
+    {
+      "prefix": "services.services.",
+      "boundary": "shared",
+      "read": "services.read",
+      "modules": [
+        "services"
+      ]
+    },
+    {
+      "prefix": "services.serviceCategories.",
+      "boundary": "shared",
+      "read": "serviceCategories.read",
+      "modules": [
+        "services"
+      ]
+    },
+    {
+      "prefix": "services.eligibility.",
+      "boundary": "composed",
+      "modules": [
+        "services"
+      ],
+      "adminOnly": true,
+      "fullAudit": true
+    },
+    {
+      "prefix": "workforce.leaveDefinitions.",
+      "boundary": "shared",
+      "read": "leaveDefinitions.read",
+      "modules": [
+        "leaves"
+      ]
+    },
+    {
+      "prefix": "workforce.leaveGroups.",
+      "boundary": "shared",
+      "read": "leaveGroups.read",
+      "modules": [
+        "leaves"
+      ]
+    },
+    {
+      "prefix": "workforce.shiftTemplates.",
+      "boundary": "shared",
+      "read": "shiftTemplates.read",
+      "modules": [
+        "shifts"
+      ]
+    },
+    {
+      "prefix": "workforce.shiftSchedules.",
+      "boundary": "source",
+      "read": "shiftSchedules.read",
+      "modules": [
+        "shifts"
+      ]
+    },
+    {
+      "prefix": "workforce.shiftPlans.",
+      "boundary": "source",
+      "read": "shiftPlans.read",
+      "modules": [
+        "shifts"
+      ]
+    },
+    {
+      "prefix": "workforce.shiftRoster.",
+      "boundary": "source",
+      "read": "shiftRoster.read",
+      "modules": [
+        "shifts"
+      ]
+    },
+    {
+      "prefix": "leave.request.",
+      "boundary": "source",
+      "modules": [
+        "leaves"
+      ],
+      "read": "leaveApprovals.read",
+      "fullAudit": true,
+      "adminOnly": true
+    },
+    {
+      "prefix": "appointment.",
+      "boundary": "source",
+      "modules": [
+        "appointments"
+      ],
+      "read": "appointments.read"
+    },
+    {
+      "prefix": "appointments.order.",
+      "boundary": "source",
+      "modules": [
+        "appointments"
+      ],
+      "read": "appointments.read"
+    },
+    {
+      "prefix": "appointments.invoice.",
+      "boundary": "source",
+      "modules": [
+        "appointments"
+      ],
+      "read": "appointments.read"
+    },
+    {
+      "prefix": "appointments.coupon.",
+      "boundary": "shared",
+      "modules": [
+        "appointments"
+      ],
+      "read": "appointmentCoupons.read"
+    },
+    {
+      "prefix": "crm.",
+      "boundary": "composed",
+      "modules": [
+        "crm"
+      ],
+      "adminOnly": true
+    },
+    {
+      "prefix": "crm.quotation.",
+      "boundary": "source",
+      "modules": [
+        "salesDocuments"
+      ],
+      "read": "quotations.read",
+      "adminOnly": true
+    },
+    {
+      "prefix": "crm.quotationTemplate.",
+      "boundary": "shared",
+      "modules": [
+        "salesDocuments"
+      ],
+      "read": "quotationTemplates.read",
+      "adminOnly": true
+    },
+    {
+      "prefix": "crm.customField",
+      "boundary": "composed",
+      "modules": [
+        "crm"
+      ],
+      "read": [
+        "customFields.read",
+        "restrictedFields.read"
+      ],
+      "adminOnly": true
+    },
+    {
+      "prefix": "realEstate.",
+      "boundary": "composed",
+      "modules": [
+        "realEstate"
+      ],
+      "read": "projects.read",
+      "adminOnly": true
+    },
+    {
+      "prefix": "catalog.",
+      "boundary": "composed",
+      "modules": [
+        "catalog"
+      ],
+      "read": "catalogItems.read",
+      "unscoped": [
+        "projects"
+      ]
+    },
+    {
+      "prefix": "catalog.reservation.",
+      "boundary": "source",
+      "modules": [
+        "catalog",
+        "salesOrders"
+      ],
+      "read": [
+        "catalogItems.read",
+        "unitReservations.read",
+        "salesOrders.read"
+      ],
+      "fullAudit": true,
+      "unscoped": [
+        "enquiries",
+        "opportunities",
+        "contacts",
+        "accounts",
+        "activities",
+        "quotations",
+        "salesOrders",
+        "receivables",
+        "orderPayments",
+        "projects"
+      ]
+    },
+    {
+      "prefix": "salesOrder.",
+      "boundary": "source",
+      "modules": [
+        "salesOrders"
+      ],
+      "read": "salesOrders.read",
+      "adminOnly": true
+    },
+    {
+      "prefix": "receivable.",
+      "boundary": "source",
+      "modules": [
+        "receivables"
+      ],
+      "read": [
+        "salesOrders.read",
+        "receivables.read",
+        "orderPayments.read"
+      ],
+      "fullAudit": true,
+      "adminOnly": true
+    }
+  ]
+}

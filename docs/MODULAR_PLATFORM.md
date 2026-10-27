@@ -1,3 +1,34 @@
+## R10 - Executable ownership contracts (phase 2D7C, local)
+
+One resource registry now binds the existing scope families to canonical roots,
+children, inherited sources, personal/composed views and explicit split resources.
+All 50 permission resources and 131 Prisma models are accounted for; 11 models
+are explicitly infrastructure. New resource/model additions require registration
+at compile time. Native RLS, source adapters and business rules remain authority;
+source links never confer parent browsing or field/model query permissions.
+
+Scope families, sharing targets/model/module definitions and simple audit family
+requirements consume the same contracts. Reviewed baseline metadata proves their
+previous authorization values are preserved. The application has no second static
+scope map or runtime migration override. Profile/record-limit screens explain
+ownership; ALL is labelled All accessible records without changing its stored
+value. The permissions table retains readable descriptions within local scrolling.
+
+Verified: 46 contract/profile/sharing/audit checks, 25 native multi-office checks,
+15 focused unit/access checks (overlapping suites), and one real-sign-in Chrome
+flow across desktop/mobile. Unsaved scope drafts leave persisted permissions and
+assignments unchanged. Schema tests cover forced RLS on business models, native
+office identities/FKs and canonical ancestry. The 129-migration disposable
+rehearsal and all 18 Inventory native checks passed. Production build, TypeScript,
+changed-file ESLint and whitespace checks passed; screenshots were inspected.
+No skipped checks count as passing.
+
+Local on staging only: no migration, data rewrite, push, deployment or hosted
+client changes. Workspace controls remain gated. Next is phase 2D8A, Tenant Admin
+office-membership UI, then provisioning/invitation wiring and the self-service
+creation-office selector. See the
+[ownership contract and readiness review](RESOURCE_OWNERSHIP_R10.md).
+
 ## R10 - Composed audit report scope (phase 2D7B, local)
 
 A closed event-family registry now defines shared, native source, composed and

@@ -90,6 +90,11 @@ for membership changes and self/Admin-only for preference changes.
 
 ## Remaining phase 2 work
 
+Phase 2D7C now provides the executable ownership/model registration and workspace
+readiness review in `RESOURCE_OWNERSHIP_R10.md`. Membership, initial provisioning
+and self-service creation-office controls are the next UI work; no new office
+switcher is exposed by that consolidation.
+
 1. Sales roots and canonical children now have native ownership in phase 2B.
    Complete the operational families and personal/conflict paths, retaining the
    initial-office backfill and all existing responsibility/sharing relationships.

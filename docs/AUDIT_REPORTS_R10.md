@@ -100,9 +100,10 @@ detail and revoked-office empty screenshots were inspected. Logs remain under
 
 ## Remaining release gates
 
-This completes the bounded composed audit report slice. The consolidated
-cross-module executable ownership registry and final workspace/user controls
-review remain next; the matrix in `RESOURCE_BOUNDARIES_R10.md` records the current
-source inventory. Neither report work nor a directory grant releases office UI
+This completes the bounded composed audit report slice. Phase 2D7C now consolidates the cross-module executable ownership contracts and
+records the workspace readiness review in `RESOURCE_OWNERSHIP_R10.md`; its simple
+audit families consume that same registration. Membership/provisioning/workspace
+UI and the hosted release gates remain pending. The matrix in
+`RESOURCE_BOUNDARIES_R10.md` records the current source inventory. Neither report work nor a directory grant releases office UI
 or external collaborator accounts automatically. The R10 migrations/runtime still
 require the full staged release and client-data recovery checks before hosting.
