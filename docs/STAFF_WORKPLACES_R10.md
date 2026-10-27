@@ -16,7 +16,11 @@ membership and company/office grants. Changing any creation preference never mov
 a workplace. Assigning a workplace never grants record access or office membership.
 This model is industry-neutral and applies to scheduling profiles.
 
-Administrators can open **Users > staff member > Staff eligibility > Workplace**.
+Administrators can open **Users > staff member or manager > Staff profile > Workplace**.
+For a newly created login without a staff profile, explicitly save that profile
+first. The page then shows the workplace controls without a reload. This step
+does not assign a workplace, office access or service eligibility to a manager.
+Business login creation alone never creates an employment profile.
 Roster users with the relevant profile can select an individual staff member in
 **Shifts > Roster** to see the same panel. Its history shows only offices they may
 read. A selected date uses the tenant's business timezone, not the browser timezone.

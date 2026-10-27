@@ -109,13 +109,13 @@ The existing APIs are suitable foundations. UI progress is local only:
    report filter.
    New drafts capture ID/version on opening; stale saves retain the draft and
    return 409. Linked work keeps its source office.
-4. Verify the combined controls with multi-office managers, explicit subsidiary
+4. Phase 2D8D verifies the combined controls with multi-office managers, explicit subsidiary
    grants, custom profiles, revocation, missing placement and closed history.
    Keep reports/filters based on readable sources, independent of the creation
    preference. Test keyboard/mobile use and changed preferences in another tab.
 5. Complete the R10 staged release/recovery gates before exposing these changes
    to hosted tenants. External collaborator accounts remain a later R10 phase.
 
-The next bounded work is the **combined multi-office workflow and release-readiness
-review**. This review does not authorize bypasses or substitute directory placement
-for access.
+The combined review is recorded in [phase 2D8D acceptance](OFFICE_ACCEPTANCE_R10.md).
+External collaborator identity is the next bounded implementation (phase 3).
+Hosted staging/recovery gates remain pending; directory placement never replaces access.

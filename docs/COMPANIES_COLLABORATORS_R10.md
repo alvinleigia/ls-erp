@@ -78,7 +78,8 @@ boundary inventory. See [audit report contract](AUDIT_REPORTS_R10.md) and
 [workspace readiness review](RESOURCE_OWNERSHIP_R10.md). Membership/provisioning/
 workspace UI is implemented locally in phases 2D8A/B/C. See the
 [workspace selector contract](WORKSPACE_OFFICE_UI_R10.md). Combined workflow
-verification and the complete release/recovery gates remain pending.
+verification is recorded in [phase 2D8D acceptance](OFFICE_ACCEPTANCE_R10.md).
+The complete hosted release/recovery gates remain pending.
 Complete the combined operational-family, assignment-selector and workspace
 checks before exposing office controls or deploying the office-isolation release.
 

@@ -96,7 +96,8 @@ local database and synthetic sign-ins. Evidence is retained under ignored
 
 ## Next bounded work
 
-Verify the combined onboarding, memberships, workspace preferences and dated
-workplaces across multiple teams/offices and custom profiles. Review the complete
-R10 release inventory before external collaborator identities (phase 3) and hosted
-staging/recovery gates. No hosted release is authorized by this local milestone.
+The combined onboarding, memberships, workspace preferences, dated workplaces,
+multiple-team managers and custom-profile review is recorded in
+[phase 2D8D acceptance](OFFICE_ACCEPTANCE_R10.md). External collaborator identities
+are the next bounded implementation (phase 3). Complete the hosted staging and
+recovery gates separately; this local milestone authorizes no hosted release.

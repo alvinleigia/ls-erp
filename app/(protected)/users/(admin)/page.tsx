@@ -378,7 +378,7 @@ export default function UsersPage() {
                 View details
               </DropdownMenuItem>
               {canManage && ["ADMIN", "MANAGER", "STAFF"].includes(row.original.role) && <DropdownMenuItem onSelect={() => setOfficeUser(row.original)}>Office access</DropdownMenuItem>}
-              {row.original.role === "STAFF" ? (
+              {["STAFF", "MANAGER"].includes(row.original.role) ? (
                 <DropdownMenuItem
                   onSelect={() => window.location.assign(`/users/${row.original.id}/staff`)}
                 >

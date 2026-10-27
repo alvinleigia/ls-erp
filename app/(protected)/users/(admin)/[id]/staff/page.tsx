@@ -22,12 +22,13 @@ export default function StaffProfilePage() {
   const { enabled, can, loading: accessLoading } = useBusinessModules()
   const editScheduling = enabled("shifts") && can("shiftRoster.edit") && currentRole === "ADMIN"
   const serviceAccess = enabled("services") && can("services.read")
-  const editEligibility = serviceAccess && can("services.edit") && currentRole === "ADMIN"
   const canManage = currentRole === "ADMIN"
+  const workplaceAccess = enabled("shifts") && can("shiftRoster.read")
 
   const [loading, setLoading] = React.useState(true)
   const [saving, setSaving] = React.useState(false)
   const [user, setUser] = React.useState<StaffUser | null>(null)
+  const editEligibility = serviceAccess && can("services.edit") && currentRole === "ADMIN" && user?.role === "STAFF"
   const [serviceOptions, setServiceOptions] = React.useState<ServiceOption[]>([])
   const [managerOptions, setManagerOptions] = React.useState<Array<{ value: string; label: string }>>([])
   const [selectedIds, setSelectedIds] = React.useState<string[]>([])
@@ -95,43 +96,50 @@ export default function StaffProfilePage() {
     if (!user) return
     setSaving(true)
 
-    const response = await fetch(`/api/users/${user.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        ...(editEligibility ? { eligibleServiceIds: selectedIds } : {}),
-        staffProfile: {
-          managerUserId: profile.managerUserId,
-          leaveApprovalMode: profile.leaveApprovalMode,
-          ...(editScheduling ? { schedulingMode: profile.schedulingMode } : {}),
-          documents: profile.documents.map((doc) => ({
-            id: doc.id,
-            type: doc.type,
-            number: doc.number,
-            imageUrl: doc.imageUrl,
-            validFrom: doc.validFrom,
-            validTo: doc.validTo,
-          })),
-          certifications: profile.certifications.map((cert) => ({
-            id: cert.id,
-            title: cert.title,
-            issuer: cert.issuer,
-            issuedAt: cert.issuedAt,
-            expiresAt: cert.expiresAt,
-          })),
-        },
-      }),
-    })
+    try {
+      const response = await fetch(`/api/users/${user.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...(editEligibility ? { eligibleServiceIds: selectedIds } : {}),
+          staffProfile: {
+            managerUserId: profile.managerUserId,
+            leaveApprovalMode: profile.leaveApprovalMode,
+            ...(editScheduling ? { schedulingMode: profile.schedulingMode } : {}),
+            documents: profile.documents.map((doc) => ({
+              id: doc.id,
+              type: doc.type,
+              number: doc.number,
+              imageUrl: doc.imageUrl,
+              validFrom: doc.validFrom,
+              validTo: doc.validTo,
+            })),
+            certifications: profile.certifications.map((cert) => ({
+              id: cert.id,
+              title: cert.title,
+              issuer: cert.issuer,
+              issuedAt: cert.issuedAt,
+              expiresAt: cert.expiresAt,
+            })),
+          },
+        }),
+      })
 
-    if (!response.ok) {
-      const data = (await response.json()) as { error?: string }
-      toast.error(data.error ?? "Unable to update staff eligibility.")
-      setSaving(false)
-      return
-    }
+      if (!response.ok) {
+        const data = (await response.json()) as { error?: string }
+        toast.error(data.error ?? "Unable to update staff eligibility.")
+        return
+      }
 
-    toast.success("Staff profile updated.")
-    setSaving(false)
+      const result = await response.json() as { user: StaffUser }
+      setUser(result.user)
+      setProfile(toStaffProfileForm(result.user))
+      setSelectedIds(result.user.eligibleServiceIds ?? [])
+      toast.success("Staff profile updated.")
+
+    } catch {
+      toast.error("Unable to confirm the staff profile update. Check the profile before trying again.")
+    } finally { setSaving(false) }
   }
 
   if (!canManage) {
@@ -150,11 +158,11 @@ export default function StaffProfilePage() {
     return <div className="text-sm text-muted-foreground">Staff not found.</div>
   }
 
-  if (user.role !== "STAFF") {
+  if (!["STAFF", "MANAGER"].includes(user.role)) {
     return (
       <div className="space-y-3">
         <div className="text-sm text-muted-foreground">
-          This user is not a staff member.
+          This user is not eligible for a staff profile.
         </div>
         <Button variant="outline" onClick={() => router.push(`/users/${user.id}`)}>
           Back to profile
@@ -185,7 +193,7 @@ export default function StaffProfilePage() {
       {currentRole !== "ADMIN" && <p className="text-sm text-muted-foreground">Staff profiles can only be changed by an administrator.</p>}
       <fieldset disabled={currentRole !== "ADMIN"}>
       <StaffFormFields editScheduling={editScheduling}
-        showEligibility={serviceAccess}
+        showEligibility={serviceAccess && user.role === "STAFF"}
         editEligibility={editEligibility}
         profile={profile}
         setProfile={setProfile}
@@ -197,7 +205,7 @@ export default function StaffProfilePage() {
         setQuery={setQuery}
       />
       </fieldset>
-      <StaffWorkplacePanel key={user.id} staffId={user.id} />
+      {workplaceAccess && (user.staffProfile ? <StaffWorkplacePanel key={user.id} staffId={user.id} /> : <section aria-label="Staff workplace" className="space-y-2 rounded-xl border p-5"><h2 className="text-lg font-semibold">Workplace</h2><p className="text-sm text-muted-foreground">Save the staff profile above before assigning a workplace. Saving a profile does not assign an office or workplace.</p></section>)}
     </div>
   )
 }

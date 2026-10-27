@@ -113,13 +113,13 @@ test('all current/future shift sources block transfer while ended work does not'
  await root.query('INSERT INTO "ShiftSchedule"(id,"tenantId","officeId",name,"startDate","weekOffDay1","weekOff2Weeks","updatedAt") VALUES($1,$2,(SELECT id FROM \"BusinessOffice\" WHERE \"tenantId\"=$2 AND \"isInitial\"),\'Private schedule\',\'2036-01-01\',\'SUNDAY\',ARRAY[]::integer[],now())',[schedule,tenant])
  const sources=[
   ['StaffScheduleAssignment','INSERT INTO "StaffScheduleAssignment"(id,"staffProfileId","scheduleId","startDate","updatedAt") VALUES($1,$1,$2,\'2036-01-01\',now())',[staff,schedule]],
-  ['StaffShiftOverride','INSERT INTO "StaffShiftOverride"(id,"staffProfileId",date,"templateId","updatedAt") VALUES($1,$1,\'2036-01-07\',$2,now())',[staff,template]],
-  ['StaffFlexibleAvailability','INSERT INTO "StaffFlexibleAvailability"(id,"staffProfileId",date,"startTime","endTime","updatedAt") VALUES($1,$1,\'2036-01-07\',\'09:00\',\'17:00\',now())',[staff]],
+  ['StaffShiftOverride','INSERT INTO "StaffShiftOverride"(id,"tenantId","officeId","staffProfileId",date,"templateId","updatedAt") VALUES($1,$3,$4,$1,\'2036-01-07\',$2,now())',[staff,template,tenant,a]],
+  ['StaffFlexibleAvailability','INSERT INTO "StaffFlexibleAvailability"(id,"tenantId","officeId","staffProfileId",date,"startTime","endTime","updatedAt") VALUES($1,$2,$3,$1,\'2036-01-07\',\'09:00\',\'17:00\',now())',[staff,tenant,a]],
   ['StaffFlexibleWeekPlan','INSERT INTO "StaffFlexibleWeekPlan"(id,"tenantId","officeId","staffProfileId","weekStartDate","updatedAt") VALUES($1,(SELECT u."tenantId" FROM "StaffProfile" p JOIN "User" u ON u.id=p."userId" WHERE p.id=$1),(SELECT o.id FROM "StaffProfile" p JOIN "User" u ON u.id=p."userId" JOIN "BusinessOffice" o ON o."tenantId"=u."tenantId" AND o."isInitial" WHERE p.id=$1),$1,\'2036-01-07\',now())',[staff]],
   ['StaffFlexiblePattern','INSERT INTO "StaffFlexiblePattern"(id,"tenantId","officeId","staffProfileId",name,"cycleLengthWeeks","validFrom","isActive","updatedAt") VALUES($1,(SELECT u."tenantId" FROM "StaffProfile" p JOIN "User" u ON u.id=p."userId" WHERE p.id=$1),(SELECT o.id FROM "StaffProfile" p JOIN "User" u ON u.id=p."userId" JOIN "BusinessOffice" o ON o."tenantId"=u."tenantId" AND o."isInitial" WHERE p.id=$1),$1,\'Private pattern\',1,\'2036-01-01\',true,now())',[staff]],
  ]
  for(const [table,sql,args]of sources){await root.query(sql,args);await post(staff,assign(b,1,v.latest.id,'2036-01-07'),admin,409);assert.deepEqual(await state(staff),{placements:1,version:1,audits:1});await root.query(`DELETE FROM "${table}" WHERE "staffProfileId"=$1`,[staff])}
- await root.query('INSERT INTO "StaffShiftOverride"(id,"staffProfileId",date,"templateId","updatedAt") VALUES($1,$1,\'2020-01-01\',$2,now())',[staff,template]);await post(staff,assign(b,1,v.latest.id,'2036-01-07'))
+ await root.query('INSERT INTO "StaffShiftOverride"(id,"tenantId","officeId","staffProfileId",date,"templateId","updatedAt") VALUES($1,$3,$4,$1,\'2020-01-01\',$2,now())',[staff,template,tenant,a]);await post(staff,assign(b,1,v.latest.id,'2036-01-07'))
 })
 test('private future and overdue in-progress appointments block without leaking booking details',async()=>{
  const staff=await placed(),v=await view(staff),customer=staff+'_customer',service=staff+'_service'
@@ -127,7 +127,7 @@ test('private future and overdue in-progress appointments block without leaking 
  await root.query('INSERT INTO "ServiceCategory"(id,"tenantId",name,"updatedAt") VALUES($1,$2,\'Private category\',now())',[service,tenant])
  await root.query('INSERT INTO "Service"(id,"tenantId",name,"durationMinutes","priceCents","categoryId","updatedAt") VALUES($1,$2,\'Private service\',30,1000,$1,now())',[service,tenant])
  await root.query('UPDATE "TenantUserAccess" SET rules=jsonb_set(rules,\'{appointments.read}\',\'"NONE"\') WHERE "userId"=$1',[both])
- const booking=async(status,start,end)=>root.query('INSERT INTO "Appointment"(id,"tenantId","staffProfileId","customerId","serviceId","startAt","endAt",status,"updatedAt") VALUES($1,$2,$1,$3,$4,$5,$6,$7,now())',[staff,tenant,customer,service,start,end,status])
+ const booking=async(status,start,end)=>root.query('INSERT INTO "Appointment"(id,"tenantId","officeId","staffProfileId","customerId","serviceId","startAt","endAt",status,"updatedAt") VALUES($1,$2,$8,$1,$3,$4,$5,$6,$7,now())',[staff,tenant,customer,service,start,end,status,a])
  try{
   for(const [status,start,end]of[['SCHEDULED','2036-01-07T10:00:00Z','2036-01-07T11:00:00Z'],['IN_PROGRESS','2020-01-01T10:00:00Z','2020-01-01T11:00:00Z']]){
    await booking(status,start,end);await body(await call(both,'GET',undefined,'',require('../app/api/appointments/route.ts')),403)
@@ -169,7 +169,7 @@ test('booking boundary uses tenant midnight rather than UTC calendar dates',asyn
  await root.query('INSERT INTO "Service"(id,"tenantId",name,"durationMinutes","priceCents","categoryId","updatedAt") VALUES($1,$2,\'Timezone service\',30,1000,$1,now())',[service,tenant])
  await root.query('UPDATE "AppSetting" SET "timeZone"=\'America/New_York\' WHERE "tenantId"=$1',[tenant])
  try{
-  await root.query('INSERT INTO "Appointment"(id,"tenantId","staffProfileId","customerId","serviceId","startAt","endAt",status,"updatedAt") VALUES($1,$2,$1,$3,$4,\'2036-01-07T03:00:00\',\'2036-01-07T06:00:00\',\'CONFIRMED\',now())',[staff,tenant,customer,service])
+  await root.query('INSERT INTO "Appointment"(id,"tenantId","officeId","staffProfileId","customerId","serviceId","startAt","endAt",status,"updatedAt") VALUES($1,$2,$5,$1,$3,$4,\'2036-01-07T03:00:00\',\'2036-01-07T06:00:00\',\'CONFIRMED\',now())',[staff,tenant,customer,service,a])
   await post(staff,assign(b,1,v.latest.id,'2036-01-07'),admin,409)
   await root.query('UPDATE "Appointment" SET "endAt"=\'2036-01-07T05:00:00\' WHERE id=$1',[staff])
   await post(staff,assign(b,1,v.latest.id,'2036-01-07'));assert.equal((await view(staff)).latest.startDate,'2036-01-07')

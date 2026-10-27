@@ -60,6 +60,8 @@
     "test:access:profiles": "node scripts/test-sales-orders.cjs --profiles",
     "test:companies": "node scripts/test-sales-orders.cjs --companies",
     "test:companies:browser": "node scripts/test-sales-orders.cjs --companies --browser",
+    "test:office-acceptance": "node scripts/test-sales-orders.cjs --office-acceptance",
+    "test:office-acceptance:browser": "node scripts/test-sales-orders.cjs --office-acceptance --browser",
     "test:workspace-office-ui": "node scripts/test-sales-orders.cjs --workspace-office-ui",
     "test:workspace-office-ui:browser": "node scripts/test-sales-orders.cjs --workspace-office-ui --browser",
     "test:office-onboarding-ui": "node scripts/test-sales-orders.cjs --office-onboarding-ui",

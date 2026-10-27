@@ -1,3 +1,24 @@
+## R10 - Combined multi-office acceptance (phase 2D8D, local)
+
+The combined native suite exercises onboarding, memberships, multiple managed
+teams, exact/company/explicit subsidiary coverage, Restricted sharing, custom
+profiles, dated workplaces and creation preferences together. Current module,
+team and profile revocation remain mandatory; preferences never change saved
+source offices or readable populations. All 178 API/access/resource checks pass
+without skips. Historical fixture grant/booking/daily adapters are disabled.
+The 129-migration disposable rehearsal and 18 native Inventory checks also pass.
+All 18 distinct Chrome flows pass (17 combined plus the corrected journey rerun);
+desktop/mobile screenshots were inspected. Build, TypeScript and ESLint pass.
+
+New business logins explicitly save an optional staff profile before assigning
+a workplace. The UI explains this step, refreshes after Save, and supports the
+existing Manager profile target while retaining staff-only service eligibility.
+No account creation, team role or preference silently creates employment or grants.
+
+See [combined acceptance and release inventory](OFFICE_ACCEPTANCE_R10.md).
+This is local staging work only. Hosted recovery/deployment gates, phase 3
+external collaborators and phase 4 attribution remain outstanding.
+
 ## R10 - Self-service creation-office selector (phase 2D8C, local)
 
 Business layouts now expose a searchable/paged creation-office selector beside

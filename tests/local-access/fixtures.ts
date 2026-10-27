@@ -65,3 +65,9 @@ export async function assignProfiles(context: BrowserContext, userId: string, ro
 }
 
 function scopeFixture(base: RecordRules, scopes: {salesRecordScope?: string; projectRecordScope?: string}) { const rules = {...base}; for(const key of Object.keys(defaultRecordRules()) as (keyof RecordRules)[]) {const resource = key.split(".")[0]; const scope = resource === "projects" || resource === "projectMembers" ? scopes.projectRecordScope : ["enquiries","opportunities","activities","contacts","accounts","quotations","salesOrders","receivables","orderPayments","unitReservations","assignmentTargets"].includes(resource) ? scopes.salesRecordScope : undefined; if(scope) rules[key] = (scope === "ACCOUNT_ROLE" ? "ALL" : scope === "OWN" && ["contacts","accounts","activities"].includes(resource) ? "RELATED" : scope) as NonNullable<RecordRules[typeof key]>; } return rules }
+
+// Explicit setup for office-aware tests; seed() itself leaves new accounts unassigned.
+export async function assignOffices(context: BrowserContext, userId: string, officeIds: string[], creationOfficeId: string | null) {
+  const current = await json(context, `/api/access/users/${userId}/offices`)
+  return json(context, `/api/access/users/${userId}/offices`, 200, "PATCH", { version: current.version, officeIds, companies: [], creationOfficeId })
+}

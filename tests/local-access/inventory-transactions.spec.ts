@@ -1,11 +1,14 @@
 import { test, expect } from "@playwright/test"
-import { seed, login, json, assignProfiles } from "./fixtures"
+import { seed, login, json, assignProfiles, assignOffices } from "./fixtures"
 
 test("real tenant sign-ins retain receipt idempotency, stock audits and fresh access checks", async ({ browser }) => {
   test.setTimeout(120_000)
   const f = await seed(), admin = await login(browser, f.origin, f.users.admin.email)
   let manager: typeof admin | undefined
   try {
+    const initial = (await json(admin.context, "/api/offices")).items[0]
+    await assignOffices(admin.context, f.users.admin.id, [initial.id], initial.id)
+    await assignOffices(admin.context, f.users.manager.id, [initial.id], initial.id)
     const category = (await json(admin.context, "/api/inventory/categories", 201, "POST", { name: "Atomic stock category" })).item
     const supplier = (await json(admin.context, "/api/inventory/suppliers", 201, "POST", { name: "Atomic stock supplier" })).item
     const product = (await json(admin.context, "/api/inventory/products", 201, "POST", { sku: "ATOMIC-STOCK", name: "Atomic inventory stock", categoryId: category.id, costPriceCents: 100, mrpCents: 150, onHandQty: 5 })).item
@@ -42,10 +45,11 @@ test("office stock forms keep saved sources and reject stale creation drafts",as
   const f=await seed(),admin=await login(browser,f.origin,f.users.admin.email),manager=await login(browser,f.origin,f.users.manager.email)
   try{
     const initial=(await f.db.query('SELECT id,"companyId" FROM "BusinessOffice" WHERE "tenantId"=$1 AND "isInitial"',[f.slug])).rows[0]
+    await assignOffices(admin.context,f.users.admin.id,[initial.id],initial.id)
     const west=f.slug+'_west'
     await f.db.query('UPDATE "BusinessOffice" SET name=\'East warehouse\' WHERE id=$1',[initial.id])
     await f.db.query('INSERT INTO "BusinessOffice"(id,"tenantId","companyId",code,name,"updatedAt") VALUES($1,$2,$3,\'WEST\',\'West warehouse\',now())',[west,f.slug,initial.companyId])
-    await f.db.query('INSERT INTO "BusinessOfficeGrant"("tenantId","userId","officeId") VALUES($1,$2,$3)',[f.slug,f.users.manager.id,west])
+    await assignOffices(admin.context,f.users.manager.id,[initial.id,west],initial.id)
     const category=(await json(admin.context,"/api/inventory/categories",201,"POST",{name:"Office stock category"})).item
     const supplier=(await json(admin.context,"/api/inventory/suppliers",201,"POST",{name:"Office stock supplier"})).item
     const product=(await json(manager.context,"/api/inventory/products",201,"POST",{sku:"OFFICE-FORM",name:"Office stock form",categoryId:category.id,costPriceCents:100,mrpCents:500,onHandQty:5})).item
