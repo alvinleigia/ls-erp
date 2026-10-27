@@ -2,7 +2,8 @@
 
 Local implementation on `staging`; hosted staging and production are unchanged.
 This slice verifies the backend and existing real sign-in/acceptance flows.
-Dedicated partner login-management controls remain phase 3B2.
+The dedicated [partner login-management screens](EXTERNAL_LOGIN_UI_R10.md) are now
+implemented and verified locally in phase 3B2.
 
 ## Explicit identity
 
@@ -69,7 +70,7 @@ those dimensions and must count company outcomes once.
 Existing user DTOs include the link for correct identity display. Staff profile
 buttons are hidden for external accounts and direct employee-profile pages reject
 them. Manager choices exclude external identities. The dedicated creation/linking,
-invitation and lifecycle UI is the next bounded phase, 3B2.
+invitation and lifecycle UI is covered by [phase 3B2](EXTERNAL_LOGIN_UI_R10.md).
 
 ## Migration and local checks
 

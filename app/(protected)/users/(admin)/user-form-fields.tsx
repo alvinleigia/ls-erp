@@ -24,11 +24,13 @@ type UserFormFieldsProps = {
   errors: Record<string, string>
   onChange: (next: UserFormValues) => void
   canManage: boolean
+  external?: boolean
   canEditProfile: boolean
 }
 
 export function UserFormFields({
   mode,
+  external = false,
   values,
   errors,
   onChange,
@@ -128,7 +130,7 @@ export function UserFormFields({
           ))}
         </select>
       </FormField>
-      <FormField id={`${mode}-role`} label="Role" error={errors.role}>
+      <FormField id={`${mode}-role`} label={external ? "Account type" : "Role"} error={errors.role}>
         <select
           id={`${mode}-role`}
           className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
@@ -137,11 +139,11 @@ export function UserFormFields({
             const role = event.target.value as Role
             update("role", role)
           }}
-          disabled={mode === "edit" && !canManage}
+          disabled={external || (mode === "edit" && !canManage)}
         >
-          {roleOptions.map((role) => (
+          {(external ? ["STAFF"] as const : roleOptions).map((role) => (
             <option key={role} value={role}>
-              {role}
+              {external ? "External collaborator" : role}
             </option>
           ))}
         </select>

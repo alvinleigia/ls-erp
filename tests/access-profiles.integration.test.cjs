@@ -1,5 +1,6 @@
-const {assignProfiles}=require('./helpers/access-fixtures.cjs')
 /* eslint-disable @typescript-eslint/no-require-imports */
+const {assignProfiles}=require('./helpers/access-fixtures.cjs')
+const {saveOfficeMemberships}=require('../platform/companies/office-membership.ts')
 const {test,before,after}=require('node:test'),assert=require('node:assert/strict'),{randomUUID}=require('node:crypto'),{Pool}=require('pg'),{PrismaClient}=require('@prisma/client')
 const {TenantPgAdapter}=require('../lib/tenant-pg-adapter.ts'),{createAccessRoleService}=require('../platform/access/service.ts'),{createApplicationCrmService}=require('../application/crm/service.ts')
 const {findAccessUser,accessContext}=require('../platform/access/server.ts'),{permits}=require('../platform/access/policy.ts'),{moduleProfileTemplates}=require('../platform/access/profiles.ts'),{assignInitialProfiles}=require('../platform/access/user-security.ts')
@@ -13,6 +14,7 @@ async function setProfiles(ids,patch={},user=manager){return assignProfiles(role
 before(async()=>{
  await root.tenant.createMany({data:[tenant,foreign].map(id=>({id,slug:id,name:id}))});const user=(tenantId,role)=>root.user.create({data:{tenantId,role,name:role,email:randomUUID()+'@example.test'}})
  admin=await user(tenant,'ADMIN');manager=await user(tenant,'MANAGER');staff=await user(tenant,'STAFF');foreignAdmin=await user(foreign,'ADMIN')
+ for(const person of [admin,manager,staff])await db.$transaction(tx=>saveOfficeMemberships(tx,identity(admin),person.id,{version:0,officeIds:['office_'+tenant],companies:[],creationOfficeId:'office_'+tenant}))
  await root.tenantModule.createMany({data:['crm','inventory'].map(key=>({tenantId:tenant,key,enabled:true,allowed:true}))})
  roles=createAccessRoleService(db,identity(admin));crm=createApplicationCrmService(db,identity(admin));limited=createApplicationCrmService(db,identity(manager))
  const profile=key=>moduleProfileTemplates.find(t=>t.key===key)

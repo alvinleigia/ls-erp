@@ -205,7 +205,7 @@ export default function UsersPage() {
     const response = await fetch(`/api/users/${editingUser.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(editValues),
+      body: JSON.stringify({ ...editValues, expectedStatus: editingUser.status ?? undefined }),
     })
 
     if (!response.ok) {
@@ -336,6 +336,7 @@ export default function UsersPage() {
             <SortIndicator value={column.getIsSorted()} />
           </button>
         ),
+        cell: ({ row }) => row.original.collaboratorId ? "External collaborator" : row.original.role,
         filterFn: (row, id, value) => (value ? row.getValue(id) === value : true),
       },
       {
@@ -526,6 +527,7 @@ export default function UsersPage() {
           <div className="flex-1 overflow-y-auto">
             <UserFormFields
               mode="edit"
+              external={Boolean(editingUser?.collaboratorId)}
               values={editValues}
               errors={editErrors}
               onChange={setEditValues}

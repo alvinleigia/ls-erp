@@ -145,6 +145,7 @@ async function handlePATCH(request: Request,
       const user = await scheduleTransaction(tenantId, async (tx) => {
         const identity = { tenantId, userId: sessionUserId!, requestId: logContext.requestId }
         const priorSecurity = await guardUserWrite(tx, identity, id, data, role === "ADMIN")
+        if (bodyData.expectedStatus && priorSecurity?.status !== bodyData.expectedStatus) throw new BusinessError(409, "Account status changed. Refresh before retrying.")
         if (priorSecurity?.collaboratorId && (staffProfileInput || eligibleServiceIds !== undefined)) throw new BusinessError(400, "External logins cannot have employee profiles or service eligibility.")
         if (role === "ADMIN" && normalizedEligibleServiceIds !== null) {
           const accessUser = await findAccessUser(tx, tenantId, sessionUserId!)

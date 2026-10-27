@@ -217,6 +217,7 @@ export default function InvitesPage() {
             <SortIndicator value={column.getIsSorted()} />
           </button>
         ),
+        cell: ({ row }) => row.original.collaboratorId ? "External collaborator" : row.original.role,
       },
       {
         accessorKey: "createdAt",

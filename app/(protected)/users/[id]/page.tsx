@@ -67,6 +67,7 @@ export default function UserProfilePage() {
         </div>
       </div>
 
+      {canManage && user.collaboratorId && <Button variant="outline" onClick={() => router.push(`/users/collaborators/${user.collaboratorId}/logins`)}>Collaborator logins</Button>}
       {officeOpen && <OfficeMembershipEditor key={user.id} user={user} onClose={() => setOfficeOpen(false)} onSaved={() => setOfficeOpen(false)} />}
       <UserProfileSections user={user} formatDate={formatDate} />
     </div>

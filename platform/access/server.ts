@@ -1,4 +1,4 @@
-import { externalPermissionAllowed } from "@/platform/collaborators/login"
+import { externalPermissionAllowed } from "@/platform/collaborators/permissions"
 import type { RecordRules } from "./rules"
 import { recordScope } from "./rules"
 import type { Resource, PermissionAction } from "./catalog"

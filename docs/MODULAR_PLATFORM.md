@@ -1,3 +1,21 @@
+## R10 - External login-management screens (phase 3B2, local)
+
+Tenant Admin can create/invite named collaborator logins and manage profiles,
+offices, account status and pending invitation links from Users > External
+collaborators > Manage logins. Shared editors retain fixed account identity,
+explicit grants, stale-save protection, dirty drafts and mobile footer controls.
+External identity remains distinct from employment; supervisor responsibility
+never supplies access. Archive/restore retains the phase 3B1 lifecycle contract.
+
+91 API checks and 12 distinct Chrome flows passed; the three new screen flows
+also passed together after correcting one test's authority-revocation timing.
+All 131 migrations, rollback/source preservation and 18 native stock checks passed.
+Build, TypeScript, lint and whitespace passed; desktop/mobile captures inspected.
+No new migration or runtime compatibility path. See [screens and verification](EXTERNAL_LOGIN_UI_R10.md).
+Next is phase 4 partner attribution and reporting/KPI separation. Hosted recovery,
+staging verification and production release remain separate gates. Nothing pushed
+or deployed; client data and hosted sessions unchanged.
+
 ## R10 - External login identity and lifecycle backend (phase 3B1, local)
 
 New business accounts and invitations can explicitly link to a same-tenant

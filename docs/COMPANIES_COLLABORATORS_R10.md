@@ -107,7 +107,9 @@ separate identities, explicit internal supervisors, archiving and mandatory audi
 No login or employee profile is created. Login linking and lifecycle remain phase
 3B; attribution and KPI separation remain phase 4.
 Phase 3B1 now adds the local [explicit login identity and lifecycle backend](EXTERNAL_LOGINS_R10.md).
-Partner login-management UI remains phase 3B2.
+Phase 3B2 adds the local [partner login-management screens](EXTERNAL_LOGIN_UI_R10.md),
+reusing shared profiles, office membership, invitations and account lifecycle.
+Next is phase 4 attribution and reporting; hosted release gates remain pending.
 
 Add an industry-neutral external collaborator identity with optional agency/party
 association and one or more linked login accounts. "Channel partner" is a

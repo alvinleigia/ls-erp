@@ -37,6 +37,7 @@ export function CollaboratorList() {
   }, [query])
   const columns = React.useMemo<ColumnDef<Collaborator>[]>(() => [
     { accessorKey: "name", header: "Collaborator", cell: ({ row }) => <Link className="underline" href={`${base}/${row.original.id}`}>{row.original.name}</Link> },
+    { id: "logins", header: "Logins", cell: ({ row }) => <Link className="underline" href={`${base}/${row.original.id}/logins`}>Manage logins</Link> },
     { accessorKey: "code", header: "Code" }, { accessorKey: "classification", header: "Classification" },
     { accessorKey: "organizationName", header: "Organization" },
     { id: "supervisor", header: "Supervisor", cell: ({ row }) => <span>{row.original.supervisor.name || row.original.supervisor.email}{row.original.supervisor.status !== "ACTIVE" || !["ADMIN", "MANAGER"].includes(row.original.supervisor.role) ? " (unavailable)" : ""}</span> },
@@ -76,6 +77,7 @@ export function CollaboratorEditor({ id }: { id: string }) {
   return <div className={pageClass}>
     <PageHeader title={creating ? "New collaborator" : "Edit collaborator"} description="An external partner is a separate identity. Contact email is not a login." backHref={base} actions={<FormActions form="collaborator" cancelHref={base} saving={saving} disabled={loading || (!creating && !record) || !form.supervisorUserId} saveLabel={creating ? "Create collaborator" : "Save changes"} />} />
     {error && <p role="alert" className="text-destructive">{error}</p>}
+    {!creating && <Button asChild variant="outline"><Link href={`${base}/${id}/logins`}>Manage logins</Link></Button>}
     {!creating && <Button type="button" variant="outline" disabled={saving || loading} onClick={() => setReload(value => value + 1)}>Reload saved details</Button>}
     {loading ? <p>Loading collaborator...</p> : (creating || record) && <Surface><form id="collaborator" onSubmit={save}><fieldset disabled={saving} className="grid min-w-0 gap-5 sm:grid-cols-2">
       <FormField id="collaborator-name" label="Collaborator name"><Input id="collaborator-name" required maxLength={160} value={form.name} onChange={event => setForm({ ...form, name: event.target.value })} /></FormField>

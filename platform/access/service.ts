@@ -1,3 +1,5 @@
+import { externalPermissionAllowed } from "@/platform/collaborators/permissions"
+import { allPermissions } from "./catalog"
 import { serializationConflict } from "@/platform/database-errors"
 import type { Prisma, PrismaClient } from "@prisma/client"
 import { recordDomainAuditEvent } from "@/lib/domain-audit"
@@ -39,7 +41,7 @@ export function createAccessRoleService(db: PrismaClient, identity: Identity) {
     list(input: unknown) {
       const q = accessListSchema.parse(input)
       return run(false, async tx => {
-        const where = { tenantId: identity.tenantId, archived: q.archived === "true", ...(q.q ? { name: { contains: q.q, mode: "insensitive" as const } } : {}) }
+        const where = { tenantId: identity.tenantId, archived: q.archived === "true", ...(q.audience === "external" ? { permissions: { hasSome: allPermissions.filter(externalPermissionAllowed) } } : {}), ...(q.q ? { name: { contains: q.q, mode: "insensitive" as const } } : {}) }
         const [items, total] = await Promise.all([tx.tenantAccessRole.findMany({ where, select: { id: true, name: true, moduleKey: true, archived: true, version: true, _count: { select: { assignments: true } } }, orderBy: [{ name: "asc" }, { id: "asc" }], skip: (q.page - 1) * q.pageSize, take: q.pageSize }), tx.tenantAccessRole.count({ where })])
         return { items, total, page: q.page, pageSize: q.pageSize, totalPages: Math.max(1, Math.ceil(total / q.pageSize)) }
       })
@@ -61,7 +63,7 @@ export function createAccessRoleService(db: PrismaClient, identity: Identity) {
     },
     assignment(userId: string) {
       return run(false, async tx => {
-        const user = await tx.user.findFirst({ where: { tenantId: identity.tenantId, id: userId }, select: { id: true, name: true, role: true, accessAssignments: { orderBy: { roleId: "asc" }, select: { roleId: true, role: { select: { name: true, moduleKey: true, archived: true } } } }, accessPolicy: true } })
+        const user = await tx.user.findFirst({ where: { tenantId: identity.tenantId, id: userId }, select: { id: true, name: true, role: true, collaboratorId: true, accessAssignments: { orderBy: { roleId: "asc" }, select: { roleId: true, role: { select: { name: true, moduleKey: true, archived: true } } } }, accessPolicy: true } })
         if (!user) throw new BusinessError(404, "User not found.")
         return { ...user, accessPolicy: user.accessPolicy ?? { tenantId: identity.tenantId, userId, rules: defaultRecordRules(), version: 0 } }
       })

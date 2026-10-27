@@ -157,6 +157,7 @@ export const createUserSchema = addCountryStateValidation(z.object({
 }))
 
 export const updateUserSchema = addCountryStateValidation(z.object({
+  expectedStatus: statusSchema.optional(),
   name: z.string().trim().min(1).max(100).optional().or(z.literal("")),
   email: z.string().trim().email().optional().or(z.literal("")),
   role: roleSchema.optional(),

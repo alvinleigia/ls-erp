@@ -22,7 +22,7 @@ export function UserProfileSections({ user, formatDate }: UserProfileSectionsPro
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
               <div className="text-xs text-muted-foreground">Role</div>
-              <div className="font-medium">{user.role}</div>
+              <div className="font-medium">{user.collaboratorId ? "External collaborator" : user.role}</div>
             </div>
             <div>
               <div className="text-xs text-muted-foreground">Status</div>
@@ -42,7 +42,7 @@ export function UserProfileSections({ user, formatDate }: UserProfileSectionsPro
                 {user.gender ? user.gender.replaceAll("_", " ") : "-"}
               </div>
             </div>
-            {user.role === "STAFF" ? (
+            {!user.collaboratorId && user.role === "STAFF" ? (
               <div>
                 <div className="text-xs text-muted-foreground">Reporting manager</div>
                 <div className="font-medium">

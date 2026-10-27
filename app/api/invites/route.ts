@@ -20,6 +20,7 @@ import { withCoreApi, actorSession } from "@/platform/core/api"
 import type { BusinessActor } from "@/platform/policy"
 
 const paginationSchema = z.object({
+  collaboratorId: z.string().trim().min(1).max(200).optional(),
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(20),
   sortBy: z.enum(["createdAt", "email", "role", "expiresAt"]).optional(),
@@ -131,7 +132,7 @@ async function handleGET(request: Request, actor: BusinessActor) {
   }
 
   try {
-    const { page, pageSize, sortBy, sort, sortDir, order, q, status } = parsed.data
+    const { page, pageSize, sortBy, sort, sortDir, order, q, status, collaboratorId } = parsed.data
     const skip = (page - 1) * pageSize
     const resolvedSortBy = sort ?? sortBy
     const resolvedSortDir = order ?? sortDir
@@ -141,6 +142,7 @@ async function handleGET(request: Request, actor: BusinessActor) {
     const trimmedSearch = q?.trim()
     const where = {
       tenantId,
+      ...(collaboratorId ? { accessConfiguration: { path: ["collaboratorId"], equals: collaboratorId } } : {}),
       ...(trimmedSearch
         ? { email: { contains: trimmedSearch, mode: Prisma.QueryMode.insensitive } }
         : {}),
@@ -157,6 +159,7 @@ async function handleGET(request: Request, actor: BusinessActor) {
         skip,
         take: pageSize,
         select: {
+          accessConfiguration: true,
           id: true,
           email: true,
           role: true,
@@ -170,7 +173,7 @@ async function handleGET(request: Request, actor: BusinessActor) {
 
     const totalPages = Math.max(1, Math.ceil(total / pageSize))
 
-    const response = NextResponse.json({ items: invites, page, pageSize, total, totalPages }, { headers: { "Cache-Control": "no-store" } })
+    const response = NextResponse.json({ items: invites.map(({ accessConfiguration, ...row }) => ({ ...row, collaboratorId: accessConfiguration && typeof accessConfiguration === "object" && !Array.isArray(accessConfiguration) && typeof accessConfiguration.collaboratorId === "string" ? accessConfiguration.collaboratorId : null })), page, pageSize, total, totalPages }, { headers: { "Cache-Control": "no-store" } })
     logApiRequestSuccess(logContext, 200, { page, pageSize, total })
     return withRequestId(response, logContext.requestId)
   } catch (error) {

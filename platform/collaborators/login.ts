@@ -1,13 +1,7 @@
 import type { Prisma } from "@prisma/client"
 import { BusinessError } from "@/platform/policy"
 import { recordDomainAuditEvent } from "@/lib/domain-audit"
-import { accessResources, type Permission } from "@/platform/access/catalog"
 
-// An identity boundary, independent of which reusable profiles are assigned.
-export function externalPermissionAllowed(permission: Permission) {
-  const resource = permission.split(".")[0] as keyof typeof accessResources
-  return !["leaves", "shifts"].includes(accessResources[resource].module) && resource !== "users" && (!(["teams", "teamMembers"].includes(resource)) || permission.endsWith(".read"))
-}
 export async function validateCollaboratorLogin(tx: Prisma.TransactionClient, tenantId: string, collaboratorId: string | null | undefined, role: string) {
   if (!collaboratorId) return
   if (role !== "STAFF") throw new BusinessError(400, "External logins use the business Staff account role with explicit access profiles.")

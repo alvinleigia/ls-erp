@@ -19,6 +19,7 @@ export const roleAssignmentSchema = z.object({
   rules: recordRulesSchema,
 }).strict().refine(data => new Set(data.roleIds).size === data.roleIds.length, { path: ["roleIds"], message: "Select each profile once." })
 export const accessListSchema = z.object({
+  audience: z.enum(["all", "external"]).default("all"),
   q: z.string().trim().max(120).default(""), page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(20), archived: z.enum(["true", "false"]).default("false"),
 })

@@ -1,8 +1,9 @@
 # R10 phase 3A: external collaborator directory
 
 Local work on `staging`. Hosted staging and production are unchanged. This is the
-shared identity-directory foundation; login linking and partner reporting follow
-in separate bounded phases.
+shared identity-directory foundation. [Login identity](EXTERNAL_LOGINS_R10.md)
+and [login-management screens](EXTERNAL_LOGIN_UI_R10.md) are also implemented
+locally; partner attribution/reporting remains phase 4.
 
 ## Usage
 

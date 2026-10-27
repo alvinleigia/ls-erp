@@ -1,6 +1,7 @@
 import type { Role } from "@/lib/permissions"
 
 export type InviteRow = {
+  collaboratorId?: string | null
   id: string
   email: string
   role: Role

@@ -1,6 +1,6 @@
 import { defaultRecordRules } from "@/platform/access/rules"
 import { test, expect } from "@playwright/test"
-import { seed, login, json, password } from "./fixtures"
+import { seed, login, json, password, assignOffices } from "./fixtures"
 import { moduleProfileTemplates } from "@/platform/access/profiles"
 
 test("module profiles compose through user creation and the assignment editor", async ({ browser }, info) => {
@@ -27,6 +27,8 @@ test("module profiles compose through user creation and the assignment editor", 
     const core = await json(admin.context, "/api/access/roles", 201, "POST", { name: "Workspace viewer", moduleKey: "core", permissions: template("core:viewer").permissions })
     const email = `composed-${fixture.slug}@example.test`
     const created = await json(admin.context, "/api/users", 200, "POST", { name: "Composed staff", email, role: "STAFF", password, accessRoleIds: [sales.id, viewer.id], recordRules: defaultRecordRules() })
+    const office = (await json(admin.context, "/api/offices")).items[0]
+    for (const userId of [fixture.users.admin.id, fixture.users.staff.id, created.user.id]) await assignOffices(admin.context, userId, [office.id], office.id)
     const contact = await json(admin.context, "/api/crm/contacts", 201, "POST", { name: "Profile test customer" })
     const own = await json(admin.context, "/api/crm/enquiries", 201, "POST", { title: "Composed own lead", contactId: contact.id, assignedUserId: created.user.id })
     const other = await json(admin.context, "/api/crm/enquiries", 201, "POST", { title: "Private other lead", contactId: contact.id, assignedUserId: fixture.users.staff.id })
