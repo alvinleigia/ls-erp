@@ -1,3 +1,17 @@
+## R10 - Pilot backup and application restore (phase 6B1)
+
+Read-only production preflight verified 108 applied migrations against the reviewed
+R10 inventory: 24 are pending, including R9 permission translation. A fresh
+encrypted pilot backup restored 117 tables with matching data, financial evidence,
+ownership and ACLs. All 31 role definitions and 25 memberships match; both stored
+branding objects and their saved references verify. The disposable copy used an
+internal network with no published ports or running application and was removed.
+
+See [pilot recovery evidence](PILOT_RECOVERY_R10.md). The pending upgrade, effective-
+access comparison, six managed event triggers and environment fidelity remain
+unverified. This is application-schema recovery, not complete Supabase recovery
+or release approval. No hosted data, roles, storage or deployment changed.
+
 ## R10 - Local release readiness and recovery (phase 6A)
 
 The separate R10 inventory pins all 132 migrations while preserving the R5

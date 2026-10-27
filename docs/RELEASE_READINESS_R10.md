@@ -105,11 +105,16 @@ session changed.
 
 ## Remaining hosted gates
 
+Phase 6B1 now verifies the [actual pilot backup and application restore](PILOT_RECOVERY_R10.md):
+108 observed migrations, 117 tables and both stored assets. The pending upgrade
+and effective-access comparison remain unverified; six managed event triggers
+and source environment behavior still require review.
+
 | Gate | Local evidence | Still required before release |
 | --- | --- | --- |
 | Candidate source | Pinned schema/migration inventory and Git receipt | Verify the exact candidate deployed to hosted staging |
 | Upgrade semantics | Synthetic historical preservation and real empty-database Prisma deploy | Read actual target history/schema; reconcile any discrepancy without rewriting history |
-| Recovery | Encrypted synthetic database/role restore and mock storage recovery | Fresh encrypted pilot database **and storage** backup, restored and verified with actual ownership/grants/external dependencies |
+| Recovery | Encrypted synthetic recovery plus fresh pilot application/role/storage backup and isolated restore | Review managed dependencies/environment fidelity, then repeat fresh recovery verification at the release boundary; this does not certify complete Supabase platform recovery |
 | Existing access | Native runtime integration tests on the restored synthetic database | Compare pilot IDs, owners, assignments, profiles, sharing and effective access before/after migration on a copy |
 | UI and hosted behavior | Phase 5 local Chrome evidence | Hosted staging acceptance, including staff, multiple-team managers, office boundaries, partners and revocation |
 | Production | No changes made | Separately authorized release and agreed maintenance/recovery window |
