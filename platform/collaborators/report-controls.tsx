@@ -1,0 +1,18 @@
+"use client"
+import { FormField } from "@/components/form-field"
+import { Select } from "@/components/erp/controls"
+import { RecordSelect } from "@/components/erp/record-select"
+import { Button } from "@/components/ui/button"
+import { attributionQuery, type AttributionFilter } from "./report-validation"
+
+export const emptyAttributionFilters = { responsibleType: "all" as const, introduction: "all" as const, introducedByCollaboratorId: "", introductionSupervisorId: "" }
+export function AttributionFilters({ value, onChange, choicesEndpoint, canFilterOrigin = true, originMode = "choose", responsibleLabel = "Assigned user type" }: { value: AttributionFilter; onChange: (next: AttributionFilter) => void; choicesEndpoint: string; canFilterOrigin?: boolean; originMode?: "choose" | "retained"; responsibleLabel?: string }) {
+  const choices = (choice: "partner" | "supervisor") => { const [path, search] = choicesEndpoint.split("?");const params = new URLSearchParams(search);params.delete(choice === "partner" ? "introducedByCollaboratorId" : "introductionSupervisorId");params.set("choice", choice);return `${path}?${params}` }
+  return <>
+    <FormField id="attribution-responsible-type" label={responsibleLabel}><Select id="attribution-responsible-type" value={value.responsibleType || "all"} onValueChange={responsibleType => onChange({ ...value, responsibleType: responsibleType as AttributionFilter["responsibleType"] })}><option value="all">Internal and external</option><option value="internal">Internal users</option><option value="external">External collaborators</option></Select></FormField>
+    {originMode === "retained" ? (Object.keys(attributionQuery({ ...value, responsibleType: "all" })).length > 0 && <p className="text-xs text-muted-foreground">Origin filters follow the linked report.<Button type="button" size="sm" variant="link" onClick={() => onChange({ ...emptyAttributionFilters, responsibleType: value.responsibleType })}>Clear origin filters</Button></p>) : canFilterOrigin ? <>
+      <FormField id="attribution-introduction" label="Partner introduction"><Select id="attribution-introduction" value={value.introduction || "all"} onValueChange={introduction => onChange({ ...value, introduction: introduction as AttributionFilter["introduction"], ...(introduction === "unattributed" ? { introducedByCollaboratorId: "", introductionSupervisorId: "" } : {}) })}><option value="all">All sales origins</option><option value="partner">Partner introduced</option><option value="unattributed">No recorded introducing partner</option></Select></FormField>
+      {value.introduction !== "unattributed" && <><FormField id="attribution-partner" label="Introducing collaborator"><RecordSelect id="attribution-partner" endpoint={choices("partner")} value={value.introducedByCollaboratorId || ""} onChange={introducedByCollaboratorId => onChange({ ...value, introducedByCollaboratorId })} placeholder="All introducing collaborators" /></FormField><FormField id="attribution-supervisor" label="Supervisor at introduction"><RecordSelect id="attribution-supervisor" endpoint={choices("supervisor")} value={value.introductionSupervisorId || ""} onChange={introductionSupervisorId => onChange({ ...value, introductionSupervisorId })} placeholder="All recorded supervisors" /></FormField></>}
+    </> : <p className="text-xs text-muted-foreground">Origin filters require read access to enquiries and opportunities.{Object.keys(attributionQuery({ ...value, responsibleType: "all" })).length > 0 && <Button type="button" size="sm" variant="link" onClick={() => onChange({ ...emptyAttributionFilters, responsibleType: value.responsibleType })}>Clear origin filters</Button>}</p>}
+  </>
+}

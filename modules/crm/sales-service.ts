@@ -17,7 +17,7 @@ import { maskReferrals, referralInclude } from "./intake-service"
 import { CrmError, opportunityScope, contactScope, accountScope, enquiryScope, type CrmActor } from "./policy"
 import { crmListSchema, crmNoteSchema } from "./validation"
 import { pipelineSchema, pipelineUpdateSchema, opportunitySchema, opportunityUpdateSchema, opportunityMoveSchema, opportunityListSchema } from "./sales-validation"
-import { workScope } from "./work-service"
+import { workScope } from "./work-scope"
 import { businessDate } from "./work-time"
 import type { CrmExtensions } from "./extensions"
 

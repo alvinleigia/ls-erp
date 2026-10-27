@@ -1,3 +1,22 @@
+## R10 - Activity attribution and performance (phase 4C1, local)
+
+Activity overview, workload/type/call-outcome tables and My Work drill-downs now
+share explicit internal/external assignee and saved partner/supervisor filters.
+Completion credit follows the assigned user, separate from the completion actor.
+Origin filters require readable source records; source-backed choices expose no
+private directory. Gaps retain their opportunity-owner and all-type/date basis.
+CSV reuses list predicates, intersects Read/Export bounds and rejects over 2,000
+rows. Common filter helpers and the unchanged activity ORM scope are reused by
+sales/report callers; SQL Read projection has parity checks for every scope.
+
+76 service/native tests and six Chrome flows pass together with no skips.
+Desktop/mobile captures inspected; build, TypeScript, lint and whitespace pass.
+All 132 migration rehearsals and 18 stock checks pass; no schema change.
+See [activity contract and verification](PARTNER_ACTIVITY_R10.md). Next is phase
+4C2 source-derived financial reporting and dashboard attribution. Hosted recovery,
+copied-data rehearsal and release gates remain. Nothing pushed or deployed;
+pilot data and hosted sessions unchanged.
+
 ## R10 - Introduction controls and sales reporting (phase 4B, local)
 
 Tenant Admin selects an optional introducing collaborator on new enquiries/direct

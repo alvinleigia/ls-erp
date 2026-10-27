@@ -1,10 +1,11 @@
-import { recordLimits, scopeAllowsOthers } from "@/platform/access/rules"
-import { sharedRecordWhere } from "@/platform/access/sharing-scope"
-import type { PermissionAction } from "@/platform/access/catalog"
+import { workScope } from "./work-scope"
+import { workAttributionWhere } from "./attribution-scope"
+import { checkExportLimit, CRM_EXPORT_LIMIT, crmCsv } from "./csv"
+import { requirePermission } from "@/platform/access/policy"
+import { scopeAllowsOthers } from "@/platform/access/rules"
 import { opportunityScope } from "@/modules/crm/policy"
 import { termText } from "@/platform/terminology/message"
 import { activityTeamFilter, requireSalesTeamFilter } from "./team-filter"
-import { relatedSalesScope } from "@/platform/access/record-scope"
 import { requireScopedWriteFields, permits, authorizeOperation } from "@/platform/access/policy"
 import { recordActionAccess } from "@/platform/access/record-actions"
 import type { PermissionRun } from "@/platform/access/server"
@@ -31,15 +32,7 @@ const page = <T>(items: T[], total: number, page: number, pageSize: number) => (
 const snapshot = (value: unknown): Prisma.InputJsonValue => JSON.parse(JSON.stringify(value))
 const include = { contact: { select: { id: true, name: true, email: true, phone: true, ownerUserId: true } }, assignee: { select: { id: true, name: true } }, enquiry: { select: { id: true, title: true, assignedUserId: true, salesTeamId: true } }, opportunity: { select: { id: true, title: true, assignedUserId: true, salesTeamId: true } }, planLaunch: { select: { planName: true, planVersion: true } } } as const
 type Loaded = Prisma.CrmTaskGetPayload<{ include: typeof include }>
-export function workScope(actor: CrmActor, action?: PermissionAction): Prisma.CrmTaskWhereInput {
-  const base: Prisma.CrmTaskWhereInput = { tenantId: actor.tenantId, AND: recordLimits(actor, "activities", action).map(scope => scope === "NONE" ? { id: { in: [] } } : { OR: [
-    { assignedUserId: actor.userId }, ...(scope === "OWN" ? [] : [
-      { enquiry: relatedSalesScope(actor, "activities", action) }, { opportunity: relatedSalesScope(actor, "activities", action) },
-      { enquiryId: null, opportunityId: null, contact: { ownerUserId: actor.userId } },
-    ]),
-  ] }) }
-  return sharedRecordWhere(actor, "activities", base, { assignedUserId: actor.userId }, action)
-}
+
 function dto(record: Loaded, canViewParent: boolean, canEdit: boolean) {
   const { enquiry, opportunity, ...data } = record
   const source = enquiry || opportunity
@@ -140,7 +133,7 @@ export function createWorkService({ run, audit, checkAssignee }: Context, extens
     await log(tx, actor, before.id, "crm.work.completed", `${data.outcome}: ${data.summary}`, before, after)
     return after
   }
-  return {
+  const service = {
     getCollectionContext(orderId: string) {
       return run("activities.read", async (tx, actor) => ({ ...await collectionContext(tx, actor, orderId), timeZone: await zone(tx, actor), currentUserId: actor.userId,
         canAssign: scopeAllowsOthers(actor, "activities", "assign") && permits(actor, "activities.assign") }))
@@ -157,7 +150,7 @@ export function createWorkService({ run, audit, checkAssignee }: Context, extens
         return preview
       })
     },
-    listWork(input: unknown) {
+    listWork(input: unknown, exporting = false) {
       const split = extensions.splitQuery(input)
       const query = workListSchema.strict().parse(split.core)
       return run("activities.read", async (tx, actor) => {
@@ -169,7 +162,9 @@ export function createWorkService({ run, audit, checkAssignee }: Context, extens
           title: { contains: query.q, mode: "insensitive" },
           ...(query.state === "open" ? { status: { in: [...openStatuses] } } : query.state === "completed" ? { status: "COMPLETED" } : query.state === "cancelled" ? { status: "CANCELLED" } : {}),
         }
-        const clauses: Prisma.CrmTaskWhereInput[] = [workScope(actor), filter]
+        if (exporting) requirePermission(actor, "activities.export")
+        const clauses: Prisma.CrmTaskWhereInput[] = [workScope(actor), filter, workAttributionWhere(actor, query)]
+        if (exporting) clauses.push(workScope(actor, "export"))
         await requireSalesTeamFilter(tx, actor, query.salesTeamId)
         if (query.salesTeamId) clauses.push(activityTeamFilter(query.salesTeamId))
         const extensionFilter = await extensions.filters(tx, actor, split.extension)
@@ -189,11 +184,14 @@ export function createWorkService({ run, audit, checkAssignee }: Context, extens
           { startsAt: { lt: startOfBusinessDate(query.to, timeZone) }, endsAt: { gt: startOfBusinessDate(query.from, timeZone) } },
         ] })
         const where = { AND: clauses }
-        const [items, total] = await Promise.all([
-          tx.crmTask.findMany({ where, include, orderBy: [{ [query.sort]: query.order }, { startsAt: "asc" }, { id: "asc" }], skip: (query.page - 1) * query.pageSize, take: query.pageSize }), tx.crmTask.count({ where }),
-        ])
+        const total = await tx.crmTask.count({ where }); if (exporting) checkExportLimit(total)
+        const items = await tx.crmTask.findMany({ where, include, orderBy: [{ [query.sort]: query.order }, { startsAt: "asc" }, { id: "asc" }], skip: exporting ? 0 : (query.page - 1) * query.pageSize, take: exporting ? CRM_EXPORT_LIMIT : query.pageSize })
         return { ...page(await present(tx, actor, items), total, query.page, query.pageSize), timeZone, currentUserId: actor.userId, canManage: scopeAllowsOthers(actor, "activities", "assign"), serverTime: now.toISOString() }
       })
+    },
+    async exportWork(input: unknown): Promise<string> {
+      const result = await service.listWork(input, true)
+      return crmCsv(["ID", "Activity", "Type", "Assigned user", "Customer", "Status", "Due date", "Completed (UTC)", "Time zone"], result.items.map(row => [row.id, row.title, row.activityTypeName || row.type, row.assignee.name, row.contact.name, row.status, row.dueOn.toISOString().slice(0, 10), row.completedAt?.toISOString(), result.timeZone]))
     },
     getWork(id: string) { return run("activities.read", async (tx, actor) => {
       const record = await find(tx, actor, id)
@@ -263,4 +261,5 @@ export function createWorkService({ run, audit, checkAssignee }: Context, extens
       })
     },
   }
+  return service
 }

@@ -1,4 +1,6 @@
 "use client"
+import { AttributionFilters, emptyAttributionFilters } from "@/platform/collaborators/report-controls"
+import { attributionQuery, type AttributionFilter } from "@/platform/collaborators/report-validation"
 import { useTerminology } from "@/platform/terminology/provider"
 import { salesReportLabels, reportLabel, reportBucketLabel } from "../report-labels"
 import { SalesTeamSelect } from "@/platform/teams/controls"
@@ -103,17 +105,15 @@ export function SalesReports() {
   const [period, setPeriod] = React.useState<{ from: string; through: string } | null>(null), [from, setFrom] = React.useState(""), [through, setThrough] = React.useState("")
   const [periodOpen, setPeriodOpen] = React.useState(false), [periodError, setPeriodError] = React.useState(""), [revision, setRevision] = React.useState(0)
   const [selection, setSelection] = React.useState<{ base: string; view: SalesReportView; extra: Record<string, string>; caption?: string } | null>(null)
-  const [responsibleType, setResponsibleType] = React.useState("all"), [introduction, setIntroduction] = React.useState("all")
-  const [introducingPartner, setIntroducingPartner] = React.useState(""), [introductionSupervisor, setIntroductionSupervisor] = React.useState("")
+  const [attribution, setAttribution] = React.useState<AttributionFilter>(emptyAttributionFilters)
   const [salesTeamId, setSalesTeamId] = React.useState("")
   const extensionQuery = useCrmExtensionFilterQuery(primaryId, secondaryId)
-  const params = new URLSearchParams({ ...(responsibleType !== "all" ? { responsibleType } : {}), ...(introduction !== "all" ? { introduction } : {}), ...(introducingPartner ? { introducedByCollaboratorId: introducingPartner } : {}), ...(introductionSupervisor ? { introductionSupervisorId: introductionSupervisor } : {}), ...(salesTeamId ? { salesTeamId } : {}), scope, ...(lostReasonId ? { lostReasonId } : {}), ...(period || {}), ...(owner ? { assignedUserId: owner } : {}), ...(source ? { sourceId: source } : {}), ...extensionQuery }).toString()
-  const choices = (choice: "partner" | "supervisor") => { const filters = new URLSearchParams(params); filters.delete(choice === "partner" ? "introducedByCollaboratorId" : "introductionSupervisorId"); filters.set("choice", choice); return `/api/crm/reports/sales/attribution-choices?${filters}` }
+  const params = new URLSearchParams({ ...attributionQuery(attribution), ...(salesTeamId ? { salesTeamId } : {}), scope, ...(lostReasonId ? { lostReasonId } : {}), ...(period || {}), ...(owner ? { assignedUserId: owner } : {}), ...(source ? { sourceId: source } : {}), ...extensionQuery }).toString()
   const { data, loading, error } = useReport<SalesReportSummary>("", params, revision)
   const selected = selection?.base === params ? selection : { view: "leads" as const, extra: {} }
   const details = `${params}&${new URLSearchParams({ view: selected.view, ...selected.extra })}`
   const select: SelectReport = (view, extra = {}, caption) => { setSelection({ base: params, view, extra, caption }); document.getElementById("sales-records")?.scrollIntoView({ behavior: "smooth", block: "start" }) }
-  const reset = () => { setResponsibleType("all"); setIntroduction("all"); setIntroducingPartner(""); setIntroductionSupervisor(""); setLostReasonId(""); setOwner(""); setSource(""); setPrimaryId(""); setSecondaryId(""); setPeriod(null) }
+  const reset = () => { setAttribution(emptyAttributionFilters); setLostReasonId(""); setOwner(""); setSource(""); setPrimaryId(""); setSecondaryId(""); setPeriod(null) }
   function applyPeriod() {
     if (!from || !through || through < from || Date.parse(through) - Date.parse(from) > 365 * 86400000) { setPeriodError("Choose both dates, covering at most 366 days."); return }
     setPeriod({ from, through }); setPeriodError(""); setPeriodOpen(false)
@@ -123,11 +123,9 @@ export function SalesReports() {
     <Surface><div className="flex flex-wrap items-end gap-3">
       <FormField id="sales-scope" label="Scope"><Select id="sales-scope" value={scope} onValueChange={v => { setScope(v); setOwner("") }}><option value="mine">My sales</option>{data?.canManage && <option value="team">Team sales</option>}</Select></FormField>
       <Popover open={periodOpen} onOpenChange={open => { setPeriodOpen(open); if (open) { setFrom(period?.from || data?.from || ""); setThrough(period?.through || data?.through || "") } }}><PopoverTrigger asChild><Button variant="outline">{period ? `${period.from} – ${period.through}` : "Reporting period"}</Button></PopoverTrigger><PopoverContent align="start" className="w-[min(24rem,calc(100vw-2rem))] space-y-4"><p className="font-semibold">Reporting period</p><FormField id="sales-from" label="From"><Input id="sales-from" type="date" value={from} onChange={e => setFrom(e.target.value)} /></FormField><FormField id="sales-through" label="Through (inclusive)"><Input id="sales-through" type="date" value={through} onChange={e => setThrough(e.target.value)} /></FormField>{periodError && <p role="alert" className="text-sm text-destructive">{periodError}</p>}<div className="flex justify-end gap-2"><Button variant="outline" onClick={() => setPeriodOpen(false)}>Cancel</Button><Button onClick={applyPeriod}>Apply period</Button></div></PopoverContent></Popover>
-      <Filters activeCount={[salesTeamId, lostReasonId, owner, source, introducingPartner, introductionSupervisor].filter(Boolean).length + Number(responsibleType !== "all") + Number(introduction !== "all") + Object.keys(extensionQuery).length} onReset={() => { setSalesTeamId(""); reset() }}>
+      <Filters activeCount={[salesTeamId, lostReasonId, owner, source].filter(Boolean).length + Object.keys(attributionQuery(attribution)).length + Object.keys(extensionQuery).length} onReset={() => { setSalesTeamId(""); reset() }}>
         {scope === "team" && <FormField id="sales-owner" label="Salesperson"><RecordSelect id="sales-owner" endpoint="/api/crm/assignees" value={owner} onChange={setOwner} placeholder="All salespeople" /></FormField>}
-        <FormField id="sales-responsible-type" label="Salesperson type"><Select id="sales-responsible-type" value={responsibleType} onValueChange={setResponsibleType}><option value="all">Internal and external</option><option value="internal">Internal users</option><option value="external">External collaborators</option></Select></FormField>
-        <FormField id="sales-introduction" label="Partner introduction"><Select id="sales-introduction" value={introduction} onValueChange={value => { setIntroduction(value); if (value === "unattributed") { setIntroducingPartner(""); setIntroductionSupervisor("") } }}><option value="all">All sales origins</option><option value="partner">Partner introduced</option><option value="unattributed">No recorded introducing partner</option></Select></FormField>
-        {introduction !== "unattributed" && <><FormField id="sales-introducing-partner" label="Introducing collaborator"><RecordSelect id="sales-introducing-partner" endpoint={choices("partner")} value={introducingPartner} onChange={setIntroducingPartner} placeholder="All introducing collaborators" /></FormField><FormField id="sales-introduction-supervisor" label="Supervisor at introduction"><RecordSelect id="sales-introduction-supervisor" endpoint={choices("supervisor")} value={introductionSupervisor} onChange={setIntroductionSupervisor} placeholder="All recorded supervisors" /></FormField></>}
+        <AttributionFilters value={attribution} onChange={setAttribution} choicesEndpoint={`/api/crm/reports/sales/attribution-choices?${params}`} responsibleLabel="Salesperson type" />
         <SalesTeamSelect all value={salesTeamId} onChange={setSalesTeamId} /><LostReasonFilter value={lostReasonId} onChange={setLostReasonId} />
         <FormField id="sales-source" label={term("crm.enquiry.singular", "Lead source", "{label} source")}><RecordSelect id="sales-source" endpoint="/api/crm/lead-sources?includeArchived=true" value={source} onChange={setSource} placeholder="All sources" /></FormField>
         <CrmExtensionFilter primaryId={primaryId} secondaryId={secondaryId} onChange={(p, s) => { setPrimaryId(p); setSecondaryId(s) }} />

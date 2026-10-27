@@ -4,7 +4,7 @@ import { permits } from "@/platform/access/policy"
 import type { BusinessActor } from "@/platform/policy"
 import type { DashboardPeriod } from "@/types/dashboard"
 import { enquiryScope, opportunityScope } from "./policy"
-import { workScope } from "./work-service"
+import { workScope } from "./work-scope"
 import type { CrmDashboard } from "./dashboard-types"
 
 const label = (value: string) => value.toLowerCase().replace(/_/g, " ").replace(/^./, c => c.toUpperCase())

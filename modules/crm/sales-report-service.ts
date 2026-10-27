@@ -1,3 +1,4 @@
+import { responsibleUserSql, introductionSql } from "@/platform/collaborators/report-scope"
 import { createTermResolver } from "@/platform/terminology/resolver"
 import { reportLabel } from "./report-labels"
 import type { TermReader } from "@/platform/terminology/read"
@@ -47,10 +48,7 @@ export function createSalesReportService({ run, readTerms }: Context, extensions
       ${q.lostReasonId ? Prisma.sql`AND r."lostReasonId" = ${q.lostReasonId}` : Prisma.empty}
       ${q.salesTeamId ? Prisma.sql`AND r."salesTeamId" = ${q.salesTeamId}` : Prisma.empty}
       ${q.sourceId ? Prisma.sql`AND r."sourceId" = ${q.sourceId}` : Prisma.empty}
-      ${q.responsibleType === "all" ? Prisma.empty : q.responsibleType === "external" ? Prisma.sql`AND u."collaboratorId" IS NOT NULL` : Prisma.sql`AND u."collaboratorId" IS NULL`}
-      ${q.introduction === "all" ? Prisma.empty : q.introduction === "partner" ? Prisma.sql`AND r."introducedByCollaboratorId" IS NOT NULL` : Prisma.sql`AND r."introducedByCollaboratorId" IS NULL`}
-      ${q.introducedByCollaboratorId ? Prisma.sql`AND r."introducedByCollaboratorId"=${q.introducedByCollaboratorId}` : Prisma.empty}
-      ${q.introductionSupervisorId ? Prisma.sql`AND r."partnerAttribution"->>'supervisorUserId'=${q.introductionSupervisorId}` : Prisma.empty}
+      AND ${responsibleUserSql(q, "u")} AND ${introductionSql(q, "r")}
       ${extension.filter}`
     const sharedColumns = Prisma.sql`r.id, r.title, r."tenantId", r."assignedUserId", r."sourceId", r."createdAt", r."lostReasonId", r."lostReasonName",
       r."introducedByCollaboratorId", r."partnerAttribution"->>'name' AS "partnerName", r."partnerAttribution"->>'code' AS "partnerCode",

@@ -2,7 +2,7 @@ import { introductionForCreate, introductionBoundaryError } from "@/platform/col
 import { officeBoundaryError } from "@/platform/companies/record-office"
 import { recordActionAccess } from "@/platform/access/record-actions"
 import { authorizeBusinessOperation } from "@/platform/access/operation"
-import { workScope } from "./work-service"
+import { workScope } from "./work-scope"
 import { peopleScope } from "@/platform/access/people-scope"
 import { scopeAllowsOthers } from "@/platform/access/rules"
 import { requireScopedWriteFields } from "@/platform/access/policy"

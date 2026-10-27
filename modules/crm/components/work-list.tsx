@@ -1,4 +1,7 @@
 "use client"
+import { AttributionFilters, emptyAttributionFilters } from "@/platform/collaborators/report-controls"
+import { attributionQuery, type AttributionFilter } from "@/platform/collaborators/report-validation"
+import { ExportButton } from "@/components/erp/export-button"
 import { useTerminology, useTerminologyReader } from "@/platform/terminology/provider"
 import { AccessPageHeader } from "@/platform/access/record-page"
 import { Surface, Filters, pageClass } from "@/components/erp/page"
@@ -20,7 +23,8 @@ import { DropdownSelect } from "@/components/ui/dropdown-select"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { EmptyState, Section } from "@/components/erp/section"
 
-export function WorkList({ extensionQuery = "", guidance, allowCreate = true, contactId, enquiryId, opportunityId, planLaunchId, initialDue = "", initialScope, initialState, assignedUserId, salesTeamId, initialType, activityTypeId, completedFrom, completedThrough }: { extensionQuery?: string; guidance?: React.ReactNode; allowCreate?: boolean; contactId?: string; enquiryId?: string; opportunityId?: string; planLaunchId?: string; initialDue?: string; initialScope?: string; initialState?: string; assignedUserId?: string; salesTeamId?: string; initialType?: string; activityTypeId?: string; completedFrom?: string; completedThrough?: string }) {
+export function WorkList({ initialAttribution, extensionQuery = "", guidance, allowCreate = true, contactId, enquiryId, opportunityId, planLaunchId, initialDue = "", initialScope, initialState, assignedUserId, salesTeamId, initialType, activityTypeId, completedFrom, completedThrough }: { initialAttribution?: AttributionFilter; extensionQuery?: string; guidance?: React.ReactNode; allowCreate?: boolean; contactId?: string; enquiryId?: string; opportunityId?: string; planLaunchId?: string; initialDue?: string; initialScope?: string; initialState?: string; assignedUserId?: string; salesTeamId?: string; initialType?: string; activityTypeId?: string; completedFrom?: string; completedThrough?: string }) {
+  const [attribution, setAttribution] = React.useState<AttributionFilter>(initialAttribution || emptyAttributionFilters)
   const readTerm = useTerminologyReader()
   const term = useTerminology()
   const embedded = !!(extensionQuery || contactId || enquiryId || opportunityId)
@@ -39,20 +43,21 @@ export function WorkList({ extensionQuery = "", guidance, allowCreate = true, co
   const [revision, setRevision] = React.useState(0)
   const { formatDate } = useDateFormatter()
   const reset = () => setPagination(previous => ({ ...previous, pageIndex: 0 }))
+  const params = new URLSearchParams(extensionQuery)
+  for (const [key, value] of Object.entries({ q, scope, state, sort, order: sort === "dueOn" ? "asc" : "desc", page: String(pagination.pageIndex + 1), pageSize: String(pagination.pageSize) })) params.set(key, value)
+  if (completionPeriod) { params.set("completedFrom", completionPeriod.completedFrom); params.set("completedThrough", completionPeriod.completedThrough) }
+  for (const [key, value] of Object.entries({ due, ...activityTypeFilter(type), assignedUserId: owner, salesTeamId, contactId, enquiryId, opportunityId, planLaunchId })) if (value) params.set(key, value)
+  for (const [key, value] of Object.entries(attributionQuery(attribution))) params.set(key, value)
+  const queryString = params.toString()
   React.useEffect(() => {
-    const controller = new AbortController()
+    const controller = new AbortController(); setLoading(true); setError(""); setData(null)
     const timer = setTimeout(async () => {
-      setLoading(true); setError("")
-      const params = new URLSearchParams(extensionQuery)
-      for (const [key, value] of Object.entries({ q, scope, state, sort, order: sort === "dueOn" ? "asc" : "desc", page: String(pagination.pageIndex + 1), pageSize: String(pagination.pageSize) })) params.set(key, value)
-      if (completionPeriod) { params.set("completedFrom", completionPeriod.completedFrom); params.set("completedThrough", completionPeriod.completedThrough) }
-      for (const [key, value] of Object.entries({ due, ...activityTypeFilter(type), assignedUserId: owner, salesTeamId, contactId, enquiryId, opportunityId, planLaunchId })) if (value) params.set(key, value)
-      try { const response = await fetch(`/api/crm/work?${params}`, { signal: controller.signal, cache: "no-store" }); const result = await response.json(); if (!response.ok) throw new Error(result.error || readTerm("crm.activity.plural", "Unable to load activities.", "Unable to load {label}.")); setData(result) }
+      try { const response = await fetch(`/api/crm/work?${queryString}`, { signal: controller.signal, cache: "no-store" }); const result = await response.json(); if (!response.ok) throw new Error(result.error || readTerm("crm.activity.plural", "Unable to load activities.", "Unable to load {label}.")); if (!controller.signal.aborted) setData(result) }
       catch (error) { if (!controller.signal.aborted) { setError((error as Error).message); setData(null) } }
       finally { if (!controller.signal.aborted) setLoading(false) }
     }, 150)
     return () => { clearTimeout(timer); controller.abort() }
-  }, [readTerm, salesTeamId, q, scope, state, sort, pagination, due, type, owner, extensionQuery, contactId, enquiryId, opportunityId, planLaunchId, revision, completionPeriod])
+  }, [readTerm, queryString, revision])
   const columns = React.useMemo<ColumnDef<CrmWorkRow>[]>(() => [
     { accessorKey: "title", header: term("crm.activity.singular", "Activity"), cell: ({ row }) => <div><Link className="font-medium underline" href={`/crm/activities/${row.original.id}`}>{row.original.title}</Link>{row.original.planLaunch && <p className="text-xs text-muted-foreground">{row.original.planLaunch.planName} · Step {(row.original.planPosition ?? 0) + 1}</p>}</div> },
     { accessorKey: "type", header: "Type", cell: ({ row }) => row.original.activityTypeName || row.original.type },
@@ -67,7 +72,7 @@ export function WorkList({ extensionQuery = "", guidance, allowCreate = true, co
     onGlobalFilterChange: value => { setQ(String(value)); setPagination(previous => ({ ...previous, pageIndex: 0 })) },
   })
   const context = new URLSearchParams(Object.fromEntries(Object.entries({ contactId, enquiryId, opportunityId }).filter((entry): entry is [string, string] => !!entry[1])))
-  const filterCount = [scope !== (embedded ? "visible" : "mine"), !!due, !!type, !!owner, sort !== "dueOn"].filter(Boolean).length
+  const filterCount = [scope !== (embedded ? "visible" : "mine"), !!due, !!type, !!owner, sort !== "dueOn"].filter(Boolean).length + Object.keys(attributionQuery(attribution)).length
   const actions = <>
     <DropdownMenu><DropdownMenuTrigger asChild><Button variant="outline">More actions<ChevronDown className="size-4" aria-hidden="true" /></Button></DropdownMenuTrigger><DropdownMenuContent align="end">
       <DropdownMenuItem asChild><Link href={`/crm/activity-plans/apply?${context}`}>Apply plan</Link></DropdownMenuItem>
@@ -76,14 +81,16 @@ export function WorkList({ extensionQuery = "", guidance, allowCreate = true, co
     <Button asChild><Link href={`/crm/activities/new?${context}`}><Plus className="size-4" aria-hidden="true" />{term("crm.activity.singular", "Schedule activity", "Schedule {label}")}</Link></Button>
   </>
   const content = <>
+    <div className="flex justify-end"><ExportButton requirement="activities.export" href={`/api/crm/work/export?${queryString}`} filename="activities.csv" disabled={loading || !!error || !data?.total} /></div>
 
     {planLaunchId && <p className="text-sm">{term("crm.activity.plural", "Showing accessible activities from this plan application.", "Showing accessible {label} from this plan application.")} <Link className="underline" href="/crm/activities">Show all my work</Link></p>}
     {!embedded && <p className="text-sm text-muted-foreground">Work through reminders and follow-ups, review customer history, then record an outcome and the next step. Times use {data?.timeZone || "the business time zone"}.</p>}
     <div className="flex flex-wrap items-center gap-2">
       <div className="relative min-w-0 basis-full sm:basis-56 sm:flex-1"><Search className="pointer-events-none absolute top-2.5 left-3 size-4 text-muted-foreground" aria-hidden="true" /><Input aria-label={term("crm.activity.singular", "Search activity titles", "Search {label} titles")} placeholder={term("crm.activity.plural", "Search activities…", "Search {label}…")} className="pl-9" value={q} onChange={event => table.setGlobalFilter(event.target.value)} /></div>
       <DropdownSelect label={term("crm.activity.singular", "Activity status", "{label} status")} value={state} options={[{ value: "open", label: "Open" }, { value: "completed", label: "Completed" }, { value: "cancelled", label: "Cancelled" }, { value: "all", label: "All statuses" }]} onValueChange={value => { setState(value); setDue(""); setCompletionPeriod(null); reset() }} className="min-w-32" />
-      <Filters label={term("crm.activity.singular", "Activity filters", "{label} filters")} activeCount={filterCount} onReset={() => { setScope(embedded ? "visible" : "mine"); setDue(""); setType(""); setOwner(""); setSort("dueOn"); reset() }}>
+      <Filters label={term("crm.activity.singular", "Activity filters", "{label} filters")} activeCount={filterCount} onReset={() => { setAttribution(emptyAttributionFilters); setScope(embedded ? "visible" : "mine"); setDue(""); setType(""); setOwner(""); setSort("dueOn"); reset() }}>
             <FormField id="activity-scope" label={term("crm.activity.plural", "Show activities", "Show {label}")}><DropdownSelect id="activity-scope" label={term("crm.activity.singular", "Activity scope", "{label} scope")} className="w-full" value={scope} options={[{ value: "mine", label: "Assigned to me" }, { value: "visible", label: "All I can access" }]} onValueChange={value => { setScope(value); setOwner(""); reset() }} /></FormField>
+            <AttributionFilters value={attribution} onChange={value => { setAttribution(value); reset() }} choicesEndpoint="" originMode="retained" />
             <FormField id="activity-due" label="Due date"><DropdownSelect id="activity-due" label={term("crm.activity.singular", "Activity due filter", "{label} due filter")} className="w-full" value={due} options={[{ value: "", label: "Any due date" }, { value: "today", label: "Today" }, { value: "overdue", label: "Overdue" }, { value: "upcoming", label: "Upcoming" }, { value: "reminders", label: "My due reminders" }]} onValueChange={value => { setDue(value); setCompletionPeriod(null); if (value === "reminders" || value === "overdue") setState("open"); reset() }} /></FormField>
             <FormField id="activity-type" label={term("crm.activity.singular", "Activity type", "{label} type")}><ActivityTypeSelect id="activity-type" filter value={type} onChange={value => { setType(value); reset() }} /></FormField>
             <FormField id="activity-sort" label="Sort by"><DropdownSelect id="activity-sort" label={term("crm.activity.singular", "Activity sorting", "{label} sorting")} className="w-full" value={sort} options={[{ value: "dueOn", label: "Earliest due" }, { value: "priority", label: "Highest priority" }, { value: "updatedAt", label: "Recently updated" }]} onValueChange={value => { setSort(value); reset() }} /></FormField>

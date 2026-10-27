@@ -1,3 +1,4 @@
+import { attributionFilterShape, validateAttributionFilters } from "@/platform/collaborators/report-validation"
 import { termText } from "@/platform/terminology/message"
 import { z } from "zod"
 import { crmListSchema } from "./validation"
@@ -33,6 +34,7 @@ export const workRulePreviewSchema = z.object({ version: z.coerce.number().int()
 export const workCancelSchema = z.object({ version: z.number().int().positive(), reason: z.string().trim().min(1).max(2000) }).strict()
 export const workReminderSchema = z.object({ version: z.number().int().positive(), action: z.enum(["SNOOZE", "DISMISS"]), minutes: z.union([z.literal(15), z.literal(60), z.literal(1440)]).optional() }).strict().refine(value => value.action !== "SNOOZE" || !!value.minutes, { path: ["minutes"], message: "Choose a snooze interval." })
 export const workListSchema = crmListSchema.omit({ status: true, due: true, archived: true, sort: true }).extend({
+  ...attributionFilterShape,
   contactId: id.optional(), enquiryId: id.optional(), opportunityId: id.optional(), assignedUserId: id.optional(),
   planLaunchId: id.optional(),
   collectionOrderId: id.optional(),
@@ -45,6 +47,7 @@ export const workListSchema = crmListSchema.omit({ status: true, due: true, arch
   completedFrom: z.iso.date().optional(), completedThrough: z.iso.date().optional(),
   order: z.enum(["asc", "desc"]).default("asc"),
 }).superRefine((value, ctx) => {
+  validateAttributionFilters(value, ctx)
   if (!!value.completedFrom !== !!value.completedThrough || (value.completedFrom && value.completedThrough && (value.completedThrough < value.completedFrom || Date.parse(value.completedThrough) - Date.parse(value.completedFrom) > 365 * 86400000))) ctx.addIssue({ code: "custom", path: ["completedThrough"], message: "Choose a completion period of 1–366 days." })
   if (!!value.from !== !!value.to || (value.from && value.to && (value.to <= value.from || Date.parse(value.to) - Date.parse(value.from) > 62 * 86400000))) ctx.addIssue({ code: "custom", path: ["to"], message: "Choose a calendar window of 1–62 days." })
 })

@@ -132,13 +132,15 @@ Phase 4A implements local [partner introduction evidence](PARTNER_ATTRIBUTION_R1
 on enquiries/direct opportunities, inherited exactly through conversion. Existing
 records remain unattributed; no owner or access backfill. Phase 4B adds local
 [introduction controls and sales-report filters](PARTNER_REPORTING_UI_R10.md).
-Phase 4C activity/financial reporting and dashboard contributions remain pending.
+Phase 4C1 adds local [activity filters, drill-downs and exports](PARTNER_ACTIVITY_R10.md).
+Phase 4C2 source-derived financial reporting and dashboard contributions remain pending.
 
 Keep introducing collaborator, responsible salesperson, supervising manager and
 record company/office as separate dimensions. Preserve source attribution through
-reassignment; count business outcomes once in company totals. Employee activity
-measures employee actions; partner results and supervised portfolio totals have
-explicit reporting filters and drill-downs.
+reassignment; count business outcomes once in company totals. Activity workload
+and completion reports explicitly use the assigned account; the audit identifies
+who performed a change. Partner results and supervised
+portfolio totals have explicit reporting filters and drill-downs.
 
 Before enabling phases 2-4 on hosted staging, take a fresh encrypted, restore-
 tested backup and rehearse migrations against a copy. Compare existing client
