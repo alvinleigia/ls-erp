@@ -10,7 +10,7 @@ const summary = {
   upcomingAppointments: [{ id: "appointment", startAt: "2030-10-08T10:00:00Z", status: "CONFIRMED", customerName: "Alex", staffName: "Sam", serviceName: "Consultation", priceCents: 30000 }],
   lowStock: [], generatedAt: "2030-10-07T10:00:00Z",
 }
-const audit = { id: "audit", event: "leave.request.reviewed", entityType: "LeaveRequest", entityId: "leave", actorUserId: "admin", actorName: "Manager", actorEmail: "manager@example.test", actorRole: "MANAGER", requestId: "request-123", metadata: { source: "UI", message: "x".repeat(300) }, before: { status: "PENDING" }, after: { status: "APPROVED" }, createdAt: "2030-10-07T10:00:00Z" }
+const audit = { context: { timeZone: "Asia/Kolkata", dateFormat: "dd/MM/yyyy", timeFormat: "H24" }, id: "audit", event: "leave.request.reviewed", entityType: "LeaveRequest", entityId: "leave", actorUserId: "admin", actorName: "Manager", actorEmail: "manager@example.test", actorRole: "MANAGER", requestId: "request-123", metadata: { source: "UI", message: "x".repeat(300) }, before: { status: "PENDING" }, after: { status: "APPROVED" }, createdAt: "2030-10-07T10:00:00Z" }
 async function fixture(page: Page) {
   const queries: URL[] = [], writes: string[] = []
   const state = { fail: false, empty: false, detailDenied: false }

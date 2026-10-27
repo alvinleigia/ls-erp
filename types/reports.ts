@@ -3,12 +3,12 @@ import type { RecordOffice } from "./companies"
 
 export type CouponUsageReportStatus = "used" | "not_used"
 
-export type CouponUsageReportContext = {
-  office: RecordOffice | null
+export type ReportDateContext = {
   timeZone: string
   dateFormat: string
   timeFormat: "H12" | "H24"
 }
+export type CouponUsageReportContext = ReportDateContext & { office: RecordOffice | null }
 export type CouponUsageReportResponse = ListResponse<CouponUsageReportRow> & {
   summary: CouponUsageReportSummary
   status: CouponUsageReportStatus
@@ -47,5 +47,7 @@ export type AuditLogReportRow = {
   createdAt: string
 }
 
+export type AuditLogReportResponse = ListResponse<AuditLogReportRow> & { canReviewSecurity: boolean; context: ReportDateContext }
+
 export type AuditFieldChange = { field: string; before: unknown; after: unknown }
-export type AuditLogDetail = AuditLogReportRow & { metadata: unknown; before: unknown; after: unknown; changes: AuditFieldChange[] }
+export type AuditLogDetail = AuditLogReportRow & { context: ReportDateContext; metadata: unknown; before: unknown; after: unknown; changes: AuditFieldChange[] }

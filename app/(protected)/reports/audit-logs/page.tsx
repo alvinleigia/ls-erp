@@ -17,14 +17,8 @@ import { FormField } from "@/components/form-field"
 import { Button } from "@/components/ui/button"
 import { DropdownSelect } from "@/components/ui/dropdown-select"
 import { Input } from "@/components/ui/input"
-import type { ListResponse } from "@/types/api"
-import type { AuditLogReportRow, AuditLogDetail } from "@/types/reports"
-
-const formatDateTime = (value: string) => {
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return "-"
-  return date.toLocaleString()
-}
+import { formatReportDateTime } from "@/lib/report-dates"
+import type { AuditLogReportRow, AuditLogDetail, AuditLogReportResponse, ReportDateContext } from "@/types/reports"
 
 const prettyJson = (value: unknown) => {
   if (value === null || value === undefined) return "-"
@@ -55,10 +49,16 @@ export default function AuditLogsReportPage() {
   const [category, setCategory] = React.useState("all")
   const [actorUserId, setActorUserId] = React.useState("")
   const [entityId, setEntityId] = React.useState("")
+  const [context, setContext] = React.useState<ReportDateContext | null>(null)
   const [canReviewSecurity, setCanReviewSecurity] = React.useState(false)
 
   const loadReport = React.useCallback(async (signal: AbortSignal) => {
     setLoading(true)
+    setItems([])
+    setTotalRows(0)
+    setContext(null)
+    setDetailId(null)
+    setCanReviewSecurity(false)
     const params = new URLSearchParams()
     params.set("page", String(pagination.pageIndex + 1))
     params.set("pageSize", String(pagination.pageSize))
@@ -79,8 +79,9 @@ export default function AuditLogsReportPage() {
         const body = await response.json().catch(() => ({})) as { error?: string }
         throw new Error(body.error || "Unable to load report.")
       }
-      const data = await response.json() as ListResponse<AuditLogReportRow> & { canReviewSecurity: boolean }
+      const data = await response.json() as AuditLogReportResponse
       if (signal.aborted) return
+      setContext(data.context)
       setItems(data.items)
       setTotalRows(data.total)
       setCanReviewSecurity(data.canReviewSecurity)
@@ -115,7 +116,7 @@ export default function AuditLogsReportPage() {
       {
         id: "createdAt",
         header: "When",
-        accessorFn: (row) => formatDateTime(row.createdAt),
+        accessorFn: (row) => formatReportDateTime(row.createdAt, context),
       },
       {
         accessorKey: "event",
@@ -158,7 +159,7 @@ export default function AuditLogsReportPage() {
         ),
       },
     ],
-    []
+    [context]
   )
 
   const table = useReactTable({
@@ -183,6 +184,7 @@ export default function AuditLogsReportPage() {
     <div className={pageClass}>
       <PageHeader title="Audit logs" description="Review who changed a record and what changed. Security events are administrator-only. CRM managers use the history on accessible records." actions={<Button variant="outline" disabled={loading} onClick={() => setRefresh(value => value + 1)}>Refresh</Button>} />
 
+      {context && !loading && !error && <p role="status" className="text-sm text-muted-foreground">All readable source offices and permitted shared events. Event dates in {context.timeZone}.</p>}
       <Surface>
       <TableToolbar table={table} searchPlaceholder="Search event, entity, actor, or request ID"><DropdownSelect label="Event category" value={category} options={[{ value: "all", label: "All permitted events" }, { value: "business", label: "Business events" }, { value: "security", label: "Security events", disabled: !canReviewSecurity }]} onValueChange={value => { setCategory(value); setPagination(prev => ({ ...prev, pageIndex: 0 })) }} /><Filters activeCount={[event, entityType, entityId, actorUserId, requestId, dateFrom, dateTo].filter(Boolean).length} onReset={() => {
               setCategory("all")
@@ -233,7 +235,7 @@ export default function AuditLogsReportPage() {
               className="w-full"
             />
           </FormField>
-<FormField id="audit-date-from" label="Date from (UTC)">
+<FormField id="audit-date-from" label="Date from">
             <Input
               id="audit-date-from"
               type="date"
@@ -244,7 +246,7 @@ export default function AuditLogsReportPage() {
               }}
             />
           </FormField>
-<FormField id="audit-date-to" label="Date to (UTC)">
+<FormField id="audit-date-to" label="Date to">
             <Input
               id="audit-date-to"
               type="date"
@@ -285,7 +287,7 @@ function AuditEntry({ id, onClose }: { id: string; onClose: () => void }) {
   window.addEventListener("focus", onFocus)
   return () => window.removeEventListener("focus", onFocus)
  }, [])
- return <RecordPanel title={row?.event || "Audit entry"} description={row ? formatDateTime(row.createdAt) : "Read-only event history"} onClose={onClose} actions={<Button variant="outline" onClick={() => { setRow(null); refresh() }}>Reload entry</Button>}>
+ return <RecordPanel title={row?.event || "Audit entry"} description={row ? formatReportDateTime(row.createdAt, row.context) : "Read-only event history"} onClose={onClose} actions={<Button variant="outline" onClick={() => { setRow(null); refresh() }}>Reload entry</Button>}>
   {error ? <p role="alert" className="text-destructive">{error}</p> : !row ? <p>Loading audit entry...</p> : <>
    <Section title="Event details"><ReadOnlyFields fields={[
     { label: "Actor", value: row.actorName || row.actorEmail || row.actorUserId }, { label: "Actor role", value: row.actorRole },

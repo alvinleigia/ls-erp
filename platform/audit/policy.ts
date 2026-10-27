@@ -1,53 +1,27 @@
-import type { Prisma } from "@prisma/client"
+import { Prisma } from "@prisma/client"
 import type { BusinessActor } from "../policy"
 import { moduleEnabled } from "../modules"
-import { permits, satisfies } from "../access/policy"
+import { satisfies } from "../access/policy"
 import { recordLimits, recordScope } from "../access/rules"
+import { auditFamilies } from "./registry"
 
-export const securityEvents: Prisma.AuditLogWhereInput = { OR: ["workspace.", "structure.", "access.", "module.", "tenant.", "core.invitations.", "crm.team.", "team."].map(prefix => ({ event: { startsWith: prefix } })) }
+export const securityEvents: Prisma.AuditLogWhereInput = { OR: auditFamilies.filter(family => family.boundary === "security").map(family => ({ event: { startsWith: family.prefix } })) }
+const prefixSql = (prefix: string) => Prisma.sql`starts_with(a.event, ${prefix})`
+export const securityEventSql = Prisma.sql`(${Prisma.join(auditFamilies.filter(family => family.boundary === "security").map(family => prefixSql(family.prefix)), " OR ")})`
 
-export async function auditScope(tx: Prisma.TransactionClient, actor: BusinessActor): Promise<Prisma.AuditLogWhereInput> {
- const tenantId = actor.tenantId
-    const flags = await tx.tenantModule.findMany({ where: { tenantId }, select: { key: true, allowed: true, enabled: true } })
-    const appointmentsEnabled = moduleEnabled(flags, "appointments")
-    const canReadBookings = appointmentsEnabled && permits(actor, "appointments.read")
-    const canReadCoupons = appointmentsEnabled && permits(actor, "appointmentCoupons.read")
-    return {
-      // Apply access before pagination/counting; the same predicate guards detail reads.
-      AND: [
-        ...(actor.role !== "ADMIN" ? [{ NOT: { event: { startsWith: "structure." } } }] : []),
-        ...(!permits(actor, "restrictedFields.read") ? [{ NOT: { event: { startsWith: "crm.customField" } } }] : []),
-        // Polymorphic historical snapshots have no record FK. Restricted managers
-        // use scoped record timelines; never expose a hidden record via its audit copy.
-        ...((["enquiries", "opportunities", "contacts", "accounts", "activities", "quotations", "salesOrders", "receivables", "orderPayments"] as const).some(resource => recordLimits(actor, resource, "read").length > 0) ? [{ NOT: { OR: ["crm.", "salesOrder.", "receivable.", "catalog.reservation."].map(prefix => ({ event: { startsWith: prefix } })) } }] : []),
-        ...(recordLimits(actor, "projects", "read").length > 0 ? [{ NOT: { OR: [{ entityType: { startsWith: "RealEstate" } }, { event: { startsWith: "catalog." } }] } }] : []),
-        ...(!(recordScope(actor, "auditLogs", "read") === "ALL" && moduleEnabled(flags, "receivables") && satisfies(actor, ["salesOrders.read", "receivables.read", "orderPayments.read"])) ? [{ NOT: { event: { startsWith: "receivable." } } }] : []),
-        ...(!moduleEnabled(flags, "salesOrders") || !permits(actor, "salesOrders.read") ? [{ NOT: { event: { startsWith: "salesOrder." } } }] : []),
-        ...(!(recordScope(actor, "auditLogs", "read") === "ALL" && moduleEnabled(flags, "catalog") && moduleEnabled(flags, "salesOrders") && permits(actor, "unitReservations.read") && permits(actor, "salesOrders.read")) ? [{ NOT: { event: { startsWith: "catalog.reservation." } } }] : []),
-        ...(!moduleEnabled(flags, "catalog") || !permits(actor, "catalogItems.read") ? [{ NOT: { event: { startsWith: "catalog." } } }] : []),
-        ...(!moduleEnabled(flags, "realEstate") || !permits(actor, "projects.read") ? [{ NOT: { AND: [{ event: { startsWith: "catalog." } }, { after: { path: ["extensionKey"], equals: "realEstate" } }] } }] : []),
-        ...(!moduleEnabled(flags, "crm") ? [{ NOT: { AND: [{ event: { startsWith: "crm." } }, { NOT: securityEvents }] } }] : []),
-        ...(!moduleEnabled(flags, "salesDocuments") ? [{ NOT: { OR: [{ event: { startsWith: "crm.quotation." } }, { event: { startsWith: "crm.quotationTemplate." } }] } }] : []),
-        ...(!moduleEnabled(flags, "realEstate") ? [{ NOT: { entityType: { startsWith: "RealEstate" } } }] : []),
-        ...(["inventoryProducts", "inventoryCategories", "inventorySuppliers", "inventoryPurchases"] as const).filter(resource => !moduleEnabled(flags, "inventory") || !permits(actor, `${resource}.read`)).map(resource => ({ NOT: { event: { startsWith: `inventory.${resource}.` } } })),
-        ...(["services", "serviceCategories"] as const).filter(resource => !moduleEnabled(flags, "services") || !permits(actor, `${resource}.read`)).map(resource => ({ NOT: { event: { startsWith: `services.${resource}.` } } })),
-        ...(!(recordScope(actor, "auditLogs", "read") === "ALL" && moduleEnabled(flags, "services")) ? [{ NOT: { event: { startsWith: "services.eligibility." } } }] : []),
-        ...(actor.role !== "ADMIN" ? [{ OR: [
-          { id: { in: [] as string[] } }, // Explicit deny when no resource is readable.
-          ...(moduleEnabled(flags, "catalog") && permits(actor, "catalogItems.read") ? [{ event: { startsWith: "catalog." } }] : []),
-          ...(permits(actor, "businessSettings.read") ? [{ event: { startsWith: "core.businessSettings." } }] : []),
-          ...(permits(actor, "taxRates.read") ? [{ event: { startsWith: "core.taxRates." } }] : []),
-          ...(["inventoryProducts", "inventoryCategories", "inventorySuppliers", "inventoryPurchases"] as const).filter(resource => moduleEnabled(flags, "inventory") && permits(actor, `${resource}.read`)).map(resource => ({ event: { startsWith: `inventory.${resource}.` } })),
-          ...(["services", "serviceCategories"] as const).filter(resource => moduleEnabled(flags, "services") && permits(actor, `${resource}.read`)).map(resource => ({ event: { startsWith: `services.${resource}.` } })),
-          ...(["leaveDefinitions", "leaveGroups", "shiftTemplates", "shiftSchedules", "shiftPlans", "shiftRoster"] as const).filter(resource => moduleEnabled(flags, resource.startsWith("leave") ? "leaves" : "shifts") && permits(actor, `${resource}.read`)).map(resource => ({ event: { startsWith: `workforce.${resource}.` } })),
-          ...(canReadBookings ? ["appointment.", "appointments.order.", "appointments.invoice."].map(prefix => ({ event: { startsWith: prefix } })) : []),
-          ...(canReadCoupons ? [{ event: { startsWith: "appointments.coupon." } }] : []),
-        ] }] : []),
-        ...(["leaveDefinitions", "leaveGroups", "shiftTemplates", "shiftSchedules", "shiftPlans", "shiftRoster"] as const).filter(resource => !moduleEnabled(flags, resource.startsWith("leave") ? "leaves" : "shifts") || !permits(actor, `${resource}.read`)).map(resource => ({ NOT: { event: { startsWith: `workforce.${resource}.` } } })),
-        ...(!(recordScope(actor, "auditLogs", "read") === "ALL" && moduleEnabled(flags, "leaves") && permits(actor, "leaveApprovals.read")) ? [{ NOT: { event: { startsWith: "leave.request." } } }] : []),
-        ...(!canReadBookings ? [{ NOT: { OR: [{ event: { startsWith: "appointment." } }, { event: { startsWith: "appointments.order." } }, { event: { startsWith: "appointments.invoice." } }] } }] : []),
-        ...(!canReadCoupons ? [{ NOT: { event: { startsWith: "appointments.coupon." } } }] : []),
-      ],
-      tenantId,
-    }
+export async function auditScope(tx: Prisma.TransactionClient, actor: BusinessActor): Promise<Prisma.Sql> {
+  const flags = await tx.tenantModule.findMany({ where: { tenantId: actor.tenantId }, select: { key: true, allowed: true, enabled: true } })
+  const families = auditFamilies.filter(family => (!family.adminOnly || actor.role === "ADMIN") &&
+    (!family.fullAudit || recordScope(actor, "auditLogs", "read") === "ALL") &&
+    (!family.read || satisfies(actor, family.read)) &&
+    (!family.modules || family.modules.every(key => moduleEnabled(flags, key))) &&
+    (!family.unscoped || family.unscoped.every(resource => recordLimits(actor, resource, "read").length === 0)))
+  const predicates = families.map(family => {
+    const children = auditFamilies.filter(child => child.prefix !== family.prefix && child.prefix.startsWith(family.prefix))
+    return Prisma.sql`(${prefixSql(family.prefix)}${children.length ? Prisma.sql` AND NOT (${Prisma.join(children.map(child => prefixSql(child.prefix)), " OR ")})` : Prisma.empty})`
+  })
+  // Historical catalog snapshots can contain add-on fields. Disabling the add-on
+  // hides that evidence, including before-only snapshots, without rewriting it.
+  const addOn = moduleEnabled(flags, "realEstate") && satisfies(actor, "projects.read") ? Prisma.empty : Prisma.sql` AND NOT (starts_with(a.event, 'catalog.') AND (COALESCE(a.before->>'extensionKey', '')='realEstate' OR COALESCE(a.after->>'extensionKey', '')='realEstate'))`
+  return Prisma.sql`(${predicates.length ? Prisma.join(predicates, " OR ") : Prisma.sql`false`})${addOn}`
 }

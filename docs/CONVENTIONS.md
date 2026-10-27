@@ -62,6 +62,7 @@ This is the baseline for new modules (API + UI) in this codebase.
   - avoid fixed-origin env vars (for example `APP_URL`, `NEXT_PUBLIC_APP_URL`) for tenant-domain links.
 
 ## Audit logging
+- Composed audit reports use the closed `platform/audit/registry.ts` event-family registry and native source RLS. Count and page headers share one statement snapshot; list/detail checks refresh authority after the tenant security lock. New families require explicit audience, activation, source/privacy and negative isolation checks. Unknown families stay hidden, including for Admin. See `docs/AUDIT_REPORTS_R10.md` and `docs/RESOURCE_BOUNDARIES_R10.md`.
 - Domain-changing APIs should write audit rows via `recordDomainAuditEventSafe` (`lib/domain-audit.ts`).
 - Include `tenantId`, `event`, `entityType`, `entityId`, `actorUserId`, `actorRole`, and `requestId` whenever available.
 - Include `before`/`after` snapshots for status transitions and key mutable fields.

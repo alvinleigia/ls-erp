@@ -16,9 +16,7 @@ import { FormField } from "@/components/form-field"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { BookingOfficePicker } from "@/components/appointments/choice-picker"
-import { businessDate, wallTime } from "@/lib/business-time"
-import { formatDateForDisplay } from "@/lib/date"
-import { formatTimeFrom24h } from "@/lib/formatting"
+import { formatReportDateTime } from "@/lib/report-dates"
 import type {
   CouponUsageReportRow,
   CouponUsageReportStatus,
@@ -32,13 +30,6 @@ const defaultSummary: CouponUsageReportSummary = {
   usedCustomers: 0,
   notUsedCustomers: 0,
   totalRedemptions: 0,
-}
-
-const formatDateTime = (value: string | null, context: CouponUsageReportContext | null) => {
-  if (!value || !context) return "-"
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return "-"
-  return `${formatDateForDisplay(businessDate(date, context.timeZone), context.dateFormat)} ${formatTimeFrom24h(wallTime(date, context.timeZone).slice(11, 16), context)}`
 }
 
 function CouponUsageContent() {
@@ -136,7 +127,7 @@ function CouponUsageContent() {
       {
         id: "lastUsed",
         header: "Latest matching booking",
-        accessorFn: (row) => formatDateTime(row.lastCouponUsedAt, context),
+        accessorFn: (row) => formatReportDateTime(row.lastCouponUsedAt, context),
       },
       {
         id: "codes",

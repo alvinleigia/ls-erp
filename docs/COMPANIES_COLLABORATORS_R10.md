@@ -71,6 +71,11 @@ Phase 2D6A standardizes [Inventory transactions and mandatory audits](INVENTORY_
 Phase 2D6B1 rehearses the native stock conversion; 2D6B2 connects office balances,
 purchase/movement ownership, canonical posting, financial projections and forms
 through migration 129. This Inventory slice is local and unreleased.
+Phase 2D7A scopes the coupon report to readable booking sources; phase 2D7B
+adds the closed composed audit registry, current report authorization and source
+boundary inventory. See [audit report contract](AUDIT_REPORTS_R10.md) and
+[resource boundary inventory](RESOURCE_BOUNDARIES_R10.md). The exhaustive
+cross-module ownership registry and final workspace/user controls remain pending.
 Remaining operational families, assignment selectors and workspace
 controls remain prerequisites before exposing office controls or deploying the
 office-isolation release.

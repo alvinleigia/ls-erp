@@ -25,6 +25,7 @@ before(async()=>{
  await root.connect()
  for(const tenant of [a,b]){
   await root.query('INSERT INTO "Tenant" (id,name,slug,"updatedAt") VALUES ($1,$1,$1,now())',[tenant])
+  await root.query(`INSERT INTO "AppSetting"(id,"tenantId","timeZone","updatedAt") VALUES($1,$1,'UTC',now())`,[tenant])
   for(const role of ['ADMIN','MANAGER','STAFF'])await root.query('INSERT INTO "User" (id,name,email,role,"tenantId","updatedAt") VALUES ($1,$2,$3,$4,$5,now())',[tenant+'_'+role.toLowerCase(),role,randomUUID()+'@example.test',role,tenant])
   for(const key of ['crm','realEstate','salesDocuments','paymentPlans','inventory'])await root.query('INSERT INTO "TenantModule" ("tenantId",key,allowed,enabled,"updatedAt") VALUES ($1,$2,true,true,now())',[tenant,key])
  }
@@ -44,7 +45,7 @@ after(async()=>{await db.$disconnect();await pool.end();await prisma.$disconnect
 test('lists omit payloads and details show recorded field changes with nested credentials redacted',async()=>{
  const response=await body(await call())
  // Orphaned CRM/quotation snapshots have no canonical office and stay hidden.
- assert.equal(response.canReviewSecurity,true);assert.equal(response.total,5)
+ assert.equal(response.canReviewSecurity,true);assert.equal(response.total,4)
  for(const row of response.items){assert.equal(row.before,undefined);assert.equal(row.after,undefined);assert.equal(row.metadata,undefined);assert.equal(row.actorName,'MANAGER')}
  const detail=await body(await call('ADMIN','',a+'_product'))
  assert.deepEqual(detail.changes.map(c=>c.field),['name','status'])
@@ -97,7 +98,7 @@ test('direct service rejects suspended tenants and normalized platform-tenant co
  try {await assert.rejects(service.list({}),e=>e.status===403)} finally {if(previous===undefined)delete process.env.PLATFORM_ADMIN_TENANT_SLUG;else process.env.PLATFORM_ADMIN_TENANT_SLUG=previous}
 })
 test('ten thousand audit rows use bounded queries and indexed chronological and record lookups',async()=>{
- await root.query(`INSERT INTO "AuditLog" (id,"tenantId",event,"entityType","entityId","actorUserId","createdAt",after) SELECT $1 || n,$2,'scale.updated','Scale',CASE WHEN n%100=0 THEN 'target' ELSE 'other' END,$3,'2030-01-01'::timestamp + n*interval '1 minute','{"large":"snapshot"}'::jsonb FROM generate_series(1,10000) n`,[a+'_scale_',a,a+'_admin'])
+ await root.query(`INSERT INTO "AuditLog" (id,"tenantId",event,"entityType","entityId","actorUserId","createdAt",after) SELECT $1 || n,$2,'core.taxRates.updated','Scale',CASE WHEN n%100=0 THEN 'target' ELSE 'other' END,$3,'2030-01-01'::timestamp + n*interval '1 minute','{"large":"snapshot"}'::jsonb FROM generate_series(1,10000) n`,[a+'_scale_',a,a+'_admin'])
  await root.query('ANALYZE "AuditLog"');queries.length=0
  const result=await service.list({entityType:'Scale',pageSize:5})
  assert.equal(result.total,10000);assert.equal(result.items.length,5);assert.ok(queries.length<=8,`queries: ${queries.length}`)

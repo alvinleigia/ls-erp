@@ -80,7 +80,8 @@ and whitespace checks passed. Evidence logs are retained locally under
 
 ## Remaining phase 2D7 work
 
-Phase 2D7B must inventory shared/security/source/composed report families and
-review composed audit filters/details/exports against current source permissions.
-User/workspace UI and collaborator release work remain later gates. Completing
+Phase 2D7B now adds the closed composed audit family registry and report review
+(`AUDIT_REPORTS_R10.md`), with the source inventory in `RESOURCE_BOUNDARIES_R10.md`.
+The exhaustive cross-module executable ownership registry, user/workspace UI and
+collaborator release work remain later gates. Completing
 this coupon report is not evidence that every report or workspace control is ready.

@@ -1,3 +1,34 @@
+## R10 - Composed audit report scope (phase 2D7B, local)
+
+A closed event-family registry now defines shared, native source, composed and
+security report boundaries. Specific prefixes override parents even when their
+module/action is unavailable; unregistered families stay hidden for all roles.
+Stock events now appear for authorized reviewers within their permitted offices.
+Existing CRM composed-report audiences and fully authorized reservation review
+are retained; current native sharing/office/private-history policies still apply.
+
+Audit reads acquire the shared Tenant security row lock, then resolve current
+account/profile authority in Read Committed. Counts and paged headers use one
+statement snapshot, including concurrent modules outside the scheduling lock.
+List/detail share one family/source scope; detail credentials remain redacted.
+Audit and coupon screens share tenant date formatting, with tenant-calendar
+filters, explicit date basis and stale result clearing. No audit export exists;
+unknown list selectors cannot request an unbounded snapshot response.
+
+Verified: 23 audit/access checks, nine coupon report regressions and one real
+synthetic-sign-in Chrome flow across desktop/mobile, including revoked-office
+reload/recovery. The 10,000-row fixture used eight statements and no snapshot
+payloads in lists. The disposable 129-migration rehearsal and 18 Inventory native
+checks passed. Production build, TypeScript, changed-file ESLint and whitespace
+checks passed; desktop/mobile/detail/empty screenshots were inspected. No skipped
+checks count as passing.
+
+Local on staging only: no push, deployment, hosted migration or client data
+changes. Phase 2D7C still needs the consolidated executable ownership registry
+and workspace/user controls readiness review. See the
+[audit report contract](AUDIT_REPORTS_R10.md) and
+[current resource inventory](RESOURCE_BOUNDARIES_R10.md).
+
 ## R10 - Booking-source coupon report (phase 2D7A, local)
 
 The coupon report now derives both views, absence tests and totals from readable,
