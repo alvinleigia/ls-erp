@@ -1,8 +1,9 @@
 # R10 phase 2D7C: executable ownership contracts and workspace readiness
 
 Implemented locally on `staging`. No migration, backfill, permission rewrite,
-hosted change, push or deployment is included. The workspace selector and office
-membership editor remain gated for the next UI slice.
+hosted change, push or deployment is included. The workspace selector remains
+gated. The [office-membership editor](OFFICE_MEMBERSHIP_UI_R10.md) is now
+implemented locally in phase 2D8A.
 
 ## One registration contract
 
@@ -92,11 +93,11 @@ No skipped checks were counted as passing. Evidence remains under
 
 ## Workspace UI readiness review
 
-The existing APIs are suitable foundations, but UI controls are not yet released:
+The existing APIs are suitable foundations. UI progress is local only:
 
-1. Add a Tenant Admin office-membership editor using the existing versioned
-   `/api/access/users/:id/offices` API. Keep exact offices, company grants and
-   explicit subsidiary coverage distinct. Read eligibility includes retained
+1. Phase 2D8A implements the Tenant Admin office-membership editor using the
+   existing versioned `/api/access/users/:id/offices` API. Exact offices, company
+   grants and explicit subsidiary coverage remain distinct. Read eligibility includes retained
    closed-office history; creation needs an active permitted office.
 2. Wire initial office access into direct user creation and invitations. The
    backend already accepts `officeAccess`; the current forms do not collect it.
@@ -113,6 +114,6 @@ The existing APIs are suitable foundations, but UI controls are not yet released
 5. Complete the R10 staged release/recovery gates before exposing these changes
    to hosted tenants. External collaborator accounts remain a later R10 phase.
 
-The next bounded implementation is **phase 2D8A: office membership administration
-UI**, followed by creation/invitation wiring and the workspace selector. This
+The next bounded implementation is **phase 2D8B: initial office access in user
+creation/invitations**, followed by the workspace selector. This
 review does not authorize bypasses or substitute directory placement for access.

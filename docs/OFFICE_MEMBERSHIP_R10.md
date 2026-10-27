@@ -3,8 +3,9 @@
 This is the shared membership engine, implemented locally on `staging`.
 It is not the completed office-isolation release. Phase 2B now connects
 [sales record ownership and office RLS](SALES_OFFICE_OWNERSHIP_R10.md) while
-retaining R9 rules. Operational families and provisioning remain pending; no
-office access controls or workspace switcher are exposed in the UI. Complete
+retaining R9 rules. Later local phases cover operational families and provisioning.
+Phase 2D8A adds the [admin editor](OFFICE_MEMBERSHIP_UI_R10.md); initial-access
+forms and the workspace switcher remain pending. Complete
 the release contract before deploying these phases to clients.
 
 ## Membership contract
@@ -69,8 +70,9 @@ authenticated tenant wrapper:
 | `GET /api/workspace/offices` | Current business user; paginated active creation choices with bounded search/sort |
 | `GET/PATCH /api/workspace/office` | Current business user; own effective creation preference only |
 
-These backend endpoints do not authorize business-record access. They are not
-linked from the UI until phase 2 ownership/enforcement is complete.
+These endpoints do not authorize business-record actions. Phase 2D8A connects
+the membership API to local user management and adds its read-only draft creation
+choice endpoint; see `OFFICE_MEMBERSHIP_UI_R10.md`. Hosted release remains gated.
 
 Database helpers under the unexposed `app` schema bind the authenticated actor and
 tenant even when invoked from a security-definer function:
@@ -91,9 +93,9 @@ for membership changes and self/Admin-only for preference changes.
 ## Remaining phase 2 work
 
 Phase 2D7C now provides the executable ownership/model registration and workspace
-readiness review in `RESOURCE_OWNERSHIP_R10.md`. Membership, initial provisioning
-and self-service creation-office controls are the next UI work; no new office
-switcher is exposed by that consolidation.
+readiness review in `RESOURCE_OWNERSHIP_R10.md`. Phase 2D8A implements the
+local admin membership editor. Initial provisioning forms and self-service
+creation-office controls are the next UI work.
 
 1. Sales roots and canonical children now have native ownership in phase 2B.
    Complete the operational families and personal/conflict paths, retaining the

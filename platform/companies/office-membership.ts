@@ -7,8 +7,10 @@ import type { z } from "zod"
 
 type Identity = Pick<BusinessActor, "tenantId" | "userId" | "requestId">
 type Tx = Prisma.TransactionClient
+const officeCaption = { id: true, name: true, code: true, archived: true, company: { select: { id: true, name: true, code: true, archived: true } } } as const
 const policyInclude = {
-  offices: { include: { office: { select: { id: true, name: true, code: true, archived: true } } }, orderBy: { officeId: "asc" } },
+  creationOffice: { select: officeCaption },
+  offices: { include: { office: { select: officeCaption } }, orderBy: { officeId: "asc" } },
   companies: { include: { company: { select: { id: true, name: true, code: true, archived: true } } }, orderBy: { companyId: "asc" } },
 } satisfies Prisma.BusinessOfficePolicyInclude
 

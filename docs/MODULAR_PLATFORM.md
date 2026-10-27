@@ -1,3 +1,32 @@
+## R10 - Tenant-admin office membership editor (phase 2D8A, local)
+
+Business user details and Users row actions now expose Office access for Tenant
+Admin. Specific offices and company grants remain distinct; subsidiary coverage
+is explicit per company. Active creation-office choices resolve from the draft,
+with bounded search/paging and independently scoped selected captions. Closed
+grants retain historical labels. Administrator oversight remains tenant-wide;
+memberships do not alter action profiles, teams, workplace placement or approvals.
+
+The read-only POST creation-choice preview validates proposed grants without
+saving a policy, version, preference, audit or intermediate access. Saves retain
+the existing transactional mandatory audit and optimistic version. Cancel leaves
+stored state unchanged; 409 preserves the draft and requires explicit discard /
+reload, and 403 clears editing controls. Picker opening preserves the current
+page; actual search changes reset paging.
+
+Verified: 30 membership/preview integration checks and three real-sign-in Chrome
+flows passed. Cases include explicit descendants, future offices/reparenting,
+closed history, foreign/malformed input, revocation, off-page labels, dirty
+cancellation, concurrent edits and unchanged staff/profile assignments. Desktop /
+mobile screenshots were inspected; mobile footer controls remain in viewport.
+The disposable 129-migration rehearsal and all 18 Inventory native checks passed.
+Production build, TypeScript, changed-file ESLint and whitespace checks passed.
+No skips count as passes. See [editor contract](OFFICE_MEMBERSHIP_UI_R10.md).
+
+Local on staging only: no schema migration, data backfill, hosted changes, push
+or deployment. Next: phase 2D8B initial office access in creation/invitation
+forms, then the self-service creation-office selector and R10 release gates.
+
 ## R10 - Executable ownership contracts (phase 2D7C, local)
 
 One resource registry now binds the existing scope families to canonical roots,

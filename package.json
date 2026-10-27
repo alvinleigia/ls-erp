@@ -60,6 +60,8 @@
     "test:access:profiles": "node scripts/test-sales-orders.cjs --profiles",
     "test:companies": "node scripts/test-sales-orders.cjs --companies",
     "test:companies:browser": "node scripts/test-sales-orders.cjs --companies --browser",
+    "test:office-membership-ui": "node scripts/test-sales-orders.cjs --office-membership-ui",
+    "test:office-membership-ui:browser": "node scripts/test-sales-orders.cjs --office-membership-ui --browser",
     "test:office-access": "node scripts/test-sales-orders.cjs --office-access",
     "test:office-access:browser": "node scripts/test-sales-orders.cjs --office-access --browser",
     "test:office-records": "node scripts/test-sales-orders.cjs --office-records",

@@ -42,6 +42,7 @@ import { useFormErrors } from "@/hooks/use-form-errors"
 import { canInvite, type Role } from "@/lib/permissions"
 import type { ListResponse } from "@/types/api"
 import type { UserFormValues, UserRow, UserStatus } from "@/types/users"
+import { OfficeMembershipEditor } from "@/platform/companies/membership-editor"
 import { UserFormFields } from "./user-form-fields"
 import {
   defaultUserFormValues,
@@ -74,6 +75,7 @@ export default function UsersPage() {
   const [updating, setUpdating] = React.useState(false)
   const [createOpen, setCreateOpen] = React.useState(false)
   const [editOpen, setEditOpen] = React.useState(false)
+  const [officeUser, setOfficeUser] = React.useState<UserRow | null>(null)
   const [editingUser, setEditingUser] = React.useState<UserRow | null>(null)
   const {
     errors: createErrors,
@@ -362,6 +364,7 @@ export default function UsersPage() {
               >
                 View details
               </DropdownMenuItem>
+              {canManage && ["ADMIN", "MANAGER", "STAFF"].includes(row.original.role) && <DropdownMenuItem onSelect={() => setOfficeUser(row.original)}>Office access</DropdownMenuItem>}
               {row.original.role === "STAFF" ? (
                 <DropdownMenuItem
                   onSelect={() => window.location.assign(`/users/${row.original.id}/staff`)}
@@ -374,7 +377,7 @@ export default function UsersPage() {
         ),
       },
     ],
-    [canEditUser, startEdit]
+    [canEditUser, canManage, startEdit]
   )
 
   // eslint-disable-next-line react-hooks/incompatible-library
@@ -457,6 +460,7 @@ export default function UsersPage() {
 
       <DataTablePagination table={table} totalRows={totalRows} />
 
+      {officeUser && <OfficeMembershipEditor key={officeUser.id} user={officeUser} onClose={() => setOfficeUser(null)} onSaved={() => setOfficeUser(null)} />}
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent className="max-h-[90vh] flex flex-col">
           <DialogHeader>

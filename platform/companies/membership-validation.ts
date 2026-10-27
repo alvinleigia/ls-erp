@@ -12,3 +12,11 @@ function uniqueGrants(value: { officeIds: string[]; companies: { companyId: stri
 }
 export const initialOfficeMembershipSchema = z.object(fields).strict().superRefine(uniqueGrants)
 export const officeMembershipSchema = z.object({ version: z.number().int().nonnegative(), ...fields }).strict().superRefine(uniqueGrants)
+
+export const membershipCreationChoicesSchema = z.object({
+  officeIds: fields.officeIds, companies: fields.companies,
+  selected: id.nullable().default(null),
+  page: z.coerce.number().int().min(1).max(100000).default(1),
+  pageSize: z.coerce.number().int().min(1).max(100).default(20),
+  q: z.string().trim().max(160).default(""),
+}).strict().superRefine(uniqueGrants)

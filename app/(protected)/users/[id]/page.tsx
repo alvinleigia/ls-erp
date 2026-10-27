@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button"
 import { useDateFormatter } from "@/hooks/use-date-formatter"
 import { type Role } from "@/lib/permissions"
 import type { UserProfile } from "@/types/users"
+import { OfficeMembershipEditor } from "@/platform/companies/membership-editor"
 import { UserProfileSections } from "./user-profile-sections"
 
 export default function UserProfilePage() {
@@ -19,6 +20,7 @@ export default function UserProfilePage() {
   const canManage = currentRole === "ADMIN"
   const params = useParams<{ id: string }>()
   const [user, setUser] = React.useState<UserProfile | null>(null)
+  const [officeOpen, setOfficeOpen] = React.useState(false)
   const [loading, setLoading] = React.useState(true)
 
   React.useEffect(() => {
@@ -58,12 +60,14 @@ export default function UserProfilePage() {
               Staff profile
             </Button>
           ) : null}
+          {canManage && ["ADMIN", "MANAGER", "STAFF"].includes(user.role) && <Button variant="outline" onClick={() => setOfficeOpen(true)}>Office access</Button>}
           <Button variant="outline" onClick={() => router.push("/users")}>
             Back to users
           </Button>
         </div>
       </div>
 
+      {officeOpen && <OfficeMembershipEditor key={user.id} user={user} onClose={() => setOfficeOpen(false)} onSaved={() => setOfficeOpen(false)} />}
       <UserProfileSections user={user} formatDate={formatDate} />
     </div>
   )

@@ -1,16 +1,17 @@
 import { Prisma, type PrismaClient } from "@prisma/client"
 import { z } from "zod"
-import { officeMembershipSchema } from "./membership-validation"
+import { officeMembershipSchema, membershipCreationChoicesSchema } from "./membership-validation"
 export { officeMembershipSchema } from "./membership-validation"
-import { loadOfficeMemberships, saveOfficeMemberships } from "./office-membership"
+import { loadOfficeMemberships, saveOfficeMemberships, validateOfficeMemberships } from "./office-membership"
 import { guardUserWrite } from "@/platform/access/user-security"
 import { accessContext, findAccessUser } from "@/platform/access/server"
 import { BusinessError, hasBusinessAccess, type BusinessActor } from "@/platform/policy"
 import { serializationConflict } from "@/platform/database-errors"
+import type { OfficeChoice } from "@/types/companies"
 
 type Identity = Pick<BusinessActor, "tenantId" | "userId" | "requestId">
 type Tx = Prisma.TransactionClient
-export type OfficeChoice = { id: string; code: string; name: string; companyId: string; companyCode: string; companyName: string }
+export type { OfficeChoice } from "@/types/companies"
 const id = z.string().trim().min(1).max(200)
 const selectionSchema = z.object({ version: z.number().int().nonnegative(), officeId: id.nullable() }).strict()
 const listSchema = z.object({ page: z.coerce.number().int().min(1).max(100000).default(1), pageSize: z.coerce.number().int().min(1).max(100).default(20), q: z.string().trim().max(160).default(""), sort: z.enum(["name", "code"]).default("name"), order: z.enum(["asc", "desc"]).default("asc") }).strict()
@@ -53,7 +54,7 @@ export function createOfficeAccessService(db: PrismaClient, identity: Identity) 
       return run(true, async tx => {
         await targetUser(tx, userId)
         const current = await policy(tx, userId)
-        return current ?? { tenantId: identity.tenantId, userId, creationOfficeId: null, version: 0, offices: [], companies: [] }
+        return current ?? { tenantId: identity.tenantId, userId, creationOfficeId: null, creationOffice: null, version: 0, offices: [], companies: [] }
       })
     },
     saveMemberships(userId: string, input: unknown) {
@@ -61,6 +62,32 @@ export function createOfficeAccessService(db: PrismaClient, identity: Identity) 
       const data = officeMembershipSchema.parse(input)
       return run(true, async (tx, actor) => {
         return saveOfficeMemberships(tx, actor, userId, data)
+      })
+    },
+    creationChoices(userId: string, input: unknown) {
+      id.parse(userId)
+      const query = membershipCreationChoicesSchema.parse(input)
+      return run(true, async (tx, actor) => {
+        const target = await targetUser(tx, userId)
+        await validateOfficeMemberships(tx, actor.tenantId, target.role, target.status, { officeIds: query.officeIds, companies: query.companies, creationOfficeId: null })
+        const grants = JSON.stringify(query.companies)
+        const [view] = await tx.$queryRaw<{ items: OfficeChoice[]; total: number; selected: OfficeChoice | null }[]>`
+          WITH RECURSIVE covered(id, descendants) AS (
+            SELECT c.id,g."includeSubsidiaries" FROM "BusinessCompany" c
+            JOIN jsonb_to_recordset(${grants}::jsonb) AS g("companyId" text,"includeSubsidiaries" boolean) ON g."companyId"=c.id
+            WHERE c."tenantId"=${actor.tenantId}
+            UNION SELECT c.id,true FROM "BusinessCompany" c JOIN covered p ON c."parentId"=p.id AND p.descendants WHERE c."tenantId"=${actor.tenantId}
+          ), permitted AS MATERIALIZED (
+            SELECT o.id,o.name,o.code,o."companyId",c.name AS "companyName",c.code AS "companyCode"
+            FROM "BusinessOffice" o JOIN "BusinessCompany" c ON c.id=o."companyId" AND c."tenantId"=o."tenantId"
+            WHERE o."tenantId"=${actor.tenantId} AND NOT o.archived AND NOT c.archived AND ${target.status === "ACTIVE" && hasBusinessAccess(target.role)}
+              AND (${target.role === "ADMIN"} OR o.id=ANY(${query.officeIds}::text[]) OR o."companyId" IN (SELECT id FROM covered))
+          ), filtered AS (SELECT * FROM permitted WHERE strpos(lower(name),lower(${query.q}))>0 OR strpos(lower(code),lower(${query.q}))>0 OR strpos(lower("companyName"),lower(${query.q}))>0 OR strpos(lower("companyCode"),lower(${query.q}))>0),
+          page AS (SELECT * FROM filtered ORDER BY "companyName",name,code,id LIMIT ${query.pageSize} OFFSET ${(query.page-1)*query.pageSize})
+          SELECT COALESCE((SELECT jsonb_agg(to_jsonb(p) ORDER BY p."companyName",p.name,p.code,p.id) FROM page p),'[]'::jsonb) AS items,
+            (SELECT count(*)::integer FROM filtered) AS total,
+            (SELECT to_jsonb(p) FROM permitted p WHERE p.id=${query.selected}) AS selected`
+        return { ...view, page: query.page, pageSize: query.pageSize, totalPages: Math.max(1, Math.ceil(view.total/query.pageSize)) }
       })
     },
     listOwnOffices(input: unknown) {
