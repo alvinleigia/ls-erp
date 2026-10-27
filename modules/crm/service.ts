@@ -1,3 +1,4 @@
+import { introductionForCreate, introductionBoundaryError } from "@/platform/collaborators/attribution"
 import { officeBoundaryError } from "@/platform/companies/record-office"
 import { recordActionAccess } from "@/platform/access/record-actions"
 import { authorizeBusinessOperation } from "@/platform/access/operation"
@@ -69,6 +70,7 @@ export function createCrmService<Fields extends object = object, Metadata extend
           return operation(tx, actor)
         }, { isolationLevel: "Serializable", maxWait: 20000, timeout: 20000 })
       } catch (error) {
+        const introductionError = introductionBoundaryError(error); if (introductionError) throw introductionError
         const officeError = officeBoundaryError(error); if (officeError) throw officeError
         const code = (error as { code?: string })?.code
         if (serializationConflict(error) && attempt < 2) continue
@@ -124,6 +126,7 @@ export function createCrmService<Fields extends object = object, Metadata extend
     const custom = splitCustomFields(input)
     const { core, extension } = extensions.splitWrite(custom.core)
     const data = crmEnquiryCreateSchema.parse(core)
+    const introduction = await introductionForCreate(tx, actor, data.introducedByCollaboratorId)
     requireWriteFields(actor, "enquiries", undefined, data)
     await checkAssignee(tx, actor, data.assignedUserId)
     const team = await resolveSalesTeam(tx, actor, data.salesTeamId, data.assignedUserId)
@@ -159,7 +162,7 @@ export function createCrmService<Fields extends object = object, Metadata extend
       }
     }
     const context = await enquiryContext(tx, actor, contact.id, data)
-    const enquiry = await tx.crmEnquiry.create({ data: { importId, salesTeamId: team?.id ?? null, title: data.title, requirements: data.requirements, assignedUserId: data.assignedUserId, contactId: contact.id, ...context, tenantId: actor.tenantId }, include: enquiryInclude })
+    const enquiry = await tx.crmEnquiry.create({ data: { ...introduction, importId, salesTeamId: team?.id ?? null, title: data.title, requirements: data.requirements, assignedUserId: data.assignedUserId, contactId: contact.id, ...context, tenantId: actor.tenantId }, include: enquiryInclude })
     await extensions.save(tx, actor, "enquiry", enquiry.id, extension)
     await saveCustomFields(tx, actor, enquiryFields, enquiry, custom.patch, true)
     await activity(tx, actor, enquiry.id, "created", "Enquiry created.")

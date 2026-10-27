@@ -128,6 +128,11 @@ business accounts, without orphaning source records or silently expanding access
 
 ## Phase 4: attribution and release verification
 
+Phase 4A implements local [partner introduction evidence](PARTNER_ATTRIBUTION_R10.md)
+on enquiries/direct opportunities, inherited exactly through conversion. Existing
+records remain unattributed; no owner or access backfill. Selection screens and
+reporting/KPI filters remain phase 4B; dashboards and reports are unchanged.
+
 Keep introducing collaborator, responsible salesperson, supervising manager and
 record company/office as separate dimensions. Preserve source attribution through
 reassignment; count business outcomes once in company totals. Employee activity

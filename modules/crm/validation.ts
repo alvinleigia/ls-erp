@@ -1,3 +1,4 @@
+import { introducingCollaboratorId } from "@/platform/collaborators/attribution"
 import { termText } from "@/platform/terminology/message"
 import { customFilterShape } from "@/platform/custom-fields/validation"
 import { z } from "zod"
@@ -42,7 +43,7 @@ const enquiryFields = z.object({
   requirements: text(5000),
   assignedUserId: id, salesTeamId: z.string().max(100).nullable().optional(),
 }).strict()
-export const crmEnquiryCreateSchema = enquiryFields.extend({ contactId: id.optional(), newContact: crmContactSchema.optional() }).refine(
+export const crmEnquiryCreateSchema = enquiryFields.extend({ introducedByCollaboratorId: introducingCollaboratorId, contactId: id.optional(), newContact: crmContactSchema.optional() }).refine(
   value => !!value.contactId !== !!value.newContact, { path: ["contactId"], message: "Choose an existing contact or enter a new contact.", params: { terminology: termText("crm.contact.singular", "Choose an existing contact or enter a new contact.", "Choose an existing {label} or enter a new {label}.") } },
 )
 export const crmEnquiryUpdateSchema = enquiryFields.extend({

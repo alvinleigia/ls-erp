@@ -1,3 +1,21 @@
+## R10 - Partner introduction evidence (phase 4A, local)
+
+Enquiry/direct-opportunity creation records an external actor's own collaborator,
+or an active same-tenant partner explicitly selected by Tenant Admin. The native
+snapshot preserves code, name and supervisor at introduction. It grants no access.
+Conversion inherits exact source evidence, including null; reassignment, rename,
+supervisor change and archive do not rewrite it. Ordinary source edits and SQL
+forgery are rejected. No partner is inferred from assignee, email or referrals.
+
+Migration 132 adds nullable source fields/FKs/indexes without backfilling existing
+records or changing access. All 132 preceding tables, policies and functions pass
+rollback/preservation rehearsal. 52 service/native regression tests, 18 native
+stock checks, build, schema, TypeScript, lint and whitespace pass. No UI changes.
+See [attribution contract and verification](PARTNER_ATTRIBUTION_R10.md).
+Next is phase 4B selection/read-only controls and partner/internal reporting/KPI
+filters; existing dashboards/totals are unchanged. Hosted backup/recovery and
+release gates remain. Nothing pushed or deployed; client data unchanged.
+
 ## R10 - External login-management screens (phase 3B2, local)
 
 Tenant Admin can create/invite named collaborator logins and manage profiles,

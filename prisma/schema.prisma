@@ -149,6 +149,10 @@ model CrmStage {
 }
 
 model CrmOpportunity {
+  introducedByCollaboratorId String?
+  introducingCollaborator ExternalCollaborator? @relation("CrmOpportunityIntroducer", fields: [tenantId, introducedByCollaboratorId], references: [tenantId, id], onDelete: NoAction)
+  partnerAttribution Json?
+  @@index([tenantId, introducedByCollaboratorId])
   officeId String @default(dbgenerated("app.creation_office_id()"))
   office BusinessOffice @relation(fields: [tenantId, officeId], references: [tenantId, id], onDelete: NoAction)
   @@index([tenantId, officeId])
@@ -358,6 +362,10 @@ model CrmLostReason {
 }
 
 model CrmEnquiry {
+  introducedByCollaboratorId String?
+  introducingCollaborator ExternalCollaborator? @relation("CrmEnquiryIntroducer", fields: [tenantId, introducedByCollaboratorId], references: [tenantId, id], onDelete: NoAction)
+  partnerAttribution Json?
+  @@index([tenantId, introducedByCollaboratorId])
   officeId String @default(dbgenerated("app.creation_office_id()"))
   office BusinessOffice @relation(fields: [tenantId, officeId], references: [tenantId, id], onDelete: NoAction)
   importId String?
@@ -2990,6 +2998,8 @@ model InventoryReceiptStock {
 
 // External party directory. Login linkage and employee profiles are separate.
 model ExternalCollaborator {
+  introducedEnquiries CrmEnquiry[] @relation("CrmEnquiryIntroducer")
+  introducedOpportunities CrmOpportunity[] @relation("CrmOpportunityIntroducer")
   logins User[] @relation("CollaboratorLogins")
   id String @id @default(cuid())
   tenantId String

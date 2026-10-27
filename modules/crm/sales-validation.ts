@@ -1,3 +1,4 @@
+import { introducingCollaboratorId } from "@/platform/collaborators/attribution"
 import { z } from "zod"
 import { crmListSchema } from "./validation"
 
@@ -25,6 +26,7 @@ export const pipelineSchema = z.object({
 })
 export const pipelineUpdateSchema = pipelineSchema.safeExtend({ version: z.number().int().positive() })
 export const opportunitySchema = z.object({
+  introducedByCollaboratorId: introducingCollaboratorId,
   title: z.string().trim().min(1).max(200), pipelineId: id, stageId: id, contactId: id,
   accountId: z.string().trim().max(100).optional(), enquiryId: text(100), assignedUserId: id,
   salesTeamId: z.string().max(100).nullable().optional(),
@@ -34,7 +36,7 @@ export const opportunitySchema = z.object({
   expectedCloseOn: z.iso.date().optional(), description: text(5000), lossReason: text(2000), lostReasonId: z.string().trim().max(100).optional(),
   probability: z.number().int().min(0).max(100).optional(),
 }).strict()
-export const opportunityUpdateSchema = opportunitySchema.omit({ enquiryId: true, enquiryVersion: true }).extend({ version: z.number().int().positive(), accountId: text(100), expectedCloseOn: z.iso.date() })
+export const opportunityUpdateSchema = opportunitySchema.omit({ enquiryId: true, enquiryVersion: true, introducedByCollaboratorId: true }).extend({ version: z.number().int().positive(), accountId: text(100), expectedCloseOn: z.iso.date() })
 export const opportunityMoveSchema = z.object({ pipelineId: id, stageId: id, version: z.number().int().positive(), lossReason: text(2000), lostReasonId: z.string().trim().max(100).optional() }).strict()
 export const opportunityListSchema = crmListSchema.omit({ status: true, due: true, archived: true, sort: true }).extend({
   pipelineId: id.optional(), stageId: id.optional(), assignedUserId: id.optional(), kind: z.enum(stageKinds).optional(),

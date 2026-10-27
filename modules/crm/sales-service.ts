@@ -1,3 +1,4 @@
+import { introductionForCreate } from "@/platform/collaborators/attribution"
 import { recordActionAccess } from "@/platform/access/record-actions"
 import { permits } from "@/platform/access/policy"
 import { termText } from "@/platform/terminology/message"
@@ -164,6 +165,8 @@ export function createSalesService<Fields extends object, Metadata extends objec
           if (enquiry.status === "CLOSED") throw new CrmError(409, termText("crm.enquiry.singular", "Reopen this enquiry before converting it.", "Reopen this {label} before converting it."))
           sourceEnquiry = enquiry
         }
+        if (sourceEnquiry && data.introducedByCollaboratorId !== undefined && data.introducedByCollaboratorId !== sourceEnquiry.introducedByCollaboratorId) throw new CrmError(400, "Conversion keeps the original introducing collaborator.")
+        const introduction = sourceEnquiry ? { introducedByCollaboratorId: sourceEnquiry.introducedByCollaboratorId } : await introductionForCreate(tx, actor, data.introducedByCollaboratorId)
         await checkAssignee(tx, actor, data.assignedUserId)
         const team = await resolveSalesTeam(tx, actor, data.salesTeamId === undefined ? sourceEnquiry?.salesTeamId : data.salesTeamId, data.assignedUserId)
         if (sourceEnquiry && (team?.id ?? null) !== sourceEnquiry.salesTeamId) throw new CrmError(400, termText("crm.enquiry.singular", "Conversion keeps the enquiry's sales team.", "Conversion keeps the {label}'s sales team."))
@@ -175,7 +178,7 @@ export function createSalesService<Fields extends object, Metadata extends objec
         await relations(tx, actor, data.contactId, accountId)
         const stage = await destination(tx, actor, data.pipelineId, data.stageId)
         const result = await tx.crmOpportunity.create({ data: {
-          ...data, salesTeamId: team?.id ?? null, ...outcome(stage, data.lossReason, data.probability), ...await resolveLostReason(tx, actor, stage.kind === "LOST", data.lostReasonId), tenantId: actor.tenantId,
+          ...data, ...introduction, salesTeamId: team?.id ?? null, ...outcome(stage, data.lossReason, data.probability), ...await resolveLostReason(tx, actor, stage.kind === "LOST", data.lostReasonId), tenantId: actor.tenantId,
           accountId: accountId || null, enquiryId: data.enquiryId || null, expectedCloseOn: new Date(`${expectedCloseOn}T00:00:00Z`),
           customFieldsCreatedAt: sourceEnquiry?.createdAt,
           sourceId: sourceEnquiry?.sourceId, source: sourceEnquiry?.source,
