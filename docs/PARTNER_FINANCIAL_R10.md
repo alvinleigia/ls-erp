@@ -85,7 +85,7 @@ Ignored evidence is under `tmp/industry-release`: `phase4c2a-rehearsal.log`,
 `phase4c2a-lint.log` and `phase4c2a-tsc.log`. Screenshots are under
 `test-results/local-access`. No client records or hosted sessions were used.
 
-Phase 4C2b remains: CRM/document dashboard attribution and its matching links and
-choices. Dashboard totals are unchanged by this slice. This is local `staging`
+Phase 4C2b adds [CRM/document dashboard attribution](PARTNER_DASHBOARD_R10.md)
+and matching links/choices. Dashboard totals were unchanged by phase 4C2a. This is local `staging`
 development only; hosted backup/restore rehearsal, pilot effective-access
 comparison and production release gates remain required.

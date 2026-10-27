@@ -1,70 +1,47 @@
-import type { Prisma } from "@prisma/client"
+import { Prisma } from "@prisma/client"
 import { moduleEnabled, type ModuleFlag } from "@/platform/modules"
 import { permits } from "@/platform/access/policy"
 import type { BusinessActor } from "@/platform/policy"
 import type { DashboardPeriod } from "@/types/dashboard"
+import { introductionWhere, responsibleUserWhere } from "@/platform/collaborators/report-scope"
+import type { AttributionFilter } from "@/platform/collaborators/report-validation"
 import { enquiryScope, opportunityScope } from "./policy"
-import { workScope } from "./work-scope"
+import { crmDashboardSets } from "./dashboard-sets"
 import type { CrmDashboard } from "./dashboard-types"
 
-const label = (value: string) => value.toLowerCase().replace(/_/g, " ").replace(/^./, c => c.toUpperCase())
-const rate = (part: number, total: number) => total ? Math.round(part / total * 1000) / 10 : null
-
-// Shared with dashboard contributions through application composition. Null scopes
-// mean the corresponding record counts must not be queried or exposed.
-export function dashboardSalesScopes(actor: BusinessActor, flags: ModuleFlag[], period: DashboardPeriod) {
-  const crm = moduleEnabled(flags, "crm") && permits(actor, "reports.read")
-  const sales = enquiryScope(actor)
-  const activeDeal: Prisma.CrmOpportunityWhereInput = { AND: [opportunityScope(actor, "read")], stage: { kind: "OPEN", archived: false }, pipeline: { archived: false }, contact: { archived: false } }
+const label = (value:string) => value.toLowerCase().replace(/_/g," ").replace(/^./,c=>c.toUpperCase())
+const rate = (part:number,total:number) => total ? Math.round(part/total*1000)/10 : null
+// Project-directory counts remain independent; only their sales columns use these scopes.
+export function dashboardSalesScopes(actor:BusinessActor,flags:ModuleFlag[],period:DashboardPeriod,filter:AttributionFilter={}) {
+  const crm=moduleEnabled(flags,"crm") && permits(actor,"reports.read")
+  const sales={assignee:responsibleUserWhere(filter),...introductionWhere(filter)}
   return {
-    enquiries: crm && permits(actor, "enquiries.read") ? { AND: [sales], createdAt: { gte: period.start, lt: period.end } } : null,
-    opportunities: crm && permits(actor, "opportunities.read") ? activeDeal : null,
+    enquiries:crm && permits(actor,"enquiries.read") ? {AND:[enquiryScope(actor,"read"),sales],createdAt:{gte:period.start,lt:period.end}} : null,
+    opportunities:crm && permits(actor,"opportunities.read") ? {AND:[opportunityScope(actor,"read"),sales],stage:{kind:"OPEN" as const,archived:false},pipeline:{archived:false},contact:{archived:false}} : null,
   }
 }
-
-// Aggregation stays in Postgres; preview rows are bounded and tenant scoped.
-export async function crmDashboard(tx: Prisma.TransactionClient, actor: BusinessActor, flags: ModuleFlag[], period: DashboardPeriod): Promise<CrmDashboard> {
-  const scopes = dashboardSalesScopes(actor, flags, period)
-  const leads = scopes.enquiries !== null, deals = scopes.opportunities !== null
-  const work = moduleEnabled(flags, "crm") && permits(actor, "reports.read") && permits(actor, "activities.read")
-  const createdAt = { gte: period.start, lt: period.end }
-  const sales = opportunityScope(actor, "read")
-  const activeDeal = scopes.opportunities!
-  const pending: Prisma.CrmTaskWhereInput = { AND: [workScope(actor)], status: { in: ["OPEN", "IN_PROGRESS"] } }
-  const completed: Prisma.CrmTaskWhereInput = { AND: [workScope(actor)], status: "COMPLETED", completedAt: createdAt }
-  const result: CrmDashboard = { enquiries: null, opportunities: null, activities: null }
-  await Promise.all([
-    leads ? (async () => {
-      const where = scopes.enquiries!
-      const [statuses, converted] = await Promise.all([
-        tx.crmEnquiry.groupBy({ by: ["status"], where, _count: { _all: true }, orderBy: { status: "asc" } }),
-        deals ? tx.crmEnquiry.count({ where: { ...where, opportunities: { some: opportunityScope(actor, "read") } } }) : Promise.resolve(null),
-      ])
-      const total = statuses.reduce((sum, row) => sum + row._count._all, 0)
-      result.enquiries = { total, converted, conversionPercent: converted === null ? null : rate(converted, total), statuses: statuses.map(row => ({ label: row.status === "CLOSED" ? "Lost" : label(row.status), count: row._count._all })) }
-    })() : undefined,
-    deals ? (async () => {
-      const [open, won, lost, stages, values] = await Promise.all([
-        tx.crmOpportunity.count({ where: activeDeal }),
-        tx.crmOpportunity.count({ where: { AND: [sales], stage: { kind: "WON" }, closedAt: createdAt } }),
-        tx.crmOpportunity.count({ where: { AND: [sales], stage: { kind: "LOST" }, closedAt: createdAt } }),
-        tx.crmOpportunity.groupBy({ by: ["stageId"], where: activeDeal, _count: { _all: true }, orderBy: [{ _count: { stageId: "desc" } }, { stageId: "asc" }], take: 8 }),
-        tx.crmOpportunity.groupBy({ by: ["currency"], where: activeDeal, _sum: { amount: true }, _count: { _all: true }, orderBy: { currency: "asc" } }),
-      ])
-      const names = await tx.crmStage.findMany({ where: { tenantId: actor.tenantId, id: { in: stages.map(row => row.stageId) } }, select: { id: true, name: true, pipeline: { select: { name: true } } } })
-      result.opportunities = { open, won, lost, winPercent: rate(won, won + lost), stages: stages.map(row => { const stage = names.find(s => s.id === row.stageId); return { label: `${stage?.pipeline.name} / ${stage?.name}`, count: row._count._all } }), values: values.map(row => ({ currency: row.currency, count: row._count._all, amount: row._sum.amount?.toString() || "0" })) }
-    })() : undefined,
-    work ? (async () => {
-      const [calls, connected, overdue, total, types, upcoming] = await Promise.all([
-        tx.crmTask.count({ where: { ...completed, type: "CALL" } }),
-        tx.crmTask.count({ where: { ...completed, type: "CALL", outcome: "CONNECTED" } }),
-        tx.crmTask.count({ where: { ...pending, OR: [{ startsAt: { lt: period.now } }, { startsAt: null, dueOn: { lt: new Date(`${period.today}T00:00:00Z`) } }] } }),
-        tx.crmTask.count({ where: completed }),
-        tx.crmTask.groupBy({ by: ["type", "activityTypeId", "activityTypeName"], where: completed, _count: { _all: true }, orderBy: [{ _count: { type: "desc" } }, { activityTypeId: "asc" }, { activityTypeName: "asc" }, { type: "asc" }], take: 8 }),
-        tx.crmTask.findMany({ where: pending, select: { id: true, title: true, type: true, activityTypeName: true, dueOn: true, startsAt: true }, orderBy: [{ dueOn: "asc" }, { startsAt: "asc" }, { id: "asc" }], take: 6 }),
-      ])
-      result.activities = { calls, connected, overdue, completed: total, types: types.map(row => ({ label: row.activityTypeName || label(row.type), count: row._count._all })), upcoming: upcoming.map(row => ({ id: row.id, title: row.title, type: row.activityTypeName || label(row.type), dueOn: row.dueOn.toISOString().slice(0, 10), startsAt: row.startsAt?.toISOString() || null })) }
-    })() : undefined,
-  ])
+export async function crmDashboard(tx:Prisma.TransactionClient,actor:BusinessActor,flags:ModuleFlag[],period:DashboardPeriod,filter:AttributionFilter={}):Promise<CrmDashboard> {
+  const sets=crmDashboardSets(actor,flags,period,filter),result:CrmDashboard={enquiries:null,opportunities:null,activities:null}
+  const count=async(sql:Prisma.Sql)=> (await tx.$queryRaw<{count:number}[]>(Prisma.sql`SELECT count(*)::int AS count FROM (${sql}) s`))[0].count
+  if(sets.enquiries){
+    const statuses=await tx.$queryRaw<{status:string;count:number}[]>(Prisma.sql`SELECT status::text,count(*)::int AS count FROM (${sets.enquiries}) s GROUP BY status ORDER BY status`)
+    const total=statuses.reduce((n,r)=>n+r.count,0),converted=sets.pipeline ? await count(sets.converted!) : null
+    result.enquiries={total,converted,conversionPercent:converted===null?null:rate(converted,total),statuses:statuses.map(r=>({label:r.status==="CLOSED"?"Lost":label(r.status),count:r.count}))}
+  }
+  if(sets.pipeline){
+    const [open,won,lost,stages,values]=await Promise.all([count(sets.pipeline),count(sets.won!),count(sets.lost!),
+      tx.$queryRaw<{label:string;count:number}[]>(Prisma.sql`SELECT "pipelineName"||' / '||"stageName" AS label,count(*)::int AS count FROM (${sets.pipeline}) s GROUP BY "stageId","pipelineName","stageName" ORDER BY count DESC,"stageId" LIMIT 8`),
+      tx.$queryRaw<{currency:string;count:number;amount:string}[]>(Prisma.sql`SELECT currency,count(*)::int AS count,sum(amount)::text AS amount FROM (${sets.pipeline}) s GROUP BY currency ORDER BY currency`),
+    ])
+    result.opportunities={open,won,lost,winPercent:rate(won,won+lost),stages,values:values.map(r=>({...r,amount:new Prisma.Decimal(r.amount).toString()}))}
+  }
+  if(sets.completedActivities){
+    const [calls,overdue,total,connected,types,upcoming]=await Promise.all([count(sets.completedCalls!),count(sets.overdueActivities!),count(sets.completedActivities),
+      count(Prisma.sql`SELECT * FROM (${sets.completedCalls!}) s WHERE outcome='CONNECTED'`),
+      tx.$queryRaw<{type:string;activityTypeName:string|null;count:number}[]>(Prisma.sql`SELECT type::text,"activityTypeId","activityTypeName",count(*)::int AS count FROM (${sets.completedActivities}) s GROUP BY type,"activityTypeId","activityTypeName" ORDER BY count DESC,"activityTypeId","activityTypeName",type LIMIT 8`),
+      tx.$queryRaw<{id:string;title:string;type:string;activityTypeName:string|null;dueOn:Date;startsAt:Date|null}[]>(Prisma.sql`SELECT id,title,type::text,"activityTypeName","dueOn","startsAt" FROM (${sets.openActivities!}) s ORDER BY "dueOn","startsAt",id LIMIT 6`),
+    ])
+    result.activities={calls,connected,overdue,completed:total,types:types.map(r=>({label:r.activityTypeName||label(r.type),count:r.count})),upcoming:upcoming.map(r=>({id:r.id,title:r.title,type:r.activityTypeName||label(r.type),dueOn:r.dueOn.toISOString().slice(0,10),startsAt:r.startsAt?.toISOString()||null}))}
+  }
   return result
 }

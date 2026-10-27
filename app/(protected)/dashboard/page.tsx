@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { PageHeader, pageClass, Surface } from "@/components/erp/page"
+import { PageHeader, pageClass, Surface, Filters } from "@/components/erp/page"
 import { Section } from "@/components/erp/section"
 import { Select } from "@/components/erp/controls"
 import { Button } from "@/components/ui/button"
@@ -33,11 +33,14 @@ import { formatCurrencyFromCents } from "@/lib/formatting"
 import type { AppSettingsPayload } from "@/types/scheduling"
 import { useBusinessModules } from "@/platform/module-provider"
 import { SalesWidgets } from "@/application/dashboard/sales-widgets"
-import type { SalesDashboard } from "@/application/dashboard/types"
+import { AttributionFilters, emptyAttributionFilters } from "@/platform/collaborators/report-controls"
+import { attributionQuery, type AttributionFilter } from "@/platform/collaborators/report-validation"
+import type { SalesDashboard, DashboardFilterContext } from "@/application/dashboard/types"
 
 type DashboardSummary = {
   stockOffice: {name:string;companyName:string;active:boolean}|null
   sales: SalesDashboard
+  salesFilters: DashboardFilterContext
   visibility: {
     appointments: boolean
     leaves: boolean
@@ -146,6 +149,8 @@ const toDateOnlyLocal = (value: Date) => {
 
 export default function DashboardPage() {
   const { flags, permissions, loading: modulesLoading } = useBusinessModules()
+  const [attribution, setAttribution] = React.useState<AttributionFilter>(emptyAttributionFilters)
+  const attributionParams = new URLSearchParams(attributionQuery(attribution)).toString()
   const [range, setRange] = React.useState<"today" | "week" | "month" | "custom">("week")
   const [refresh, setRefresh] = React.useState(0)
   const [appliedCustom, setAppliedCustom] = React.useState<DateRange | undefined>()
@@ -191,7 +196,7 @@ export default function DashboardPage() {
   React.useEffect(() => {
     if (modulesLoading) return
     const controller = new AbortController()
-    const query = new URLSearchParams({ range })
+    const query = new URLSearchParams({ range, ...Object.fromEntries(new URLSearchParams(attributionParams)) })
     if (range === "custom" && appliedCustom?.from && appliedCustom?.to) {
       query.set("startDate", toDateOnlyLocal(appliedCustom.from))
       query.set("endDate", toDateOnlyLocal(appliedCustom.to))
@@ -224,7 +229,7 @@ export default function DashboardPage() {
     return () => {
       controller.abort()
     }
-  }, [range, appliedCustom, refresh, flags, permissions, modulesLoading])
+  }, [range, appliedCustom, refresh, flags, permissions, modulesLoading, attributionParams])
 
   const rangeText = React.useMemo(() => {
     if (!summary?.range) return ""
@@ -320,6 +325,7 @@ export default function DashboardPage() {
             if (next?.from && next?.to) { setAppliedCustom(next); setRange("custom") }
           }} />
           </>}
+          {!modulesLoading && (hasSales || Object.keys(attributionQuery(attribution)).length > 0) && <Filters label="Sales filters" activeCount={Object.keys(attributionQuery(attribution)).length} onReset={() => setAttribution(emptyAttributionFilters)}><AttributionFilters value={attribution} onChange={setAttribution} choicesEndpoint={`/api/dashboard/sales-attribution-choices?${new URLSearchParams({range,...Object.fromEntries(new URLSearchParams(attributionParams)),...(range === "custom" && appliedCustom?.from && appliedCustom?.to ? {startDate:toDateOnlyLocal(appliedCustom.from),endDate:toDateOnlyLocal(appliedCustom.to)} : {})})}`} canFilterOrigin={summary?.salesFilters.canFilterOrigin ?? false} responsibleLabel="Sales owner / assigned user type" /></Filters>}
           <Button variant="outline" onClick={() => setRefresh(value => value + 1)} disabled={loading}>Refresh</Button>
         </div>
         {!modulesLoading && hasPeriod && <p className="text-sm text-muted-foreground">{rangeText || "Choose a period to view metrics."}</p>}
@@ -329,7 +335,9 @@ export default function DashboardPage() {
           <p className="font-medium">No dashboard summaries available for your current modules.</p>
           <p className="text-sm text-muted-foreground">Open a module from the sidebar to get started.</p>
         </Surface>}
-        {hasSales && <SalesWidgets data={summary.sales} settings={settings} />}
+        {Object.keys(attributionQuery(attribution)).length > 0 && <p className="text-sm text-muted-foreground">Sales filters apply to CRM and document widgets and project sales counts. Operational and project-directory totals keep their own scope. User type follows the current sales owner or activity assignee; partner origin follows saved source evidence.</p>}
+        {summary.salesFilters.omitted.map(message => <p key={message} role="status" className="text-sm text-muted-foreground">{message}</p>)}
+        {hasSales && <SalesWidgets data={summary.sales} settings={settings} context={summary.salesFilters} />}
         {headerCards.length > 0 && <div className="grid gap-3 sm:grid-cols-[repeat(auto-fit,minmax(14rem,1fr))]">
           {headerCards.map(card => <Surface key={card.label}>
             <div className="flex items-center justify-between gap-2 text-sm text-muted-foreground"><span>{card.label}</span><card.icon className="size-4" aria-hidden="true" /></div>

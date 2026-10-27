@@ -1,3 +1,22 @@
+## R10 - Dashboard attribution and matching records (phase 4C2b, local)
+
+Dashboard sales filters use shared identity/original-introduction predicates.
+Module-owned SQL sets feed CRM/document KPIs, previews, source-backed choices and
+paged drill-downs with the same filters/calendar dates. Plans count current
+revisions once. Missing source Read omits dependent filtered widgets explicitly;
+financial Read remains independent. Fresh transaction authorization and native
+RLS retain tenant, office, sharing and source privacy. Operational/project-directory
+totals keep their own basis; optional project sales columns follow sales filters.
+
+93 service/native checks pass, plus a final nine-case dashboard rerun. Twelve
+distinct Chrome flows pass across combined/focused runs; desktop/mobile captures
+inspected. Build, TypeScript, lint and whitespace pass. All 132 migration rehearsals
+and 18 stock checks pass; no schema/data migration. The wider architecture scan
+has 20 passes and three pre-existing inventory/audit findings in unchanged files;
+those remain the next cleanup before release acceptance. See [contract and evidence](PARTNER_DASHBOARD_R10.md).
+Hosted recovery, copied-data rehearsal and release gates remain. Nothing pushed
+or deployed; pilot data and hosted sessions unchanged.
+
 ## R10 - Receivable attribution reporting (phase 4C2a, local)
 
 Receivables reuse shared salesperson-type and original partner/saved-supervisor

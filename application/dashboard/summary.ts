@@ -2,7 +2,8 @@ import { Role, UserStatus } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 import { permits } from "@/platform/access/policy"
 import type { BusinessActor } from "@/platform/policy"
-import { salesDashboard } from "./sales-summary"
+import { createDashboardSalesService } from "./sales-service"
+import type { AttributionFilter } from "@/platform/collaborators/report-validation"
 import { appointmentsDashboardData } from "@/modules/appointments/dashboard"
 import { workforceDashboardData } from "@/modules/workforce/dashboard"
 import { servicesDashboardData } from "@/modules/services/dashboard"
@@ -12,7 +13,7 @@ import { addDays, dateKeyToUtcDate, addDaysToDateKey, toDateKeyInTimeZone, toDat
 // The HTTP entry point establishes current-account authorization and tenant DB context.
 export async function dashboardSummary(actor: BusinessActor, options: {
   range: string; startDateRaw: string | null; endDateRaw: string | null;
-  debug?: boolean; host?: string | null; forwardedHost?: string | null;
+  attribution?: AttributionFilter; debug?: boolean; host?: string | null; forwardedHost?: string | null;
 }) {
   const { tenantId } = actor
   const { range, startDateRaw, endDateRaw, debug } = options
@@ -52,7 +53,7 @@ export async function dashboardSummary(actor: BusinessActor, options: {
     servicesDashboardData(prisma, actor, moduleFlags),
     inventoryDashboardData(prisma, actor, moduleFlags),
     permits(actor, "users.read") ? prisma.user.count({ where: { tenantId, collaboratorId: null, role: Role.STAFF, status: UserStatus.ACTIVE } }) : Promise.resolve(0),
-    salesDashboard(prisma, actor, moduleFlags, { start: rangeStart, end: rangeEndExclusive, now, today: todayDateKey }),
+    createDashboardSalesService(prisma, actor).summary({ range, startDate: startDateRaw || undefined, endDate: endDateRaw || undefined, ...options.attribution }, { start: rangeStart, end: rangeEndExclusive, now, today: todayDateKey }),
   ])
   const { visible: canReadBookings, periodOrders, todayOrders, periodAppointments, todayAppointments, distinctCustomers, upcomingAppointments, appointmentStatusRows, topServiceLines, staffRangeAppointments } = bookings
   const { visible: canReadLeaves, pendingLeaves } = workforce
@@ -119,7 +120,8 @@ export async function dashboardSummary(actor: BusinessActor, options: {
   }
 
   const payload = {
-    sales,
+    sales: sales.data,
+    salesFilters: sales.metadata,
     visibility: {
       appointments: canReadBookings,
       leaves: canReadLeaves,

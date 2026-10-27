@@ -12,10 +12,10 @@ import type { DashboardCount, DashboardValue } from "@/types/dashboard"
 export function ViewAll({ href, children }: { href: string; children: ReactNode }) {
   return <Button variant="outline" size="sm" asChild><Link href={href}>{children}</Link></Button>
 }
-export function Metrics({ items }: { items: { label: string; value: number | string; hint: string }[] }) {
+export function Metrics({ items }: { items: { label: string; value: number | string; hint: string; href?: string }[] }) {
   return <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{items.map(item => <Surface key={item.label}>
     <p className="text-sm text-muted-foreground">{item.label}</p>
-    <p className="text-2xl font-semibold">{item.value}</p>
+    <p className="text-2xl font-semibold">{item.href ? <Link className="underline underline-offset-4" href={item.href}>{item.value}<span className="sr-only"> {item.label}</span></Link> : item.value}</p>
     <p className="text-xs text-muted-foreground">{item.hint}</p>
   </Surface>)}</div>
 }
