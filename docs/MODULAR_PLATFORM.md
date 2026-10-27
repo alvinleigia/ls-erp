@@ -1,3 +1,19 @@
+## R10 - Hosted staging release and initial acceptance (phase 6C)
+
+Candidate 525b853 is READY on all three staging aliases. A restored staging copy
+verified all 21 pending migrations, 121 original tables, existing profiles/sharing
+and matching six-resource read populations across 131 accounts. Fresh encrypted
+cutover recovery verified 11 stored objects and eight saved asset references.
+Live staging reached 132 applied migrations with zero pending; runtime access
+was restored after approximately 3 minutes 15 seconds. Production is unchanged.
+
+Initial hosted acceptance passed 45 checks using isolated QA tenants and ordinary
+APIs. Five desktop/mobile Chrome captures were inspected; synthetic records were
+archived. The first test assumption about administrator office access was corrected
+against the existing policy without changing application grants. Wider hosted
+module, multi-team, external-login and report/write acceptance remains. No GitHub
+push or production deployment. See [staging evidence and limits](STAGING_RELEASE_R10.md).
+
 ## R10 - Pilot-copy migration and access comparison (phase 6B2)
 
 The corrected pilot baseline is 107 applied migrations plus one rolled-back

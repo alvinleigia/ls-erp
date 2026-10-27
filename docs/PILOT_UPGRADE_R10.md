@@ -83,8 +83,10 @@ Additional assertions verify:
 The oracle uses the recorded production source revision
 `160becb79d10b112ea1364b3b66c300fc808eeb9`, which has the matching 107-migration
 inventory. The later recorded hosting-only release uses this baseline and changes
-packaging/routing. A fresh live Vercel revision check still requires renewed CLI
-authentication; the saved login returned HTTP 403 during this phase.
+packaging/routing. The saved CLI login returned HTTP 403 during phase 6B2, blocking
+a fresh live Vercel revision check. Phase 6C subsequently renewed the login and
+verified the exact live production revision
+and hosting-only difference; see [staging checkpoint](STAGING_RELEASE_R10.md).
 
 Before migration, the probe executes the baseline's own CRM, activity and project
 record predicates; after migration it executes the candidate predicates with fresh
@@ -116,7 +118,7 @@ utilities are retained privately for review; no client rows or credentials are
 committed. Failed attempts are not completion evidence.
 
 Source/history/storage unit checks and changed-tooling ESLint/whitespace checks
-are separate from this pilot-copy result. Nothing has been pushed or deployed.
-Next: renew Vercel access, verify the live project/revision, then prepare and run
-the hosted staging migration/deployment and acceptance checks. Production remains
+are separate from this pilot-copy result. No deployment or push occurred in phase
+6B2. Phase 6C has since verified the live revision and completed the staging
+release and initial hosted checks; wider acceptance remains. Production requires
 a separately authorized release with a fresh cutover backup.
