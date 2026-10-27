@@ -51,7 +51,7 @@ export async function dashboardSummary(actor: BusinessActor, options: {
     workforceDashboardData(prisma, actor, moduleFlags),
     servicesDashboardData(prisma, actor, moduleFlags),
     inventoryDashboardData(prisma, actor, moduleFlags),
-    permits(actor, "users.read") ? prisma.user.count({ where: { tenantId, role: Role.STAFF, status: UserStatus.ACTIVE } }) : Promise.resolve(0),
+    permits(actor, "users.read") ? prisma.user.count({ where: { tenantId, collaboratorId: null, role: Role.STAFF, status: UserStatus.ACTIVE } }) : Promise.resolve(0),
     salesDashboard(prisma, actor, moduleFlags, { start: rangeStart, end: rangeEndExclusive, now, today: todayDateKey }),
   ])
   const { visible: canReadBookings, periodOrders, todayOrders, periodAppointments, todayAppointments, distinctCustomers, upcomingAppointments, appointmentStatusRows, topServiceLines, staffRangeAppointments } = bookings

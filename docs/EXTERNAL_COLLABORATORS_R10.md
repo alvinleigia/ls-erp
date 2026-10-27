@@ -89,6 +89,10 @@ no failed test or skipped check is counted as a pass.
 
 ## Next bounded phase
 
+[Phase 3B1](EXTERNAL_LOGINS_R10.md) implements the local identity/lifecycle backend
+and verifies existing real sign-in and invitation acceptance. Dedicated login
+management controls remain phase 3B2.
+
 Phase 3B connects explicit external login identities to collaborators without
 reusing employee profiles. One collaborator may have multiple named logins;
 login lifecycle, invitation acceptance, suspension and archive must use the shared

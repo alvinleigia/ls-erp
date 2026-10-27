@@ -106,6 +106,8 @@ Phase 3A implements the local [external collaborator directory](EXTERNAL_COLLABO
 separate identities, explicit internal supervisors, archiving and mandatory audits.
 No login or employee profile is created. Login linking and lifecycle remain phase
 3B; attribution and KPI separation remain phase 4.
+Phase 3B1 now adds the local [explicit login identity and lifecycle backend](EXTERNAL_LOGINS_R10.md).
+Partner login-management UI remains phase 3B2.
 
 Add an industry-neutral external collaborator identity with optional agency/party
 association and one or more linked login accounts. "Channel partner" is a

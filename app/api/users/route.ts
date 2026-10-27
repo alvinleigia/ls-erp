@@ -1,3 +1,4 @@
+import { validateCollaboratorLogin, auditCollaboratorLogin } from "@/platform/collaborators/login"
 import { hasBusinessAccess } from "@/platform/policy"
 import { requireBusinessModule } from "@/platform/module-server"
 import { recordDomainAuditEvent } from "@/lib/domain-audit"
@@ -111,7 +112,7 @@ async function handleGET(request: Request, actor: BusinessActor) {
         prisma.user.count({ where }),
         prisma.user.findMany({
           select: {
-            id: true,
+            id: true, collaboratorId: true,
             name: true,
             email: true,
             phone: true,
@@ -236,6 +237,8 @@ async function handlePOST(request: Request, actor: BusinessActor) {
       const identity = { tenantId, userId: sessionUserId!, requestId: logContext.requestId }
       const user = await prisma.$transaction(async tx => {
         await guardUserWrite(tx, identity)
+        await validateCollaboratorLogin(tx, tenantId, parsed.data.collaboratorId, userRole ?? "CUSTOMER")
+        if (parsed.data.collaboratorId && eligibleServiceIds !== undefined) throw new BusinessError(400, "External logins cannot have employee service eligibility.")
         if (normalizedEligibleServiceIds.length) {
           await requireBusinessModule(tx, tenantId, "services")
           const count = await tx.service.count({ where: { tenantId, id: { in: normalizedEligibleServiceIds } } })
@@ -245,6 +248,7 @@ async function handlePOST(request: Request, actor: BusinessActor) {
         data: {
           name: name || undefined,
           tenantId,
+          collaboratorId: parsed.data.collaboratorId,
           email,
           passwordHash,
           role: userRole ?? "CUSTOMER",
@@ -269,7 +273,7 @@ async function handlePOST(request: Request, actor: BusinessActor) {
             : undefined,
         },
         select: {
-          id: true,
+          id: true, collaboratorId: true,
           name: true,
           email: true,
           phone: true,
@@ -299,6 +303,7 @@ async function handlePOST(request: Request, actor: BusinessActor) {
       if (parsed.data.officeAccess) await saveOfficeMemberships(tx, identity, created.id, { ...parsed.data.officeAccess, version: 0 })
         if (normalizedEligibleServiceIds.length) await recordDomainAuditEvent(tx, { tenantId, actorUserId: sessionUserId, actorRole: "ADMIN", requestId: logContext.requestId, event: "services.eligibility.updated", entityType: "User", entityId: created.id, after: { serviceIds: normalizedEligibleServiceIds } })
         await auditUserSecurity(tx, identity, created.id, null, created)
+        await auditCollaboratorLogin(tx, identity, created, parsed.data.collaboratorId)
         return created
       })
 

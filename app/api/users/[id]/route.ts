@@ -63,7 +63,7 @@ async function handlePATCH(request: Request,
 
     const existingUser = await prisma.user.findFirst({
       where: { id, tenantId },
-      select: { role: true },
+      select: { role: true, collaboratorId: true },
     })
     if (!existingUser) {
       const response = NextResponse.json({ error: "User not found." }, { status: 404 })
@@ -144,6 +144,8 @@ async function handlePATCH(request: Request,
     try {
       const user = await scheduleTransaction(tenantId, async (tx) => {
         const identity = { tenantId, userId: sessionUserId!, requestId: logContext.requestId }
+        const priorSecurity = await guardUserWrite(tx, identity, id, data, role === "ADMIN")
+        if (priorSecurity?.collaboratorId && (staffProfileInput || eligibleServiceIds !== undefined)) throw new BusinessError(400, "External logins cannot have employee profiles or service eligibility.")
         if (role === "ADMIN" && normalizedEligibleServiceIds !== null) {
           const accessUser = await findAccessUser(tx, tenantId, sessionUserId!)
           if (!accessUser || accessUser.role !== "ADMIN") throw new BusinessError(403, "Service eligibility requires administrator access.")
@@ -151,9 +153,8 @@ async function handlePATCH(request: Request,
           const count = await tx.service.count({ where: { tenantId, id: { in: normalizedEligibleServiceIds } } })
           if (count !== normalizedEligibleServiceIds.length) throw new BusinessError(400, "One or more services were not found in this tenant.")
         }
-        const priorSecurity = await guardUserWrite(tx, identity, id, data, role === "ADMIN")
         const select = {
-          id: true,
+          id: true, collaboratorId: true,
           name: true,
           email: true,
           phone: true,
@@ -227,11 +228,11 @@ async function handlePATCH(request: Request,
           if (managerUserId) {
             const managerUser = await tx.user.findUnique({
               where: { id: managerUserId },
-              select: { id: true, role: true, status: true },
+              select: { id: true, role: true, status: true, collaboratorId: true },
             })
             if (
               !managerUser ||
-              !hasBusinessAccess(managerUser.role) || managerUser.id === id ||
+              !hasBusinessAccess(managerUser.role) || managerUser.collaboratorId || managerUser.id === id ||
               managerUser.status !== "ACTIVE"
             ) {
               throw new BusinessError(400, "Selected manager is invalid or inactive.")
@@ -344,7 +345,7 @@ async function handleGET(request: Request,
     const user = await prisma.user.findUnique({
       where: { id },
       select: {
-        id: true,
+        id: true, collaboratorId: true,
         name: true,
         email: true,
         phone: true,

@@ -71,6 +71,17 @@ export function createCollaboratorService(db: PrismaClient, identity: Identity) 
         return row
       })
     },
+    logins(id: string, input: unknown) {
+      const query = supervisorQuerySchema.parse(input)
+      return run(false, async tx => {
+        await get(tx, id)
+        const where: Prisma.UserWhereInput = { tenantId: identity.tenantId, collaboratorId: id,
+          ...(query.q ? { OR: [{ name: { contains: query.q, mode: "insensitive" } }, { email: { contains: query.q, mode: "insensitive" } }] } : {}) }
+        const total = await tx.user.count({ where })
+        const items = await tx.user.findMany({ where, select: { id: true, name: true, email: true, role: true, status: true, collaboratorId: true }, orderBy: [{ email: "asc" }, { id: "asc" }], skip: (query.page - 1) * query.pageSize, take: query.pageSize })
+        return { items, total, page: query.page, pageSize: query.pageSize, totalPages: Math.max(1, Math.ceil(total / query.pageSize)) }
+      })
+    },
     supervisors(input: unknown) {
       const query = supervisorQuerySchema.parse(input)
       return run(false, async tx => {

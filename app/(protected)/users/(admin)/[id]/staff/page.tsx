@@ -73,11 +73,11 @@ export default function StaffProfilePage() {
 
       if (managersRes.ok) {
         const data = (await managersRes.json()) as {
-          items?: { id: string; name: string | null; email: string; role: string }[]
+          items?: { id: string; name: string | null; email: string; role: string; collaboratorId?: string | null }[]
         }
         setManagerOptions([
           { value: "", label: "No manager assigned" },
-          ...(data.items ?? []).filter(manager => manager.role !== "CUSTOMER" && manager.id !== params.id).map((manager) => ({
+          ...(data.items ?? []).filter(manager => !manager.collaboratorId && manager.role !== "CUSTOMER" && manager.id !== params.id).map((manager) => ({
             value: manager.id,
             label: manager.name?.trim() || manager.email,
           })),
@@ -158,7 +158,7 @@ export default function StaffProfilePage() {
     return <div className="text-sm text-muted-foreground">Staff not found.</div>
   }
 
-  if (!["STAFF", "MANAGER"].includes(user.role)) {
+  if (user.collaboratorId || !["STAFF", "MANAGER"].includes(user.role)) {
     return (
       <div className="space-y-3">
         <div className="text-sm text-muted-foreground">

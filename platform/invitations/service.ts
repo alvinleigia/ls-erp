@@ -1,3 +1,4 @@
+import { validateCollaboratorLogin, auditCollaboratorLogin } from "@/platform/collaborators/login"
 import { randomUUID } from "node:crypto"
 import bcrypt from "bcryptjs"
 import { Prisma, type PrismaClient } from "@prisma/client"
@@ -20,6 +21,7 @@ async function admin(tx: Tx, identity: Identity) {
   await tx.$executeRaw`SELECT set_config('app.actor_id', ${identity.userId}, true)`
 }
 async function validateAccess(tx: Tx, tenantId: string, role: string, access: ReturnType<typeof invitationAccessSchema.parse>) {
+  await validateCollaboratorLogin(tx, tenantId, access.collaboratorId, role)
   await validateInitialProfiles(tx, tenantId, role, access.accessRoleIds)
   if (access.officeAccess) await validateOfficeMemberships(tx, tenantId, role, "ACTIVE", access.officeAccess)
 }
@@ -80,10 +82,11 @@ export async function acceptInvitation(db: PrismaClient, tenantId: string, input
       await validateAccess(tx, tenantId, invite.role, access)
       const consumed = await tx.invitation.updateMany({ where: { id: invite.id, tenantId, acceptedAt: null, expiresAt: { gt: new Date() } }, data: { acceptedAt: new Date() } })
       if (consumed.count !== 1) throw invalid()
-      const user = await tx.user.create({ data: { tenantId, name: data.name || undefined, email: invite.email.toLowerCase(), passwordHash, role: invite.role, status: "ACTIVE" }, select: { id: true, role: true, status: true } })
+      const user = await tx.user.create({ data: { tenantId, collaboratorId: access.collaboratorId, name: data.name || undefined, email: invite.email.toLowerCase(), passwordHash, role: invite.role, status: "ACTIVE" }, select: { id: true, role: true, status: true } })
       await assignInitialProfiles(tx, identity, user, access.accessRoleIds, access.recordRules)
       if (access.officeAccess) await saveOfficeMemberships(tx, identity, user.id, { ...access.officeAccess, version: 0 })
       await auditUserSecurity(tx, identity, user.id, null, user)
+      await auditCollaboratorLogin(tx, identity, user, access.collaboratorId)
       await recordDomainAuditEvent(tx, { tenantId, actorUserId: user.id, actorRole: user.role, requestId, event: "core.invitations.accept", entityType: "Invitation", entityId: invite.id, after: { userId: user.id, role: user.role }, metadata: { invitedById: identity.userId } })
       return { ok: true }
     })

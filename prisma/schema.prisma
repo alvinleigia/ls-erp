@@ -741,6 +741,9 @@ enum StockMovementType {
 }
 
 model User {
+  collaboratorId String?
+  collaborator ExternalCollaborator? @relation("CollaboratorLogins", fields: [tenantId, collaboratorId], references: [tenantId, id], onDelete: NoAction)
+
   supervisedCollaborators ExternalCollaborator[] @relation("CollaboratorSupervisor")
   officePolicy BusinessOfficePolicy?
   recordSharingGrants RecordSharingGrant[]
@@ -797,6 +800,7 @@ model User {
   updatedAt             DateTime                  @updatedAt
   tenant                Tenant?                   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
+  @@index([tenantId, collaboratorId])
   @@unique([tenantId, email])
   @@unique([tenantId, id])
   @@index([tenantId])
@@ -2986,6 +2990,7 @@ model InventoryReceiptStock {
 
 // External party directory. Login linkage and employee profiles are separate.
 model ExternalCollaborator {
+  logins User[] @relation("CollaboratorLogins")
   id String @id @default(cuid())
   tenantId String
   code String

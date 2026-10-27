@@ -1,3 +1,29 @@
+## R10 - External login identity and lifecycle backend (phase 3B1, local)
+
+New business accounts and invitations can explicitly link to a same-tenant
+external collaborator. Existing accounts remain unlinked; identity is immutable
+and cannot become internal, Customer, Manager or Admin. Supervisor responsibility
+never supplies access. Multiple named logins share a collaborator identity while
+retaining individual explicit profiles, record rules and office grants.
+
+The central resolver and database boundaries exclude external employee/roster/
+leave/directory authority and internal team management. Staff profiles, employee
+reporting relationships and service eligibility reject external identities.
+Private integrity projections allow explicit booking use, without accepting an
+employee profile capability in its place. Active-staff totals exclude externals.
+
+Archive atomically suspends linked accounts, expires pending invitations and
+commits mandatory audit without credentials/tokens. Restore reactivates neither
+accounts nor old links. Existing sessions and credential sign-in are blocked by
+fresh account status; explicit activation uses the ordinary account lifecycle.
+Migration 131 preserves all existing data after only adding a nullable User link.
+
+108 distinct API checks and four Chrome flows pass, including focused reruns.
+Schema validation, build, TypeScript, lint, rollback/preservation and cleanup checks
+pass. See [identity/lifecycle contract](EXTERNAL_LOGINS_R10.md). Next is phase 3B2:
+dedicated external login-management controls. Attribution remains phase 4; hosted
+staging/recovery and production release gates remain. Nothing pushed or deployed.
+
 ## R10 - External collaborator directory (phase 3A, local)
 
 Tenant Admin now manages external identities under Users > External collaborators.

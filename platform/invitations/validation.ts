@@ -3,6 +3,7 @@ import { recordRulesSchema, defaultRecordRules } from "@/platform/access/rules"
 import { initialOfficeMembershipSchema } from "@/platform/companies/membership-validation"
 
 const fields = {
+  collaboratorId: z.string().trim().min(1).max(200).optional(),
   accessRoleIds: z.array(z.string().trim().min(1).max(100)).max(50).default([]),
   recordRules: recordRulesSchema.default(defaultRecordRules),
   officeAccess: initialOfficeMembershipSchema.optional(),

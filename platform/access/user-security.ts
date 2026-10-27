@@ -11,8 +11,12 @@ export async function guardUserWrite(tx: Prisma.TransactionClient, identity: Ide
   const actor = await tx.user.findFirst({ where: { tenantId: identity.tenantId, id: identity.userId, status: "ACTIVE", tenant: { status: "ACTIVE" } }, select: { role: true } })
   if (!actor || (administrative && actor.role !== "ADMIN") || (!administrative && identity.userId !== targetId)) throw new BusinessError(403, "Your current account cannot make this change.")
   if (!targetId) return null
-  const before = await tx.user.findFirst({ where: { tenantId: identity.tenantId, id: targetId }, select: { role: true, status: true } })
+  const before = await tx.user.findFirst({ where: { tenantId: identity.tenantId, id: targetId }, select: { role: true, status: true, collaboratorId: true } })
   if (!before) throw new BusinessError(404, "User not found.")
+  if (before.collaboratorId) {
+    if (next?.role && next.role !== "STAFF") throw new BusinessError(400, "An external login cannot become an internal or customer account.")
+    if (next?.status === "ACTIVE" && !await tx.externalCollaborator.findFirst({ where: { tenantId: identity.tenantId, id: before.collaboratorId, archived: false }, select: { id: true } })) throw new BusinessError(409, "Restore the collaborator before activating its login.")
+  }
   if (before.role === "ADMIN" && before.status === "ACTIVE" && ((next?.role && next.role !== "ADMIN") || (next?.status && next.status !== "ACTIVE"))) {
     if (await tx.user.count({ where: { tenantId: identity.tenantId, role: "ADMIN", status: "ACTIVE" } }) <= 1) throw new BusinessError(409, "Keep at least one active tenant administrator.")
   }
@@ -20,7 +24,7 @@ export async function guardUserWrite(tx: Prisma.TransactionClient, identity: Ide
 }
 export async function auditUserSecurity(tx: Prisma.TransactionClient, identity: Identity, userId: string, before: { role: string; status: string } | null, after: { role: string; status: string }) {
   if (before?.role === after.role && before?.status === after.status) return
-  await recordDomainAuditEvent(tx, { ...identity, actorUserId: identity.userId, actorRole: "ADMIN", event: "access.user.updated", entityType: "User", entityId: userId, before: before ?? undefined, after: { role: after.role, status: after.status } })
+  await recordDomainAuditEvent(tx, { ...identity, actorUserId: identity.userId, actorRole: "ADMIN", event: "access.user.updated", entityType: "User", entityId: userId, before: before ? { role: before.role, status: before.status } : undefined, after: { role: after.role, status: after.status } })
 }
 // Proposal validation grants no authority; callers must establish administration.
 export async function validateInitialProfiles(tx: Prisma.TransactionClient, tenantId: string, role: string, roleIds: string[]) {

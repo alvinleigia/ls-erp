@@ -14,6 +14,7 @@ export type UserAddress = {
 }
 
 export type UserCore = UserAddress & {
+  collaboratorId?: string | null
   id: string
   name: string | null
   email: string

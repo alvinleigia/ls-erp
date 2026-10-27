@@ -133,6 +133,7 @@ export const signUpSchema = addCountryStateValidation(z.object({
 }))
 
 export const createUserSchema = addCountryStateValidation(z.object({
+  collaboratorId: z.string().trim().min(1).max(200).optional(),
   officeAccess: initialOfficeMembershipSchema.optional(),
   accessRoleIds: z.array(z.string().trim().min(1).max(100)).max(50).optional(),
   recordRules: recordRulesSchema.optional(),

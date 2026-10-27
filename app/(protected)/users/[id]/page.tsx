@@ -55,7 +55,7 @@ export default function UserProfilePage() {
           <p className="text-sm text-muted-foreground">{user.email}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          {canManage && ["STAFF", "MANAGER"].includes(user.role) ? (
+          {canManage && !user.collaboratorId && ["STAFF", "MANAGER"].includes(user.role) ? (
             <Button onClick={() => router.push(`/users/${user.id}/staff`)}>
               Staff profile
             </Button>

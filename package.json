@@ -60,6 +60,8 @@
     "test:access:profiles": "node scripts/test-sales-orders.cjs --profiles",
     "test:companies": "node scripts/test-sales-orders.cjs --companies",
     "test:companies:browser": "node scripts/test-sales-orders.cjs --companies --browser",
+    "test:external-logins": "node scripts/test-sales-orders.cjs --external-logins",
+    "test:external-logins:browser": "node scripts/test-sales-orders.cjs --external-logins --browser",
     "test:collaborators": "node scripts/test-sales-orders.cjs --collaborators",
     "test:collaborators:browser": "node scripts/test-sales-orders.cjs --collaborators --browser",
     "test:office-acceptance": "node scripts/test-sales-orders.cjs --office-acceptance",
