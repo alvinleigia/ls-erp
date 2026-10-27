@@ -1,3 +1,26 @@
+## R10 - Pilot-copy migration and access comparison (phase 6B2)
+
+The corrected pilot baseline is 107 applied migrations plus one rolled-back
+attempt (108 history rows): 25 migrations were pending. The earlier 6B1 counts
+confused attempts with applied migrations; its original backup/restore evidence
+remains retained. A shared history-summary helper and regression now distinguish
+these counts and reject invalid history.
+
+An isolated pilot copy reached 132 applied migrations with the original failed
+attempt preserved. All 117 prior tables retained their original values under the
+reviewed translations. Five profiles and 870 resource/action rules match their
+conversion contract. Seven accounts have identical readable populations across
+six resource families: 42 decisions and 459 account/record bindings. Original
+owners/ACLs, global memberships, individual project assignments and initial-office
+placement were verified; no sharing or partner attribution was invented.
+
+Actual Supabase DDL event definitions were replayed unchanged. The operator is
+non-superuser and runtime checks use ordinary non-BYPASSRLS authority. PostgreSQL
+17.11 and locale settings match, but ICU versions and full managed services differ;
+hosted staging UI/write/report acceptance remains required. Both the disposable
+container and internal network were removed. No hosted data or deployment changed.
+See [pilot upgrade scope, evidence and limits](PILOT_UPGRADE_R10.md).
+
 ## R10 - Pilot backup and application restore (phase 6B1)
 
 Read-only production preflight verified 108 applied migrations against the reviewed

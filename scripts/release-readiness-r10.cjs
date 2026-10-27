@@ -39,6 +39,13 @@ function historyProblems(rows, complete = true, candidate = manifest) {
   return errors
 }
 
+function summarizeHistory(rows, candidate = manifest) {
+  const problems = historyProblems(rows, false, candidate)
+  if (problems.length) throw Error('Migration history is not a verified prefix: ' + problems.join('; '))
+  const applied = new Set(rows.filter(r => r.finished && !r.rolledBack).map(r => r.name))
+  return { historyRows: rows.length, appliedMigrations: applied.size, pendingMigrations: candidate.migrations.length - applied.size, rolledBackAttempts: rows.filter(r => r.rolledBack).length }
+}
+
 function receipt() {
   verifySource()
   const git = args => execFileSync('git', args, { cwd: root, windowsHide: true, encoding: 'utf8' }).trim()
@@ -53,4 +60,4 @@ if (require.main === module) {
   try { console.log(JSON.stringify(receipt(), null, 2)) }
   catch (error) { console.error(error.message); process.exitCode = 1 }
 }
-module.exports = { verifySource, historyProblems, receipt }
+module.exports = { verifySource, historyProblems, summarizeHistory, receipt }
