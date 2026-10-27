@@ -15,17 +15,17 @@ import { Select } from "@/components/erp/controls"
 import { FormField } from "@/components/form-field"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import type { ListResponse } from "@/types/api"
+import { BookingOfficePicker } from "@/components/appointments/choice-picker"
+import { businessDate, wallTime } from "@/lib/business-time"
+import { formatDateForDisplay } from "@/lib/date"
+import { formatTimeFrom24h } from "@/lib/formatting"
 import type {
   CouponUsageReportRow,
   CouponUsageReportStatus,
   CouponUsageReportSummary,
+  CouponUsageReportResponse,
+  CouponUsageReportContext,
 } from "@/types/reports"
-
-type CouponUsageResponse = ListResponse<CouponUsageReportRow> & {
-  summary: CouponUsageReportSummary
-  status: CouponUsageReportStatus
-}
 
 const defaultSummary: CouponUsageReportSummary = {
   totalCustomers: 0,
@@ -34,11 +34,11 @@ const defaultSummary: CouponUsageReportSummary = {
   totalRedemptions: 0,
 }
 
-const formatDateTime = (value: string | null) => {
-  if (!value) return "-"
+const formatDateTime = (value: string | null, context: CouponUsageReportContext | null) => {
+  if (!value || !context) return "-"
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return "-"
-  return date.toLocaleString()
+  return `${formatDateForDisplay(businessDate(date, context.timeZone), context.dateFormat)} ${formatTimeFrom24h(wallTime(date, context.timeZone).slice(11, 16), context)}`
 }
 
 function CouponUsageContent() {
@@ -51,6 +51,8 @@ function CouponUsageContent() {
   const [couponCode, setCouponCode] = React.useState("")
   const [dateFrom, setDateFrom] = React.useState("")
   const [dateTo, setDateTo] = React.useState("")
+  const [officeId, setOfficeId] = React.useState("all")
+  const [context, setContext] = React.useState<CouponUsageReportContext | null>(null)
   const [summary, setSummary] = React.useState<CouponUsageReportSummary>(defaultSummary)
   const [totalRows, setTotalRows] = React.useState(0)
   const [pagination, setPagination] = React.useState<PaginationState>({
@@ -60,12 +62,17 @@ function CouponUsageContent() {
 
   const loadReport = React.useCallback(async (signal: AbortSignal) => {
     setLoading(true)
+    setItems([])
+    setSummary(defaultSummary)
+    setTotalRows(0)
+    setContext(null)
     const params = new URLSearchParams()
     params.set("page", String(pagination.pageIndex + 1))
     params.set("pageSize", String(pagination.pageSize))
     params.set("status", status)
     if (search.trim()) params.set("q", search.trim())
     if (couponCode.trim()) params.set("couponCode", couponCode.trim().toUpperCase())
+    if (officeId !== "all") params.set("officeId", officeId)
     if (dateFrom) params.set("dateFrom", dateFrom)
     if (dateTo) params.set("dateTo", dateTo)
 
@@ -76,8 +83,9 @@ function CouponUsageContent() {
         const body = await response.json().catch(() => ({})) as { error?: string }
         throw new Error(body.error || "Unable to load report.")
       }
-      const data = await response.json() as CouponUsageResponse
+      const data = await response.json() as CouponUsageReportResponse
       if (signal.aborted) return
+      setContext(data.context)
       setItems(data.items)
       setTotalRows(data.total)
       setSummary(data.summary)
@@ -90,7 +98,7 @@ function CouponUsageContent() {
     } finally {
       if (!signal.aborted) setLoading(false)
     }
-  }, [couponCode, dateFrom, dateTo, pagination.pageIndex, pagination.pageSize, search, status])
+  }, [officeId, couponCode, dateFrom, dateTo, pagination.pageIndex, pagination.pageSize, search, status])
 
   React.useEffect(() => {
     const controller = new AbortController()
@@ -127,8 +135,8 @@ function CouponUsageContent() {
       },
       {
         id: "lastUsed",
-        header: "Last used",
-        accessorFn: (row) => formatDateTime(row.lastCouponUsedAt),
+        header: "Latest matching booking",
+        accessorFn: (row) => formatDateTime(row.lastCouponUsedAt, context),
       },
       {
         id: "codes",
@@ -137,7 +145,7 @@ function CouponUsageContent() {
           row.original.usedCouponCodes.length ? row.original.usedCouponCodes.join(", ") : "-",
       },
     ],
-    []
+    [context]
   )
 
   const table = useReactTable({
@@ -160,12 +168,13 @@ function CouponUsageContent() {
 
   return (
     <div className={pageClass}>
-      <PageHeader title="Coupon usage report" description="Track which customers used coupons and who has never used one." actions={<Button variant="outline" disabled={loading} onClick={() => setRefresh(value => value + 1)}>Refresh</Button>} />
+      <PageHeader title="Coupon usage report" description="Customers with readable, non-canceled bookings in the selected period." actions={<Button variant="outline" disabled={loading} onClick={() => setRefresh(value => value + 1)}>Refresh</Button>} />
 
+      {context && !loading && !error && <p className="text-sm text-muted-foreground" role="status">{context.office ? `${context.office.companyName} / ${context.office.name}${context.office.active ? "" : " (Closed)"}` : "All readable booking offices"}. Booking creation dates in {context.timeZone}.</p>}
       {!loading && !error && <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {[
-          { label: "Total customers", value: summary.totalCustomers }, { label: "Used coupons", value: summary.usedCustomers },
-          { label: "Not used coupons", value: summary.notUsedCustomers }, { label: "Total redemptions", value: summary.totalRedemptions },
+          { label: "Customers in report", value: summary.totalCustomers }, { label: "With matching coupon use", value: summary.usedCustomers },
+          { label: "No matching coupon use", value: summary.notUsedCustomers }, { label: "Coupon redemptions", value: summary.totalRedemptions },
         ].map(item => <Surface key={item.label}><p className="text-sm text-muted-foreground">{item.label}</p><p className="text-2xl font-semibold">{item.value}</p></Surface>)}
       </div>}
 
@@ -180,17 +189,18 @@ function CouponUsageContent() {
                 setPagination((prev) => ({ ...prev, pageIndex: 0 }))
               }}
             >
-              <option value="used">Used coupons</option>
-              <option value="not_used">Not used coupons</option>
+              <option value="used">With matching coupon use</option>
+              <option value="not_used">No matching coupon use</option>
             </Select>
-          </FormField><Filters activeCount={[couponCode, dateFrom, dateTo].filter(Boolean).length} onReset={() => {
+          </FormField><Filters activeCount={[officeId !== "all" ? officeId : "", couponCode, dateFrom, dateTo].filter(Boolean).length} onReset={() => {
+              setOfficeId("all")
               setCouponCode("")
               setDateFrom("")
               setDateTo("")
               setSearch("")
               setStatus("used")
               setPagination({ pageIndex: 0, pageSize: 10 })
-            }}><FormField id="report-coupon-code" label="Coupon code">
+            }}><FormField id="report-office" label="Booking office"><BookingOfficePicker id="report-office" value={officeId} onChange={value => { setOfficeId(value); setPagination(previous => ({ ...previous, pageIndex: 0 })) }} /></FormField><FormField id="report-coupon-code" label="Coupon code">
             <Input
               id="report-coupon-code"
               value={couponCode}
@@ -228,7 +238,7 @@ function CouponUsageContent() {
       {error ? <p role="alert" className="text-sm text-destructive">{error}</p> : <DataTable
         table={table}
         loading={loading}
-        emptyMessage={status === "used" ? "No coupon usage found." : "All customers have used coupons."}
+        emptyMessage={status === "used" ? "No matching coupon use found." : "No customers without matching coupon use in this report."}
       />}
       <TablePagination table={table} totalRows={totalRows} loading={loading} />
       </Surface>

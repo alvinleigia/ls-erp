@@ -1,4 +1,19 @@
+import type { ListResponse } from "./api"
+import type { RecordOffice } from "./companies"
+
 export type CouponUsageReportStatus = "used" | "not_used"
+
+export type CouponUsageReportContext = {
+  office: RecordOffice | null
+  timeZone: string
+  dateFormat: string
+  timeFormat: "H12" | "H24"
+}
+export type CouponUsageReportResponse = ListResponse<CouponUsageReportRow> & {
+  summary: CouponUsageReportSummary
+  status: CouponUsageReportStatus
+  context: CouponUsageReportContext
+}
 
 export type CouponUsageReportRow = {
   customerId: string

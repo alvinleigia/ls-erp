@@ -8,6 +8,12 @@ export async function lockTenantOperations(tx: Prisma.TransactionClient, tenantI
   if (!tenantId) throw new BusinessError(403, "Tenant context is required.")
   await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`workforce-schedules:${tenantId}`}, 0))`
 }
+// Reports share the writer lock so their counts and rows see one authorized
+// source population. Acquire before resolving permissions, using Read Committed.
+export async function lockTenantReads(tx: Prisma.TransactionClient, tenantId: string) {
+  if (!tenantId) throw new BusinessError(403, "Tenant context is required.")
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock_shared(hashtextextended(${`workforce-schedules:${tenantId}`}, 0))`
+}
 export function tenantOperationTransaction<T>(tenantId: string, operation: (tx: Prisma.TransactionClient) => Promise<T>) {
   if (!tenantId) throw new BusinessError(403, "Tenant context is required.")
   return prisma.$transaction(async tx => {

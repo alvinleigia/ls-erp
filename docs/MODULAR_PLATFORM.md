@@ -1,3 +1,30 @@
+## R10 - Booking-source coupon report (phase 2D7A, local)
+
+The coupon report now derives both views, absence tests and totals from readable,
+non-canceled saved bookings. It cannot classify directory-only or hidden-office
+customers as non-users, nor leak their codes/counts/latest-use dates. Explicit
+office filtering narrows source Read; closed-office history remains readable and
+creation-workspace preferences do not change report scope. Tenant-calendar date
+boundaries and display replace browser/UTC assumptions; labels disclose the
+booking-creation date basis and scoped absence semantics.
+
+The module service reauthorizes after acquiring the shared tenant operation lock,
+so a queued reader sees committed security changes. Native source/child RLS still
+applies. Loading/errors clear old report data; reset recovers from a revoked
+explicit office. No migration or client-data rewrite was needed.
+
+Verified: nine new report integration checks, 85 Inventory/booking regression
+checks and one real-sign-in Chrome flow across desktop/mobile. The disposable
+129-migration rehearsal and its 18 Inventory native/preservation checks passed.
+Production build, TypeScript, changed-file ESLint and whitespace checks passed;
+desktop/mobile/filter screenshots were inspected. No skipped checks count as
+passing. Evidence remains local under tmp/industry-release and test-results.
+
+This phase is local on staging, without push, deployment or hosted data changes.
+Phase 2D7B still needs the composed audit/report scope review and family registry;
+workspace UI and collaborator release gates remain pending. See the
+[report office contract](REPORT_OFFICES_R10.md).
+
 ## R10 - Inventory office-stock runtime cutover (phase 2D6B2, local)
 
 The phase 2D6B1 candidate is promoted to migration 129 with matching Prisma,

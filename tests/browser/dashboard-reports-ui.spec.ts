@@ -16,14 +16,16 @@ async function fixture(page: Page) {
   const state = { fail: false, empty: false, detailDenied: false }
   await page.route("**/api/**", async route => {
     if (new URL(route.request().url()).pathname === "/api/modules") return route.fulfill({ json: { modules: ["appointments", "services", "inventory"].map(key => ({ key, enabled: true, allowed: true })), permissions: null } })
-    const url = new URL(route.request().url()); queries.push(url)
+    const url = new URL(route.request().url())
+    if (url.pathname === "/api/appointments/office-choices") return route.fulfill({ json: { items: [], selected: null, total: 0, totalPages: 1 } })
+    queries.push(url)
     if (route.request().method() !== "GET") { writes.push(url.pathname); return route.fulfill({ status: 405, json: { error: "Read only" } }) }
     if (url.pathname.startsWith("/api/settings")) return route.fulfill({ json: { settings: { currency: "INR", locale: "en-IN", numberFormat: "US_UK", dateFormat: "dd/MM/yyyy", timeZone: "Asia/Kolkata" } } })
     if (url.pathname === "/api/reports/audit-logs/audit") return state.detailDenied ? route.fulfill({ status: 404, json: { error: "Audit entry not found or no longer accessible." } }) : route.fulfill({ json: { ...audit, changes: [{ field: "status", before: "PENDING", after: "APPROVED" }] } })
     if (state.fail) return route.fulfill({ status: 503, json: { error: "Report temporarily unavailable." } })
     if (url.pathname === "/api/dashboard/summary") return route.fulfill({ json: { ...summary, range: { ...summary.range, startDate: url.searchParams.get("startDate") || summary.range.startDate, endDate: url.searchParams.get("endDate") || summary.range.endDate } } })
     const row = url.pathname.endsWith("audit-logs") ? audit : { customerId: "customer", customerName: "Alex", customerEmail: "alex@example.test", customerPhone: null, customerStatus: "ACTIVE", couponUsageCount: 2, distinctCouponCount: 1, usedCouponCodes: ["SAVE10"], lastCouponUsedAt: "2030-10-07T10:00:00Z" }
-    return route.fulfill({ json: { canReviewSecurity: true, items: state.empty ? [] : [row], total: state.empty ? 0 : 25, totalPages: state.empty ? 1 : 3, page: Number(url.searchParams.get("page") || 1), pageSize: Number(url.searchParams.get("pageSize") || 10), summary: { totalCustomers: 25, usedCustomers: 10, notUsedCustomers: 15, totalRedemptions: 30 } } })
+    return route.fulfill({ json: { context: { office: null, timeZone: "Asia/Kolkata", dateFormat: "dd/MM/yyyy", timeFormat: "H24" }, canReviewSecurity: true, items: state.empty ? [] : [row], total: state.empty ? 0 : 25, totalPages: state.empty ? 1 : 3, page: Number(url.searchParams.get("page") || 1), pageSize: Number(url.searchParams.get("pageSize") || 10), summary: { totalCustomers: 25, usedCustomers: 10, notUsedCustomers: 15, totalRedemptions: 30 } } })
   })
   return { queries, state, writes }
 }
@@ -84,7 +86,7 @@ test("coupon report preserves filters, resets pages and distinguishes load error
   await page.getByRole("button", { name: "Next page" }).click()
   await expect.poll(() => queries.at(-1)?.searchParams.get("page")).toBe("2")
   await page.getByLabel("Status", { exact: true }).click()
-  await page.getByRole("menuitemradio", { name: "Not used coupons", exact: true }).click()
+  await page.getByRole("menuitemradio", { name: "No matching coupon use", exact: true }).click()
   await expect.poll(() => queries.at(-1)?.searchParams.get("status")).toBe("not_used")
   expect(queries.at(-1)?.searchParams.get("page")).toBe("1")
   await page.getByRole("button", { name: "Filters", exact: true }).click()
@@ -102,10 +104,10 @@ test("coupon report preserves filters, resets pages and distinguishes load error
   state.fail = true
   await page.getByRole("button", { name: "Refresh" }).click()
   await expect(page.getByRole("alert").filter({ hasText: "Report temporarily unavailable." })).toBeVisible()
-  await expect(page.getByText("All customers have used coupons.")).toHaveCount(0)
+  await expect(page.getByText("No customers without matching coupon use in this report.")).toHaveCount(0)
   state.fail = false; state.empty = true
   await page.getByRole("button", { name: "Refresh" }).click()
-  await expect(page.getByText("All customers have used coupons.")).toBeVisible()
+  await expect(page.getByText("No customers without matching coupon use in this report.")).toBeVisible()
   await expect(page.getByRole("navigation", { name: "Pagination" })).toHaveCount(0)
 })
 
