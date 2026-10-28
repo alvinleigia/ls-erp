@@ -147,3 +147,6 @@ Phase 6D3 covers hosted appointments and inventory workflows, followed by Leaves
 and Shifts. Invitation acceptance/expiry, multiple managers on one team and
 broader sharing/browser-write scenarios remain explicit hosted gates. Production
 still needs its own fresh recovery checks and authorized cutover decision.
+
+[Phase 6D3](STAGING_OPERATIONS_R10.md) now verifies hosted appointments and
+inventory. Workforce and remaining activation/invitation/browser gates continue.

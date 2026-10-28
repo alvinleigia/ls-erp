@@ -1,3 +1,24 @@
+## R10 - Hosted appointments and office inventory (phase 6D3)
+
+168 hosted checks verified receipt idempotency, stale stock/office conflicts,
+source-office booking sales/restores, coupon pricing, hidden booking conflicts,
+scoped staff choices, saved financial reads without catalogue Read and invoice
+export. Two simultaneous six-unit sales against seven units admitted one request
+only. Two desktop/mobile Chrome captures were visually inspected.
+
+The existing appointment-authorized Staff identity lookup contract was retained;
+the separate booking picker enforces office/date eligibility and captured context.
+Runner lookup/query expectations were corrected, preserving earlier successful
+writes rather than replaying the fixture. No application access rule changed.
+
+57 cleanup checks and 95 independent read-only audit checks verified three canceled
+orders, four canceled appointments, six archived accounts, two zero stock balances,
+canceled workplaces and removed availability. Received purchase and invoice history
+remain intact. No application/schema/deployment change, GitHub push or production
+write; staging stays at 132 migrations on candidate 525b853. Next: hosted Leaves
+and Shifts, then remaining activation/invitation/browser gates. See
+[operational evidence and limits](STAGING_OPERATIONS_R10.md).
+
 ## R10 - Hosted financial transitions and source privacy (phase 6D2)
 
 229 hosted checks verified quotation revisions and PDF issuance, frozen order
