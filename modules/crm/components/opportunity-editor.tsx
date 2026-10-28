@@ -4,6 +4,8 @@ import { useCreationOfficeSnapshot } from "@/platform/companies/creation-snapsho
 import { useTerminology, useTerminologyReader } from "@/platform/terminology/provider"
 import { initialOpportunityStage } from "../conversion-stage"
 import { withRecordView, useRecordView, AccessRecordForm, AccessSummarySection, AccessSectionEdit } from "@/platform/access/record-view"
+import { ParticipantEditor } from "@/platform/participants/editor"
+import { useParticipantLabels } from "./extension-provider"
 import { CrmOpportunityPanels } from "./extension-provider"
 import { SalesTeamSelect } from "@/platform/teams/controls"
 import { useCustomFields } from "./custom-fields"
@@ -43,6 +45,7 @@ function fields(record: CrmOpportunityRow) {
 }
 export const OpportunityEditor = withRecordView(OpportunityEditorBody)
 function OpportunityEditorBody({ id, enquiryId, initialReferences }: { id?: string; enquiryId?: string; initialReferences?: CrmViewReferences }) {
+  const participantLabels = useParticipantLabels()
   const creationHeaders = useCreationOfficeSnapshot(!id)
   const { can } = useBusinessModules()
   const readTerm = useTerminologyReader()
@@ -108,6 +111,19 @@ function OpportunityEditorBody({ id, enquiryId, initialReferences }: { id?: stri
     return () => controller.abort()
   }, [values.pipelineId, id, enquiryId, canReadPipelines])
   const stage = pipeline?.stages.find(stage => stage.id === values.stageId)
+  async function participantsSaved() {
+    // A participant save advances the source version. Reload every root field
+    // before accepting that version, or a stale title/assignment draft could
+    // overwrite another editor's intervening root change.
+    try {
+      const response = await fetch(`/api/crm/opportunities/${id}`, { cache: "no-store" })
+      const data = await response.json()
+      if (!response.ok) throw new Error(data.error || "Reload this opportunity before editing its details.")
+      setRecord(data); loadAccess(data.recordAccess); setContact(data.contact); setValues(fields(data)); loadExtension(data); await loadCustom(data); setRevision(value => value + 1)
+    } catch {
+      setFailed(true); setError("Participants were saved. Reload this page before editing the opportunity details.")
+    }
+  }
   async function save(event: React.FormEvent) {
     event.preventDefault(); setSaving(true); setError(""); clearErrors()
     try {
@@ -129,6 +145,7 @@ function OpportunityEditorBody({ id, enquiryId, initialReferences }: { id?: stri
         {extension.summary()} {custom.readOnlySection(<AccessSectionEdit section="Additional information" />)}
       </>}
       tabs={record ? [
+        { value: "participants", label: "Participants", content: <ParticipantEditor endpoint={`/api/crm/opportunities/${record.id}/participants`} sourceVersion={record.version} labels={participantLabels} onSaved={participantsSaved} /> },
         ...(hasDocumentPanels ? [{ value: "documents", permission: "quotations.read" as const, label: "Sales documents", content: <CrmOpportunityPanels opportunityId={record.id} /> }] : []),
         { value: "activities", permission: "activities.read" as const, label: term("crm.activity.plural", "Activities"), content: <WorkList contactId={record.contactId} opportunityId={record.id} /> },
         { value: "history", label: "History", content: <OpportunityTimeline id={record.id} revision={revision} /> },

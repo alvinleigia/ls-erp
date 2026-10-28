@@ -18,5 +18,5 @@ export type QuotationDependencies = {
   readTerms?: TermReader
   resolveItems?: (tx: Prisma.TransactionClient, actor: BusinessActor, content: QuotationContent, previous: QuotationItemReference[]) => Promise<QuotationItemReference[]>
   documentContext?: (tx: Prisma.TransactionClient, actor: BusinessActor, opportunityId: string, term?: TermResolver) => Promise<DocumentContext>
-  participants?: (source: CustomerParticipantSource) => ParticipantSnapshot
+  participants?: (tx: Prisma.TransactionClient, opportunityId: string, source: CustomerParticipantSource) => Promise<ParticipantSnapshot>
 }

@@ -196,6 +196,12 @@ masked presentation and suitable audit events. Do not reuse public branding acce
 | P5: shared document generation and Real Estate letters | Shared issuance/source/template contracts, then booking intimation and unit allotment templates owned by Real Estate. | Generic document provider works with Real Estate disabled; multiple applicants render correctly; frozen issued data, independent financial authorization, tenant/office privacy and controlled template corrections. No copied monetary/legal policy. |
 | P6: migration and release | Rehearse the pilot upgrade against a fresh protected copy, then staging acceptance and separately approved production release. | Values, IDs, assignments, sharing, office bounds, snapshots, money and effective access match; complete recovery and release evidence. |
 
+Local progress: P1 and P2 are implemented and verified on the staging branch.
+P2 adds source-owned participant storage/editor and accepted quotation/order
+copies; it does not claim a complete CIF form or either letter. No hosted
+migration or deployment has occurred for these increments. See
+[the P2 evidence](PARTICIPANTS_P2.md). P3 is the next increment.
+
 P1-P5 are the authorized phased feature direction. Finish and verify each increment
 before depending on it. KYC file collection, electronic signing, ownership shares,
 an independent application approval workflow and automatic penalties are not

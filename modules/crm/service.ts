@@ -31,6 +31,8 @@ import { createSalesReportService } from "./sales-report-service"
 import { checkExportLimit, CRM_EXPORT_LIMIT } from "./csv"
 import type { Prisma, PrismaClient, Role } from "@prisma/client"
 import { recordDomainAuditEvent } from "@/lib/domain-audit"
+import { lockTenantOperations } from "@/platform/transactions/tenant-lock"
+import { createOpportunityParticipantService } from "./participant-service"
 import { createSalesService } from "./sales-service"
 import { createActivityTypeService } from "./activity-type-service"
 import { createWorkService } from "./work-service"
@@ -59,16 +61,22 @@ function pageResult<T>(items: T[], total: number, page: number, pageSize: number
 // module access, then runs in a transaction. Caller must establish DB tenant context.
 export function createCrmService<Fields extends object = object, Metadata extends object = object, Addons extends object = object>(db: PrismaClient, identity: Pick<CrmActor, "tenantId" | "userId" | "requestId">, extensions: CrmExtensions<Fields, Metadata> = noCrmExtensions as CrmExtensions<Fields, Metadata>, presets: readonly CrmPreset[] = [], install?: (context: CrmServiceContext) => Addons, terms: readonly Term[] = crmTerms) {
   const readTerms = (tx: Tx, actor: { tenantId: string }) => readTermReplacements(tx, actor.tenantId, terms)
-  async function run<T>(requirement: Requirement, operation: (tx: Tx, actor: CrmActor) => Promise<T>): Promise<T> {
+  async function run<T>(requirement: Requirement, operation: (tx: Tx, actor: CrmActor) => Promise<T>, lockSecurity = false): Promise<T> {
     for (let attempt = 0; ; attempt++) {
       try {
         // A page loads several CRM panels concurrently through the small tenant
         // pool. Allow bounded queueing beyond Prisma's two-second default while
         // retaining the execution limit for up to 12 audited plan activities.
         return await db.$transaction(async tx => {
+          if (lockSecurity) {
+            // Match security administration's tenant lock before the shared
+            // office/account mutex; authorize only after both waits complete.
+            await tx.$queryRaw`SELECT id FROM "Tenant" WHERE id=${identity.tenantId} FOR SHARE`
+            await lockTenantOperations(tx, identity.tenantId)
+          }
           const actor = await authorizeBusinessOperation(tx, identity, requirement, ["crm"])
           return operation(tx, actor)
-        }, { isolationLevel: "Serializable", maxWait: 20000, timeout: 20000 })
+        }, { isolationLevel: lockSecurity ? "ReadCommitted" : "Serializable", maxWait: 20000, timeout: 20000 })
       } catch (error) {
         const introductionError = introductionBoundaryError(error); if (introductionError) throw introductionError
         const officeError = officeBoundaryError(error); if (officeError) throw officeError
@@ -176,6 +184,7 @@ export function createCrmService<Fields extends object = object, Metadata extend
     ...(install ? install({ run, audit }) : {} as Addons),
     listExtensionChoices(key: string, input: unknown) { return run(workspaceRead, (tx, actor) => extensions.choices(tx, actor, key, input)) },
     ...createSalesService({ run, audit, checkAssignee, readTerms }, extensions),
+    ...createOpportunityParticipantService({ run, audit, runLocked: (requirement, operation) => run(requirement, operation, true) }),
     ...createActivityTypeService({ run, audit }),
     ...createWorkService({ run, audit, checkAssignee }, extensions),
     ...createReportService({ run }),

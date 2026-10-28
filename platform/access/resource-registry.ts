@@ -68,7 +68,7 @@ export const resourceRegistry = {
   contacts: { policy: "sales", record: "CrmContact", ownership: { kind: "shared", roots: ["CrmContact"], children: ["CrmAccountContact"] }, sharing: "contacts" },
   accounts: { policy: "sales", record: "CrmAccount", ownership: { kind: "shared", roots: ["CrmAccount"], children: ["CrmAccountContact"] }, sharing: "accounts" },
   enquiries: { policy: "sales", record: "CrmEnquiry", ownership: { kind: "office", roots: ["CrmEnquiry", "CrmEnquiryImport"], children: ["CrmEnquiryImportRow", "CrmActivity", "RealEstateEnquiryContext", "CrmEnquiryFieldValue"] }, sharing: "enquiries" },
-  opportunities: { policy: "sales", record: "CrmOpportunity", ownership: { kind: "office", roots: ["CrmOpportunity"], children: ["CrmOpportunityActivity", "RealEstateOpportunityContext", "CrmOpportunityFieldValue"] }, sharing: "opportunities" },
+  opportunities: { policy: "sales", record: "CrmOpportunity", ownership: { kind: "office", roots: ["CrmOpportunity"], children: ["CrmOpportunityParticipant", "CrmOpportunityActivity", "RealEstateOpportunityContext", "CrmOpportunityFieldValue"] }, sharing: "opportunities" },
   activities: { policy: "sales", record: "CrmTask", ownership: { kind: "office", roots: ["CrmTask", "CrmPlanLaunch"], children: ["CrmTaskEvent"] }, sharing: "activities" },
   reports: { policy: "reporting", ownership: { kind: "composed", roots: ["CrmEnquiry", "CrmOpportunity", "CrmTask"], sources: ["enquiries", "opportunities", "activities", "projects", "quotations", "salesOrders", "receivables", "orderPayments"] } },
   pipelines: { policy: "shared", ownership: { kind: "shared", roots: ["CrmPipeline"], children: ["CrmStage"] } },

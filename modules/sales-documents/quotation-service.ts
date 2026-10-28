@@ -175,7 +175,7 @@ export function createQuotationService({ run: checkedRun, audit, opportunityScop
         snapshot.items = items
         // Capture all customer facts from this one scoped source read. A second
         // lookup could mix two identities if the source is reassigned meanwhile.
-        if (participants) snapshot.participants = participants({ tenantId: actor.tenantId, person: row.contact, business: row.account })
+        if (participants) snapshot.participants = await participants(tx, opportunityId, { tenantId: actor.tenantId, person: row.contact, business: row.account })
         snapshot.branding = prior ? (prior.snapshot as unknown as QuotationSnapshot).branding || null : await readDocumentBranding(tx, actor.tenantId)
         const values = { title: data.content.title, currency: data.content.currency, consideration: calculation.consideration }
         if (before) await tx.crmQuotation.updateMany({ where: { tenantId: actor.tenantId, id, version: before.version }, data: { ...values, version: { increment: 1 } } })

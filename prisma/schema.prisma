@@ -149,6 +149,7 @@ model CrmStage {
 }
 
 model CrmOpportunity {
+  participants CrmOpportunityParticipant[]
   introducedByCollaboratorId String?
   introducingCollaborator ExternalCollaborator? @relation("CrmOpportunityIntroducer", fields: [tenantId, introducedByCollaboratorId], references: [tenantId, id], onDelete: NoAction)
   partnerAttribution Json?
@@ -242,6 +243,7 @@ model TenantModule {
 }
 
 model CrmContact {
+  participantRoles CrmOpportunityParticipant[]
   sharingPolicyId String?
   sharingPolicy RecordSharingPolicy? @relation(fields: [tenantId, sharingPolicyId], references: [tenantId, id], onDelete: Restrict)
   @@unique([tenantId, sharingPolicyId])
@@ -283,6 +285,7 @@ model CrmContact {
 }
 
 model CrmAccount {
+  participantRoles CrmOpportunityParticipant[]
   sharingPolicyId String?
   sharingPolicy RecordSharingPolicy? @relation(fields: [tenantId, sharingPolicyId], references: [tenantId, id], onDelete: Restrict)
   @@unique([tenantId, sharingPolicyId])
@@ -852,6 +855,7 @@ model Organization {
 }
 
 model Tenant {
+  opportunityParticipants CrmOpportunityParticipant[]
   externalCollaborators ExternalCollaborator[]
   officeStocks InventoryOfficeStock[]
   bookingStock InventoryBookingStock[]
@@ -3021,4 +3025,26 @@ model ExternalCollaborator {
   @@unique([tenantId, code])
   @@index([tenantId, archived, name])
   @@index([tenantId, supervisorUserId])
+}
+
+// Source-owned selections. Primary customer remains on CrmOpportunity.
+model CrmOpportunityParticipant {
+  id String @id @default(cuid())
+  tenantId String
+  opportunityId String
+  role String
+  contactId String?
+  accountId String?
+  position Int
+  details Json
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  opportunity CrmOpportunity @relation(fields: [tenantId, opportunityId], references: [tenantId, id], onDelete: Restrict)
+  contact CrmContact? @relation(fields: [tenantId, contactId], references: [tenantId, id], onDelete: Restrict)
+  account CrmAccount? @relation(fields: [tenantId, accountId], references: [tenantId, id], onDelete: Restrict)
+  @@unique([tenantId, id])
+  @@unique([tenantId, opportunityId, position])
+  @@unique([tenantId, opportunityId, contactId, role])
+  @@unique([tenantId, opportunityId, accountId, role])
+  @@index([tenantId, contactId])
+  @@index([tenantId, accountId])
 }

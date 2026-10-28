@@ -1,3 +1,4 @@
+import { crmSourceParticipants } from "./participant-source"
 import { introductionForCreate } from "@/platform/collaborators/attribution"
 import { recordActionAccess } from "@/platform/access/record-actions"
 import { permits } from "@/platform/access/policy"
@@ -209,6 +210,13 @@ export function createSalesService<Fields extends object, Metadata extends objec
         await checkAssignee(tx, actor, data.assignedUserId, before.assignedUserId)
         const team = await resolveSalesTeam(tx, actor, data.salesTeamId, data.assignedUserId, before)
         await relations(tx, actor, data.contactId, data.accountId, before)
+        if (data.contactId !== before.contactId || (data.accountId || null) !== before.accountId) {
+          const source = await tx.crmOpportunity.findFirst({ where: { ...scope(actor, "edit"), id }, select: { tenantId: true } })
+          if (!source) throw new CrmError(403, "This action is outside your record access.")
+          const person = await tx.crmContact.findFirstOrThrow({ where: { ...contactScope(actor), id: data.contactId }, select: { id: true, tenantId: true, name: true, email: true, phone: true, version: true } })
+          const business = data.accountId ? await tx.crmAccount.findFirstOrThrow({ where: { ...accountScope(actor), id: data.accountId }, select: { id: true, tenantId: true, name: true, version: true } }) : null
+          await crmSourceParticipants(tx, id, { tenantId: source.tenantId, person, business })
+        }
         const changedStage = data.stageId !== before.stageId
         const stage = await destination(tx, actor, data.pipelineId, data.stageId, changedStage)
         await extensions.save(tx, actor, "opportunity", id, extension)

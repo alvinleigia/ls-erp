@@ -1,3 +1,24 @@
+## Shared customer participation - P2 (local staging)
+
+Source-owned participant storage, scoped reference choices and the common
+repeatable editor are implemented. Generic customers/businesses work with Real
+Estate disabled; its extension supplies applicant/co-applicant labels. Saved
+unavailable selections remain intact, while new roles and explicit refresh
+require current directory Read. Source Read/Edit, office/privacy RLS, security
+locks, optimistic versions and strict audit bound every save.
+
+New quotation revisions copy accepted participant evidence; existing orders and
+historical snapshots stay frozen. The editor reloads full parent fields after
+independent participant saves before accepting the new source version.
+
+43 unit/architecture/calculation checks, 94 native/financial regressions and two
+browser scenarios passed; desktop/mobile screenshots were inspected. Migration
+133 passed rollback and exact preservation of 132 preceding tables/policies/
+source functions. Build, targeted lint and whitespace checks passed.
+
+No hosted migration, backfill, push or deployment. P3 is next: common details
+forms and bounded requirements/presets. See [P2 evidence](PARTICIPANTS_P2.md).
+
 ## Shared customer participation - P1 (local staging)
 
 Shared, versioned snapshots support repeatable person/business participants,

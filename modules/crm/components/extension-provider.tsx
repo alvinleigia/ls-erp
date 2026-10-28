@@ -17,6 +17,7 @@ export type ExtensionFilterProps = {
   onChange: (primaryId: string, secondaryId: string) => void
 }
 export type CrmExtensionView = {
+  participantLabels?: import("@/platform/participants/editor").ParticipantLabels
   filterQuery: (primaryId: string, secondaryId: string) => Record<string, string>
   initial: (references: CrmViewReferences) => unknown
   load: (record: unknown) => unknown
@@ -78,4 +79,9 @@ export function useCrmExtensionFilterQuery(primaryId: string, secondaryId: strin
   const view = React.useContext(ExtensionContext)
   const active = React.useContext(ExtensionActiveContext)
   return active ? view.filterQuery(primaryId, secondaryId) : {}
+}
+
+export function useParticipantLabels() {
+  const view = React.useContext(ExtensionContext)
+  return React.useContext(ExtensionActiveContext) ? view.participantLabels : undefined
 }

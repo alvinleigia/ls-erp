@@ -31,7 +31,7 @@ const partyDetails = {
 export const resolvedParticipantPartySchema = participantPartyReferenceSchema.extend({
   tenantId: id, ...partyDetails,
 }).strict()
-const savedParticipantSchema = z.object({
+export const savedParticipantSchema = z.object({
   role: participantRoleSchema,
   party: participantPartyReferenceSchema.extend(partyDetails).strict(),
 }).strict()
@@ -53,4 +53,32 @@ export type CustomerParticipantSource = {
   tenantId: string
   person: { tenantId: string; id: string; name: string; email: string | null; phone: string | null; version: number }
   business: { tenantId: string; id: string; name: string; version: number } | null
+}
+
+// The source owns its main customer. Clients submit references, never copied
+// identity facts. A refresh is explicit and requires a new authorized lookup.
+export const additionalParticipantSchema = participantSelectionSchema.extend({
+  role: z.enum(["ADDITIONAL_CUSTOMER", "REPRESENTATIVE"]),
+  refresh: z.boolean().optional(),
+}).strict()
+export const participantReplacementSchema = z.object({
+  version: z.number().int().positive(),
+  participants: z.array(additionalParticipantSchema).max(98).superRefine((rows, ctx) => {
+    const keys = new Set<string>()
+    rows.forEach((row, index) => {
+      const key = participantKey(row)
+      if (keys.has(key)) ctx.addIssue({ code: "custom", path: [index], message: "This participant already has that role." })
+      keys.add(key)
+    })
+  }),
+}).strict()
+export const participantKey = (row: ParticipantSelection) => JSON.stringify([row.role, row.party.kind, row.party.id])
+export type AdditionalParticipant = z.infer<typeof additionalParticipantSchema>
+export type ParticipantEditorData = {
+  version: number
+  primary: ParticipantSnapshot["participants"]
+  participants: (ParticipantSnapshot["participants"][number] & { available: boolean })[]
+  canEdit: boolean
+  canChoosePerson: boolean
+  canChooseBusiness: boolean
 }

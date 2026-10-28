@@ -18,6 +18,7 @@ function Editor({ value, record, onChange, disabled, readOnly, errors }: Extensi
   return <PropertyFields isNew={!record} value={value as PropertyContextInput} selected={selected?.propertyContext} onChange={onChange} disabled={disabled} readOnly={readOnly} error={errors.propertyContext} />
 }
 export const realEstateCrmView: CrmExtensionView = {
+  participantLabels: { CUSTOMER: "Primary applicant", ADDITIONAL_CUSTOMER: "Co-applicant", REPRESENTATIVE: "Representative" },
   filterQuery: realEstateFilterQuery,
   initial: ({ primaryId, secondaryId }) => ({ ...emptyProperty, projectId: primaryId, subprojectId: secondaryId }),
   load: record => propertyFields((record as RecordContext)?.propertyContext),
