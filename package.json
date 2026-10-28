@@ -23,6 +23,8 @@
     "test:crm:team-intake": "node scripts/test-sales-orders.cjs --teams",
     "test:crm:fields:integration": "node --require ./tests/register.cjs --test tests/custom-fields.integration.test.cjs",
     "test:terminology": "node --require ./tests/register.cjs --test tests/terminology.test.cjs",
+    "test:documents": "node scripts/test-sales-orders.cjs --documents",
+    "test:documents:browser": "node scripts/test-sales-orders.cjs --documents --browser-only",
     "test:booking": "node scripts/test-sales-orders.cjs --booking",
     "test:booking:browser": "node scripts/test-sales-orders.cjs --booking --browser-only",
     "test:participant-information": "node scripts/test-sales-orders.cjs --participants",

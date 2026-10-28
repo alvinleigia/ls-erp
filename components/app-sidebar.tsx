@@ -204,6 +204,7 @@ export function AppSidebar({ brandingLogo, brandingName }: { brandingLogo?: stri
           : [
               { title: "General", href: "/settings", icon: SettingsIcon, isActive: (current) => current === "/settings" },
               { title: "Customer details", href: "/settings/customer-details", icon: SettingsIcon, isActive: (current) => current === "/settings/customer-details" },
+              { title: "Document templates", href: "/settings/documents", icon: SettingsIcon, isActive: (current) => current === "/settings/documents" },
               { title: "Branding", href: "/settings/branding", icon: Building2Icon, isActive: (current) => current === "/settings/branding" },
               { title: "Companies and offices", href: "/settings/companies", icon: Building2Icon, isActive: (current) => current.startsWith("/settings/companies") || current.startsWith("/settings/offices") },
               { title: "Access profiles", href: "/settings/roles", icon: UsersIcon, isActive: (current) => current.startsWith("/settings/roles") },
@@ -223,6 +224,7 @@ export function AppSidebar({ brandingLogo, brandingName }: { brandingLogo?: stri
         if (item.href === "/users") return can("users.read")
         if (item.href === "/settings") return can("businessSettings.read")
         if (item.href === "/settings/customer-details") return can("participantSettings.read")
+        if (item.href === "/settings/documents") return can("documentTemplates.read")
         if (item.href === "/settings/branding") return can("branding.read")
         if (item.href === "/settings/taxes") return can("taxRates.read")
         return true

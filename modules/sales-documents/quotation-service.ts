@@ -153,7 +153,8 @@ export function createQuotationService({ run: checkedRun, audit, opportunityScop
       return archived
     },
     saveQuotation(opportunityId: string, input: unknown, id?: string) {
-      const data = quotationSaveSchema.parse(input), calculation = calculate(data.content)
+      const data = quotationSaveSchema.parse(input)
+      const acceptedContent={...data.content,lines:data.content.lines.map(line=>{const copy={...line};delete copy.refreshCatalogItem;return copy})},calculation=calculate(acceptedContent)
       return run(id ? "quotations.edit" : "quotations.create", async (tx, actor, paymentPlans) => {
         let recordId = id
         const row = await opportunity(tx, actor, opportunityId)
@@ -171,7 +172,7 @@ export function createQuotationService({ run: checkedRun, audit, opportunityScop
         const author = await tx.user.findFirstOrThrow({ where: { tenantId: actor.tenantId, id: actor.userId }, select: { name: true } })
         const term = createTermResolver(await readTerms?.(tx, actor) || {})
         const context = await documentContext?.(tx, actor, row.id, term) || []
-        const snapshot: QuotationSnapshot = { labels: quotationDocumentLabels(term), content: data.content, calculation, context, customer: { name: row.contact.name, email: row.contact.email, phone: row.contact.phone }, opportunity: row.title, actor: author.name || "Staff", template, locale: settings?.locale || "en-US", dateFormat: settings?.dateFormat || "yyyy-MM-dd", numberFormat: settings?.numberFormat || "US_UK", currencySymbolPlacement: settings?.currencySymbolPlacement || "BEFORE" }
+        const snapshot: QuotationSnapshot = { labels: quotationDocumentLabels(term), content: acceptedContent, calculation, context, customer: { name: row.contact.name, email: row.contact.email, phone: row.contact.phone }, opportunity: row.title, actor: author.name || "Staff", template, locale: settings?.locale || "en-US", dateFormat: settings?.dateFormat || "yyyy-MM-dd", numberFormat: settings?.numberFormat || "US_UK", currencySymbolPlacement: settings?.currencySymbolPlacement || "BEFORE" }
         snapshot.items = items
         // Capture all customer facts from this one scoped source read. A second
         // lookup could mix two identities if the source is reassigned meanwhile.

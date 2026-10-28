@@ -27,7 +27,9 @@ export function CatalogQuotationPicker({ line, onChange, currency, disabled, id 
   if (!enabled && !line.catalogItemId) return null
   return <div className="space-y-2 sm:col-span-2 lg:col-span-4">
     {enabled && <FormField id={id} label="Catalog item (optional)" error={error}><RecordSelect showCode id={id} endpoint={`/api/catalog/items?availability=AVAILABLE&currency=${encodeURIComponent(currency)}`} value={line.catalogItemId || ""} selected={line.catalogItemId ? { value: line.catalogItemId, label: line.description } : undefined} onChange={pick} disabled={disabled || loading} placeholder="Search item name or code..." /></FormField>}
-    {line.catalogItemId && <Button type="button" variant="ghost" disabled={disabled || loading} onClick={() => { const { catalogItemId, catalogItemVersion, ...manual } = line; void catalogItemId; void catalogItemVersion; onChange(manual) }}>Remove catalog link</Button>}
+    {line.catalogItemId && <Button type="button" variant="ghost" disabled={disabled || loading || (!enabled&&!line.refreshCatalogItem)} onClick={()=>onChange({...line,refreshCatalogItem:!line.refreshCatalogItem})}>{line.refreshCatalogItem?"Keep saved item details":"Refresh saved item details"}</Button>}
+    {line.refreshCatalogItem && <p className="text-xs text-muted-foreground">Current item details will be checked and saved in the new revision.</p>}
+    {line.catalogItemId && <Button type="button" variant="ghost" disabled={disabled || loading} onClick={() => { const { catalogItemId, catalogItemVersion, refreshCatalogItem, ...manual } = line; void catalogItemId; void catalogItemVersion; void refreshCatalogItem; onChange(manual) }}>Remove catalog link</Button>}
     {line.catalogItemId && <p className="text-xs text-muted-foreground">The saved item reference is retained. This quotation does not reserve or sell the item.</p>}
   </div>
 }

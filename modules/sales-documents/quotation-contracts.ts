@@ -7,7 +7,7 @@ import type { QuotationContent } from "./quotation-validation"
 import type { CustomerParticipantSource, ParticipantSnapshot } from "@/platform/participants/validation"
 
 export type DocumentContext = { label: string; value: string }[]
-export type QuotationItemReference = { itemId: string; version: number; code: string; name: string; kind: string; currency: string }
+export type QuotationItemReference = { itemId: string; version: number; code: string; name: string; kind: string; currency: string; documentEvidence?: { key: string; value: Prisma.InputJsonValue } }
 
 // Application composition supplies the existing checked transaction and CRM
 // record scope. No unrelated CRM queries, imports or extension hooks are needed.

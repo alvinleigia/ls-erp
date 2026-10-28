@@ -6,6 +6,7 @@ import { permits, requirePermission } from "@/platform/access/policy"
 import { BusinessError } from "@/platform/policy"
 import { projectScope } from "./service"
 import { resolvePropertyChoice } from "./choice-service"
+import { readPropertyDocumentEvidence } from "./document-evidence"
 export const unitDetailsSchema = z.object({
   projectId: z.string().min(1).max(100), categoryId: z.string().min(1).max(100),
   bedrooms: z.number().int().min(0).max(100).nullable().default(null),
@@ -14,6 +15,7 @@ export const unitDetailsSchema = z.object({
 }).strict()
 export const propertyCatalogExtension: CatalogExtension = {
   key: "realEstate",
+  documentEvidence: readPropertyDocumentEvidence,
   async scope(tx, actor, contextId) {
     const flags = await tx.tenantModule.findMany({ where: { tenantId: actor.tenantId } })
     if (!moduleEnabled(flags, "realEstate") || !permits(actor, "projects.read")) return null

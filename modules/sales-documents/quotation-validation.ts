@@ -14,7 +14,7 @@ export const quotationContentSchema = z.object({
   supplierName: text(200).min(1), website: z.union([z.literal(""), z.url().refine(value => /^https?:\/\//.test(value))]),
   bookingDate: date, validUntil: date, registration: text(300), registrationUrl: z.union([z.literal(""), z.url().max(1000).refine(value => /^https?:\/\//.test(value))]),
   details: z.array(z.object({ label: text(100).min(1), value: text(500) }).strict()).max(15),
-  lines: z.array(z.object({ description: text(300).min(1), quantity: decimal.refine(value => Number(value) > 0), unit: text(40), rate: decimal, catalogItemId: text(100).min(1).optional(), catalogItemVersion: z.number().int().positive().optional() }).strict().refine(line => !!line.catalogItemId === !!line.catalogItemVersion, "Choose the catalog item again.")).min(1).max(30),
+  lines: z.array(z.object({ description: text(300).min(1), quantity: decimal.refine(value => Number(value) > 0), unit: text(40), rate: decimal, catalogItemId: text(100).min(1).optional(), catalogItemVersion: z.number().int().positive().optional(), refreshCatalogItem: z.boolean().optional() }).strict().refine(line => !!line.catalogItemId === !!line.catalogItemVersion && (!line.refreshCatalogItem || !!line.catalogItemId), "Choose the catalog item again.")).min(1).max(30),
   discount: decimal,
   charges: z.array(z.object({ label: text(150).min(1), group: text(100).default(""), kind: z.enum(["FIXED", "PERCENT", "TBD"]), value: decimal, basis: z.enum(["BASE", "CONSIDERATION"]), included: z.boolean(), due: text(500) }).strict()).max(30),
   instalments: z.array(z.object({ label: text(150).min(1), percent: decimal.refine(value => Number(value) > 0 && Number(value) <= 100), days: z.number().int().min(0).max(36500), note: text(300) }).strict()).max(30),

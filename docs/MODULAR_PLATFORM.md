@@ -1,3 +1,34 @@
+## Shared document issuance - P5 (local staging)
+
+Shared issuance now supports reviewed operating-company templates, a generic
+order acknowledgement and Real Estate booking-intimation/unit-allotment letters.
+The source owns immutable document rows and exact private PDF versions, with
+explicit reasoned replacements. Real Estate owns property evidence and current
+hold/allocation eligibility; finance independently supplies authorized balances.
+
+Read, Create and Export record bounds intersect with native source, office and
+Restricted privacy. Limited issuer/template-company projections avoid granting
+the company directory. Preparation is rechecked after rendering/upload; strict
+audit, replay/concurrency guards and conservative failed-upload handling retain
+one committed issuance per request. New permissions never expand old profiles.
+
+Multiple accepted applicants, commercial lines, instalments, pending charges and
+posted balances render through the shared plaintext/table engine. Unknown ledger
+balances remain unverified. Old missing evidence requires explicit source and
+quotation/order correction, never automatic reconstruction. National identifiers,
+KYC uploads, electronic signing and ownership calculations remain outside scope.
+
+134 regression checks, 12 focused document/access checks and the final scoped
+non-admin issuance check passed (overlapping counts). Migration 136 preserves all
+135 prior tables/policies/functions and passed forced rollback; new tables start
+empty. Build/TypeScript, targeted lint and whitespace checks passed. Two complete
+Real Estate PDFs, a generic PDF and long-table pagination were visually checked.
+All eight final browser scenarios passed; four desktop/mobile document views
+were visually inspected. Detailed evidence is in the P5 document/receipt.
+
+No hosted migration, push or deployment. P6 is the pilot-copy preservation and
+separately approved release phase. See [P5 evidence](DOCUMENT_ISSUANCE_P5.md).
+
 ## Shared booking composition - P4 (local staging)
 
 Creation review binds its saved quotation ID/revision, customer and exact terms.

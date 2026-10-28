@@ -11,6 +11,8 @@ const nextConfig: NextConfig = {
   },
   outputFileTracingIncludes: {
     "/api/crm/quotations/*/pdf": ["./public/assets/fonts/NotoSans-Regular.ttf"],
+    "/api/sales-orders/*/documents/preview": ["./public/assets/fonts/NotoSans-Regular.ttf"],
+    "/api/sales-orders/*/documents/issue": ["./public/assets/fonts/NotoSans-Regular.ttf"],
   },
 };
 

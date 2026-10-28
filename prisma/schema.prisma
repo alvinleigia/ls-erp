@@ -856,6 +856,7 @@ model Organization {
 }
 
 model Tenant {
+  documentTemplates BusinessDocumentTemplate[]
   salesOrderSequence SalesOrderSequence?
   participantFormConfiguration ParticipantFormConfiguration?
   opportunityParticipants CrmOpportunityParticipant[]
@@ -950,6 +951,7 @@ model Tenant {
 
 // Operating structure within a tenant. Platform Organization remains separate.
 model BusinessCompany {
+  documentTemplates BusinessDocumentTemplate[]
   officeGrants BusinessCompanyGrant[]
   id String @id @default(cuid())
   tenantId String
@@ -2667,6 +2669,7 @@ model CrmQuotationRevision {
 }
 
 model SalesOrder {
+  documents SalesOrderDocument[]
   reference String?
   orderedOn DateTime? @db.Date
   participantAcceptance Json?
@@ -2704,6 +2707,50 @@ model SalesOrderSequence {
   tenantId String @id
   value Int
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+}
+
+model BusinessDocumentTemplate {
+  tenantId String
+  companyId String
+  providerKey String
+  version Int
+  content Json
+  createdBy String
+  createdAt DateTime @default(now())
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  company BusinessCompany @relation(fields: [tenantId, companyId], references: [tenantId, id], onDelete: Restrict)
+  documents SalesOrderDocument[]
+  @@id([tenantId, companyId, providerKey, version])
+}
+
+model SalesOrderDocument {
+  tenantId String
+  id String @default(uuid())
+  orderId String
+  companyId String
+  providerKey String
+  templateVersion Int
+  version Int
+  reference String
+  requestKey String
+  requestHash String
+  snapshot Json
+  archive Json
+  supersedesId String?
+  reason String @default("")
+  createdBy String
+  createdAt DateTime @default(now())
+  source SalesOrder @relation(fields: [tenantId, orderId], references: [tenantId, id], onDelete: Restrict)
+  template BusinessDocumentTemplate @relation(fields: [tenantId, companyId, providerKey, templateVersion], references: [tenantId, companyId, providerKey, version], onDelete: Restrict)
+  supersedes SalesOrderDocument? @relation("DocumentReplacement", fields: [tenantId, orderId, providerKey, supersedesId], references: [tenantId, orderId, providerKey, id], onDelete: NoAction)
+  successors SalesOrderDocument[] @relation("DocumentReplacement")
+  @@id([tenantId, id])
+  @@unique([tenantId, requestKey])
+  @@unique([tenantId, reference])
+  @@unique([tenantId, orderId, providerKey, version])
+  @@unique([tenantId, orderId, providerKey, id])
+  @@unique([tenantId, supersedesId])
+  @@index([tenantId, orderId, createdAt(sort: Desc), id])
 }
 
 model OrderReceivable {

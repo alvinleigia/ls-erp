@@ -99,6 +99,10 @@ This is the baseline for new modules (API + UI) in this codebase.
 - Put reusable domain/UI types in `types/<domain>.ts` (example: `types/scheduling.ts`, `types/shifts.ts`) and import them instead of redefining per page.
 - API: `schema.safeParse(body)` and return `{ error, details }` with `flatten()` on failure.
 
+## Document issuance
+
+- Source-owned business documents use `platform/documents` and a typed owner/provider registered by application composition. Authorize Read, Create and Export record bounds separately, as well as each provider's source Read limits. Keep rendering/upload outside transactions and recheck fresh authority and the prepared fingerprint before immutable issuance/audit. Use source-owned native child tables, reviewed per-company template versions, explicit replacements and private exact-file downloads. Real Estate letter fields and eligibility belong in its provider. Do not infer missing historical participant/property facts on read or silently refresh accepted references. See `docs/DOCUMENT_ISSUANCE_P5.md`.
+
 ## Forms
 - Use `FormField` from `components/form-field.tsx` for label/input/error.
 - Use `useFormErrors` from `hooks/use-form-errors.ts` to map Zod field errors.

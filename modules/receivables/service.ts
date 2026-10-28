@@ -1,4 +1,5 @@
 import { attributionChoiceSchema } from "@/platform/collaborators/report-validation"
+import { readReceivableBalances } from "./document-evidence"
 import { readAttributionChoices } from "@/platform/collaborators/report-choices"
 import { authorizeBusinessOperation } from "@/platform/access/operation"
 import { recordActionAccess } from "@/platform/access/record-actions"
@@ -54,9 +55,7 @@ export function createReceivableService(db: PrismaClient, identity: Pick<Busines
     return (await tx.user.findFirstOrThrow({ where: { tenantId: actor.tenantId, id: actor.userId }, select: { name: true } })).name || "Staff"
   }
   async function balances(tx: Tx, tenantId: string, orderId: string) {
-    const lines = await tx.orderReceivableLine.findMany({ where: { tenantId, orderId }, orderBy: { position: "asc" } })
-    const paid = await tx.orderReceiptAllocation.groupBy({ by: ["lineId"], where: { tenantId, orderId, payment: { status: "POSTED" } }, _sum: { amount: true } })
-    return lines.map(line => { const received = paid.find(p => p.lineId === line.id)?._sum.amount || new D(0); return { ...line, paid: received, outstanding: line.amount.minus(received) } })
+    return readReceivableBalances(tx,tenantId,orderId)
   }
   async function accountForWrite(tx: Tx, tenantId: string, orderId: string, status: string, version: number) {
     if (status !== "CONFIRMED") throw new BusinessError(409, "Payments require a confirmed order.")

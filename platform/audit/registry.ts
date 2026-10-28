@@ -35,6 +35,8 @@ function resourceFamily(resource: Resource, prefix: string, component?: string):
 export const auditFamilies: readonly AuditFamily[] = [
   ...["collaborator.", "workspace.", "structure.", "access.", "module.", "tenant.", "organization.", "core.invitations.", "crm.team.", "team."].map(prefix => ({ prefix, boundary: "security" as const, adminOnly: true })),
   { ...resourceFamily("participantSettings", "participantSettings."), adminOnly: true },
+  { ...resourceFamily("documentTemplates", "documentTemplate."), adminOnly: true },
+  { prefix:"salesOrder.document.",boundary:"source",read:["orderDocuments.read","salesOrders.read"],modules:["salesOrders"],adminOnly:true },
   resourceFamily("businessSettings", "core.businessSettings."),
   resourceFamily("taxRates", "core.taxRates."),
   resourceFamily("branding", "branding."),

@@ -5,6 +5,8 @@ export type PermissionAction = typeof permissionActions[number]
 const editable = ["read", "create", "edit"] as const
 const records = ["read", "create", "edit", "archive"] as const
 export const accessResources = {
+  orderDocuments: { name: "Issued order documents", module: "salesOrders", actions: ["read", "create", "export"], createOnRecord: true },
+  documentTemplates: { name: "Company document templates", module: "core", actions: ["read", "edit"] },
   receivables: { name: "Order receivables", module: "receivables", actions: ["read", "create"], createOnRecord: true },
   orderPayments: { name: "Order payments (cancel records a correction or full refund)", module: "receivables", actions: ["read", "create", "cancel"], createOnRecord: true },
   unitReservations: { name: "Unit reservations (confirm allocates; cancel releases)", module: "catalog", actions: ["read", "create", "confirm", "cancel"], createOnRecord: true },

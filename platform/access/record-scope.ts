@@ -30,7 +30,7 @@ export function ownedRecordSql(actor: BusinessActor, resource: Resource, alias: 
 export function quotationRecordScope(actor: BusinessActor, action?: PermissionAction): Prisma.CrmQuotationWhereInput {
   return sharedRecordWhere(actor, "quotations", { tenantId: actor.tenantId, opportunity: ownedRecordScope(actor, "quotations", action) }, { opportunity: { assignedUserId: actor.userId } }, action)
 }
-export function salesOrderRecordScope(actor: BusinessActor, resource: "salesOrders" | "receivables" | "orderPayments" | "unitReservations" = "salesOrders"): Prisma.SalesOrderWhereInput {
+export function salesOrderRecordScope(actor: BusinessActor, resource: "salesOrders" | "receivables" | "orderPayments" | "unitReservations" | "orderDocuments" = "salesOrders"): Prisma.SalesOrderWhereInput {
   const rules: Resource[] = [resource, "salesOrders", ...(resource === "orderPayments" ? ["receivables" as const] : [])]
   const base: Prisma.SalesOrderWhereInput = { tenantId: actor.tenantId, source: { quotation: { opportunity: { AND: rules.map((key,index) => ownedRecordScope(actor, key, index ? "read" : undefined)) } } } }
   if (rules.some((key,index) => recordLimits(actor, key, index ? "read" : undefined).includes("NONE"))) return base

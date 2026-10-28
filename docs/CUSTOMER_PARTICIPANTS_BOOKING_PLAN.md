@@ -196,7 +196,7 @@ masked presentation and suitable audit events. Do not reuse public branding acce
 | P5: shared document generation and Real Estate letters | Shared issuance/source/template contracts, then booking intimation and unit allotment templates owned by Real Estate. | Generic document provider works with Real Estate disabled; multiple applicants render correctly; frozen issued data, independent financial authorization, tenant/office privacy and controlled template corrections. No copied monetary/legal policy. |
 | P6: migration and release | Rehearse the pilot upgrade against a fresh protected copy, then staging acceptance and separately approved production release. | Values, IDs, assignments, sharing, office bounds, snapshots, money and effective access match; complete recovery and release evidence. |
 
-Local progress: P1-P4 are implemented and verified on the staging branch.
+Local progress: P1-P5 are implemented and verified on the staging branch.
 P2 adds source-owned participant storage/editor and accepted quotation/order
 copies. P3 adds common correspondence forms, versioned captions/requirements,
 impact preview and server-enforced confirmation acceptance. Real Estate owns its
@@ -206,7 +206,13 @@ tenant-calendar order dates, retaining separate reservation and financial states
 No hosted migration or deployment has occurred for these increments. See
 [the P2 evidence](PARTICIPANTS_P2.md), [the P3 evidence](PARTICIPANTS_P3.md) and
 [the P4 evidence](BOOKING_COMPOSITION_P4.md).
-P5 is the next increment; neither letter is claimed complete yet.
+P5 adds shared issuance, reviewed issuing-company templates, a generic order
+acknowledgement and the two Real Estate letter providers, with frozen PDFs and
+explicit replacement history. These are standardized letters with approved
+company wording; protected national identifiers are not captured or printed by
+this increment. See [the P5 evidence](DOCUMENT_ISSUANCE_P5.md).
+P6 is next: pilot-copy preservation, staging acceptance and separately approved
+release. Earlier hosted deployments have not received P1-P5 through this work.
 
 P1-P5 are the authorized phased feature direction. Finish and verify each increment
 before depending on it. KYC file collection, electronic signing, ownership shares,

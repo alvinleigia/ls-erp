@@ -7,4 +7,5 @@ export type CatalogExtension = {
   scope: (tx: Prisma.TransactionClient, actor: BusinessActor, contextId?: string) => Promise<Prisma.CatalogItemWhereInput | null>
   read: (tx: Prisma.TransactionClient, actor: BusinessActor, itemId: string) => Promise<unknown>
   save: (tx: Prisma.TransactionClient, actor: BusinessActor, itemId: string, input: unknown) => Promise<void>
+  documentEvidence?: (tx: Prisma.TransactionClient, actor: BusinessActor, itemId: string) => Promise<Prisma.InputJsonValue>
 }

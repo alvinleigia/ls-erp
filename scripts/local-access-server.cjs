@@ -32,7 +32,15 @@ async function main() {
     APP_ROOT_DOMAIN: "localhost", PLATFORM_ADMIN_TENANT_SLUG: "platform",
     RLS_POOL_MAX: "4", SMTP_HOST: "", SMTP_USER: "", SMTP_PASS: "", MAIL_FROM: "",
   })
-  const child = spawn(process.execPath, ["node_modules/next/dist/bin/next", "start", "--hostname", "127.0.0.1", "--port", "3108"], { env, stdio: "inherit", windowsHide: true })
+  const args = ["node_modules/next/dist/bin/next", "start", "--hostname", "127.0.0.1", "--port", "3108"]
+  if (process.env.P5_DOCUMENT_STORAGE_TEST === "1") {
+    // External transport only. The real routes, authorization, rendering,
+    // transactions and native RLS still run against the guarded local database.
+    env.SUPABASE_URL = "https://documentstest.supabase.co"
+    env.SUPABASE_SECRET_KEY = "sb_secret_local_test"
+    args.unshift("--require", "./tests/helpers/document-storage-fetch.cjs")
+  }
+  const child = spawn(process.execPath, args, { env, stdio: "inherit", windowsHide: true })
   for (const signal of ["SIGINT", "SIGTERM"]) process.on(signal, () => child.kill(signal))
   child.on("exit", code => { process.exitCode = code ?? 1 })
 }

@@ -28,7 +28,9 @@ test('consolidation preserves the reviewed scope families, sharing owners and co
  for(const [resource,policy]of Object.entries(baseline.recordPolicies))assert.equal(resourceRecordPolicies[resource],policy,resource)
  assert.deepEqual(sharingRecords,baseline.sharingRecords)
  for(const [resource,owner]of Object.entries(baseline.sharingOwners))assert.equal(sharingResource(resource)??null,owner,resource)
- assert.deepEqual(auditFamilies.filter(family=>!['collaborator.','participantSettings.'].includes(family.prefix)),baseline.auditFamilies)
+ assert.deepEqual(auditFamilies.filter(family=>!['collaborator.','participantSettings.','documentTemplate.','salesOrder.document.'].includes(family.prefix)),baseline.auditFamilies)
+ assert.deepEqual(auditFamilies.filter(family=>family.prefix==='documentTemplate.'),[{prefix:'documentTemplate.',boundary:'shared',read:'documentTemplates.read',adminOnly:true}])
+ assert.equal(resourceRegistry.orderDocuments.sharing,'salesOrders');assert.deepEqual(resourceRegistry.orderDocuments.ownership.sources,['salesOrders'])
  assert.deepEqual(auditFamilies.filter(family=>family.prefix==='participantSettings.'),[{prefix:'participantSettings.',boundary:'shared',read:'participantSettings.read',adminOnly:true}])
  assert.deepEqual(auditFamilies.filter(family=>family.prefix==='collaborator.'),[{prefix:'collaborator.',boundary:'security',adminOnly:true}])
  for(const resource of resourceKeys){const contract=resourceRegistry[resource];if(contract.sharing){assert.ok(Object.hasOwn(sharingRecords,contract.sharing),resource);assert.equal(sharingResource(resource),contract.sharing)}}
