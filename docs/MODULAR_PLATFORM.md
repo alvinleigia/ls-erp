@@ -1,3 +1,25 @@
+## R10 - Consolidated release readiness (phase 6E)
+
+The targeted technical review passed across staging phases 6C-6D6. Runtime source
+is unchanged from tested candidate 525b853; subsequent changes are documentation.
+Authenticated CLI reads resolved the old direct-helper 403 without another login.
+All three staging and three production domains match their expected READY
+revisions. Production remains on 107 applied migrations (108 history attempts,
+one rolled back); staging has 132. The 25 pending migrations are identified by
+the pinned R10 inventory. Runtime roles retain their expected non-bypass bounds.
+
+Both retained recovery sets authenticated offline, including 13 stored objects;
+prior isolated restore and pilot-copy access comparisons were reviewed. These
+are historical snapshots, not a fresh cutover backup. Required environment keys,
+authentication origins, live storage inventories and Git deployment branches were
+checked read-only. GitHub main/staging remain at 160becb and can fast-forward to
+the reviewed source. No push, deployment, migration or production write occurred.
+
+Next is a production-release decision and agreed maintenance window, followed by
+fresh recovery verification and the explicit cutover. This review grants no
+production execution approval. See [consolidated evidence](RELEASE_REVIEW_R10.md)
+and [R10 execution/recovery steps](PRODUCTION_CUTOVER_R10.md).
+
 ## R10 - Hosted sharing and browser editing (phase 6D6)
 
 188 hosted checks verified actual mobile enquiry/project edits, desktop/mobile

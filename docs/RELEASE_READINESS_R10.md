@@ -1,5 +1,11 @@
 # R10 release readiness: source and synthetic recovery
 
+Current consolidated status: [phase 6E release review](RELEASE_REVIEW_R10.md).
+Targeted staging acceptance through 6D6 passed, current deployment identities are
+verified through the authenticated CLI, and retained recovery artifacts passed
+offline integrity checks. Production execution still needs its approved window
+and fresh recovery checks; see the [R10 cutover runbook](PRODUCTION_CUTOVER_R10.md).
+
 Phase 6A is local release preparation. It does not authorize deployment or certify
 the pilot client's database. The R5 manifest, comparison rules and historical
 cutover evidence remain unchanged.
@@ -116,15 +122,16 @@ Phase 6D3 verifies [hosted appointments, purchase receipts and office stock](STA
 Phase 6D4 verifies [hosted Leaves/Shifts, approval routing and roster boundaries](STAGING_WORKFORCE_R10.md).
 Phase 6D5 verifies [multiple managers, invitations and module activation](STAGING_GOVERNANCE_R10.md), with natural expiry covered by fresh disposable-local tests.
 Phase 6D6 verifies [hosted browser edits, Restricted sharing and linked source boundaries](STAGING_SHARING_R10.md).
-Wider hosted acceptance and the documented managed-environment differences remain.
+Phase 6E reviews these completed targeted checkpoints together. Documented coverage
+and managed-environment limits remain part of the production release decision.
 
 | Gate | Local evidence | Still required before release |
 | --- | --- | --- |
-| Candidate source | Pinned schema/migration inventory; exact candidate `525b853` verified READY on all three staging aliases | Recheck the selected production candidate at release time |
+| Candidate source | Pinned schema/migration inventory; candidate `525b853` freshly verified READY on all three staging domains in phase 6E; later changes are documentation only | Record the final approved release commit and recheck it at execution time |
 | Upgrade semantics | Synthetic preservation, empty-database Prisma deploy and actual pilot-copy upgrade from 107 to 132 | Recheck the live target at release time; retain the original rolled-back attempt and never rewrite history to silence a discrepancy |
-| Recovery | Encrypted synthetic recovery plus fresh pilot application/role/storage backup and isolated restore | Review managed dependencies/environment fidelity, then repeat fresh recovery verification at the release boundary; this does not certify complete Supabase platform recovery |
+| Recovery | Encrypted synthetic recovery and pilot application/role/storage restore/upgrade; phase 6E reauthenticated both retained backup sets and 13 storage objects offline | Repeat a fresh consistent backup and restore/upgrade verification at the release boundary; retained artifacts are historical and do not certify complete Supabase platform recovery |
 | Existing access | Native synthetic and pilot-copy evidence; hosted team/office/profile, financial, stock, workforce and activation checks; phase 6D6 sharing/action/None bounds, source-private CSV/financial reads and immediate grant revocation | Review the combined evidence and documented limits for the selected release; pilot-copy evidence does not exercise business writes |
-| UI and hosted behavior | Local Chrome and hosted captures through phase 6D6; actual mobile enquiry/project edits, Sharing controls, read-only financial views, 188 sharing checks and 89 cleanup-audit checks; phase 6D5 invitations/activation and 76 local onboarding/account tests | No exhaustive form/browser matrix or directly observed seven-day hosted expiry is claimed; rerun affected flows if the candidate changes; refresh Vercel metadata after HTTP 403 |
+| UI and hosted behavior | Local Chrome and hosted captures through phase 6D6; actual mobile enquiry/project edits, Sharing controls, read-only financial views, 188 sharing checks and 89 cleanup-audit checks; phase 6D5 invitations/activation and 76 local onboarding/account tests | No exhaustive form/browser matrix or directly observed seven-day hosted expiry is claimed; rerun affected flows if the application changes; the old HTTP 403 metadata blocker is resolved by authenticated CLI reads |
 | Production | No changes made | Separately authorized release and agreed maintenance/recovery window |
 
 Do not use the older R5-only source verifier to approve R10. Its strict historical
