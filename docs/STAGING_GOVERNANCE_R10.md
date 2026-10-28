@@ -118,6 +118,7 @@ checkpoint. No credentials, environment files, invitation tokens or session stat
 are committed. This checkpoint is not a fresh database backup or standalone
 recovery tool.
 
-Next: remaining hosted browser-write and Restricted-sharing paths, followed by
-release readiness review. Production still requires fresh recovery verification,
-current deployment/alias verification and a separately authorized cutover.
+Phase 6D6 now records [hosted browser editing and Restricted sharing](STAGING_SHARING_R10.md).
+Next: consolidated release readiness review. Production still requires fresh
+recovery verification, current deployment/alias verification and a separately
+authorized cutover.

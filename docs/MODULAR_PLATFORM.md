@@ -1,3 +1,24 @@
+## R10 - Hosted sharing and browser editing (phase 6D6)
+
+188 hosted checks verified actual mobile enquiry/project edits, desktop/mobile
+Sharing controls, combined user/team grants, immediate revocation and private
+source boundaries across enquiries, quotations, orders and receivables. None and
+missing actions remain bounds; parent sharing governs child projects. Read-only
+financial pages expose no edit/confirm/cancel controls. Eight captures were
+visually inspected after completing panel animations.
+
+75 cleanup checks and 89 independent read-only audit checks verified six archived
+accounts, zero selected grants on six Restricted policies, two archived projects,
+a closed enquiry/Lost opportunity and a canceled order with no outstanding balance
+or payments. One immutable quotation version remains; no PDF was issued.
+Runner failures and resumed receipts are retained; uncertified counts excluded.
+No application/schema/deployment change, push or production write.
+
+Staging has 132 verified applied migrations. Vercel metadata still returns HTTP
+403. Next: consolidate release readiness across phases 6C-6D6, then renew target
+verification and recovery at a separately authorized production cutover.
+See [sharing evidence and limits](STAGING_SHARING_R10.md).
+
 ## R10 - Hosted invitations, activation and shared managers (phase 6D5)
 
 274 hosted checks verified two managers sharing one team, one manager overseeing
