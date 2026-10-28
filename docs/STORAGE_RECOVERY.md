@@ -1,8 +1,17 @@
-# Logo and quotation archive recovery
+# Logo and issued-document archive recovery
 
 The application database backup alone does not contain Supabase object bytes.
 Keep the database archive and a storage companion covering `tenant-branding`
-(public logos) and `tenant-documents` (private issued quotation PDFs).
+(public logos) and `tenant-documents` (private issued quotation and order PDFs).
+
+The operator-only `scripts/document-recovery.cjs` collects saved references from
+settings, appointment branding, quotation revisions and every issued order document,
+including replaced versions and their saved logos. Reconciliation checks bucket
+privacy, tenant-safe paths, sizes and available source checksums against the
+authenticated storage manifest. Missing or changed PDFs fail verification.
+The reviewed pre-P5 baseline may lack the new order-document table; no existing
+malformed reference is skipped. This is recovery tooling, not an application
+compatibility or backfill path.
 
 `scripts/storage-recovery.cjs` only reads Supabase. It never creates a bucket,
 uploads, overwrites or deletes a hosted object. Local recovery is deliberately

@@ -25,6 +25,8 @@
     "test:terminology": "node --require ./tests/register.cjs --test tests/terminology.test.cjs",
     "test:documents": "node scripts/test-sales-orders.cjs --documents",
     "test:documents:browser": "node scripts/test-sales-orders.cjs --documents --browser-only",
+    "release:participants:source": "node scripts/participant-release-readiness.cjs",
+    "test:participant-release": "node --test tests/participant-release-readiness.test.cjs tests/document-recovery.test.cjs tests/storage-recovery.test.cjs",
     "test:booking": "node scripts/test-sales-orders.cjs --booking",
     "test:booking:browser": "node scripts/test-sales-orders.cjs --booking --browser-only",
     "test:participant-information": "node scripts/test-sales-orders.cjs --participants",

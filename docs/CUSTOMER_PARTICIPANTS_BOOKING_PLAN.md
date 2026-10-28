@@ -211,8 +211,11 @@ acknowledgement and the two Real Estate letter providers, with frozen PDFs and
 explicit replacement history. These are standardized letters with approved
 company wording; protected national identifiers are not captured or printed by
 this increment. See [the P5 evidence](DOCUMENT_ISSUANCE_P5.md).
-P6 is next: pilot-copy preservation, staging acceptance and separately approved
-release. Earlier hosted deployments have not received P1-P5 through this work.
+P6A pilot-copy preservation is verified: the fresh protected copy upgraded from
+132 to 136 migrations, retained all original values/grants and matched existing
+record-action populations. See [the rehearsal evidence](PARTICIPANTS_P6_REHEARSAL.md).
+P6B hosted staging acceptance and P6C separately approved production release remain.
+Hosted deployments have not received P1-P5 through this work.
 
 P1-P5 are the authorized phased feature direction. Finish and verify each increment
 before depending on it. KYC file collection, electronic signing, ownership shares,

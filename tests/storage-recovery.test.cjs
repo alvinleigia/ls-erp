@@ -3,6 +3,7 @@ const { test } = require('node:test')
 const assert = require('node:assert/strict')
 const fs = require('node:fs'), path = require('node:path'), os = require('node:os'), crypto = require('node:crypto')
 const { backup, verify, recover, protect, seal, open } = require('../scripts/storage-recovery.cjs')
+const { verifyReferences,reference } = require('../scripts/document-recovery.cjs')
 const project = 'abcdefghijklmnopqrst'
 function fixture(t, extra = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ls-erp-storage-test-'))
@@ -57,6 +58,18 @@ test('recursive inventory paginates beyond 100 files and 100 tenant folders', as
   assert.equal(verify({ dir: f.input.out, unwrap: f.wrap }).objects, 211)
   assert.ok(f.calls.some(c => c.prefix === 'tenant-a/logos' && c.offset === 100))
   assert.ok(f.calls.some(c => c.prefix === '' && c.offset === 100))
+})
+
+test('issued order originals and replacements recover as separate exact private files',async t=>{
+ const original=Buffer.from('%PDF-issued order original'),replacement=Buffer.from('%PDF-issued order replacement')
+ const a='tenant-b/orders/order-a/document-a/first.pdf',b='tenant-b/orders/order-a/document-b/replacement.pdf'
+ const f=fixture(t,{'tenant-documents':{[a]:original,[b]:replacement}})
+ await backup(f.input);const out=path.join(f.root,'order-recovery');recover({dir:f.input.out,out,unwrap:f.wrap})
+ const manifest=JSON.parse(fs.readFileSync(path.join(out,'storage-manifest.json')))
+ const refs=[[a,original],[b,replacement]].map(([path,bytes])=>reference('tenant-b','issued-order','tenant-documents',{path,bytes:bytes.length,sha256:crypto.createHash('sha256').update(bytes).digest('hex')}))
+ assert.deepEqual(verifyReferences(refs,manifest),{references:2,uniqueReferencedObjects:2,verified:true})
+ assert.deepEqual(fs.readFileSync(path.join(out,'tenant-documents',a)),original);assert.deepEqual(fs.readFileSync(path.join(out,'tenant-documents',b)),replacement)
+ assert.equal(manifest.buckets.find(r=>r.bucket==='tenant-documents').public,false)
 })
 test('empty buckets produce a valid recoverable archive', async t => {
   const f = fixture(t, { 'tenant-branding': {}, 'tenant-documents': {} })

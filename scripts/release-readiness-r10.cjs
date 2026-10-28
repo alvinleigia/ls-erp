@@ -7,16 +7,16 @@ const { sha, lf } = require('./industry-release.cjs')
 const root = path.resolve(__dirname, '..')
 const manifest = require('../docs/release-source-r10.json')
 
-function verifySource(candidate = manifest, directory = root) {
+function verifySource(candidate = manifest, directory = root, expectedRelease = 'R10') {
   const migrationDir = path.join(directory, 'prisma/migrations')
   const names = fs.readdirSync(migrationDir).filter(name => fs.statSync(path.join(migrationDir, name)).isDirectory()).sort()
-  if (candidate.format !== 1 || candidate.release !== 'R10' || JSON.stringify(names) !== JSON.stringify(candidate.migrations.map(m => m.name))) throw Error('R10 migration inventory differs from the reviewed source.')
+  if (candidate.format !== 1 || candidate.release !== expectedRelease || JSON.stringify(names) !== JSON.stringify(candidate.migrations.map(m => m.name))) throw Error(expectedRelease + ' migration inventory differs from the reviewed source.')
   for (const m of candidate.migrations) {
     const sql = lf(fs.readFileSync(path.join(migrationDir, m.name, 'migration.sql')))
-    if (sha(sql) !== m.sha256Lf || sha(sql.replaceAll('\n', '\r\n')) !== m.sha256Crlf) throw Error(`R10 migration checksum mismatch: ${m.name}`)
+    if (sha(sql) !== m.sha256Lf || sha(sql.replaceAll('\n', '\r\n')) !== m.sha256Crlf) throw Error(`${expectedRelease} migration checksum mismatch: ${m.name}`)
     if (m.sha256LfFinalCrlf && (!sql.endsWith('\n') || sha(sql.slice(0, -1) + '\r\n') !== m.sha256LfFinalCrlf)) throw Error(`Historical newline checksum mismatch: ${m.name}`)
   }
-  if (sha(lf(fs.readFileSync(path.join(directory, 'prisma/schema.prisma')))) !== candidate.schemaSha256Lf) throw Error('R10 schema differs from the reviewed source.')
+  if (sha(lf(fs.readFileSync(path.join(directory, 'prisma/schema.prisma')))) !== candidate.schemaSha256Lf) throw Error(expectedRelease + ' schema differs from the reviewed source.')
 }
 
 function historyProblems(rows, complete = true, candidate = manifest) {

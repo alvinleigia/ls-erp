@@ -1,3 +1,27 @@
+## Participant/document pilot rehearsal - P6A (local)
+
+A fresh encrypted online pilot snapshot upgraded from 132 to 136 migrations
+inside an isolated restore. All 132 original application tables and 133 history
+attempts retained their values/IDs. Existing assignments, profiles, action rules,
+offices, sharing, module flags, financial rows and snapshots remain exact. The
+five new tables stay empty; no customer/property facts or references are invented.
+
+Seven existing accounts matched across 161 resource/action checks and 1,235
+account/record/action bindings under ordinary non-BYPASSRLS runtime authority.
+Original owners/ACLs, global role metadata and two saved storage references match.
+Two encrypted logo objects verified; original/replacement order PDF recovery and
+new reference coverage have separate synthetic checks. Nineteen release/storage
+checks, changed-tooling lint, source inventory and whitespace checks passed.
+
+Actual PostgreSQL 17.11, locale/provider and six managed DDL triggers were checked.
+ICU versions differ (153.121 hosted, 153.128 local); full Supabase services and
+hosted UI behavior remain separate acceptance. No application ran on pilot data.
+The owned copy/network were removed. No hosted schema, object or deployment write.
+
+The candidate has a separate 136-migration manifest; the released R10 manifest is
+unchanged. P6B staging acceptance and P6C separately approved production release
+remain. See [P6A evidence](PARTICIPANTS_P6_REHEARSAL.md).
+
 ## Shared document issuance - P5 (local staging)
 
 Shared issuance now supports reviewed operating-company templates, a generic

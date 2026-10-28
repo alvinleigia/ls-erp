@@ -102,6 +102,7 @@ This is the baseline for new modules (API + UI) in this codebase.
 ## Document issuance
 
 - Source-owned business documents use `platform/documents` and a typed owner/provider registered by application composition. Authorize Read, Create and Export record bounds separately, as well as each provider's source Read limits. Keep rendering/upload outside transactions and recheck fresh authority and the prepared fingerprint before immutable issuance/audit. Use source-owned native child tables, reviewed per-company template versions, explicit replacements and private exact-file downloads. Real Estate letter fields and eligibility belong in its provider. Do not infer missing historical participant/property facts on read or silently refresh accepted references. See `docs/DOCUMENT_ISSUANCE_P5.md`.
+- Recovery inventories must include every native document version and its frozen asset references. Reuse the operator-only `scripts/document-recovery.cjs`; validate tenant paths, bucket privacy, sizes and saved checksums against the authenticated storage companion. Keep release manifests separate from the previously released inventory. Copied-data rehearsal utilities remain private, never application compatibility/backfill code. See `docs/PARTICIPANTS_P6_REHEARSAL.md`.
 
 ## Forms
 - Use `FormField` from `components/form-field.tsx` for label/input/error.
