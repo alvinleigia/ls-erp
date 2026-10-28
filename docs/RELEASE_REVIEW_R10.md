@@ -1,9 +1,12 @@
 # R10 consolidated release review - phase 6E
 
 Reviewed on 2026-10-28. **The targeted technical review passed.** The reviewed
-application is ready for a production-release decision. Production remains
-unchanged; this review does not authorize a push, maintenance freeze, migration
+application was ready for a production-release decision. At that checkpoint,
+production remained unchanged; this review did not authorize a push, maintenance freeze, migration
 or deployment. The execution steps are in [the R10 cutover runbook](PRODUCTION_CUTOVER_R10.md).
+
+Subsequent phase 6F completed the [production release](PRODUCTION_RELEASE_R10.md)
+under the user's explicit approval, with fresh recovery and live verification.
 
 ## Current identities
 

@@ -1,3 +1,23 @@
+## R10 - Production release completed (phase 6F)
+
+Explicitly authorized maintenance completed on 2026-10-28. GitHub main and
+all three production domains now serve f9e24db on the verified READY deployment.
+The 25 migrations applied once: 132 applied, zero pending, with the original
+rolled-back history attempt retained. Access reopened after approximately ten
+minutes; original runtime role settings, global grants and object ACLs match.
+
+Fresh protected recovery set 541042ae5789 passed isolated restore and upgrade
+checks across 117 original tables and two branding objects/references. Live
+access matched seven existing accounts, 42 resource decisions and 459 record
+bindings. Tenant read-only smoke and fresh platform sign-in passed; foreign
+tenant and platform/business boundaries remain enforced. Both stored objects
+match their saved byte lengths and hashes. No production QA fixture was created.
+
+Staging was unchanged. These post-release notes are local only and do not
+trigger another build. Production is open; any destructive recovery after new
+client work requires a separate data-loss decision. See the completed
+[production release record](PRODUCTION_RELEASE_R10.md) for scope and evidence.
+
 ## R10 - Consolidated release readiness (phase 6E)
 
 The targeted technical review passed across staging phases 6C-6D6. Runtime source

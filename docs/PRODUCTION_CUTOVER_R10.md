@@ -1,7 +1,9 @@
 # R10 production cutover runbook
 
-Prepared in phase 6E on 2026-10-28. **Not executed or authorized by the readiness
-review.** Current evidence is in [the consolidated review](RELEASE_REVIEW_R10.md).
+Prepared in phase 6E on 2026-10-28 and executed under explicit user approval in
+phase 6F. See the [completed production release](PRODUCTION_RELEASE_R10.md).
+The readiness review itself did not authorize execution. The pinned targets below
+describe the pre-cutover state, with historical evidence in [the review](RELEASE_REVIEW_R10.md).
 This operation interrupts login, reads and writes for every tenant using the
 shared production runtime role. It is not a tenant suspension.
 

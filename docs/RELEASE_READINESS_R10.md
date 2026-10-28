@@ -1,10 +1,10 @@
 # R10 release readiness: source and synthetic recovery
 
-Current consolidated status: [phase 6E release review](RELEASE_REVIEW_R10.md).
-Targeted staging acceptance through 6D6 passed, current deployment identities are
-verified through the authenticated CLI, and retained recovery artifacts passed
-offline integrity checks. Production execution still needs its approved window
-and fresh recovery checks; see the [R10 cutover runbook](PRODUCTION_CUTOVER_R10.md).
+Current status: [R10 production release completed in phase 6F](PRODUCTION_RELEASE_R10.md)
+under explicit user approval, with fresh recovery, 25 applied migrations and live
+access verification. Targeted staging acceptance through 6D6 and the
+[phase 6E review](RELEASE_REVIEW_R10.md) remain supporting evidence. The historical
+[cutover runbook](PRODUCTION_CUTOVER_R10.md) records the execution/recovery boundaries.
 
 Phase 6A is local release preparation. It does not authorize deployment or certify
 the pilot client's database. The R5 manifest, comparison rules and historical
@@ -109,7 +109,7 @@ attempts have no completed receipt and must not be used as success evidence.
 Both owned containers were removed. No hosted data, deployment or saved browser
 session changed.
 
-## Remaining hosted gates
+## Hosted evidence and production status
 
 Phase 6B1 now verifies the [actual pilot backup and application restore](PILOT_RECOVERY_R10.md):
 107 applied migrations (108 history attempts), 117 tables and both stored assets.
@@ -125,14 +125,14 @@ Phase 6D6 verifies [hosted browser edits, Restricted sharing and linked source b
 Phase 6E reviews these completed targeted checkpoints together. Documented coverage
 and managed-environment limits remain part of the production release decision.
 
-| Gate | Local evidence | Still required before release |
+| Gate | Verified evidence | Limits and future releases |
 | --- | --- | --- |
-| Candidate source | Pinned schema/migration inventory; candidate `525b853` freshly verified READY on all three staging domains in phase 6E; later changes are documentation only | Record the final approved release commit and recheck it at execution time |
-| Upgrade semantics | Synthetic preservation, empty-database Prisma deploy and actual pilot-copy upgrade from 107 to 132 | Recheck the live target at release time; retain the original rolled-back attempt and never rewrite history to silence a discrepancy |
-| Recovery | Encrypted synthetic recovery and pilot application/role/storage restore/upgrade; phase 6E reauthenticated both retained backup sets and 13 storage objects offline | Repeat a fresh consistent backup and restore/upgrade verification at the release boundary; retained artifacts are historical and do not certify complete Supabase platform recovery |
-| Existing access | Native synthetic and pilot-copy evidence; hosted team/office/profile, financial, stock, workforce and activation checks; phase 6D6 sharing/action/None bounds, source-private CSV/financial reads and immediate grant revocation | Review the combined evidence and documented limits for the selected release; pilot-copy evidence does not exercise business writes |
+| Candidate source | Tested application `525b853` plus documentation released as `f9e24db`; exact READY production deployment and all three domains verified | Pin and verify the selected commit again for future releases |
+| Upgrade semantics | Synthetic, pilot-copy and fresh cutover rehearsal plus actual production upgrade from 107 to 132; all original history attempts retained | Never rewrite history to silence a discrepancy; recheck future targets |
+| Recovery | Fresh encrypted `541042ae5789` backup restored and upgraded in isolation; 117 original tables and both stored assets verified | Treat this as a historical snapshot after reopening; new releases need fresh recovery; complete Supabase recovery is not certified |
+| Existing access | Staging boundaries plus live equivalence across seven accounts, 42 resource-read checks and 459 record bindings; original values, translated policies and native foreign-tenant denial verified | Keep the documented scope limits; production smoke tests created no business fixtures |
 | UI and hosted behavior | Local Chrome and hosted captures through phase 6D6; actual mobile enquiry/project edits, Sharing controls, read-only financial views, 188 sharing checks and 89 cleanup-audit checks; phase 6D5 invitations/activation and 76 local onboarding/account tests | No exhaustive form/browser matrix or directly observed seven-day hosted expiry is claimed; rerun affected flows if the application changes; the old HTTP 403 metadata blocker is resolved by authenticated CLI reads |
-| Production | No changes made | Separately authorized release and agreed maintenance/recovery window |
+| Production | Phase 6F authorized release completed; runtime settings restored, GitHub main matches release, tenant and platform smoke checks passed | Monitor normal operations; later migrations or destructive recovery require their own release/recovery decision |
 
 Do not use the older R5-only source verifier to approve R10. Its strict historical
 inventory is intentionally different. Never infer pilot restoration or permission
