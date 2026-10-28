@@ -38,6 +38,27 @@ test('frozen quotation terms and decimal totals survive source changes; list omi
  await assert.rejects(orders.create({quotationId:q.id,revision:2}),status(409))
  await root.crmContact.update({where:{tenantId_id:{tenantId:tenant,id:contact.id}},data:{name:'Original customer'}})
 })
+test('new quotation participant evidence preserves authoritative IDs into the order',async()=>{
+ const q=await quote(),saved=await crm.getQuotation(q.id)
+ assert.equal(saved.snapshot.participants.format,1)
+ assert.deepEqual(saved.snapshot.participants.participants,[{role:'CUSTOMER',party:{kind:'PERSON',id:contact.id,name:'Original customer',email:'original@example.test',phone:null,sourceVersion:1}}])
+ const order=await orders.create({quotationId:q.id,revision:1})
+ assert.deepEqual((await orders.get(order.id)).snapshot.participants,saved.snapshot.participants)
+ assert.throws(()=>crm.saveQuotation(deal.id,{content:content(),participants:{format:1,participants:[]}}))
+})
+
+test('business customer and its representative keep separate identities without Real Estate',async()=>{
+ const business=await root.crmAccount.create({data:{tenantId:tenant,name:'Company buyer',email:'private@example.test',phone:'private-directory-phone',ownerUserId:staff.id}})
+ try{
+  await root.crmOpportunity.update({where:{tenantId_id:{tenantId:tenant,id:deal.id}},data:{accountId:business.id}})
+  const q=await quote(),saved=await crm.getQuotation(q.id),parties=saved.snapshot.participants.participants
+  assert.deepEqual(parties.map(p=>[p.role,p.party.kind,p.party.id]),[['CUSTOMER','BUSINESS',business.id],['REPRESENTATIVE','PERSON',contact.id]])
+  assert.equal(parties[0].party.email,null);assert.equal(parties[0].party.phone,null)
+  const order=await orders.create({quotationId:q.id,revision:1})
+  assert.deepEqual((await orders.get(order.id)).snapshot.participants,saved.snapshot.participants)
+ }finally{await root.crmOpportunity.update({where:{tenantId_id:{tenantId:tenant,id:deal.id}},data:{accountId:null}})}
+})
+
 test('parallel create requests return one active order and one audit event',async()=>{
  const q=await quote(),input={quotationId:q.id,revision:1}
  const rows=await Promise.all([orders.create(input),orders.create(input),orders.create(input)])
@@ -52,8 +73,23 @@ test('creation uses the selected revision customer even after opportunity reassi
   await root.crmOpportunity.update({where:{tenantId_id:{tenantId:tenant,id:deal.id}},data:{contactId:replacement.id}})
   const order=await orders.create({quotationId:q.id,revision:1}),saved=await orders.get(order.id)
   assert.deepEqual(saved.snapshot.customer,original.customer);assert.equal(saved.customerName,original.customer.name)
+  assert.deepEqual(saved.snapshot.participants,original.participants)
+  assert.equal(saved.snapshot.participants.participants[0].party.id,contact.id)
  }finally{await root.crmOpportunity.update({where:{tenantId_id:{tenantId:tenant,id:deal.id}},data:{contactId:contact.id}})}
 })
+test('historical snapshots without participant IDs remain exact and are never inferred from current contacts',async()=>{
+ const q=await quote(),current=await crm.getQuotation(q.id),historical=structuredClone(current.snapshot)
+ delete historical.participants
+ const header=await root.crmQuotation.create({data:{tenantId:tenant,opportunityId:deal.id,title:historical.content.title,currency:historical.content.currency,consideration:historical.calculation.consideration}})
+ await root.crmQuotationRevision.create({data:{tenantId:tenant,quotationId:header.id,number:1,snapshot:historical}})
+ const replacement=await root.crmContact.create({data:{tenantId:tenant,name:'Different present-day customer',ownerUserId:staff.id}})
+ try{
+  await root.crmOpportunity.update({where:{tenantId_id:{tenantId:tenant,id:deal.id}},data:{contactId:replacement.id}})
+  const order=await orders.create({quotationId:header.id,revision:1}),saved=await orders.get(order.id)
+  assert.deepEqual(saved.snapshot,historical);assert.equal('participants' in saved.snapshot,false)
+ }finally{await root.crmOpportunity.update({where:{tenantId_id:{tenantId:tenant,id:deal.id}},data:{contactId:contact.id}})}
+})
+
 test('staff record scope, cross-tenant FKs and forced RLS prevent data disclosure',async()=>{
  const q=await quote(),order=await staffOrders.create({quotationId:q.id,revision:1})
  for(const denied of [otherOrders,foreignOrders]){await assert.rejects(denied.get(order.id),status(404));await assert.rejects(denied.create({quotationId:q.id,revision:1}),status(404));assert.equal((await denied.list({q:order.id})).total,0)}

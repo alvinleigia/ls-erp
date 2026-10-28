@@ -37,9 +37,19 @@ export async function readReceivableOverview(tx: Prisma.TransactionClient, tenan
   const cte = receivableOverviewSet(tenantId, visibleOrderIds, today, q)
   const sort = { overdue: Prisma.sql`filtered.overdue`, outstanding: Prisma.sql`filtered.outstanding`, nextDue: Prisma.sql`filtered."nextDue"`, title: Prisma.sql`filtered.title` }[q.sort]
   const direction = q.order === "asc" ? Prisma.sql`ASC` : Prisma.sql`DESC`
-  const items = await tx.$queryRaw<ReceivableOverviewRow[]>(Prisma.sql`${cte} SELECT "orderId",title,"customerName",currency,total::text,paid::text,outstanding::text,overdue::text,"nextDue" FROM filtered ORDER BY ${sort} ${direction} NULLS LAST,"orderId" ASC LIMIT ${q.pageSize} OFFSET ${(q.page - 1) * q.pageSize}`)
-  const summaries = await tx.$queryRaw<ReceivableCurrencySummary[]>(Prisma.sql`${cte} SELECT currency,count(*)::int AS orders,sum(total)::text AS total,sum(paid)::text AS paid,sum(outstanding)::text AS outstanding,sum(overdue)::text AS overdue,sum(current)::text AS current,sum(unscheduled)::text AS unscheduled,sum("days1to30")::text AS "days1to30",sum("days31to60")::text AS "days31to60",sum("days61to90")::text AS "days61to90",sum("days91plus")::text AS "days91plus" FROM filtered GROUP BY currency ORDER BY currency`)
-  const currencies = (await tx.$queryRaw<{ currency: string }[]>(Prisma.sql`${cte} SELECT DISTINCT currency FROM orders ORDER BY currency`)).map(row => row.currency)
+  // Reuse one scoped statement for the page, totals and choices. Replanning the
+  // full RLS/source graph three times can exhaust the transaction even for a
+  // small page; do not loosen the access predicates or the financial timeout.
+  const [result] = await tx.$queryRaw<{ items: ReceivableOverviewRow[]; summaries: ReceivableCurrencySummary[]; currencies: string[] }[]>(Prisma.sql`${cte}, page AS (
+    SELECT "orderId",title,"customerName",currency,total::text,paid::text,outstanding::text,overdue::text,"nextDue",${sort} AS "sortValue"
+    FROM filtered ORDER BY ${sort} ${direction} NULLS LAST,"orderId" ASC LIMIT ${q.pageSize} OFFSET ${(q.page - 1) * q.pageSize}
+  ), summaries AS (
+    SELECT currency,count(*)::int AS orders,sum(total)::text AS total,sum(paid)::text AS paid,sum(outstanding)::text AS outstanding,sum(overdue)::text AS overdue,sum(current)::text AS current,sum(unscheduled)::text AS unscheduled,sum("days1to30")::text AS "days1to30",sum("days31to60")::text AS "days31to60",sum("days61to90")::text AS "days61to90",sum("days91plus")::text AS "days91plus" FROM filtered GROUP BY currency
+  ) SELECT
+    coalesce((SELECT jsonb_agg(to_jsonb(p)-'sortValue' ORDER BY p."sortValue" ${direction} NULLS LAST,p."orderId" ASC) FROM page p),'[]'::jsonb) AS items,
+    coalesce((SELECT jsonb_agg(to_jsonb(s) ORDER BY s.currency) FROM summaries s),'[]'::jsonb) AS summaries,
+    ARRAY(SELECT DISTINCT currency FROM orders ORDER BY currency) AS currencies`)
+  const { items, summaries, currencies } = result
   const total = summaries.reduce((n, row) => n + row.orders, 0)
   for (const row of items) for (const key of ["total", "paid", "outstanding", "overdue"] as const) row[key] = new Prisma.Decimal(row[key]).toString()
   for (const row of summaries) for (const key of ["total", "paid", "outstanding", "overdue", "current", "unscheduled", "days1to30", "days31to60", "days61to90", "days91plus"] as const) row[key] = new Prisma.Decimal(row[key]).toString()

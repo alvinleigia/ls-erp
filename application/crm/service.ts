@@ -11,9 +11,10 @@ import { realEstateCrmExtension } from "@/modules/real-estate/crm-extension"
 import { catalogQuotationItems } from "@/modules/catalog/quotation-items"
 import { catalogExtensions } from "@/application/catalog/service"
 import { collectionContext } from "@/application/receivables/collection-context"
+import { crmQuotationParticipants } from "@/modules/crm/participants"
 
 // The application installs extensions; each implementation checks the tenant's
 // current module state inside the transaction. No process-wide tenant cache.
 export function createApplicationCrmService(db: PrismaClient, actor: Pick<CrmActor, "tenantId" | "userId" | "requestId">) {
-  return createCrmService(db, actor, { ...realEstateCrmExtension, collectionContext }, crmPresets, context => createQuotationService({ ...context, opportunityScope: actor => ownedRecordScope(actor, "quotations"), resolveItems: catalogQuotationItems(catalogExtensions), documentContext: realEstateQuotationContext, readTerms: (tx, identity) => readTermReplacements(tx, identity.tenantId, terminologyCatalog) }), terminologyCatalog)
+  return createCrmService(db, actor, { ...realEstateCrmExtension, collectionContext }, crmPresets, context => createQuotationService({ ...context, opportunityScope: actor => ownedRecordScope(actor, "quotations"), resolveItems: catalogQuotationItems(catalogExtensions), documentContext: realEstateQuotationContext, participants: crmQuotationParticipants, readTerms: (tx, identity) => readTermReplacements(tx, identity.tenantId, terminologyCatalog) }), terminologyCatalog)
 }

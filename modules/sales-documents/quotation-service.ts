@@ -17,9 +17,11 @@ import { createTermResolver } from "@/platform/terminology/resolver"
 import { quotationDocumentLabels, type QuotationDocumentLabels } from "./quotation-labels"
 import { buildQuotationPdf } from "./quotation-pdf"
 import { uploadQuotationPdf, removeUnusedPdf, type ArchivedPdf } from "@/platform/storage/documents"
+import type { ParticipantSnapshot } from "@/platform/participants/validation"
 
 type Tx = Prisma.TransactionClient
 export type QuotationSnapshot = {
+  participants?: ParticipantSnapshot;
   branding?: DocumentBranding | null;
   labels?: QuotationDocumentLabels;
   items?: QuotationItemReference[];
@@ -33,7 +35,7 @@ const json = (value: unknown): Prisma.InputJsonValue => JSON.parse(JSON.stringif
 const page = <T>(items: T[], total: number, q: { page: number; pageSize: number }) => ({ items, total, page: q.page, pageSize: q.pageSize, totalPages: Math.max(1, Math.ceil(total / q.pageSize)) })
 function calculate(content: QuotationContent) { try { return calculateQuotation(content) } catch (error) { throw new BusinessError(400, (error as Error).message) } }
 const activeTemplatesOnly = (actor: BusinessActor) => recordLimits(actor, "quotationTemplates").includes("ACTIVE")
-export function createQuotationService({ run: checkedRun, audit, opportunityScope, documentContext, readTerms, resolveItems }: QuotationDependencies) {
+export function createQuotationService({ run: checkedRun, audit, opportunityScope, documentContext, readTerms, resolveItems, participants }: QuotationDependencies) {
   function run<T>(requirement: Requirement, operation: (tx: Tx, actor: BusinessActor, paymentPlans: boolean) => Promise<T>) {
     return checkedRun(requirement, async (tx, actor) => {
       const flags = await tx.tenantModule.findMany({ where: { tenantId: actor.tenantId } })
@@ -45,7 +47,7 @@ export function createQuotationService({ run: checkedRun, audit, opportunityScop
     if (!enabled && (content.instalments.length || previous?.instalments.length)) throw new BusinessError(403, "Enable Payment Plans before saving a document or template with an instalment schedule. Saved versions remain available.")
   }
   async function opportunity(tx: Tx, actor: BusinessActor, id: string) {
-    const row = await tx.crmOpportunity.findFirst({ where: { ...opportunityScope(actor), id }, select: { id: true, title: true, currency: true, amount: true, contact: { select: { name: true, email: true, phone: true, archived: true } } } })
+    const row = await tx.crmOpportunity.findFirst({ where: { ...opportunityScope(actor), id }, select: { id: true, title: true, currency: true, amount: true, contact: { select: { id: true, tenantId: true, name: true, email: true, phone: true, archived: true, version: true } }, account: { select: { id: true, tenantId: true, name: true, version: true } } } })
     if (!row) throw new BusinessError(404, termText("crm.opportunity.singular", "Opportunity not found.", "{label} not found."))
     return row
   }
@@ -171,6 +173,9 @@ export function createQuotationService({ run: checkedRun, audit, opportunityScop
         const context = await documentContext?.(tx, actor, row.id, term) || []
         const snapshot: QuotationSnapshot = { labels: quotationDocumentLabels(term), content: data.content, calculation, context, customer: { name: row.contact.name, email: row.contact.email, phone: row.contact.phone }, opportunity: row.title, actor: author.name || "Staff", template, locale: settings?.locale || "en-US", dateFormat: settings?.dateFormat || "yyyy-MM-dd", numberFormat: settings?.numberFormat || "US_UK", currencySymbolPlacement: settings?.currencySymbolPlacement || "BEFORE" }
         snapshot.items = items
+        // Capture all customer facts from this one scoped source read. A second
+        // lookup could mix two identities if the source is reassigned meanwhile.
+        if (participants) snapshot.participants = participants({ tenantId: actor.tenantId, person: row.contact, business: row.account })
         snapshot.branding = prior ? (prior.snapshot as unknown as QuotationSnapshot).branding || null : await readDocumentBranding(tx, actor.tenantId)
         const values = { title: data.content.title, currency: data.content.currency, consideration: calculation.consideration }
         if (before) await tx.crmQuotation.updateMany({ where: { tenantId: actor.tenantId, id, version: before.version }, data: { ...values, version: { increment: 1 } } })

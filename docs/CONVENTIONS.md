@@ -69,6 +69,7 @@ This is the baseline for new modules (API + UI) in this codebase.
   - avoid fixed-origin env vars (for example `APP_URL`, `NEXT_PUBLIC_APP_URL`) for tenant-domain links.
 
 ## Shared implementation boundaries
+- Transaction participant snapshots use `platform/participants` through an explicitly authorized module source. Preserve stable person/business IDs, transaction-specific roles and copied source evidence; roles grant no login, record access, ownership share or payment liability. New quotation revisions obtain their display values and participant evidence from the same scoped source read. Orders retain the selected revision verbatim; never reconstruct missing historical IDs from current master relationships. Real Estate owns applicant labels, property projections and allotment eligibility. Editable participants require native source foreign keys/RLS and ordinary profile/action bounds before any UI/API is exposed; the snapshot builder alone grants nothing. See `docs/PARTICIPANTS_P1.md` and `docs/CUSTOMER_PARTICIPANTS_BOOKING_PLAN.md`.
 - Calendar-only offsets/conversion belong in `lib/business-time.ts`; platform and domain code must not import dashboard composition for date arithmetic. Booking-native stock posting belongs in the source-specific inventory adapter, while generic corrections and shared stock authority remain separate. Office/staff selector routes forward input to their owning module; validation and fresh post-lock authorization stay in that service. See `docs/ARCHITECTURE_BASELINE_R10.md`.
 
 ## Audit logging

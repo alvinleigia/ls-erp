@@ -1,3 +1,24 @@
+## Shared customer participation - P1 (local staging)
+
+Shared, versioned snapshots support repeatable person/business participants,
+transaction-specific roles and stable source IDs. New quotation versions capture
+the authorized customer context; orders retain the exact selected revision.
+Foreign/ambiguous sources and request-body snapshot injection are rejected.
+Historical documents are not rewritten or inferred from current contacts.
+
+43 unit/architecture/calculation checks and 64 native integration checks passed,
+with the existing 132-migration preservation/rollback rehearsals. Build and
+targeted lint passed. The receivables overview now obtains its page, summaries
+and currencies from one scoped statement after repeatable local timeout failures;
+no timeout, access predicate or financial transition was relaxed. Failed and
+released-code comparison runs are retained separately from the passing receipt.
+
+The plan separates common document issuance from Real Estate-owned property
+inputs and the two letter templates. Editable co-applicants remain P2; no new
+CIF screen or letter generation is claimed in P1. No schema migration, backfill,
+hosted deployment or production change. See [P1 evidence](PARTICIPANTS_P1.md) and
+[the phased plan](CUSTOMER_PARTICIPANTS_BOOKING_PLAN.md).
+
 ## R10 - Production release completed (phase 6F)
 
 Explicitly authorized maintenance completed on 2026-10-28. GitHub main and

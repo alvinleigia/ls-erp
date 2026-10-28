@@ -2,6 +2,8 @@ import { attributionFilterShape, validateAttributionFilters } from "@/platform/c
 import { recordRulesSchema } from "@/platform/access/rules"
 import { initialOfficeMembershipSchema } from "@/platform/companies/membership-validation"
 import { z } from "zod"
+export { participantRoleSchema, participantPartyReferenceSchema, participantSelectionSchema, participantSelectionsSchema, participantSnapshotSchema } from "@/platform/participants/validation"
+export type { ParticipantRole, ParticipantPartyReference, ParticipantSelection, ParticipantSnapshot } from "@/platform/participants/validation"
 export const brandingUpdateSchema = z.object({
   name: z.string().trim().max(200),
   version: z.coerce.number().int().nonnegative(),

@@ -23,6 +23,7 @@
     "test:crm:team-intake": "node scripts/test-sales-orders.cjs --teams",
     "test:crm:fields:integration": "node --require ./tests/register.cjs --test tests/custom-fields.integration.test.cjs",
     "test:terminology": "node --require ./tests/register.cjs --test tests/terminology.test.cjs",
+    "test:participants": "node --require ./tests/register.cjs --test tests/participants.test.cjs",
     "test:terminology:integration": "node --require ./tests/register.cjs --test --test-force-exit tests/terminology.integration.test.cjs",
     "test:crm:sales:integration": "node --require ./tests/register.cjs --test tests/crm-sales.integration.test.cjs",
     "test:real-estate:integration": "node --require ./tests/register.cjs --test tests/real-estate.integration.test.cjs",
