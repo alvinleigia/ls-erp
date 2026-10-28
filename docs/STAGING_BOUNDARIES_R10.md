@@ -128,3 +128,8 @@ leaves and shifts. Invitation acceptance/expiry, multiple managers on one team,
 selected sharing/Restricted visibility and broader browser writes also retain
 their prior local/native evidence until exercised explicitly on hosted staging.
 Production still requires its own fresh recovery and authorized cutover checks.
+
+Subsequent [phase 6D2](STAGING_FINANCIAL_R10.md) now verifies financial transitions,
+source Restricted visibility/sharing, financial office boundaries, document
+dashboard drill-downs and the existing sales-report CSV. Its remaining hosted
+gates are listed separately.

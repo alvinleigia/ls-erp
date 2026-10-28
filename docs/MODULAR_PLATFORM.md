@@ -1,3 +1,22 @@
+## R10 - Hosted financial transitions and source privacy (phase 6D2)
+
+229 hosted checks verified quotation revisions and PDF issuance, frozen order
+snapshots, idempotent order/payment/reversal requests, precise allocations, stale
+and invalid-payment rejection, corrections/refunds and replacement agreements.
+Office and tenant boundaries, source Restricted sharing, financial/source Read
+separation, filtered balances, latest-document dashboard/drill-down populations
+and the existing sales CSV passed. Two Chrome captures were visually inspected.
+
+All financial assertions completed in one run. Its cleanup used POST rather than
+PATCH for stage changes; targeted normal-API repair and an independent 101-check
+read-only audit verified five canceled orders, four closed opportunities, four
+archived accounts and resolved receipts/grants. Immutable QA document history,
+including one issued PDF, remains. Failed-exit and repair evidence are retained.
+No application/schema/deployment change, GitHub push or production write. Staging
+remains at 132 applied migrations on candidate 525b853. Next: hosted appointments
+and inventory, then Leaves/Shifts and remaining invitation/browser cases. See
+[financial scope, evidence and limits](STAGING_FINANCIAL_R10.md).
+
 ## R10 - Hosted team, office and partner boundaries (phase 6D1)
 
 The current staging candidate passed 162 hosted checks and 80 cleanup checks.

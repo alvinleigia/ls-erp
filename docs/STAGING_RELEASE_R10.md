@@ -129,3 +129,7 @@ Subsequent [phase 6D1](STAGING_BOUNDARIES_R10.md) verifies multiple-team manager
 boundaries, office/profile revocation, direct partner-login lifecycle and initial
 attribution reports. Financial/operational workflows, invitation acceptance/expiry
 and wider report/browser acceptance remain separate hosted gates.
+
+[Phase 6D2](STAGING_FINANCIAL_R10.md) subsequently verifies financial transitions,
+source/office privacy, balances, PDF issuance and document/report populations.
+Hosted operational acceptance and the remaining invitation/browser paths continue.
