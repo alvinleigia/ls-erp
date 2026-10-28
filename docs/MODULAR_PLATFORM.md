@@ -1,3 +1,23 @@
+## R10 - Hosted Leaves and Shifts (phase 6D4)
+
+Hosted synthetic checks verified leave eligibility, reporting-manager versus
+admin-only approval, self/unrelated reviewer denial, booking conflicts and bulk
+rollback, terminal transitions, office transfers and neutral roster privacy.
+Weekly plans correctly precede recurring plans and daily availability; the runner
+expectation was corrected without changing application access or scheduling code.
+
+The API runner reached 172 checks before an interrupted browser response wait.
+The one saved mobile request was recovered without resubmitting. A completed
+36-check recovery receipt, two inspected Chrome captures, 74 cleanup checks and
+98 independent audit checks verify the final state; counts overlap. Seven leave
+requests are terminal, one booking canceled, six accounts archived, three
+placements canceled and live test work configuration retired. History is retained.
+
+No application/schema/deployment change, push or production write. Staging has
+132 completed migrations. Fresh Vercel metadata verification is blocked by HTTP
+403 and must be renewed before release. Invitation, activation and remaining
+browser/sharing gates are next. See [evidence and limits](STAGING_WORKFORCE_R10.md).
+
 ## R10 - Hosted appointments and office inventory (phase 6D3)
 
 168 hosted checks verified receipt idempotency, stale stock/office conflicts,

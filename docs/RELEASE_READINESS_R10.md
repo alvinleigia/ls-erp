@@ -113,6 +113,7 @@ Phase 6C now verifies the [staging migration, deployment and initial hosted chec
 Phase 6D1 also verifies [hosted team/office boundaries and partner logins](STAGING_BOUNDARIES_R10.md).
 Phase 6D2 verifies [hosted financial transitions, linked privacy and reporting](STAGING_FINANCIAL_R10.md).
 Phase 6D3 verifies [hosted appointments, purchase receipts and office stock](STAGING_OPERATIONS_R10.md).
+Phase 6D4 verifies [hosted Leaves/Shifts, approval routing and roster boundaries](STAGING_WORKFORCE_R10.md).
 Wider hosted acceptance and the documented managed-environment differences remain.
 
 | Gate | Local evidence | Still required before release |
@@ -120,8 +121,8 @@ Wider hosted acceptance and the documented managed-environment differences remai
 | Candidate source | Pinned schema/migration inventory; exact candidate `525b853` verified READY on all three staging aliases | Recheck the selected production candidate at release time |
 | Upgrade semantics | Synthetic preservation, empty-database Prisma deploy and actual pilot-copy upgrade from 107 to 132 | Recheck the live target at release time; retain the original rolled-back attempt and never rewrite history to silence a discrepancy |
 | Recovery | Encrypted synthetic recovery plus fresh pilot application/role/storage backup and isolated restore | Review managed dependencies/environment fidelity, then repeat fresh recovery verification at the release boundary; this does not certify complete Supabase platform recovery |
-| Existing access | Native synthetic and pilot-copy evidence; hosted team/office/profile boundaries, financial source privacy and reporting; phase 6D3 booking conflicts, office stock, receipt idempotency and concurrent stock sales | Hosted Leaves/Shifts and remaining activation/sharing/report/browser paths; pilot-copy evidence does not exercise business writes |
-| UI and hosted behavior | Local Chrome plus hosted captures from phases 6C/6D1/6D2; phase 6D3 168 checks, two inspected captures and 95 cleanup-audit checks | Invitation acceptance/expiry, broader browser writes, multiple managers on one team, module activation and workforce acceptance |
+| Existing access | Native synthetic and pilot-copy evidence; hosted team/office/profile boundaries, financial source privacy and reporting; phase 6D3 booking/stock checks; phase 6D4 leave authority, conflicts, office transfers and neutral roster privacy | Remaining activation/sharing/report/browser paths; pilot-copy evidence does not exercise business writes |
+| UI and hosted behavior | Local Chrome and hosted captures through phase 6D4; workforce API checkpoint, 36 recovery checks, two inspected captures and 98 cleanup-audit checks, with documented interruption/capture limits | Invitation acceptance/expiry, broader browser writes, multiple managers on one team and module activation; refresh Vercel metadata after the saved login returned HTTP 403 |
 | Production | No changes made | Separately authorized release and agreed maintenance/recovery window |
 
 Do not use the older R5-only source verifier to approve R10. Its strict historical

@@ -136,7 +136,8 @@ attempt receipts, two PNG captures and the invoice PDF. Utilities/receipt hashes
 are retained privately with the existing staging recovery checkpoint. No raw
 client data, credentials, environment files or browser state are committed.
 
-Next: phase 6D4 hosted Leaves and Shifts. Invitation acceptance/expiry, multiple
+Phase 6D4 now records [hosted Leaves and Shifts evidence](STAGING_WORKFORCE_R10.md).
+Invitation acceptance/expiry, multiple
 managers on one team, module activation and broader browser-write/sharing scenarios
 remain explicit acceptance gates. Production requires its own fresh recovery and
 authorized cutover decision.
