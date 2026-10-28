@@ -1,4 +1,5 @@
 "use client"
+import { ParticipantInformationSummary } from "@/platform/participants/summary"
 import { quotationDocumentLabels } from "../quotation-labels"
 import { useTerminology } from "@/platform/terminology/provider"
 
@@ -28,9 +29,10 @@ export function QuotationSummary({ value, snapshot, section, canEdit, name, arch
       { label: "Registration", value: value.registration }, { label: "Registration URL", value: value.registrationUrl },
       { label: "Logo", value: value.logoDataUrl ? "Included in document" : "None" },
     ]} />
-    {snapshot && <Section title={documentLabels.parties}><ReadOnlyFields fields={[
-      { label: documentLabels.customer, value: snapshot.customer.name }, { label: "Email", value: snapshot.customer.email },
-      { label: "Phone", value: snapshot.customer.phone }, { label: documentLabels.opportunity, value: snapshot.opportunity },
+    {snapshot?.participants && <ParticipantInformationSummary value={snapshot.participants} />}
+    {snapshot && <Section title={snapshot.participants ? "Sales context" : documentLabels.parties}><ReadOnlyFields fields={[
+      ...(!snapshot.participants ? [{ label: documentLabels.customer, value: snapshot.customer.name }, { label: "Email", value: snapshot.customer.email }, { label: "Phone", value: snapshot.customer.phone }] : []),
+      { label: documentLabels.opportunity, value: snapshot.opportunity },
       ...snapshot.context,
     ]} /></Section>}
     <AccessSummarySection title="Additional details" canEdit={canEdit} fields={value.details}>{!value.details.length && <p className="text-sm text-muted-foreground">No additional details.</p>}</AccessSummarySection>

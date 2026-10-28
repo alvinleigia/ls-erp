@@ -7,6 +7,9 @@ const {createRecordSharingService}=require('../platform/access/sharing-service.t
 const {runWithDatabaseActor}=require('../lib/database-actor.ts')
 const {applicationSalesOrders}=require('../application/sales-orders/service.ts')
 const {applicationReceivables}=require('../application/receivables/service.ts')
+const {applicationParticipantSettings}=require('../application/participants/configuration.ts')
+const {emptyCorrespondence}=require('../platform/participants/information.ts')
+const {defaultParticipantDefinition}=require('../platform/participants/requirements.ts')
 const {emptyQuotationContent}=require('../modules/sales-documents/quotation-validation.ts')
 require('../lib/logger.ts').logger.info=()=>{}
 const url=new URL(process.env.CRM_TEST_DATABASE_URL||'http://invalid')
@@ -201,8 +204,13 @@ test('maximum 98 additions save/read/snapshot/order within the ordinary transact
  await root.crmContact.createMany({data:people})
  const started=Date.now(),saved=await replace(d.id,people.map(p=>selection(p)))
  assert.equal(saved.participants.length,98);assert.equal((await crm.getOpportunityParticipants(d.id)).participants.length,98)
+ const info=await crm.getOpportunityParticipantInformation(d.id)
+ const hundred={format:1,records:info.participants.map(row=>({party:{kind:row.party.kind,id:row.party.id},values:{...emptyCorrespondence,email:'correspondence@example.test',city:'Pune'}}))}
+ assert.equal(hundred.records.length,100)
+ await crm.saveOpportunityParticipantInformation(d.id,{version:info.version,configurationVersion:info.configuration.version,information:hundred})
  const q=await crm.saveQuotation(d.id,{content:content()}),snapshot=(await crm.getQuotation(q.id)).snapshot
  assert.equal(snapshot.participants.participants.length,100)
+ assert.equal(snapshot.participants.participants.filter(row=>row.information.city==='Pune').length,100)
  const orders=applicationSalesOrders(db,identity(admin)),order=await orders.create({quotationId:q.id,revision:1})
  assert.deepEqual((await orders.get(order.id)).snapshot.participants,snapshot.participants)
  assert.equal((await orders.list({q:order.id})).total,1)
@@ -213,4 +221,150 @@ test('maximum 98 additions save/read/snapshot/order within the ordinary transact
  const balances=await ledger.list({q:order.id})
  assert.equal(balances.total,1);assert.deepEqual([balances.summaries[0].total,balances.summaries[0].paid,balances.summaries[0].outstanding],['100','10','90'])
  console.log(`Maximum participant save/read/quotation/order path: ${Date.now()-started}ms`)
+})
+
+const settings=(user=admin,connection=db)=>applicationParticipantSettings(connection,identity(user))
+async function publish(definition){const current=await settings().get(),data={version:current.version,definition};const preview=await settings().preview(data);return settings().publish({...data,previewHash:preview.previewHash})}
+async function infoInput(id,values={}){const view=await crm.getOpportunityParticipantInformation(id);return {version:view.version,configurationVersion:view.configuration.version,information:{format:1,records:[{party:{kind:'PERSON',id:contact.id},values:{...emptyCorrespondence,...values}}]}}}
+const brokenAudit=()=>new Proxy(db,{get(target,key){if(key==='$transaction')return (fn,options)=>target.$transaction(tx=>fn(new Proxy(tx,{get(t,k){if(k==='auditLog')return new Proxy(t.auditLog,{get(a,m){return m==='createMany'?async()=>{throw Error('Audit unavailable')}:a[m]}});return t[k]}})),options);return target[key]}})
+
+test('source correspondence is versioned, normalized and separate from the directory and accepted identities',async()=>{
+ const d=await deal();await replace(d.id,[selection(additional)])
+ const input=await infoInput(d.id,{email:' TRANSACTION@EXAMPLE.TEST ',phone:'+91 (98765) 43210',addressLine1:'Unit 10',city:'Pune',country:'India'})
+ const saved=await crm.saveOpportunityParticipantInformation(d.id,input)
+ assert.equal(saved.version,input.version+1);assert.equal(saved.participants[0].information.email,'transaction@example.test');assert.equal(saved.participants[0].information.phone,'+919876543210')
+ assert.equal(saved.participants[0].party.email,null)
+ assert.equal((await root.crmContact.findUnique({where:{id:contact.id}})).email,null)
+ await assert.rejects(otherCrm.getOpportunityParticipantInformation(d.id),status(404))
+ const bad=await infoInput(d.id);bad.information.records[0].party.id=additional.id+'foreign'
+ await assert.rejects(crm.saveOpportunityParticipantInformation(d.id,bad),status(409))
+ await assert.rejects(crm.saveOpportunityParticipantInformation(d.id,input),status(409))
+ for(const patch of [{email:'typo'},{phone:'9876543210'},{country:'Not a country'}])assert.throws(()=>crm.saveOpportunityParticipantInformation(d.id,{...input,information:{format:1,records:[{party:{kind:'PERSON',id:contact.id},values:{...emptyCorrespondence,...patch}}]}}))
+ const log=await root.auditLog.findFirst({where:{entityId:d.id,event:'crm.opportunity.information.updated'}})
+ assert.equal(JSON.stringify(log.after).includes('transaction@example.test'),false)
+})
+test('ordinary source Read/Edit bounds apply without borrowing directory or configuration permissions',async()=>{
+ const d=await deal(),profile=await fixtureProfile(root,{data:{tenantId:tenant,name:'Source correspondence editor',nameKey:randomUUID(),permissions:['opportunities.read','opportunities.edit']}})
+ await fixtureRole(root,{data:{tenantId:tenant,userId:staff.id,roleId:profile.id}})
+ try{
+  const view=await staffCrm.getOpportunityParticipantInformation(d.id)
+  assert.equal(view.canEdit,true)
+  await staffCrm.saveOpportunityParticipantInformation(d.id,{version:view.version,configurationVersion:view.configuration.version,information:{format:1,records:[{party:{kind:'PERSON',id:contact.id},values:{...emptyCorrespondence,city:'Pune'}}]}})
+  await assert.rejects(settings(staff).get(),status(403))
+  await root.tenantAccessRole.update({where:{id:profile.id},data:{permissions:['opportunities.read']}})
+  const read=await staffCrm.getOpportunityParticipantInformation(d.id);assert.equal(read.canEdit,false);assert.equal(read.participants[0].information.city,'Pune')
+  await assert.rejects(staffCrm.saveOpportunityParticipantInformation(d.id,{...await infoInput(d.id)}),status(403))
+ }finally{await resetFixtureRoles(root,{where:{tenantId:tenant,userId:staff.id}})}
+})
+test('quotation/order copies freeze correspondence; removing/replacing a participant prunes only that identity',async()=>{
+ const d=await deal();await replace(d.id,[selection(additional)])
+ const view=await crm.getOpportunityParticipantInformation(d.id)
+ await crm.saveOpportunityParticipantInformation(d.id,{version:view.version,configurationVersion:view.configuration.version,information:{format:1,records:view.participants.map(row=>({party:{kind:row.party.kind,id:row.party.id},values:{...emptyCorrespondence,city:row.party.id===contact.id?'Pune':'Mumbai'}}))}})
+ const q=await crm.saveQuotation(d.id,{content:content()}),snapshot=(await crm.getQuotation(q.id)).snapshot,orders=applicationSalesOrders(db,identity(admin)),order=await orders.create({quotationId:q.id,revision:1})
+ await replace(d.id,[])
+ assert.deepEqual((await root.crmOpportunity.findUnique({where:{id:d.id}})).participantInformation.records.map(row=>row.party.id),[contact.id])
+ const current=await crm.getOpportunity(d.id)
+ await crm.updateOpportunity(d.id,{title:current.title,contactId:additional.id,accountId:'',assignedUserId:staff.id,pipelineId:pipeline.id,stageId:stage.id,amount:'100',currency:'INR',expectedCloseOn:'2027-01-01',version:current.version})
+ assert.equal((await root.crmOpportunity.findUnique({where:{id:d.id}})).participantInformation.records.length,0)
+ assert.deepEqual((await orders.get(order.id)).snapshot,snapshot)
+ assert.equal(snapshot.participants.participants[1].information.city,'Mumbai')
+})
+test('settings preview/publish requires fresh administration authority and leaves other tenants/profiles untouched',async()=>{
+ const before=await settings().get(),definition=defaultParticipantDefinition();definition.required.CUSTOMER=['email'];definition.labels.city='Town'
+ assert.equal(before.version,0)
+ const profile=await fixtureProfile(root,{data:{tenantId:tenant,name:'Delegated settings reader',nameKey:randomUUID(),permissions:['participantSettings.read','participantSettings.edit']}})
+ await fixtureRole(root,{data:{tenantId:tenant,userId:staff.id,roleId:profile.id}})
+ try{assert.equal((await settings(staff).get()).canPublish,false);await assert.rejects(settings(staff).preview({version:0,definition}),status(403))}finally{await resetFixtureRoles(root,{where:{tenantId:tenant,userId:staff.id}})}
+ const input={version:before.version,definition},preview=await settings().preview(input)
+ assert.equal(preview.impact.accessibleDrafts,(await applicationSalesOrders(db,identity(admin)).list({status:'DRAFT'})).total)
+ assert(preview.impact.incompleteDrafts>0)
+ assert.throws(()=>settings().publish(input))
+ const saved=await settings().publish({...input,previewHash:preview.previewHash});assert.equal(saved.version,1)
+ assert.equal((await settings(foreign,foreignDb).get()).version,0)
+ await assert.rejects(settings().publish({...input,previewHash:preview.previewHash}),status(409))
+ const d=await deal(),stale=await infoInput(d.id)
+ await publish(defaultParticipantDefinition())
+ await assert.rejects(crm.saveOpportunityParticipantInformation(d.id,stale),status(409))
+})
+test('settings impact uses the administrator canonical office scope and native configuration writes remain administrator-only',async()=>{
+ const d=await deal(),q=await crm.saveQuotation(d.id,{content:content()}),snapshot=(await crm.getQuotation(q.id)).snapshot
+ const office=await root.businessOffice.findFirst({where:{tenantId:tenant,code:'P2'}})
+ const hiddenSource=await root.crmOpportunity.findFirst({where:{tenantId:tenant,officeId:office.id}})
+ const header=await root.crmQuotation.create({data:{tenantId:tenant,opportunityId:hiddenSource.id,title:snapshot.content.title,currency:'INR',consideration:'100'}})
+ await root.crmQuotationRevision.create({data:{tenantId:tenant,quotationId:header.id,number:1,snapshot}})
+ const hidden=await root.salesOrder.create({data:{tenantId:tenant,quotationId:header.id,revision:1,title:snapshot.content.title,customerName:snapshot.customer.name,currency:'INR',consideration:'100',snapshot,createdBy:admin.id}})
+ const orders=applicationSalesOrders(db,identity(admin))
+ assert.equal((await orders.get(hidden.id)).id,hidden.id)
+ await assert.rejects(applicationSalesOrders(db,identity(staff)).get(hidden.id),status(404))
+ const current=await settings().get(),definition=defaultParticipantDefinition();definition.required.CUSTOMER=['city']
+ const preview=await settings().preview({version:current.version,definition})
+ assert.equal(preview.impact.accessibleDrafts,(await orders.list({status:'DRAFT'})).total)
+ assert.equal((await direct(staff,()=>db.participantFormConfiguration.updateMany({where:{tenantId:tenant},data:{version:current.version+1,definition}}))).count,0)
+ assert.equal((await settings().get()).version,current.version)
+ assert.equal(await direct(foreign,()=>foreignDb.participantFormConfiguration.findUnique({where:{tenantId:tenant}})),null)
+})
+test('publishing rechecks its draft-impact acknowledgement and does not rewrite existing orders',async()=>{
+ const definition=defaultParticipantDefinition();definition.required.CUSTOMER=['city']
+ const current=await settings().get(),input={version:current.version,definition},preview=await settings().preview(input)
+ const d=await deal(),q=await crm.saveQuotation(d.id,{content:content()}),orders=applicationSalesOrders(db,identity(admin)),order=await orders.create({quotationId:q.id,revision:1}),before=await orders.get(order.id)
+ await assert.rejects(settings().publish({...input,previewHash:preview.previewHash}),status(409))
+ assert.equal((await settings().get()).version,current.version)
+ const next=await settings().preview(input);await settings().publish({...input,previewHash:next.previewHash})
+ assert.deepEqual(await orders.get(order.id),before)
+ await publish(defaultParticipantDefinition())
+})
+test('confirmation enforces current requirements on the selected frozen revision and captures immutable applied rules',async()=>{
+ const definition=defaultParticipantDefinition();definition.required.CUSTOMER=['city'];definition.labels.city='Town'
+ const config=await publish(definition),d=await deal(),q=await crm.saveQuotation(d.id,{content:content()}),orders=applicationSalesOrders(db,identity(admin)),order=await orders.create({quotationId:q.id,revision:1})
+ await assert.rejects(orders.transition(order.id,{action:'confirm',version:1}),e=>e.status===409&&e.message.includes('Primary person: Town'))
+ await crm.saveOpportunityParticipantInformation(d.id,await infoInput(d.id,{city:'Pune'}))
+ await assert.rejects(orders.transition(order.id,{action:'confirm',version:1}),status(409))
+ await orders.transition(order.id,{action:'cancel',version:1,reason:'Correct correspondence'})
+ await crm.saveQuotation(d.id,{content:content(),version:1},q.id)
+ const replacement=await orders.create({quotationId:q.id,revision:2})
+ await orders.transition(replacement.id,{action:'confirm',version:1})
+ const accepted=await orders.get(replacement.id)
+ assert.equal(accepted.participantAcceptance.configurationVersion,config.version);assert.deepEqual(accepted.participantAcceptance.definition,definition)
+ const stricter=defaultParticipantDefinition();stricter.required.CUSTOMER=['phone'];await publish(stricter)
+ assert.deepEqual((await orders.get(replacement.id)).participantAcceptance,accepted.participantAcceptance)
+ await assert.rejects(root.salesOrder.update({where:{tenantId_id:{tenantId:tenant,id:replacement.id}},data:{participantAcceptance:{},status:'CANCELLED',version:3}}),/immutable/)
+ await orders.transition(replacement.id,{action:'cancel',version:2,reason:'Retain acceptance history'})
+ assert.deepEqual((await orders.get(replacement.id)).participantAcceptance,accepted.participantAcceptance)
+ await publish(defaultParticipantDefinition())
+})
+test('required role checks cover every co-applicant while preserving one commercial total',async()=>{
+ const definition=defaultParticipantDefinition();definition.required.ADDITIONAL_CUSTOMER=['email'];await publish(definition)
+ const d=await deal();await replace(d.id,[selection(additional),selection(business,'ADDITIONAL_CUSTOMER','BUSINESS')])
+ const q=await crm.saveQuotation(d.id,{content:content()}),orders=applicationSalesOrders(db,identity(admin)),order=await orders.create({quotationId:q.id,revision:1})
+ await assert.rejects(orders.transition(order.id,{action:'confirm',version:1}),e=>e.status===409&&e.message.includes('Participating company: Email'))
+ await publish(defaultParticipantDefinition())
+ await orders.transition(order.id,{action:'confirm',version:1})
+ assert.equal(String((await orders.get(order.id)).consideration),'100')
+})
+test('confirmation waiting for configuration publication applies the newly committed rules',async()=>{
+ const d=await deal(),q=await crm.saveQuotation(d.id,{content:content()}),orders=applicationSalesOrders(db,identity(admin)),order=await orders.create({quotationId:q.id,revision:1})
+ const current=await settings().get(),definition=defaultParticipantDefinition();definition.required.CUSTOMER=['city']
+ let locked,release;const ready=new Promise(resolve=>{locked=resolve}),hold=new Promise(resolve=>{release=resolve})
+ const writer=root.$transaction(async tx=>{
+  await tx.$queryRaw`SELECT id FROM "Tenant" WHERE id=${tenant} FOR UPDATE`
+  await tx.participantFormConfiguration.update({where:{tenantId:tenant},data:{version:current.version+1,definition}})
+  locked();await hold
+ },{timeout:20000})
+ try{
+  await ready;const result=assert.rejects(orders.transition(order.id,{action:'confirm',version:1}),status(409))
+  await new Promise(resolve=>setTimeout(resolve,100));release();await writer;await result
+  const saved=await orders.get(order.id);assert.equal(saved.status,'DRAFT');assert.equal(saved.participantAcceptance,null)
+ }finally{release();await writer;await publish(defaultParticipantDefinition())}
+})
+test('mandatory audit failure rolls back information, configuration publication and confirmation proof',async()=>{
+ const d=await deal(),input=await infoInput(d.id,{city:'Pune'}),before=await crm.getOpportunityParticipantInformation(d.id),broken=brokenAudit()
+ await assert.rejects(service(admin,broken).saveOpportunityParticipantInformation(d.id,input),/Audit unavailable/)
+ assert.deepEqual(await crm.getOpportunityParticipantInformation(d.id),before)
+ const current=await settings().get(),definition=defaultParticipantDefinition();definition.title='Another caption'
+ const proposal={version:current.version,definition},preview=await settings().preview(proposal)
+ await assert.rejects(settings(admin,broken).publish({...proposal,previewHash:preview.previewHash}),/Audit unavailable/)
+ assert.equal((await settings().get()).version,current.version)
+ const q=await crm.saveQuotation(d.id,{content:content()}),orders=applicationSalesOrders(db,identity(admin)),order=await orders.create({quotationId:q.id,revision:1})
+ await assert.rejects(applicationSalesOrders(broken,identity(admin)).transition(order.id,{action:'confirm',version:1}),/Audit unavailable/)
+ const retained=await orders.get(order.id);assert.equal(retained.status,'DRAFT');assert.equal(retained.participantAcceptance,null)
 })

@@ -3,6 +3,7 @@ import { createRouteAccess } from "@/platform/access/routes"
 import { crmConfigurationGroups } from "@/modules/crm/configuration"
 
 const routes: [string, Resource][] = [
+  ["/settings/customer-details", "participantSettings"],
   ["/users/teams", "teams"],
   ["/sales-orders/receivables", "receivables"],
   ["/sales-orders", "salesOrders"],

@@ -16,6 +16,7 @@ export const accessResources = {
   assignmentTargets: { name: "Assignment directory", module: "core", actions: ["read"] },
   restrictedFields: { name: "Restricted field access", module: "core", actions: ["read", "edit"] },
   branding: { name: "Business branding", module: "core", actions: ["read", "edit"] },
+  participantSettings: { name: "Customer details requirements", module: "core", actions: ["read", "edit"] },
   businessSettings: { name: "Business settings", module: "core", actions: ["read", "edit"] },
   taxRates: { name: "Tax configuration", module: "core", actions: records },
   leaveRequests: { name: "My leave requests", module: "leaves", actions: ["read", "create", "archive"] },

@@ -1,4 +1,5 @@
 import { z } from "zod"
+import { correspondenceSchema, participantPresentationSchema } from "./information"
 
 const id = z.string().trim().min(1).max(100)
 export const participantRoleSchema = z.enum(["CUSTOMER", "ADDITIONAL_CUSTOMER", "REPRESENTATIVE"])
@@ -34,13 +35,16 @@ export const resolvedParticipantPartySchema = participantPartyReferenceSchema.ex
 export const savedParticipantSchema = z.object({
   role: participantRoleSchema,
   party: participantPartyReferenceSchema.extend(partyDetails).strict(),
+  information: correspondenceSchema.optional(),
 }).strict()
 export const participantSnapshotSchema = z.object({
   format: z.literal(1),
+  presentation: participantPresentationSchema.optional(),
   participants: z.array(savedParticipantSchema).min(1).max(100).superRefine(validateSelections),
 }).strict()
 
 export type ParticipantRole = z.infer<typeof participantRoleSchema>
+export const participantRoleLabels: Record<ParticipantRole, string> = { CUSTOMER: "Main customer", ADDITIONAL_CUSTOMER: "Additional customer", REPRESENTATIVE: "Representative" }
 export type ParticipantPartyReference = z.infer<typeof participantPartyReferenceSchema>
 export type ParticipantSelection = z.infer<typeof participantSelectionSchema>
 export type ResolvedParticipantParty = z.infer<typeof resolvedParticipantPartySchema>
@@ -51,6 +55,7 @@ export type ParticipantSnapshot = z.infer<typeof participantSnapshotSchema>
 // directory communication details and any identity documents or private fields.
 export type CustomerParticipantSource = {
   tenantId: string
+  information?: unknown
   person: { tenantId: string; id: string; name: string; email: string | null; phone: string | null; version: number }
   business: { tenantId: string; id: string; name: string; version: number } | null
 }
@@ -82,3 +87,19 @@ export type ParticipantEditorData = {
   canChoosePerson: boolean
   canChooseBusiness: boolean
 }
+
+export const participantInformationSchema = z.object({
+  format: z.literal(1),
+  records: z.array(z.object({ party: participantPartyReferenceSchema, values: correspondenceSchema }).strict()).max(100).superRefine((rows, ctx) => {
+    const seen = new Set<string>()
+    rows.forEach((row, index) => {
+      const key = JSON.stringify([row.party.kind, row.party.id])
+      if (seen.has(key)) ctx.addIssue({ code: "custom", path: [index], message: "Save correspondence once for each participant." })
+      seen.add(key)
+    })
+  }),
+}).strict()
+export const participantInformationSaveSchema = z.object({
+  version: z.number().int().positive(), configurationVersion: z.number().int().min(0), information: participantInformationSchema,
+}).strict()
+export type ParticipantInformation = z.infer<typeof participantInformationSchema>

@@ -1,3 +1,4 @@
+import { lockTenantOperations } from "@/platform/transactions/tenant-lock"
 import { officeBoundaryError } from "@/platform/companies/record-office"
 import { authorizeBusinessOperation } from "@/platform/access/operation"
 import { recordActionAccess } from "@/platform/access/record-actions"
@@ -16,13 +17,17 @@ type Tx = Prisma.TransactionClient
 const listSelect = { id: true, title: true, customerName: true, currency: true, consideration: true, quotationId: true, revision: true, status: true, version: true, createdAt: true } as const
 
 export function createSalesOrderService(db: PrismaClient, identity: Pick<BusinessActor, "tenantId" | "userId" | "requestId">, source: SalesOrderSource) {
-  async function run<T>(requirement: Requirement, operation: (tx: Tx, actor: BusinessActor) => Promise<T>): Promise<T> {
+  async function run<T>(requirement: Requirement, operation: (tx: Tx, actor: BusinessActor) => Promise<T>, write = false): Promise<T> {
     for (let attempt = 0; ; attempt++) {
       try {
         return await db.$transaction(async tx => {
+          if (write) {
+            await tx.$queryRaw`SELECT id FROM "Tenant" WHERE id=${identity.tenantId} FOR SHARE`
+            await lockTenantOperations(tx, identity.tenantId)
+          }
           const actor = await authorizeBusinessOperation(tx, identity, requirement, ["salesOrders"])
           return operation(tx, actor)
-        }, { isolationLevel: "Serializable", maxWait: 20000, timeout: 20000 })
+        }, { isolationLevel: write ? "ReadCommitted" : "Serializable", maxWait: 20000, timeout: 20000 })
       } catch (e) {
         const officeError = officeBoundaryError(e); if (officeError) throw officeError
         if ((serializationConflict(e) || (e as { code?: string }).code === "P2002") && attempt < 3) continue
@@ -74,7 +79,7 @@ export function createSalesOrderService(db: PrismaClient, identity: Pick<Busines
         const row = await tx.salesOrder.create({ data: { ...selected, tenantId: actor.tenantId, createdBy: actor.userId }, select: listSelect })
         await event(tx, actor, row)
         return row
-      })
+      }, true)
     },
     transition(id: string, input: unknown) {
       const data = salesOrderTransitionSchema.parse(input)
@@ -84,11 +89,12 @@ export function createSalesOrderService(db: PrismaClient, identity: Pick<Busines
         const before = await find(tx, actor, id)
         if (before.version !== data.version) throw new BusinessError(409, "This order changed. Refresh before continuing.")
         if (before.status === "CANCELLED" || (data.action === "confirm" && before.status !== "DRAFT")) throw new BusinessError(409, "This order cannot make that transition.")
+        const participantAcceptance = data.action === "confirm" ? await source.onConfirm(tx, actor, before.snapshot) : undefined
         if (data.action === "cancel") await source.onCancel?.(tx, actor, id, data.reason)
-        const row = await tx.salesOrder.update({ where: { tenantId_id: { tenantId: actor.tenantId, id } }, data: { status: data.action === "confirm" ? "CONFIRMED" : "CANCELLED", version: { increment: 1 } }, select: listSelect })
+        const row = await tx.salesOrder.update({ where: { tenantId_id: { tenantId: actor.tenantId, id } }, data: { participantAcceptance, status: data.action === "confirm" ? "CONFIRMED" : "CANCELLED", version: { increment: 1 } }, select: listSelect })
         await event(tx, actor, row, before.status, data.action === "cancel" ? data.reason : "")
         return row
-      })
+      }, true)
     },
   }
 }

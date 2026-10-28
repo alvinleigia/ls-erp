@@ -1,3 +1,6 @@
+import { readParticipantConfiguration } from "@/platform/participants/configuration"
+import { participantConfirmationProof } from "@/platform/participants/requirements"
+import { realEstateParticipantPreset } from "@/modules/real-estate/participant-preset"
 import { ownedRecordScope, quotationRecordScope, salesOrderRecordScope } from "@/platform/access/record-scope"
 import type { Prisma, PrismaClient } from "@prisma/client"
 import { BusinessError, type BusinessActor } from "@/platform/policy"
@@ -7,6 +10,15 @@ import type { QuotationSnapshot } from "@/modules/sales-documents/quotation-serv
 import { releaseOrderReservations } from "@/modules/catalog/reservation-events"
 import { requireResolvedPayments } from "@/modules/receivables/cancellation"
 const source: SalesOrderSource = {
+  async onConfirm(tx, actor, snapshot) {
+    const configuration = await readParticipantConfiguration(tx, actor.tenantId, await realEstateParticipantPreset(tx, actor))
+    const { missing, proof } = participantConfirmationProof((snapshot as unknown as QuotationSnapshot).participants, configuration)
+    if (missing.length) {
+      const examples = missing.slice(0, 8).map(item => `${item.participant}: ${item.label}`).join("; ")
+      throw new BusinessError(409, `Complete the required customer details in a new quotation revision before confirming: ${examples}${missing.length > 8 ? `; and ${missing.length - 8} more` : ""}. Saved orders retain their selected revision; cancel and replace this draft after correcting the source.`)
+    }
+    return proof
+  },
   async onCancel(tx, actor, id, reason) {
     await requireResolvedPayments(tx, actor, id)
     await releaseOrderReservations(tx, actor, id, reason)

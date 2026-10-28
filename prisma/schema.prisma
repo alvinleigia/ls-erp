@@ -149,6 +149,7 @@ model CrmStage {
 }
 
 model CrmOpportunity {
+  participantInformation Json?
   participants CrmOpportunityParticipant[]
   introducedByCollaboratorId String?
   introducingCollaborator ExternalCollaborator? @relation("CrmOpportunityIntroducer", fields: [tenantId, introducedByCollaboratorId], references: [tenantId, id], onDelete: NoAction)
@@ -855,6 +856,7 @@ model Organization {
 }
 
 model Tenant {
+  participantFormConfiguration ParticipantFormConfiguration?
   opportunityParticipants CrmOpportunityParticipant[]
   externalCollaborators ExternalCollaborator[]
   officeStocks InventoryOfficeStock[]
@@ -2664,6 +2666,7 @@ model CrmQuotationRevision {
 }
 
 model SalesOrder {
+  participantAcceptance Json?
   sharingPolicyId String?
   sharingPolicy RecordSharingPolicy? @relation(fields: [tenantId, sharingPolicyId], references: [tenantId, id], onDelete: Restrict)
   @@unique([tenantId, sharingPolicyId])
@@ -3047,4 +3050,12 @@ model CrmOpportunityParticipant {
   @@unique([tenantId, opportunityId, accountId, role])
   @@index([tenantId, contactId])
   @@index([tenantId, accountId])
+}
+
+model ParticipantFormConfiguration {
+  tenantId String @id
+  version Int @default(1)
+  definition Json
+  updatedAt DateTime @updatedAt
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
 }

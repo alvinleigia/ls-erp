@@ -47,7 +47,7 @@ export function createQuotationService({ run: checkedRun, audit, opportunityScop
     if (!enabled && (content.instalments.length || previous?.instalments.length)) throw new BusinessError(403, "Enable Payment Plans before saving a document or template with an instalment schedule. Saved versions remain available.")
   }
   async function opportunity(tx: Tx, actor: BusinessActor, id: string) {
-    const row = await tx.crmOpportunity.findFirst({ where: { ...opportunityScope(actor), id }, select: { id: true, title: true, currency: true, amount: true, contact: { select: { id: true, tenantId: true, name: true, email: true, phone: true, archived: true, version: true } }, account: { select: { id: true, tenantId: true, name: true, version: true } } } })
+    const row = await tx.crmOpportunity.findFirst({ where: { ...opportunityScope(actor), id }, select: { id: true, title: true, currency: true, amount: true, participantInformation: true, contact: { select: { id: true, tenantId: true, name: true, email: true, phone: true, archived: true, version: true } }, account: { select: { id: true, tenantId: true, name: true, version: true } } } })
     if (!row) throw new BusinessError(404, termText("crm.opportunity.singular", "Opportunity not found.", "{label} not found."))
     return row
   }
@@ -175,7 +175,7 @@ export function createQuotationService({ run: checkedRun, audit, opportunityScop
         snapshot.items = items
         // Capture all customer facts from this one scoped source read. A second
         // lookup could mix two identities if the source is reassigned meanwhile.
-        if (participants) snapshot.participants = await participants(tx, opportunityId, { tenantId: actor.tenantId, person: row.contact, business: row.account })
+        if (participants) snapshot.participants = await participants(tx, actor, opportunityId, { tenantId: actor.tenantId, person: row.contact, business: row.account, information: row.participantInformation })
         snapshot.branding = prior ? (prior.snapshot as unknown as QuotationSnapshot).branding || null : await readDocumentBranding(tx, actor.tenantId)
         const values = { title: data.content.title, currency: data.content.currency, consideration: calculation.consideration }
         if (before) await tx.crmQuotation.updateMany({ where: { tenantId: actor.tenantId, id, version: before.version }, data: { ...values, version: { increment: 1 } } })

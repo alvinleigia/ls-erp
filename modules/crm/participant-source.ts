@@ -1,3 +1,4 @@
+import { withParticipantInformation } from "@/platform/participants/source-information"
 import type { Prisma } from "@prisma/client"
 import { BusinessError } from "@/platform/policy"
 import { buildParticipantSnapshot } from "@/platform/participants/snapshot"
@@ -25,5 +26,5 @@ export function combineParticipants(source: CustomerParticipantSource, extra: Pa
 // The quotation service supplies its exact scoped source read and transaction.
 export async function crmSourceParticipants(tx: Tx, opportunityId: string, source: CustomerParticipantSource) {
   const rows = await tx.crmOpportunityParticipant.findMany({ where: { tenantId: source.tenantId, opportunityId }, orderBy: [...participantOrder] })
-  return combineParticipants(source, rows.map(savedParticipant))
+  return withParticipantInformation(combineParticipants(source, rows.map(savedParticipant)), source.information)
 }

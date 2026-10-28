@@ -1,16 +1,17 @@
 "use client"
 
 import * as React from "react"
+import { ReloadDraft } from "@/components/erp/reload-draft"
 import { Button } from "@/components/ui/button"
 import { Checkbox, Select } from "@/components/erp/controls"
 import { Section } from "@/components/erp/section"
 import { EditPanel } from "@/components/erp/record-detail"
 import { RecordSelect } from "@/components/erp/record-select"
 import { FormField } from "@/components/form-field"
-import { participantKey, type AdditionalParticipant, type ParticipantEditorData, type ParticipantRole } from "./validation"
+import { participantKey, participantRoleLabels, type AdditionalParticipant, type ParticipantEditorData, type ParticipantRole } from "./validation"
 
 export type ParticipantLabels = Record<ParticipantRole, string>
-export const defaultParticipantLabels: ParticipantLabels = { CUSTOMER: "Main customer", ADDITIONAL_CUSTOMER: "Additional customer", REPRESENTATIVE: "Representative" }
+export const defaultParticipantLabels: ParticipantLabels = participantRoleLabels
 type Draft = AdditionalParticipant & { name: string; saved: boolean; available: boolean }
 const draftRows = (data: ParticipantEditorData): Draft[] => data.participants.map(row => ({ role: row.role as AdditionalParticipant["role"], party: { kind: row.party.kind, id: row.party.id }, name: row.party.name, saved: true, available: row.available }))
 
@@ -62,7 +63,7 @@ export function ParticipantEditor({ endpoint, sourceVersion, onSaved, labels = d
     </div>)}{!data.participants.length && <p className="text-sm text-muted-foreground">No additional participants.</p>}
     <p className="text-sm text-muted-foreground">The main customer follows the source contact/business. Additional details stay as saved until explicitly refreshed. New quotation revisions copy these participants; saved orders keep their selected revision.</p></div>}
     {data && editing && <EditPanel open title="Edit participants" description="Add customers or representatives. Removing a row does not delete the contact or business." onClose={close} onSubmit={save} saving={saving} dirty={dirty} error={error} disabled={!dirty || conflict} saveLabel="Save participants"
-      footerActions={conflict && <Button type="button" variant="outline" disabled={saving} onClick={() => { if (window.confirm("Discard this participant draft and reload the saved selections?")) { close(); setReload(value => value + 1) } }}>Reload saved participants</Button>}>
+      footerActions={conflict && <ReloadDraft label="Reload saved participants" disabled={saving} onReload={() => { close(); setReload(value => value + 1) }} />}>
       {draft.map((row, index) => <div key={`${index}:${row.party.kind}:${row.party.id}`} className="space-y-3 rounded-md border p-4">
         <p className="break-words font-medium">{row.name}</p>
         <FormField id={`participant-role-${index}`} label={`Role for ${row.name}`}><Select id={`participant-role-${index}`} value={row.role} disabled={!row.available} onValueChange={role => setDraft(rows => rows.map((item, i) => i === index ? { ...item, role: role as Draft["role"] } : item))}>

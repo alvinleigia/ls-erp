@@ -1,10 +1,10 @@
 # Shared customer participation and booking plan
 
-Research date: 2026-10-28. Status: phased implementation authorized; P1 foundation
-is verified locally on the `staging` branch. See [P1 delivery evidence](PARTICIPANTS_P1.md).
+Research date: 2026-10-28. Status: phased implementation authorized; P1-P3
+are verified locally on the `staging` branch. See [P3 delivery evidence](PARTICIPANTS_P3.md).
 R10 production phase 6F is complete.
 No production deployment/migration or alteration of existing customer records is
-part of P1. Hosted staging deployment evidence is separate from local verification.
+part of these increments. Hosted staging deployment evidence is separate from local verification.
 
 ## Decision
 
@@ -196,11 +196,14 @@ masked presentation and suitable audit events. Do not reuse public branding acce
 | P5: shared document generation and Real Estate letters | Shared issuance/source/template contracts, then booking intimation and unit allotment templates owned by Real Estate. | Generic document provider works with Real Estate disabled; multiple applicants render correctly; frozen issued data, independent financial authorization, tenant/office privacy and controlled template corrections. No copied monetary/legal policy. |
 | P6: migration and release | Rehearse the pilot upgrade against a fresh protected copy, then staging acceptance and separately approved production release. | Values, IDs, assignments, sharing, office bounds, snapshots, money and effective access match; complete recovery and release evidence. |
 
-Local progress: P1 and P2 are implemented and verified on the staging branch.
+Local progress: P1-P3 are implemented and verified on the staging branch.
 P2 adds source-owned participant storage/editor and accepted quotation/order
-copies; it does not claim a complete CIF form or either letter. No hosted
-migration or deployment has occurred for these increments. See
-[the P2 evidence](PARTICIPANTS_P2.md). P3 is the next increment.
+copies. P3 adds common correspondence forms, versioned captions/requirements,
+impact preview and server-enforced confirmation acceptance. Real Estate owns its
+CIF/applicant labels; no property or ownership rules enter the shared form.
+No hosted migration or deployment has occurred for these increments. See
+[the P2 evidence](PARTICIPANTS_P2.md) and [the P3 evidence](PARTICIPANTS_P3.md).
+P4 is the next increment; neither letter is claimed complete yet.
 
 P1-P5 are the authorized phased feature direction. Finish and verify each increment
 before depending on it. KYC file collection, electronic signing, ownership shares,

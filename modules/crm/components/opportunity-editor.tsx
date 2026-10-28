@@ -4,6 +4,7 @@ import { useCreationOfficeSnapshot } from "@/platform/companies/creation-snapsho
 import { useTerminology, useTerminologyReader } from "@/platform/terminology/provider"
 import { initialOpportunityStage } from "../conversion-stage"
 import { withRecordView, useRecordView, AccessRecordForm, AccessSummarySection, AccessSectionEdit } from "@/platform/access/record-view"
+import { ParticipantInformationEditor } from "@/platform/participants/information-editor"
 import { ParticipantEditor } from "@/platform/participants/editor"
 import { useParticipantLabels } from "./extension-provider"
 import { CrmOpportunityPanels } from "./extension-provider"
@@ -145,6 +146,7 @@ function OpportunityEditorBody({ id, enquiryId, initialReferences }: { id?: stri
         {extension.summary()} {custom.readOnlySection(<AccessSectionEdit section="Additional information" />)}
       </>}
       tabs={record ? [
+        { value: "customer-details", label: "Customer details", content: <ParticipantInformationEditor endpoint={`/api/crm/opportunities/${record.id}/information`} sourceVersion={record.version} onSaved={participantsSaved} /> },
         { value: "participants", label: "Participants", content: <ParticipantEditor endpoint={`/api/crm/opportunities/${record.id}/participants`} sourceVersion={record.version} labels={participantLabels} onSaved={participantsSaved} /> },
         ...(hasDocumentPanels ? [{ value: "documents", permission: "quotations.read" as const, label: "Sales documents", content: <CrmOpportunityPanels opportunityId={record.id} /> }] : []),
         { value: "activities", permission: "activities.read" as const, label: term("crm.activity.plural", "Activities"), content: <WorkList contactId={record.contactId} opportunityId={record.id} /> },

@@ -1,3 +1,4 @@
+import { pruneParticipantInformation } from "@/platform/participants/source-information"
 import { crmSourceParticipants } from "./participant-source"
 import { introductionForCreate } from "@/platform/collaborators/attribution"
 import { recordActionAccess } from "@/platform/access/record-actions"
@@ -31,7 +32,15 @@ type Context = { readTerms: TermReader;
 const include = { salesTeam: { select: teamSelect }, contact: { select: { id: true, name: true } }, account: { select: { id: true, name: true } }, assignee: { select: { id: true, name: true } }, pipeline: true, stage: true, ...referralInclude } as const
 const stages = { orderBy: [{ position: "asc" as const }, { id: "asc" as const }] }
 const page = <T>(items: T[], total: number, page: number, pageSize: number) => ({ items, total, page, pageSize, totalPages: Math.max(1, Math.ceil(total / pageSize)) })
-const snapshot = (value: unknown): Prisma.InputJsonValue => JSON.parse(JSON.stringify(value))
+const snapshot = (value: unknown): Prisma.InputJsonValue => {
+  // Root edits log references, not another copy of correspondence addresses.
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    const { participantInformation: _information, ...rest } = value as Record<string, unknown>
+    void _information
+    return JSON.parse(JSON.stringify(rest))
+  }
+  return JSON.parse(JSON.stringify(value))
+}
 const scope = opportunityScope
 
 export function createSalesService<Fields extends object, Metadata extends object>({ run, audit, checkAssignee, readTerms }: Context, extensions: CrmExtensions<Fields, Metadata>) {
@@ -210,19 +219,20 @@ export function createSalesService<Fields extends object, Metadata extends objec
         await checkAssignee(tx, actor, data.assignedUserId, before.assignedUserId)
         const team = await resolveSalesTeam(tx, actor, data.salesTeamId, data.assignedUserId, before)
         await relations(tx, actor, data.contactId, data.accountId, before)
+        let participantInformation = undefined
         if (data.contactId !== before.contactId || (data.accountId || null) !== before.accountId) {
           const source = await tx.crmOpportunity.findFirst({ where: { ...scope(actor, "edit"), id }, select: { tenantId: true } })
           if (!source) throw new CrmError(403, "This action is outside your record access.")
           const person = await tx.crmContact.findFirstOrThrow({ where: { ...contactScope(actor), id: data.contactId }, select: { id: true, tenantId: true, name: true, email: true, phone: true, version: true } })
           const business = data.accountId ? await tx.crmAccount.findFirstOrThrow({ where: { ...accountScope(actor), id: data.accountId }, select: { id: true, tenantId: true, name: true, version: true } }) : null
-          await crmSourceParticipants(tx, id, { tenantId: source.tenantId, person, business })
+          participantInformation = pruneParticipantInformation(before.participantInformation, await crmSourceParticipants(tx, id, { tenantId: source.tenantId, person, business }))
         }
         const changedStage = data.stageId !== before.stageId
         const stage = await destination(tx, actor, data.pipelineId, data.stageId, changedStage)
         await extensions.save(tx, actor, "opportunity", id, extension)
         await saveCustomFields(tx, actor, opportunityFields, { ...before, salesTeamId: team?.id ?? null }, custom.patch)
         const updated = await tx.crmOpportunity.updateManyAndReturn({ where: { ...scope(actor), id, version }, data: {
-          ...data, salesTeamId: team?.id ?? null, ...outcome(stage, data.lossReason, data.probability ?? (changedStage ? undefined : before.probability)),
+          ...data, participantInformation, salesTeamId: team?.id ?? null, ...outcome(stage, data.lossReason, data.probability ?? (changedStage ? undefined : before.probability)),
           ...await resolveLostReason(tx, actor, stage.kind === "LOST", data.lostReasonId, before.stage.kind === "LOST" ? before : undefined), accountId: data.accountId || null,
           expectedCloseOn: new Date(`${data.expectedCloseOn}T00:00:00Z`), version: { increment: 1 },
           closedAt: stage.kind === "OPEN" ? null : before.closedAt ?? new Date(),

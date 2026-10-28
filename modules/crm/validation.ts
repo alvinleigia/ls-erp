@@ -1,3 +1,4 @@
+import { communicationEmail, communicationPhone } from "@/platform/participants/information"
 import { introducingCollaboratorId } from "@/platform/collaborators/attribution"
 import { termText } from "@/platform/terminology/message"
 import { customFilterShape } from "@/platform/custom-fields/validation"
@@ -7,14 +8,12 @@ import { COUNTRY_OPTIONS } from "@/lib/constants/countries"
 const id = z.string().trim().min(1).max(100)
 const text = (max: number) => z.string().trim().max(max).default("")
 const optionalText = (max: number) => z.string().trim().max(max).optional()
-const phone = z.string().trim().max(40).transform(value => value.replace(/[\s().-]/g, "")).refine(
-  value => !value || /^\+[1-9]\d{6,14}$/.test(value), "Use an international number, for example +919876543210.",
-)
+const phone = communicationPhone
 export const enquiryStatuses = ["NEW", "CONTACTED", "QUALIFIED", "CLOSED"] as const
 
 const identitySchema = z.object({
   name: z.string().trim().min(1, "Enter a name.").max(160),
-  email: z.string().trim().max(254).pipe(z.union([z.email(), z.literal("")])).default("").transform(value => value.toLowerCase()),
+  email: communicationEmail.default(""),
   phone: phone.default(""),
 }).strict()
 const optionalPhone = phone.optional()

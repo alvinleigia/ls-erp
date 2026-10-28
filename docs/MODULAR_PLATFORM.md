@@ -1,3 +1,24 @@
+## Customer details and confirmation requirements - P3 (local staging)
+
+Common customer correspondence forms, tenant captions and role-specific
+confirmation requirements are implemented. Generic tenants use shared customer
+terms; Real Estate supplies CIF/applicant labels through its preset. Saving
+transaction correspondence changes neither master identity nor record access.
+
+Tenant Admin previews affected readable draft orders before publishing versioned
+requirements. Confirmation validates the selected frozen quotation revision,
+records the exact accepted rules and never repairs old evidence from live data.
+Source/configuration conflicts preserve drafts for explicit discard/reload.
+
+54 focused checks, 111 native/financial regressions and four browser scenarios
+passed; four desktop/mobile screenshots were inspected. Migration 134 passed
+rollback and preservation of 133 preceding tables and prior policies/functions,
+with only the documented order-guard exclusion for the new evidence column.
+Build including TypeScript, targeted lint and whitespace checks passed.
+
+No hosted migration, backfill, push or deployment. P4 is next: booking composition
+and its references/dates. See [P3 evidence](PARTICIPANTS_P3.md).
+
 ## Shared customer participation - P2 (local staging)
 
 Source-owned participant storage, scoped reference choices and the common

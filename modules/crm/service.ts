@@ -31,6 +31,7 @@ import { createSalesReportService } from "./sales-report-service"
 import { checkExportLimit, CRM_EXPORT_LIMIT } from "./csv"
 import type { Prisma, PrismaClient, Role } from "@prisma/client"
 import { recordDomainAuditEvent } from "@/lib/domain-audit"
+import type { ParticipantPresetReader } from "@/platform/participants/configuration"
 import { lockTenantOperations } from "@/platform/transactions/tenant-lock"
 import { createOpportunityParticipantService } from "./participant-service"
 import { createSalesService } from "./sales-service"
@@ -59,7 +60,7 @@ function pageResult<T>(items: T[], total: number, page: number, pageSize: number
 
 // No HTTP or Lia dependencies. Every operation checks current membership and
 // module access, then runs in a transaction. Caller must establish DB tenant context.
-export function createCrmService<Fields extends object = object, Metadata extends object = object, Addons extends object = object>(db: PrismaClient, identity: Pick<CrmActor, "tenantId" | "userId" | "requestId">, extensions: CrmExtensions<Fields, Metadata> = noCrmExtensions as CrmExtensions<Fields, Metadata>, presets: readonly CrmPreset[] = [], install?: (context: CrmServiceContext) => Addons, terms: readonly Term[] = crmTerms) {
+export function createCrmService<Fields extends object = object, Metadata extends object = object, Addons extends object = object>(db: PrismaClient, identity: Pick<CrmActor, "tenantId" | "userId" | "requestId">, extensions: CrmExtensions<Fields, Metadata> = noCrmExtensions as CrmExtensions<Fields, Metadata>, presets: readonly CrmPreset[] = [], install?: (context: CrmServiceContext) => Addons, terms: readonly Term[] = crmTerms, participantPreset?: ParticipantPresetReader) {
   const readTerms = (tx: Tx, actor: { tenantId: string }) => readTermReplacements(tx, actor.tenantId, terms)
   async function run<T>(requirement: Requirement, operation: (tx: Tx, actor: CrmActor) => Promise<T>, lockSecurity = false): Promise<T> {
     for (let attempt = 0; ; attempt++) {
@@ -184,7 +185,7 @@ export function createCrmService<Fields extends object = object, Metadata extend
     ...(install ? install({ run, audit }) : {} as Addons),
     listExtensionChoices(key: string, input: unknown) { return run(workspaceRead, (tx, actor) => extensions.choices(tx, actor, key, input)) },
     ...createSalesService({ run, audit, checkAssignee, readTerms }, extensions),
-    ...createOpportunityParticipantService({ run, audit, runLocked: (requirement, operation) => run(requirement, operation, true) }),
+    ...createOpportunityParticipantService({ run, audit, runLocked: (requirement, operation) => run(requirement, operation, true) }, participantPreset),
     ...createActivityTypeService({ run, audit }),
     ...createWorkService({ run, audit, checkAssignee }, extensions),
     ...createReportService({ run }),
