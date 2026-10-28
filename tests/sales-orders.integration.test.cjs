@@ -1,5 +1,5 @@
-const {materializeRules}=require('./helpers/resource-policy-data.cjs')
 /* eslint-disable @typescript-eslint/no-require-imports */
+const {materializeRules}=require('./helpers/resource-policy-data.cjs')
 const {fixtureUser,fixtureRole,fixtureProfile,resetFixtureRoles}=require("./helpers/access-fixtures.cjs")
 const {test,before,after}=require('node:test'),assert=require('node:assert/strict'),{randomUUID}=require('node:crypto'),{Pool}=require('pg'),{PrismaClient}=require('@prisma/client')
 const {TenantPgAdapter}=require('../lib/tenant-pg-adapter.ts'),{createApplicationCrmService}=require('../application/crm/service.ts'),{applicationSalesOrders}=require('../application/sales-orders/service.ts'),{emptyQuotationContent}=require('../modules/sales-documents/quotation-validation.ts')
@@ -25,6 +25,66 @@ before(async()=>{
  deal=await crm.createOpportunity({title:'Service contract',contactId:contact.id,assignedUserId:staff.id,pipelineId:pipeline.id,stageId:stage.id,amount:'300.375',currency:'INR',expectedCloseOn:'2027-01-01'})
 })
 after(async()=>{await Promise.all(clients.map(c=>c.$disconnect()));await Promise.all(pools.map(p=>p.end()))})
+
+test('creation review checks current authority and saved terms without consuming a reference',async()=>{
+ const q=await quote(),input={quotationId:q.id,revision:1},before=await root.salesOrderSequence.findUnique({where:{tenantId:tenant}})
+ const view=await orders.prepareCreate(input)
+ assert.equal(view.quotationId,q.id);assert.equal(view.revision,1)
+ assert.equal(view.title,'Annual maintenance');assert.equal(view.customerName,'Original customer');assert.equal(view.existing,null)
+ assert.match(view.orderedOn,/^\d{4}-\d{2}-\d{2}$/);assert.equal('snapshot' in view,false)
+ assert.deepEqual(await root.salesOrderSequence.findUnique({where:{tenantId:tenant}}),before)
+ for(const denied of [otherOrders,foreignOrders])await assert.rejects(denied.prepareCreate(input),status(404))
+ const row=await orders.create(input),again=await orders.prepareCreate(input)
+ assert.equal(again.existing.id,row.id);assert.equal(again.existing.reference,row.reference)
+ assert.equal((await staffOrders.get(row.id)).confirmationReview,undefined)
+})
+
+test('parallel creates and retries allocate unique references once; search respects record scope',async()=>{
+ const a=await quote(),b=await quote(),before=(await root.salesOrderSequence.findUnique({where:{tenantId:tenant}}))?.value||0
+ const rows=await Promise.all([orders.create({quotationId:a.id,revision:1}),orders.create({quotationId:b.id,revision:1}),orders.create({quotationId:a.id,revision:1})])
+ assert.equal(rows[0].id,rows[2].id);assert.equal(new Set(rows.map(row=>row.reference)).size,2)
+ for(const row of rows)assert.match(row.reference,/^SO-\d{6,}$/)
+ assert.equal((await root.salesOrderSequence.findUnique({where:{tenantId:tenant}})).value,before+2)
+ assert.equal((await orders.list({q:rows[0].reference})).items[0].id,rows[0].id)
+ assert.equal((await otherOrders.list({q:rows[0].reference})).total,0);assert.equal((await foreignOrders.list({q:rows[0].reference})).total,0)
+ await orders.transition(rows[0].id,{action:'cancel',version:1,reason:'Replace terms'})
+ const replacement=await orders.create({quotationId:a.id,revision:1})
+ assert.notEqual(replacement.reference,rows[0].reference);assert.equal((await orders.get(rows[0].id)).reference,rows[0].reference)
+})
+
+test('tenant calendar defaults, past dates and immutable saved references/dates',async()=>{
+ await root.appSetting.upsert({where:{tenantId:tenant},create:{tenantId:tenant,timeZone:'Pacific/Kiritimati'},update:{timeZone:'Pacific/Kiritimati'}})
+ try{
+  const q=await quote(),view=await orders.prepareCreate({quotationId:q.id,revision:1}),[{date}]=await root.$queryRaw`SELECT (clock_timestamp() AT TIME ZONE 'Pacific/Kiritimati')::date AS date`
+  assert.equal(view.orderedOn,date.toISOString().slice(0,10))
+  const row=await orders.create({quotationId:q.id,revision:1,orderedOn:'2024-02-29'})
+  assert.equal(row.orderedOn.toISOString().slice(0,10),'2024-02-29')
+  assert.equal((await orders.create({quotationId:q.id,revision:1,orderedOn:'2024-02-29'})).id,row.id)
+  await assert.rejects(orders.create({quotationId:q.id,revision:1,orderedOn:'2024-03-01'}),status(409))
+  const where={tenantId_id:{tenantId:tenant,id:row.id}}
+  await assert.rejects(root.salesOrder.update({where,data:{orderedOn:new Date('2024-03-01')}}),/immutable/)
+  await assert.rejects(root.salesOrder.update({where,data:{reference:'SO-999999'}}),/immutable/)
+  await orders.transition(row.id,{action:'confirm',version:1});await orders.transition(row.id,{action:'cancel',version:2,reason:'Date stays recorded'})
+  assert.equal((await orders.get(row.id)).orderedOn.toISOString().slice(0,10),'2024-02-29')
+  const fresh=await quote(),input={quotationId:fresh.id,revision:1}
+  assert.throws(()=>orders.create({...input,orderedOn:'2025-02-29'}));assert.throws(()=>orders.create({...input,reference:'Injected'}));assert.throws(()=>orders.create({...input,revision:'1'}))
+  await assert.rejects(orders.create({...input,orderedOn:'2999-01-01'}),status(400))
+  assert.equal(await root.salesOrder.count({where:{tenantId:tenant,quotationId:fresh.id}}),0)
+ }finally{await root.appSetting.update({where:{tenantId:tenant},data:{timeZone:'UTC'}})}
+})
+
+test('numbering stays per tenant, private to the trigger and protected from caller overrides',async()=>{
+ const foreignCrm=createApplicationCrmService(dbB,identity(foreign)),person=await foreignCrm.createContact({name:'Foreign customer'})
+ const pipeline=await root.crmPipeline.create({data:{tenantId:otherTenant,name:'Foreign sales'}}),stage=await root.crmStage.create({data:{tenantId:otherTenant,pipelineId:pipeline.id,name:'Open',position:0,kind:'OPEN',probability:10,color:'#123456'}})
+ const d=await foreignCrm.createOpportunity({title:'Other agreement',contactId:person.id,assignedUserId:foreign.id,pipelineId:pipeline.id,stageId:stage.id,amount:'300.375',currency:'INR',expectedCloseOn:'2027-01-01'})
+ const q=await foreignCrm.saveQuotation(d.id,{content:content()}),row=await foreignOrders.create({quotationId:q.id,revision:1})
+ assert.equal(row.reference,'SO-000001')
+ for(const connection of [db,dbB,unscoped])await assert.rejects(connection.salesOrderSequence.findMany())
+ await assert.rejects(db.salesOrderSequence.update({where:{tenantId:tenant},data:{value:999}}))
+ const own=await quote(),saved=await crm.getQuotation(own.id),before=await root.salesOrderSequence.findUnique({where:{tenantId:tenant}})
+ await assert.rejects(root.salesOrder.create({data:{tenantId:tenant,quotationId:own.id,revision:1,title:'Injected',customerName:'Injected',currency:'INR',consideration:'1',snapshot:saved.snapshot,reference:'SO-999999',createdBy:admin.id}}),/generated by the system/)
+ assert.deepEqual(await root.salesOrderSequence.findUnique({where:{tenantId:tenant}}),before)
+})
 
 test('frozen quotation terms and decimal totals survive source changes; list omits snapshots',async()=>{
  const q=await quote(),source=await crm.getQuotation(q.id),order=await staffOrders.create({quotationId:q.id,revision:1})
@@ -122,7 +182,9 @@ test('database rejects snapshot edits, deletion, invalid starts, duplicate activ
 test('failed mandatory audit rolls back draft and transitions',async()=>{
  const broken=new Proxy(db,{get(target,key){if(key==='$transaction')return (fn,options)=>target.$transaction(tx=>fn(new Proxy(tx,{get(t,k){if(k==='auditLog')return new Proxy(t.auditLog,{get(a,method){return method==='createMany'?async()=>{throw Error('Audit unavailable')}:a[method]}});return t[k]}})),options);return target[key]}})
  const service=applicationSalesOrders(broken,identity(manager)),q=await quote()
+ const numberingBefore=await root.salesOrderSequence.findUnique({where:{tenantId:tenant}})
  await assert.rejects(service.create({quotationId:q.id,revision:1}),/Audit unavailable/);assert.equal(await root.salesOrder.count({where:{tenantId:tenant,quotationId:q.id}}),0)
+ assert.deepEqual(await root.salesOrderSequence.findUnique({where:{tenantId:tenant}}),numberingBefore)
  const order=await orders.create({quotationId:q.id,revision:1});await assert.rejects(service.transition(order.id,{action:'confirm',version:1}),/Audit unavailable/)
  const saved=await orders.get(order.id);assert.equal(saved.status,'DRAFT');assert.equal(saved.history.length,1)
 })

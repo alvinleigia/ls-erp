@@ -16,6 +16,7 @@ test('generic order creation, confirmation, cancellation and access controls on 
     const quote = await json(context, `/api/crm/opportunities/${deal.id}/quotations`, 201, 'POST', { content: { ...emptyQuotationContent, title: 'Annual support agreement', supplierName: 'QA Shared Industries', currency: 'INR', terms: 'Support provided during business hours.', lines: [{ description: 'Support hours', quantity: '3', unit: 'hour', rate: '100.125' }] } })
     await page.goto(`/crm/quotations/${quote.id}`)
     await page.getByRole('button', { name: 'Create sales order', exact: true }).click()
+    await page.getByRole('button', { name: 'Create draft', exact: true }).click()
     await expect(page).toHaveURL(/\/sales-orders\/[^/]+$/)
     const id = page.url().split('/').pop()!
     await expect(page.getByRole('heading', { name: 'Annual support agreement', exact: true })).toBeVisible()
@@ -52,6 +53,7 @@ test('generic order creation, confirmation, cancellation and access controls on 
     try {
       await staff.page.goto(`/crm/quotations/${quote.id}`)
       await staff.page.getByRole('button', { name: 'Create sales order', exact: true }).click()
+      await staff.page.getByRole('button', { name: 'Create draft', exact: true }).click()
       await expect(staff.page).toHaveURL(/\/sales-orders\/[^/]+$/)
       await expect(staff.page.getByRole('heading', { name: 'Annual support agreement', exact: true })).toBeVisible()
       await expect(staff.page.getByRole('button', { name: 'Confirm sales order', exact: true })).toHaveCount(0)

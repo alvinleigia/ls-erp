@@ -1,7 +1,7 @@
 # Shared customer participation and booking plan
 
-Research date: 2026-10-28. Status: phased implementation authorized; P1-P3
-are verified locally on the `staging` branch. See [P3 delivery evidence](PARTICIPANTS_P3.md).
+Research date: 2026-10-28. Status: phased implementation authorized; P1-P4
+are verified locally on the `staging` branch. See [P4 delivery evidence](BOOKING_COMPOSITION_P4.md).
 R10 production phase 6F is complete.
 No production deployment/migration or alteration of existing customer records is
 part of these increments. Hosted staging deployment evidence is separate from local verification.
@@ -196,14 +196,17 @@ masked presentation and suitable audit events. Do not reuse public branding acce
 | P5: shared document generation and Real Estate letters | Shared issuance/source/template contracts, then booking intimation and unit allotment templates owned by Real Estate. | Generic document provider works with Real Estate disabled; multiple applicants render correctly; frozen issued data, independent financial authorization, tenant/office privacy and controlled template corrections. No copied monetary/legal policy. |
 | P6: migration and release | Rehearse the pilot upgrade against a fresh protected copy, then staging acceptance and separately approved production release. | Values, IDs, assignments, sharing, office bounds, snapshots, money and effective access match; complete recovery and release evidence. |
 
-Local progress: P1-P3 are implemented and verified on the staging branch.
+Local progress: P1-P4 are implemented and verified on the staging branch.
 P2 adds source-owned participant storage/editor and accepted quotation/order
 copies. P3 adds common correspondence forms, versioned captions/requirements,
 impact preview and server-enforced confirmation acceptance. Real Estate owns its
 CIF/applicant labels; no property or ownership rules enter the shared form.
+P4 adds the bound quotation/order review, immutable commercial references and
+tenant-calendar order dates, retaining separate reservation and financial states.
 No hosted migration or deployment has occurred for these increments. See
-[the P2 evidence](PARTICIPANTS_P2.md) and [the P3 evidence](PARTICIPANTS_P3.md).
-P4 is the next increment; neither letter is claimed complete yet.
+[the P2 evidence](PARTICIPANTS_P2.md), [the P3 evidence](PARTICIPANTS_P3.md) and
+[the P4 evidence](BOOKING_COMPOSITION_P4.md).
+P5 is the next increment; neither letter is claimed complete yet.
 
 P1-P5 are the authorized phased feature direction. Finish and verify each increment
 before depending on it. KYC file collection, electronic signing, ownership shares,

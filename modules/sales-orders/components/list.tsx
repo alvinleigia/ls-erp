@@ -13,10 +13,10 @@ import { useTerminology } from "@/platform/terminology/provider"
 import { useDateFormatter } from "@/hooks/use-date-formatter"
 import { formatDecimalCurrency } from "@/lib/formatting"
 import { orderRequest } from "./request"
-export type OrderRow = { id: string; title: string; customerName: string; currency: string; consideration: string; quotationId: string; revision: number; status: string; version: number; createdAt: string }
+export type OrderRow = { id: string; reference: string | null; orderedOn: string | null; title: string; customerName: string; currency: string; consideration: string; quotationId: string; revision: number; status: string; version: number; createdAt: string }
 export const orderStatus = (status: string) => ({ DRAFT: "Draft", CONFIRMED: "Confirmed", CANCELLED: "Cancelled" })[status] || status
 export function SalesOrderList() {
-  const term = useTerminology(), { formatDateTime } = useDateFormatter()
+  const term = useTerminology(), { formatDateTime, formatDateOnly } = useDateFormatter()
   const [pagination, setPagination] = useState({ pageIndex: 0, pageSize: 20 }), [q, setQ] = useState(""), [status, setStatus] = useState("")
   const [data, setData] = useState<{ items: OrderRow[]; total: number }>({ items: [], total: 0 }), [error, setError] = useState(""), [loading, setLoading] = useState(true), [refresh, setRefresh] = useState(0)
   useEffect(() => {
@@ -29,13 +29,15 @@ export function SalesOrderList() {
     return () => { clearTimeout(timer); controller.abort() }
   }, [pagination, q, status, refresh])
   const columns = useMemo<ColumnDef<OrderRow>[]>(() => [
+    { id: "reference", header: "Reference", cell: ({ row }) => row.original.reference || "Not recorded" },
     { id: "title", header: term("salesOrders.order.singular", "Sales order"), cell: ({ row }) => <Link className="font-medium underline" href={`/sales-orders/${row.original.id}`}>{row.original.title}</Link> },
     { accessorKey: "customerName", header: "Customer" },
     { id: "status", header: "Status", cell: ({ row }) => orderStatus(row.original.status) },
     { id: "amount", header: "Consideration", cell: ({ row }) => formatDecimalCurrency(row.original.consideration, row.original.currency) },
     { accessorKey: "revision", header: "Source revision" },
+    { id: "orderedOn", header: term("salesOrders.order.singular", "Order date", "{label} date"), cell: ({ row }) => formatDateOnly(row.original.orderedOn) },
     { id: "createdAt", header: "Created", cell: ({ row }) => formatDateTime(row.original.createdAt) },
-  ], [term, formatDateTime])
+  ], [term, formatDateTime, formatDateOnly])
   // eslint-disable-next-line react-hooks/incompatible-library
   const table = useReactTable({ data: data.items, columns, state: { pagination }, onPaginationChange: setPagination, manualPagination: true, pageCount: Math.max(1, Math.ceil(data.total / pagination.pageSize)), getCoreRowModel: getCoreRowModel() })
   return <div className={pageClass}><AccessPageHeader title={term("salesOrders.order.plural", "Sales Orders")} description="Create a draft from a saved quotation, review its terms, then confirm the agreement." actions={<Button asChild variant="outline"><Link href="/crm/quotations">Open quotations</Link></Button>} /><Surface>

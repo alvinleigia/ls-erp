@@ -9,10 +9,17 @@ import type { SalesOrderSource } from "@/modules/sales-orders/contracts"
 import type { QuotationSnapshot } from "@/modules/sales-documents/quotation-service"
 import { releaseOrderReservations } from "@/modules/catalog/reservation-events"
 import { requireResolvedPayments } from "@/modules/receivables/cancellation"
+async function reviewConfirmation(tx: Prisma.TransactionClient, actor: BusinessActor, snapshot: Prisma.JsonValue) {
+  const configuration = await readParticipantConfiguration(tx, actor.tenantId, await realEstateParticipantPreset(tx, actor))
+  return participantConfirmationProof((snapshot as unknown as QuotationSnapshot).participants, configuration)
+}
 const source: SalesOrderSource = {
+  async reviewConfirmation(tx, actor, snapshot) {
+    const { missing, proof } = await reviewConfirmation(tx, actor, snapshot)
+    return { missing: missing.map(({ participant, label }) => ({ participant, label })), configurationVersion: proof.configurationVersion }
+  },
   async onConfirm(tx, actor, snapshot) {
-    const configuration = await readParticipantConfiguration(tx, actor.tenantId, await realEstateParticipantPreset(tx, actor))
-    const { missing, proof } = participantConfirmationProof((snapshot as unknown as QuotationSnapshot).participants, configuration)
+    const { missing, proof } = await reviewConfirmation(tx, actor, snapshot)
     if (missing.length) {
       const examples = missing.slice(0, 8).map(item => `${item.participant}: ${item.label}`).join("; ")
       throw new BusinessError(409, `Complete the required customer details in a new quotation revision before confirming: ${examples}${missing.length > 8 ? `; and ${missing.length - 8} more` : ""}. Saved orders retain their selected revision; cancel and replace this draft after correcting the source.`)

@@ -25,7 +25,7 @@ export function QuotationSummary({ value, snapshot, section, canEdit, name, arch
     <AccessSummarySection sectionKey="Document details" title={term("salesDocuments.quotation.singular", "Document details", "{label} details")} canEdit={canEdit} fields={[
       { label: "Title", value: value.title }, { label: "Supplier", value: value.supplierName },
       { label: "Currency", value: value.currency }, { label: "Website", value: value.website },
-      { label: "Booking date", value: formatDateForDisplay(value.bookingDate, snapshot?.dateFormat) }, { label: "Valid until", value: formatDateForDisplay(value.validUntil, snapshot?.dateFormat) },
+      { label: "Booking date on quotation", value: formatDateForDisplay(value.bookingDate, snapshot?.dateFormat) }, { label: "Valid until", value: formatDateForDisplay(value.validUntil, snapshot?.dateFormat) },
       { label: "Registration", value: value.registration }, { label: "Registration URL", value: value.registrationUrl },
       { label: "Logo", value: value.logoDataUrl ? "Included in document" : "None" },
     ]} />

@@ -1,3 +1,25 @@
+## Shared booking composition - P4 (local staging)
+
+Creation review binds its saved quotation ID/revision, customer and exact terms.
+New orders get tenant-unique transactional references and immutable calendar
+order dates. Existing active orders can be reopened; replacement retains the
+existing cancellation/revision contract. Old orders keep unrecorded metadata.
+
+Confirmation review uses current requirements against frozen source evidence;
+actual confirmation still reauthorizes and checks again. Reservations/allocation
+and receivables/payments keep independent permissions and states. Multiple units
+and customers do not multiply an agreement or its financial balance. Generic
+Booking labels work with Real Estate off; its applicant preset stays separate.
+
+116 native/regression checks and six final browser scenarios passed. Four final
+desktop/mobile screenshots were inspected. Migration 135 preserves 134 prior
+tables/policies/functions, including a populated confirmed order and history,
+with forced rollback and private counter checks. Build/TypeScript, targeted lint
+and whitespace checks passed. Prior functions and security policies are unchanged.
+
+No hosted migration, push or deployment. P5 is next: shared document issuance
+and Real Estate letter providers. See [P4 evidence](BOOKING_COMPOSITION_P4.md).
+
 ## Customer details and confirmation requirements - P3 (local staging)
 
 Common customer correspondence forms, tenant captions and role-specific

@@ -1,5 +1,5 @@
-const {materializeRules}=require('./helpers/resource-policy-data.cjs')
 /* eslint-disable @typescript-eslint/no-require-imports */
+const {materializeRules}=require('./helpers/resource-policy-data.cjs')
 const {fixtureUser,fixtureRole,fixtureProfile,resetFixtureRoles}=require("./helpers/access-fixtures.cjs")
 const {test,before,after}=require('node:test'),assert=require('node:assert/strict'),{randomUUID}=require('node:crypto'),{Pool}=require('pg'),{PrismaClient}=require('@prisma/client')
 const {TenantPgAdapter}=require('../lib/tenant-pg-adapter.ts'),{applicationCatalog}=require('../application/catalog/service.ts'),{applicationReservations}=require('../application/catalog/reservations.ts'),{applicationSalesOrders}=require('../application/sales-orders/service.ts'),{createApplicationCrmService}=require('../application/crm/service.ts'),{emptyQuotationContent}=require('../modules/sales-documents/quotation-validation.ts')
@@ -28,6 +28,33 @@ before(async()=>{
  deal=await crm.createOpportunity({title:'Equipment agreement',contactId:contact.id,assignedUserId:staff.id,pipelineId:pipeline.id,stageId:stage.id,amount:'100.125',currency:'INR',expectedCloseOn:'2027-01-01'})
 })
 after(async()=>{await Promise.all(clients.map(c=>c.$disconnect()));await Promise.all(pools.map(p=>p.end()))})
+
+test('multi-unit booking with multiple customers keeps one agreement, one balance and independent allocations',async()=>{
+ const a=await catalog.save(itemInput({price:'100'})),b=await catalog.save(itemInput({price:'200'}))
+ const person=await root.crmContact.create({data:{tenantId:tenant,name:'Additional equipment customer',ownerUserId:staff.id}})
+ const source=await crm.getOpportunityParticipants(deal.id)
+ await crm.replaceOpportunityParticipants(deal.id,{version:source.version,participants:[{role:'ADDITIONAL_CUSTOMER',party:{kind:'PERSON',id:person.id}}]})
+ const quote=await crm.saveQuotation(deal.id,{content:{...content(a),lines:[content(a).lines[0],content(b).lines[0]]}})
+ const order=await orders.create({quotationId:quote.id,revision:1,orderedOn:'2026-01-01'})
+ const held=await Promise.all([a,b].map(item=>reservations.create(order.id,{itemId:item.id,expiresAt:future()})))
+ assert.equal((await orders.get(order.id)).snapshot.participants.participants.length,2)
+ assert.equal(String(order.consideration),'300');assert.equal((await orders.list({q:order.reference})).total,1)
+ await orders.transition(order.id,{action:'confirm',version:1})
+ await Promise.all(held.map(row=>reservations.transition(order.id,row.id,{action:'allocate',version:1})))
+ assert.equal((await reservations.history(order.id)).items.filter(row=>row.status==='ALLOCATED').length,2)
+ await root.tenantModule.create({data:{tenantId:tenant,key:'receivables',allowed:true,enabled:true}})
+ const {applicationReceivables}=require('../application/receivables/service.ts'),finance=applicationReceivables(db,identity(manager))
+ await finance.open(order.id,{dueDates:[null]})
+ const request={requestKey:randomUUID(),version:1,amount:'100',receivedOn:'2026-01-01',method:'CASH',reference:'',note:''}
+ const posted=await finance.record(order.id,request);assert.equal((await finance.record(order.id,request)).id,posted.id)
+ const balance=await finance.get(order.id);assert.equal(String(balance.account.total),'300');assert.equal(String(balance.paid),'100');assert.equal(String(balance.outstanding),'200')
+ assert.equal(await root.orderReceipt.count({where:{tenantId:tenant,orderId:order.id}}),1)
+ await assert.rejects(orders.transition(order.id,{action:'cancel',version:2,reason:'Payments must be resolved'}),status(409))
+ await finance.reverse(order.id,posted.id,{requestKey:randomUUID(),version:2,kind:'CORRECTION',reason:'Synthetic correction',effectiveOn:'2026-01-02',reference:''})
+ await orders.transition(order.id,{action:'cancel',version:2,reason:'Customer replaced booking'})
+ assert.equal((await reservations.history(order.id)).items.filter(row=>row.status==='RELEASED').length,2)
+ const current=await crm.getOpportunityParticipants(deal.id);await crm.replaceOpportunityParticipants(deal.id,{version:current.version,participants:[]})
+})
 
 test('generic units: concurrent repeated holds are idempotent; competing orders cannot double reserve',async()=>{
  const f=await fixture(),second=await orderFor(f.item),input={itemId:f.item.id,expiresAt:future()}
@@ -77,8 +104,10 @@ test('invalid selection, expired/overlong expiry, non-unit, unavailable and arch
  await orders.transition(f.order.id,{action:'cancel',version:1,reason:'Not needed'});await assert.rejects(hold(f),status(409))
 })
 test('allocated units remain unavailable beyond their original hold expiry',async()=>{
- const f=await fixture(),held=await hold(f,future(1500))
+ const f=await fixture()
  await orders.transition(f.order.id,{action:'confirm',version:1})
+ // Finish agreement setup before the deliberately short hold starts ticking.
+ const held=await hold(f,future(1500))
  await reservations.transition(f.order.id,held.id,{action:'allocate',version:1})
  await new Promise(resolve=>setTimeout(resolve,1600))
  assert.equal((await reservations.history(f.order.id)).items[0].status,'ALLOCATED')

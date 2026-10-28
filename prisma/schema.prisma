@@ -856,6 +856,7 @@ model Organization {
 }
 
 model Tenant {
+  salesOrderSequence SalesOrderSequence?
   participantFormConfiguration ParticipantFormConfiguration?
   opportunityParticipants CrmOpportunityParticipant[]
   externalCollaborators ExternalCollaborator[]
@@ -2666,6 +2667,8 @@ model CrmQuotationRevision {
 }
 
 model SalesOrder {
+  reference String?
+  orderedOn DateTime? @db.Date
   participantAcceptance Json?
   sharingPolicyId String?
   sharingPolicy RecordSharingPolicy? @relation(fields: [tenantId, sharingPolicyId], references: [tenantId, id], onDelete: Restrict)
@@ -2690,9 +2693,17 @@ model SalesOrder {
   reservations UnitReservation[]
   receivable OrderReceivable?
   @@id([tenantId, id])
+  @@unique([tenantId, reference])
   @@index([tenantId, status, createdAt(sort: Desc), id])
   @@index([tenantId, createdAt(sort: Desc), id])
   @@index([tenantId, quotationId, revision])
+}
+
+// Internal transactional numbering only; no directory or business browse grant.
+model SalesOrderSequence {
+  tenantId String @id
+  value Int
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
 }
 
 model OrderReceivable {

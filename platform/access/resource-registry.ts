@@ -93,11 +93,12 @@ type PartModels<P> = P extends { roots: readonly (infer R)[] } ? R | (P extends 
 type OwnershipModels<O> = O extends { parts: infer P } ? PartModels<P[keyof P]> : PartModels<O>
 type InfrastructureModel = Exclude<Prisma.ModelName, OwnershipModels<typeof resourceRegistry[Resource]["ownership"]>>
 export const infrastructureModels = {
+  SalesOrderSequence: "numbering",
   TenantModule: "tenantSecurity", Tenant: "tenantBoundary", TenantDomain: "tenantBoundary",
   Organization: "controlPlane", OrganizationMembership: "controlPlane",
   Account: "authentication", Session: "authentication", VerificationToken: "authentication", PasswordResetToken: "authentication",
   RecordSharingPolicy: "sourceSecurity", RecordSharingGrant: "sourceSecurity",
-} as const satisfies Record<InfrastructureModel, "tenantSecurity" | "tenantBoundary" | "controlPlane" | "authentication" | "sourceSecurity">
+} as const satisfies Record<InfrastructureModel, "tenantSecurity" | "tenantBoundary" | "controlPlane" | "authentication" | "sourceSecurity" | "numbering">
 
 export function ownershipDescription(resource: Resource): string {
   const ownership = resourceRegistry[resource].ownership
