@@ -1,3 +1,21 @@
+## R10 - Hosted team, office and partner boundaries (phase 6D1)
+
+The current staging candidate passed 162 hosted checks and 80 cleanup checks.
+Two-team manager and Staff populations, separate Read/Edit limits, report/CSV
+scope, office/subsidiary grants and fresh session revocation were verified through
+ordinary APIs. Partner login grants, workforce masks, immutable external identity,
+saved introduction evidence, owner/origin report separation, archive suspension
+and explicit reactivation passed. Three Chrome captures were visually inspected,
+including mobile team selection, its count and preserved drill-down link.
+
+An independent read-only audit verified cleanup across all seven runner attempts:
+40 new accounts archived, 33 non-admin accounts without profile/office grants,
+27 enquiries closed and 15 activities canceled; new team/profile/directory entries
+are archived. Failed attempts are not completion evidence. Application source,
+schema, deployments, production and saved browser sessions are unchanged. No push.
+Next: hosted financial/source/report and operational acceptance, plus invitations
+and broader sharing/browser flows. See [scope, evidence and limits](STAGING_BOUNDARIES_R10.md).
+
 ## R10 - Hosted staging release and initial acceptance (phase 6C)
 
 Candidate 525b853 is READY on all three staging aliases. A restored staging copy

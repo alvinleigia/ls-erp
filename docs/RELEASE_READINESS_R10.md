@@ -110,6 +110,7 @@ Phase 6B1 now verifies the [actual pilot backup and application restore](PILOT_R
 [Phase 6B2](PILOT_UPGRADE_R10.md) then rehearsed all 25 pending migrations,
 compared existing account readable-record access and verified policy translation.
 Phase 6C now verifies the [staging migration, deployment and initial hosted checks](STAGING_RELEASE_R10.md).
+Phase 6D1 also verifies [hosted team/office boundaries and partner logins](STAGING_BOUNDARIES_R10.md).
 Wider hosted acceptance and the documented managed-environment differences remain.
 
 | Gate | Local evidence | Still required before release |
@@ -117,8 +118,8 @@ Wider hosted acceptance and the documented managed-environment differences remai
 | Candidate source | Pinned schema/migration inventory; exact candidate `525b853` verified READY on all three staging aliases | Recheck the selected production candidate at release time |
 | Upgrade semantics | Synthetic preservation, empty-database Prisma deploy and actual pilot-copy upgrade from 107 to 132 | Recheck the live target at release time; retain the original rolled-back attempt and never rewrite history to silence a discrepancy |
 | Recovery | Encrypted synthetic recovery plus fresh pilot application/role/storage backup and isolated restore | Review managed dependencies/environment fidelity, then repeat fresh recovery verification at the release boundary; this does not certify complete Supabase platform recovery |
-| Existing access | Native synthetic integration tests, pilot data/ownership comparison, 870 translated rules and matching six-resource read populations across seven accounts | Hosted staging acceptance for full UI/write/report flows and other resource families; pilot-copy evidence does not exercise business writes |
-| UI and hosted behavior | Phase 5 local Chrome evidence; phase 6C initial hosted API/write/security checks and five inspected Chrome captures | Wider hosted staging acceptance, including multiple-team managers, office boundaries/revocation, external login lifecycle and full report/write flows |
+| Existing access | Native synthetic integration tests, pilot data/ownership comparison, 870 translated rules and matching six-resource read populations across seven accounts; phase 6D1 hosted team/office/profile revocation and partner boundaries | Full hosted financial/operational writes, sharing and report/drill-down flows; pilot-copy evidence does not exercise business writes |
+| UI and hosted behavior | Phase 5 local Chrome evidence; phase 6C initial hosted checks/five inspected captures; phase 6D1 162 checks and three inspected captures | Invitation acceptance/expiry, broader browser writes, multiple managers on one team and full financial/operational/report acceptance |
 | Production | No changes made | Separately authorized release and agreed maintenance/recovery window |
 
 Do not use the older R5-only source verifier to approve R10. Its strict historical

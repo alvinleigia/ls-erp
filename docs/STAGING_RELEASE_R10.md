@@ -124,3 +124,8 @@ operational/financial write workflows. These retain earlier local/native test
 evidence but are not all exercised by this initial hosted check. Production still
 requires its own fresh target/recovery checks, authorized maintenance window and
 release decision. This document is a staging checkpoint only.
+
+Subsequent [phase 6D1](STAGING_BOUNDARIES_R10.md) verifies multiple-team manager
+boundaries, office/profile revocation, direct partner-login lifecycle and initial
+attribution reports. Financial/operational workflows, invitation acceptance/expiry
+and wider report/browser acceptance remain separate hosted gates.
