@@ -1,3 +1,23 @@
+## R10 - Hosted invitations, activation and shared managers (phase 6D5)
+
+274 hosted checks verified two managers sharing one team, one manager overseeing
+two teams, selected-team counts and immediate authority refresh after demotion.
+Invitation checks verified real mobile acceptance and exact grants, one-use,
+wrong-tenant, revoked, stale-profile and suspended-inviter rejection. All 12
+modules enforced both activation layers, dependencies, API and widget boundaries;
+retained service values survived reactivation. Original QA settings are restored.
+
+76 disposable-local onboarding/account tests passed, including expired tokens.
+Natural seven-day hosted expiry was not simulated by changing hosted dates.
+68 cleanup checks and 86 independent audit checks verified six archived users,
+two closed enquiries, three canceled activities, retired configuration and one
+consumed invitation retained as history. Two Chrome captures were inspected.
+
+No application/schema/deployment change, push or production write. Staging has
+132 verified applied migrations. Vercel metadata still returns HTTP 403. Next:
+remaining hosted browser-write/Restricted-sharing paths and release review.
+See [governance evidence and limits](STAGING_GOVERNANCE_R10.md).
+
 ## R10 - Hosted Leaves and Shifts (phase 6D4)
 
 Hosted synthetic checks verified leave eligibility, reporting-manager versus

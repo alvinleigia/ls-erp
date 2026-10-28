@@ -90,6 +90,6 @@ utilities and receipt hashes retained in the existing private staging recovery
 checkpoint. That checkpoint is not a new database backup or standalone recovery
 tool. Credentials, environment files and browser session state are excluded.
 
-Next gates: invitation acceptance/expiry, multiple managers on one team, module
-activation and the remaining browser-write/sharing paths. This checkpoint does
-not approve production release.
+Phase 6D5 now records [invitation, multiple-manager and activation checks](STAGING_GOVERNANCE_R10.md),
+with expiry covered in disposable-local tests. Remaining browser-write/sharing
+paths still need acceptance. This checkpoint does not approve production release.
