@@ -294,6 +294,36 @@ test("slow requests checkpoint after a row and resume with fresh service state",
   assert.equal(progress.status, 'REVIEW')
 })
 
+test("history pages retain exact counts for large, mixed and empty jobs without leaking other creators", async () => {
+  const owner = await fixtureUser(root, { data: { tenantId: a, role: "ADMIN", name: "History owner", email: `${prefix}-history-owner@example.test` } })
+  const history = createApplicationCrmService(dbA, { tenantId: a, userId: owner.id })
+  const csv = 'Name,Email\n' + Array.from({ length: 1000 }, (_, i) => `History ${i},${prefix}-history-${i}@example.test`).join('\n')
+  const first = await upload(csv, history), secondJob = await upload(csv, history)
+  const mixed = await review(await upload(`Name,Email\nValid,${prefix}-history-mixed@example.test\nDuplicate,${prefix}-history-mixed@example.test\nInvalid,bad-address`, history), undefined, history)
+  await finish(mixed, history)
+  const empty = await upload(`Name,Email\nEmpty,${prefix}-history-empty@example.test`, history)
+  // Native fixture only: cover a retained parent with no child rows.
+  await root.crmEnquiryImportRow.deleteMany({ where: { tenantId: a, importId: empty.id } })
+  const page1 = await history.listEnquiryImports({ page: 1, pageSize: 2 })
+  assert.equal(page1.total, 4); assert.equal(page1.totalPages, 2)
+  assert.deepEqual(page1.items.map(row => [row.id, row._count.rows]), [[empty.id, 0], [mixed.id, 3]])
+  assert.equal(page1.items[1].status, 'COMPLETE')
+  const page2 = await history.listEnquiryImports({ page: 2, pageSize: 2 })
+  assert.deepEqual(page2.items.map(row => [row.id, row._count.rows]), [[secondJob.id, 1000], [first.id, 1000]])
+  const all = await history.listEnquiryImports({ pageSize: 100 })
+  assert.equal(all.items.reduce((sum, row) => sum + row._count.rows, 0), 2003)
+  const beyond = await history.listEnquiryImports({ page: 3, pageSize: 2 })
+  assert.deepEqual(beyond.items, []); assert.equal(beyond.total, 4)
+  for (const other of [service, second]) {
+    const foreign = await other.listEnquiryImports({ pageSize: 100 })
+    assert.ok(foreign.items.every(row => !all.items.some(own => own.id === row.id)))
+    await assert.rejects(other.getEnquiryImport(first.id), e => e.status === 404)
+  }
+  await root.user.update({ where: { id: owner.id }, data: { status: 'SUSPENDED' } })
+  try { await assert.rejects(history.listEnquiryImports({}), e => e.status === 403) }
+  finally { await root.user.update({ where: { id: owner.id }, data: { status: 'ACTIVE' } }) }
+})
+
 test("1,000 rows use bounded compact batches with cross-batch duplicates and complete correction results", { timeout: 900000 }, async t => {
   const started = performance.now()
   const rows = Array.from({ length: 1000 }, (_, i) => [`Bulk ${i}`, `${prefix}-bulk-${i}@example.test`])

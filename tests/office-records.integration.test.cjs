@@ -232,6 +232,26 @@ test('membership revocation takes effect on the next read without altering recor
  await membership(dual,[a.id,b.id],a.id)
  assert.equal((await crm(dual).getEnquiry(leadB.id)).id,leadB.id)
 })
+test('import history counts only the creator\'s currently readable offices',async()=>{
+ const own=createOfficeAccessService(db,identity(dual)),initial=await own.getOwnContext()
+ const choose=async office=>{const current=await own.getOwnContext();await own.selectCreationOffice({version:current.version,officeId:office.id})}
+ const service=crm(dual)
+ await choose(a)
+ const east=await service.uploadEnquiryImport('history-east.csv',Buffer.from('Name,Email\nEast,history-east@example.test\n'))
+ await choose(b)
+ const west=await service.uploadEnquiryImport('history-west.csv',Buffer.from('Name,Email\nWest,history-west@example.test\nWest two,history-west-two@example.test\n'))
+ try{
+  const before=await service.listEnquiryImports({pageSize:100})
+  assert.equal(before.items.find(row=>row.id===east.id)._count.rows,1)
+  assert.equal(before.items.find(row=>row.id===west.id)._count.rows,2)
+  await membership(dual,[a.id],a.id)
+  const after=await service.listEnquiryImports({pageSize:100})
+  assert.equal(after.items.find(row=>row.id===east.id)._count.rows,1)
+  assert.ok(!after.items.some(row=>row.id===west.id));assert.equal(after.total,before.total-1)
+  await assert.rejects(service.getEnquiryImport(west.id),status(404))
+ }finally{await membership(dual,[a.id,b.id],initial.creationOfficeId)}
+})
+
 test('closed offices remain readable to authorized staff but reject new independent work',async()=>{
  b=await companies.updateOffice(b.id,{version:b.version,archived:true})
  try{

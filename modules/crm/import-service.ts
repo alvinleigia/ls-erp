@@ -165,7 +165,12 @@ export function createEnquiryImportService({ run, audit, readTerms }: CrmService
       const q = crmListSchema.parse(input)
       return run(permission, async (tx, actor) => {
         const where = { tenantId: actor.tenantId, createdByUserId: actor.userId }
-        const [items, total] = await Promise.all([tx.crmEnquiryImport.findMany({ where, select: { id: true, fileName: true, status: true, createdAt: true, _count: { select: { rows: true } } }, orderBy: [{ createdAt: "desc" }, { id: "desc" }], skip: (q.page - 1) * q.pageSize, take: q.pageSize }), tx.crmEnquiryImport.count({ where })])
+        const [records, total] = await Promise.all([tx.crmEnquiryImport.findMany({ where, select: { id: true, fileName: true, status: true, createdAt: true }, orderBy: [{ createdAt: "desc" }, { id: "desc" }], skip: (q.page - 1) * q.pageSize, take: q.pageSize }), tx.crmEnquiryImport.count({ where })])
+        // Count only this authorized page in one pass. Correlated relation counts
+        // repeatedly scan protected rows as retained imports accumulate.
+        const grouped = records.length ? await tx.crmEnquiryImportRow.groupBy({ by: ["importId"], where: { tenantId: actor.tenantId, importId: { in: records.map(record => record.id) } }, _count: true }) : []
+        const counts = new Map(grouped.map(row => [row.importId, row._count]))
+        const items = records.map(record => ({ ...record, _count: { rows: counts.get(record.id) || 0 } }))
         return { items, total, page: q.page, pageSize: q.pageSize, totalPages: Math.max(1, Math.ceil(total / q.pageSize)) }
       })
     },
