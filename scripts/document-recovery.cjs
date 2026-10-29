@@ -19,7 +19,7 @@ async function assetReferences(db){
  for(const r of(await db.query('SELECT "tenantId","quotationId",number,snapshot,"archivedPdf" archive FROM "CrmQuotationRevision"')).rows){add(r.tenantId,`quotation-logo:${r.quotationId}:${r.number}`,'tenant-branding',r.snapshot?.branding?.logo);add(r.tenantId,`quotation-pdf:${r.quotationId}:${r.number}`,'tenant-documents',r.archive)}
  // Recovery may inspect the reviewed pre-upgrade baseline. Absence is permitted
  // only for these newly registered tables; malformed existing references always fail closed.
- for(const [table,prefix] of [['SalesOrderDocument','order-document'],['OrderReceiptDocument','payment-receipt']]){
+ for(const [table,prefix] of [['SalesOrderDocument','order-document'],['OrderReceiptDocument','payment-receipt'],['CustomerInvoiceDocument','customer-invoice']]){
   const exists=(await db.query(`SELECT to_regclass('public."${table}"') IS NOT NULL AS present`)).rows[0].present
   if(exists)for(const r of(await db.query(`SELECT "tenantId",id,snapshot,archive FROM "${table}"`)).rows){add(r.tenantId,prefix+'-logo:'+r.id,'tenant-branding',r.snapshot?.payload?.branding?.logo);assert.ok(r.archive,'Issued PDF is missing its archive');add(r.tenantId,prefix+'-pdf:'+r.id,'tenant-documents',r.archive)}
  }

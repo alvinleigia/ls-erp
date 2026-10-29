@@ -30,8 +30,9 @@ export function ownedRecordSql(actor: BusinessActor, resource: Resource, alias: 
 export function quotationRecordScope(actor: BusinessActor, action?: PermissionAction): Prisma.CrmQuotationWhereInput {
   return sharedRecordWhere(actor, "quotations", { tenantId: actor.tenantId, opportunity: ownedRecordScope(actor, "quotations", action) }, { opportunity: { assignedUserId: actor.userId } }, action)
 }
-export function salesOrderRecordScope(actor: BusinessActor, resource: "salesOrders" | "receivables" | "orderPayments" | "unitReservations" | "orderDocuments" | "paymentDocuments" = "salesOrders"): Prisma.SalesOrderWhereInput {
-  const rules: Resource[] = [resource, "salesOrders", ...(resource === "paymentDocuments" ? ["orderPayments" as const,"receivables" as const] : resource === "orderPayments" ? ["receivables" as const] : [])]
+export function salesOrderRecordScope(actor: BusinessActor, resource: "salesOrders" | "receivables" | "orderPayments" | "unitReservations" | "orderDocuments" | "paymentDocuments" | "customerInvoices" | "invoicePayments" | "invoiceDocuments" = "salesOrders"): Prisma.SalesOrderWhereInput {
+  const inherited:Resource[]=resource==="invoicePayments"?["customerInvoices","receivables","orderPayments"]:resource==="invoiceDocuments"?["customerInvoices","receivables"]:resource==="customerInvoices"?["receivables"]:resource==="paymentDocuments"?["orderPayments","receivables"]:resource==="orderPayments"?["receivables"]:[]
+  const rules: Resource[] = [resource, "salesOrders", ...inherited]
   const base: Prisma.SalesOrderWhereInput = { tenantId: actor.tenantId, source: { quotation: { opportunity: { AND: rules.map((key,index) => ownedRecordScope(actor, key, index ? "read" : undefined)) } } } }
   if (rules.some((key,index) => recordLimits(actor, key, index ? "read" : undefined).includes("NONE"))) return base
   return sharedRecordWhere(actor, resource, base, { source: { quotation: { opportunity: { assignedUserId: actor.userId } } } })

@@ -23,6 +23,9 @@ type ResourceContract = { policy: ResourceRecordPolicy; ownership: ResourceOwner
 // Adding a permission resource requires a contract here; model names are checked
 // against the generated Prisma schema. No data/default/scope migration is implied.
 export const resourceRegistry = {
+  customerInvoices: { policy: "sales", ownership: { kind: "source", roots: ["CustomerInvoice"], children: ["CustomerCreditNote", "CustomerInvoiceEvent"], sources: ["salesOrders", "receivables"] }, sharing: "salesOrders" },
+  invoicePayments: { policy: "sales", ownership: { kind: "source", roots: ["InvoicePaymentApplication"], children: ["InvoicePaymentRelease"], sources: ["customerInvoices", "orderPayments"] }, sharing: "salesOrders" },
+  invoiceDocuments: { policy: "sales", ownership: { kind: "source", roots: ["CustomerInvoiceDocument"], sources: ["customerInvoices"] }, sharing: "salesOrders" },
   orderDocuments: { policy: "sales", ownership: { kind: "source", roots: ["SalesOrderDocument"], sources: ["salesOrders"] }, sharing: "salesOrders" },
   paymentDocuments: { policy: "sales", ownership: { kind: "source", roots: ["OrderReceiptDocument"], sources: ["orderPayments"] }, sharing: "salesOrders" },
   documentTemplates: { policy: "shared", ownership: { kind: "shared", roots: ["BusinessDocumentTemplate"] } },
@@ -35,7 +38,7 @@ export const resourceRegistry = {
     availability: { kind: "source", roots: ["CatalogReservationAvailability"], sources: ["catalogItems"] },
   } } },
   dashboard: { policy: "sources", ownership: { kind: "composed", roots: ["CrmEnquiry", "AppointmentOrder", "InventoryOfficeStock"], sources: ["enquiries", "opportunities", "activities", "quotations", "projects", "appointments", "inventoryProducts", "leaveApprovals", "services"] } },
-  auditLogs: { policy: "administrative", ownership: { kind: "composed", roots: ["AuditLog"], sources: ["users", "businessSettings", "participantSettings", "documentTemplates", "orderDocuments", "paymentDocuments", "teams", "contacts", "accounts", "enquiries", "opportunities", "activities", "projects", "quotations", "salesOrders", "receivables", "orderPayments", "catalogItems", "unitReservations", "appointments", "appointmentCoupons", "inventoryProducts", "inventoryCategories", "inventorySuppliers", "inventoryPurchases", "services", "serviceCategories", "leaveApprovals", "leaveDefinitions", "leaveGroups", "shiftTemplates", "shiftSchedules", "shiftPlans", "shiftRoster", "branding", "taxRates", "customFields", "quotationTemplates"] } },
+  auditLogs: { policy: "administrative", ownership: { kind: "composed", roots: ["AuditLog"], sources: ["users", "businessSettings", "participantSettings", "documentTemplates", "orderDocuments", "paymentDocuments", "customerInvoices", "invoicePayments", "invoiceDocuments", "teams", "contacts", "accounts", "enquiries", "opportunities", "activities", "projects", "quotations", "salesOrders", "receivables", "orderPayments", "catalogItems", "unitReservations", "appointments", "appointmentCoupons", "inventoryProducts", "inventoryCategories", "inventorySuppliers", "inventoryPurchases", "services", "serviceCategories", "leaveApprovals", "leaveDefinitions", "leaveGroups", "shiftTemplates", "shiftSchedules", "shiftPlans", "shiftRoster", "branding", "taxRates", "customFields", "quotationTemplates"] } },
   users: { policy: "administrative", ownership: { kind: "security", roots: ["User"], children: ["StaffProfile", "StaffCertification", "StaffDocument", "TenantAccessRole", "TenantRoleAssignment", "TenantUserAccess", "Invitation", "BusinessCompany", "BusinessOffice", "BusinessOfficePolicy", "BusinessOfficeGrant", "BusinessCompanyGrant", "ExternalCollaborator"] } },
   assignmentTargets: { policy: "directory", ownership: { kind: "composed", roots: ["User", "BusinessTeamMember", "StaffProfile"], sources: ["teams", "enquiries", "opportunities", "projects"] } },
   restrictedFields: { policy: "shared", ownership: { kind: "composed", roots: ["CustomFieldDefinition", "CrmEnquiryFieldValue", "CrmOpportunityFieldValue", "RealEstateProjectFieldValue"], sources: ["customFields", "enquiries", "opportunities", "projects"] } },
@@ -98,6 +101,7 @@ type InfrastructureModel = Exclude<Prisma.ModelName, OwnershipModels<typeof reso
 export const infrastructureModels = {
   SalesOrderSequence: "numbering",
   ReceiptDocumentSequence: "numbering",
+  CustomerInvoiceSequence: "numbering",
   TenantModule: "tenantSecurity", Tenant: "tenantBoundary", TenantDomain: "tenantBoundary",
   Organization: "controlPlane", OrganizationMembership: "controlPlane",
   Account: "authentication", Session: "authentication", VerificationToken: "authentication", PasswordResetToken: "authentication",

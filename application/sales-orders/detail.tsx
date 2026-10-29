@@ -7,9 +7,11 @@ import { OrderReservations } from "@/modules/catalog/components/order-reservatio
 import { OrderReceivables } from "@/modules/receivables/components/order-receivables"
 import { CollectionFollowUps } from "@/application/receivables/follow-ups"
 import { OrderDocuments } from "@/modules/sales-orders/components/documents"
+import { OrderInvoices } from "@/modules/customer-invoices/components"
 export function SalesOrderDetail({ id }: { id: string }) {
   const modules = useBusinessModules()
   return <OrderDetail id={id} renderRelated={version => <div key={version} className="space-y-6">
+    {modules.enabled("invoicing")&&modules.can("customerInvoices.read")&&<OrderInvoices orderId={id}/>}
     {modules.can("orderDocuments.read")&&<OrderDocuments orderId={id}/>}
     {modules.enabled("catalog") && modules.can("catalogItems.read") && modules.can("unitReservations.read") && <OrderReservations orderId={id} />}
     {modules.enabled("receivables") && modules.can("receivables.read") && <OrderReceivables orderId={id} renderFollowUps={modules.enabled("crm") && modules.can("activities.read") ? version => <CollectionFollowUps key={version} orderId={id} /> : undefined} />}

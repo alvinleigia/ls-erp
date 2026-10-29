@@ -25,6 +25,7 @@
     "test:terminology": "node --require ./tests/register.cjs --test tests/terminology.test.cjs",
     "test:documents": "node scripts/test-sales-orders.cjs --documents",
     "test:document-editor": "node scripts/test-sales-orders.cjs --document-editor",
+    "test:customer-invoices": "node scripts/test-sales-orders.cjs --customer-invoices",
     "test:payment-documents": "node scripts/test-sales-orders.cjs --payment-documents",
     "test:quotation-layout": "node scripts/test-sales-orders.cjs --quotation-layout",
     "test:documents:browser": "node scripts/test-sales-orders.cjs --documents --browser-only",

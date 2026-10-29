@@ -27,6 +27,8 @@ const source: SalesOrderSource = {
     return proof
   },
   async onCancel(tx, actor, id, reason) {
+    const [invoiced]=await tx.$queryRaw<{blocked:boolean|null}[]>`SELECT app.has_posted_invoice(${actor.tenantId},${id}) AS blocked`
+    if(invoiced?.blocked)throw new BusinessError(409,"Fully credit posted commercial invoices before cancelling this order.")
     await requireResolvedPayments(tx, actor, id)
     await releaseOrderReservations(tx, actor, id, reason)
   },

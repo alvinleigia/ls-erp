@@ -1613,3 +1613,14 @@ export const staffWorkplaceSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("assign"), staffId: workplaceId, version: z.number().int().min(0).max(2147483647), officeId: workplaceId, startsOn: z.iso.date(), fromId: workplaceId.optional() }).strict(),
   z.object({ action: z.literal("cancel"), staffId: workplaceId, version: z.number().int().min(0).max(2147483647), assignmentId: workplaceId }).strict(),
 ])
+
+const invoiceDraftFields={invoiceDate:z.iso.date(),dueOn:z.iso.date().nullable(),note:z.string().trim().max(6000),requestKey:z.uuid()}
+export const customerInvoiceCreateSchema=z.object(invoiceDraftFields).strict()
+export const customerInvoiceEditSchema=z.object({...invoiceDraftFields,version:z.number().int().positive()}).strict()
+export const customerInvoiceTransitionSchema=z.discriminatedUnion('action',[
+ z.object({action:z.literal('post'),version:z.number().int().positive(),requestKey:z.uuid()}).strict(),
+ z.object({action:z.literal('cancel'),version:z.number().int().positive(),requestKey:z.uuid(),reason:z.string().trim().min(1).max(2000)}).strict(),
+ z.object({action:z.literal('credit'),version:z.number().int().positive(),requestKey:z.uuid(),reason:z.string().trim().min(1).max(2000),effectiveOn:z.iso.date()}).strict(),
+])
+export const invoicePaymentApplySchema=z.object({requestKey:z.uuid(),paymentId:z.string().min(1).max(100),amount:z.string().regex(/^\d{1,12}(\.\d{1,4})?$/)}).strict()
+export const invoicePaymentReleaseSchema=z.object({requestKey:z.uuid(),reason:z.string().trim().min(1).max(2000)}).strict()

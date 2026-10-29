@@ -859,6 +859,7 @@ model Tenant {
   documentTemplates BusinessDocumentTemplate[]
   salesOrderSequence SalesOrderSequence?
   receiptDocumentSequence ReceiptDocumentSequence?
+  invoiceSequences CustomerInvoiceSequence[]
   participantFormConfiguration ParticipantFormConfiguration?
   opportunityParticipants CrmOpportunityParticipant[]
   externalCollaborators ExternalCollaborator[]
@@ -2670,6 +2671,7 @@ model CrmQuotationRevision {
 }
 
 model SalesOrder {
+  invoices CustomerInvoice[]
   documents SalesOrderDocument[]
   reference String?
   orderedOn DateTime? @db.Date
@@ -2711,6 +2713,7 @@ model SalesOrderSequence {
 }
 
 model BusinessDocumentTemplate {
+  invoiceDocuments CustomerInvoiceDocument[]
   tenantId String
   companyId String
   providerKey String
@@ -2788,6 +2791,7 @@ model OrderReceivableLine {
 }
 
 model OrderReceipt {
+  invoiceApplications InvoicePaymentApplication[]
   tenantId String
   id String @default(cuid())
   orderId String
@@ -2879,6 +2883,141 @@ model OrderReceiptReversal {
   @@id([tenantId, paymentId])
   @@unique([tenantId, orderId, paymentId])
   @@unique([tenantId, requestKey])
+}
+
+model CustomerInvoiceSequence {
+  tenantId String
+  kind String
+  value Int
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  @@id([tenantId, kind])
+}
+
+model CustomerInvoice {
+  tenantId String
+  id String @default(cuid())
+  orderId String
+  requestKey String
+  status String @default("DRAFT")
+  version Int @default(1)
+  reference String?
+  number Int?
+  invoiceDate DateTime @db.Date
+  dueOn DateTime? @db.Date
+  note String @default("")
+  snapshot Json
+  createdBy String
+  actorName String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  source SalesOrder @relation(fields: [tenantId, orderId], references: [tenantId, id], onDelete: Restrict)
+  credit CustomerCreditNote?
+  events CustomerInvoiceEvent[]
+  applications InvoicePaymentApplication[]
+  documents CustomerInvoiceDocument[]
+  @@id([tenantId, id])
+  @@unique([tenantId, orderId, id])
+  @@unique([tenantId, requestKey])
+  @@unique([tenantId, reference])
+  @@unique([tenantId, number])
+  @@index([tenantId, orderId, createdAt(sort: Desc), id])
+}
+
+model CustomerCreditNote {
+  tenantId String
+  invoiceId String
+  reference String
+  number Int
+  requestKey String
+  effectiveOn DateTime @db.Date
+  reason String
+  amount Decimal @db.Decimal(18, 4)
+  createdBy String
+  actorName String
+  createdAt DateTime @default(now())
+  source CustomerInvoice @relation(fields: [tenantId, invoiceId], references: [tenantId, id], onDelete: Restrict)
+  @@id([tenantId, invoiceId])
+  @@unique([tenantId, reference])
+  @@unique([tenantId, number])
+  @@unique([tenantId, requestKey])
+}
+
+model CustomerInvoiceEvent {
+  tenantId String
+  invoiceId String
+  version Int
+  status String
+  actorId String
+  actorName String
+  reason String @default("")
+  requestKey String
+  requestHash String
+  createdAt DateTime @default(now())
+  source CustomerInvoice @relation(fields: [tenantId, invoiceId], references: [tenantId, id], onDelete: Restrict)
+  @@id([tenantId, invoiceId, version])
+  @@unique([tenantId, requestKey])
+}
+
+model InvoicePaymentApplication {
+  tenantId String
+  id String @default(cuid())
+  invoiceId String
+  orderId String
+  paymentId String
+  requestKey String
+  amount Decimal @db.Decimal(18, 4)
+  createdBy String
+  actorName String
+  createdAt DateTime @default(now())
+  source CustomerInvoice @relation(fields: [tenantId, orderId, invoiceId], references: [tenantId, orderId, id], onDelete: Restrict)
+  payment OrderReceipt @relation(fields: [tenantId, orderId, paymentId], references: [tenantId, orderId, id], onDelete: Restrict)
+  release InvoicePaymentRelease?
+  @@id([tenantId, id])
+  @@unique([tenantId, requestKey])
+  @@index([tenantId, invoiceId, createdAt(sort: Desc), id])
+}
+
+model InvoicePaymentRelease {
+  tenantId String
+  applicationId String
+  requestKey String
+  reason String
+  createdBy String
+  actorName String
+  createdAt DateTime @default(now())
+  source InvoicePaymentApplication @relation(fields: [tenantId, applicationId], references: [tenantId, id], onDelete: Restrict)
+  @@id([tenantId, applicationId])
+  @@unique([tenantId, requestKey])
+}
+
+model CustomerInvoiceDocument {
+  tenantId String
+  id String @default(uuid())
+  invoiceId String
+  companyId String
+  providerKey String
+  templateVersion Int
+  version Int
+  reference String
+  requestKey String
+  requestHash String
+  snapshot Json
+  archive Json
+  supersedesId String?
+  reason String @default("")
+  createdBy String
+  createdAt DateTime @default(now())
+  source CustomerInvoice @relation(fields: [tenantId, invoiceId], references: [tenantId, id], onDelete: Restrict)
+  template BusinessDocumentTemplate @relation(fields: [tenantId, companyId, providerKey, templateVersion], references: [tenantId, companyId, providerKey, version], onDelete: Restrict)
+  supersedes CustomerInvoiceDocument? @relation("InvoiceDocumentReplacement", fields: [tenantId, invoiceId, providerKey, supersedesId], references: [tenantId, invoiceId, providerKey, id], onDelete: NoAction)
+  successors CustomerInvoiceDocument[] @relation("InvoiceDocumentReplacement")
+  @@id([tenantId, id])
+  @@unique([tenantId, requestKey])
+  @@unique([tenantId, reference])
+  @@unique([tenantId, invoiceId, providerKey, version])
+  @@unique([tenantId, invoiceId, providerKey, id])
+  @@unique([tenantId, supersedesId])
+  @@index([tenantId, invoiceId, createdAt(sort: Desc), id])
 }
 
 model SalesOrderEvent {

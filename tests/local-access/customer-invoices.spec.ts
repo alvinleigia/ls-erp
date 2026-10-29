@@ -1,0 +1,35 @@
+import { test,expect } from '@playwright/test'
+import { seed,login,json } from './fixtures'
+import { emptyQuotationContent } from '../../modules/sales-documents/quotation-validation'
+
+test('commercial invoice posts accepted prices, applies a saved payment and issues a full credit without changing order debt',async({browser})=>{
+ test.setTimeout(180000)
+ const f=await seed(),{context,page}=await login(browser,f.origin,f.users.admin.email)
+ try{
+  await f.db.query('INSERT INTO "TenantModule" ("tenantId",key,allowed,enabled,"updatedAt") SELECT $1,k,true,true,now() FROM unnest($2::text[]) k',[f.slug,['salesOrders','receivables','invoicing']])
+  const contact=await json(context,'/api/crm/contacts',201,'POST',{name:'QA Invoice Customer'}),pipeline=await json(context,'/api/crm/pipelines',201,'POST',{name:'QA invoice sales',stages:[{name:'Open',kind:'OPEN',probability:10,color:'#123456'},{name:'Won',kind:'WON',probability:100,color:'#00aa00'},{name:'Lost',kind:'LOST',probability:0,color:'#aa0000'}]})
+  const deal=await json(context,'/api/crm/opportunities',201,'POST',{title:'QA shared invoice source',contactId:contact.id,assignedUserId:f.users.admin.id,pipelineId:pipeline.id,stageId:pipeline.stages[0].id,amount:'100',currency:'INR',expectedCloseOn:'2027-01-01'}),quote=await json(context,`/api/crm/opportunities/${deal.id}/quotations`,201,'POST',{content:{...structuredClone(emptyQuotationContent),supplierName:'QA Shared Industries',currency:'INR',lines:[{description:'Shared service',quantity:'1',unit:'each',rate:'100'}],instalments:[{label:'Initial',percent:'20',days:0,note:''},{label:'Balance',percent:'80',days:30,note:''}]}})
+  const order=await json(context,'/api/sales-orders',200,'POST',{quotationId:quote.id,revision:1,orderedOn:'2026-01-01'});await json(context,`/api/sales-orders/${order.id}`,200,'PATCH',{action:'confirm',version:1})
+  await json(context,`/api/sales-orders/${order.id}/receivables`,200,'POST',{dueDates:[null,null]})
+  const payment=await json(context,`/api/sales-orders/${order.id}/receivables/payments`,200,'POST',{requestKey:crypto.randomUUID(),version:1,amount:'30',receivedOn:'2026-01-01',method:'BANK_TRANSFER',reference:'QA-INVOICE-TXN',note:''})
+  await page.goto('/settings/documents')
+  for(const name of ['Commercial invoice','Commercial credit note']){
+   await page.getByLabel('Document type',{exact:true}).click();await page.getByRole('menuitemradio',{name,exact:true}).click();await expect(page.getByLabel('Document title',{exact:true})).toHaveValue(name)
+   await page.getByLabel('Issuing company address',{exact:true}).fill('QA company office, Pune');await page.getByLabel('Enable new issuance with this version').check();await page.getByLabel('I have reviewed the wording').check();await page.getByRole('button',{name:'Publish template version',exact:true}).click();await expect(page.getByRole('heading',{name:/version 1$/})).toBeVisible()
+  }
+  await page.goto(`/sales-orders/${order.id}`);await page.getByRole('button',{name:'Create invoice draft',exact:true}).click();await page.getByLabel('Invoice date',{exact:true}).fill('2026-01-01');await page.getByLabel('Customer note',{exact:true}).fill('Please quote this invoice number.');await page.getByRole('button',{name:'Create draft',exact:true}).click();await expect(page).toHaveURL(/\/sales-orders\/invoices\//)
+  const id=page.url().split('/').pop()!,endpoint=`/api/customer-invoices/${id}`,pdfs=page.getByRole('region',{name:'Invoice and credit-note PDFs',exact:true})
+  await page.getByRole('button',{name:'Post invoice',exact:true}).click();await page.getByRole('button',{name:'Confirm posting',exact:true}).click();await expect(page.getByRole('heading',{name:/INV\/\d+/})).toBeVisible();await expect(page.getByRole('button',{name:'Post invoice',exact:true})).toHaveCount(0)
+  await page.getByRole('button',{name:'Apply recorded payment',exact:true}).click();await page.getByLabel('Recorded payment',{exact:true}).click();await page.getByRole('option',{name:/QA-INVOICE-TXN/}).click();await page.getByLabel('Amount (INR)',{exact:true}).fill('30');await page.getByRole('button',{name:'Apply payment',exact:true}).click();await expect(page.getByRole('article').filter({hasText:'QA-INVOICE-TXN'})).toContainText('Applied')
+  expect((await json(context,endpoint)).payments.paid).toBe('30')
+  await pdfs.getByRole('button',{name:'Prepare document',exact:true}).click();await expect(pdfs.getByRole('button',{name:'Download draft preview',exact:true})).toBeVisible();const download=page.waitForEvent('download');await pdfs.getByRole('button',{name:'Download draft preview',exact:true}).click();await(await download).saveAs(test.info().outputPath('commercial-invoice.pdf'))
+  await pdfs.getByRole('button',{name:'Issue document',exact:true}).click();await page.getByRole('button',{name:'Confirm issuance',exact:true}).click();await expect(pdfs.getByRole('link',{name:'Download issued PDF',exact:true})).toHaveCount(1)
+  const issued=(await json(context,endpoint+'/documents')).items[0];await page.setViewportSize({width:390,height:844});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await pdfs.screenshot({path:test.info().outputPath('invoice-issued-mobile.png'),animations:'disabled'})
+  await page.getByRole('button',{name:'Full credit note',exact:true}).click();await page.getByLabel('Credit date',{exact:true}).fill('2026-01-01');await page.getByLabel('Reason',{exact:true}).fill('QA replacement agreement');await page.getByRole('button',{name:'Confirm full credit',exact:true}).click();await expect(page.getByRole('heading',{name:'Full commercial credit',exact:true})).toBeVisible()
+  const invoice=await json(context,endpoint),state=await json(context,`/api/sales-orders/${order.id}/receivables`);expect(invoice.status).toBe('CREDITED');expect(invoice.payments.paid).toBe('0');expect(state.paid).toBe('30');expect(state.outstanding).toBe('70');expect(state.account.version).toBe(2);expect(invoice.payments.items[0].paymentId).toBe(payment.id)
+  expect((await context.request.get(`${endpoint}/documents/${issued.id}/pdf?providerKey=commercial-invoice`,{maxRedirects:0})).status()).toBe(409)
+  await expect(pdfs.getByRole('link',{name:'Download historical original PDF',exact:true})).toHaveAttribute('href',/acknowledgeHistorical=true/)
+  await pdfs.getByRole('button',{name:'Prepare document',exact:true}).click();await expect(pdfs.getByRole('button',{name:'Download draft preview',exact:true})).toBeVisible();const creditDownload=page.waitForEvent('download');await pdfs.getByRole('button',{name:'Download draft preview',exact:true}).click();await(await creditDownload).saveAs(test.info().outputPath('commercial-credit.pdf'));await pdfs.getByRole('button',{name:'Issue document',exact:true}).click();await page.getByRole('button',{name:'Confirm issuance',exact:true}).click();await expect(pdfs.getByRole('link',{name:'Download issued PDF',exact:true})).toHaveCount(1)
+  await page.setViewportSize({width:1440,height:1000});await pdfs.screenshot({path:test.info().outputPath('invoice-credit-desktop.png'),animations:'disabled'})
+ }finally{await context.close();await f.db.end()}
+})

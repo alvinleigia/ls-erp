@@ -41,6 +41,8 @@ export async function renderBusinessDocument(document: PrintableDocument, previe
   function paragraph(value: string, size = 10, color = ink) { if (!value) return; for (const line of wrap(value,width,size)) { ensure(size+7); page.drawText(line,{x:margin,y,size,font,color}); y-=size+6 }; y-=6 }
   function formatted(node:Extract<DocumentFlow[number],{runs:unknown}>) {
     const size=node.type==="heading"?node.level===1?17:node.level===3?11:13:10
+    // Keep a template heading with the first line of the following content.
+    if(node.type==="heading")ensure(Math.min(240,wrap(node.runs.map(run=>run.text).join(""),width,size).length*(size+6)+35))
     type Piece={text:string;font:PDFFont;width:number}
     let line:Piece[]=[],used=0
     function flush(){ensure(size+7);let x=margin+(node.align==="center"?(width-used)/2:node.align==="right"?width-used:0);for(const piece of line){page.drawText(piece.text,{x,y,size,font:piece.font,color:ink});x+=piece.width}y-=size+6;line=[];used=0}

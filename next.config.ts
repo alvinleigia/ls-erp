@@ -18,6 +18,8 @@ const nextConfig: NextConfig = {
     "/api/document-templates/preview": ["./public/assets/fonts/NotoSans-*.ttf"],
     "/api/payment-receipts/*/documents/preview": ["./public/assets/fonts/NotoSans-*.ttf"],
     "/api/payment-receipts/*/documents/issue": ["./public/assets/fonts/NotoSans-*.ttf"],
+    "/api/customer-invoices/*/documents/preview": ["./public/assets/fonts/NotoSans-*.ttf"],
+    "/api/customer-invoices/*/documents/issue": ["./public/assets/fonts/NotoSans-*.ttf"],
   },
 };
 
