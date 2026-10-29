@@ -1,3 +1,28 @@
+## P10 payment receipt documents - staging verified
+
+Source 22e3237 is READY on all four staging aliases. Receivables reuses the shared
+template editor, source controls and issuance engine for actual posted payments.
+Receipts retain paid amounts, dates, methods, transaction references, allocations
+and accepted customers; no second payment or tax invoice is created. Tenant-wide
+RCT numbers and linked immutable replacements use a private transactional counter.
+Reversed payments block new issuance; explicitly acknowledged historical downloads
+reuse exact archived bytes. Independent receipt permissions retain parent Read,
+record/office/sharing bounds and current activation, without automatic grants.
+
+Migration 137 was applied only to staging after an encrypted readable application
+backup; all 137 prior tables' rows, policies and functions remained unchanged.
+Rollback/preservation rehearsal passed. Native receipt/access/numbering/race/audit
+tests, four browser cases, storage/recovery checks, build/TypeScript, lint and font
+tracing passed; a corrected hidden-office fixture was rechecked. Hosted QA issued
+a real private PDF, refunded through the UI, proved unchanged historical bytes,
+and denied foreign tenants, malformed inputs and cross-origin writes. PDF pages
+and readable desktop/mobile captures were inspected. Recovery includes receipts.
+
+The local disposable fixture was removed. QA receipt issuance is disabled again;
+only explicitly synthetic staging records/files were created. Production aliases
+and GitHub main remain at 4546cb2. No production write, environment update or Git
+push. See docs/PAYMENT_RECEIPTS_P10.md for usage, scope and evidence limits.
+
 ## P9 quotation and payment-plan layouts - staging verified
 
 Source 014bf50 is READY on all four staging aliases. Quotations and existing

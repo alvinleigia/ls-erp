@@ -1,5 +1,10 @@
 # Payment receipt documents - P10
 
+Deployed and verified on staging on 2026-10-30 from `22e3237`.
+Deployment `dpl_Fe9GrZWRDgF3aRurFdb77BCcqGgr` is READY on all four staging
+aliases. Production aliases and GitHub main remain at `4546cb2`. Migration 137
+was applied only to staging; no environment update, Git push or production write.
+
 ## Usage
 
 1. In Settings > Company document templates, select the issuing company and
@@ -78,7 +83,31 @@ new receipt cases. Five storage/recovery checks passed after adding receipt
 references. Four final browser cases passed, including three existing document
 regressions and the new partial-payment/issuance/refund/historical-download flow.
 
-Build/TypeScript, targeted lint, whitespace and font tracing are checked before
-release. Generated receipt pages and desktop/mobile evidence are inspected.
-Hosted deployment and migration results are recorded after staging verification.
-Production remains outside this phase.
+Build/TypeScript, targeted lint, whitespace and all four font faces traced to
+receipt preview/issuance passed. Generated receipt pages and readable
+desktop/mobile payment-card captures were inspected. The owned disposable local
+database container was removed after verification.
+
+The staging operator preflight verified the expected project and 136 existing
+migrations, allowing only equivalent LF/CRLF checksums. It created an encrypted,
+private application-schema backup, verified decryption/checksum and custom archive
+readability, and applied the additive migration transactionally. Existing rows
+in all 137 prior tables, prior policies and prior functions remained unchanged.
+The backup archive was not subjected to a full restore rehearsal in this phase;
+the migration's rollback/preservation rehearsal ran on the disposable database.
+
+Hosted QA used ordinary APIs/UI and bundled Chromium with normal HTTP transport,
+without hosted fixture/seed/reset SQL or network mocks. Template samples did not
+publish, draft previews did not issue, and a real private-storage PDF was issued
+for a partial payment without changing ledger balances/version. A refund through
+the UI blocked new issuance and silent original downloads; an acknowledged
+historical download returned the identical PDF checksum. Cross-tenant access,
+malformed inputs and cross-origin writes were denied, with no page errors or
+mobile overflow. Internal payment notes were absent from the actual issued PDF.
+
+One initial hosted attempt began before alias promotion finished and reached the
+old provider registration. Its clearly named synthetic payment was corrected and
+its order cancelled through ordinary APIs, before restarting after readiness.
+The final run retained one refunded QA payment and one historical PDF; its QA
+receipt template was disabled in a new published version after verification.
+No pilot/production business record was used or changed.
