@@ -63,7 +63,7 @@ export function ModuleControls({ tenantId }: { tenantId?: string }) {
     {!loading && !error && !canManage && <p className="text-sm text-muted-foreground">Ask a business administrator to change enabled modules.</p>}
     <Dialog open={!!pending} onOpenChange={open => { if (!saving && !open) setPending(null) }}><DialogContent>
       <DialogHeader><DialogTitle>{platform ? "Remove allowance for" : "Disable"} {pending?.name}?</DialogTitle><DialogDescription>
-        {pending?.parent ? "New instalment schedules and edits to scheduled documents will be disabled. Saved versions remain readable and downloadable." : "Users will lose access to this module. Its records will be kept."}
+        {pending?.key === "paymentPlans" ? "New instalment schedules and edits to scheduled documents will be disabled. Saved versions remain readable and downloadable." : "Users will lose access to this module. Its records will be kept."}
         {platform ? " The tenant administrator cannot enable it again until you allow it." : " You can enable it again while the platform allows it."}
       </DialogDescription></DialogHeader>
       <DialogFooter><Button variant="outline" disabled={saving} onClick={() => setPending(null)}>Cancel</Button><Button loading={saving} onClick={() => pending && void save(pending)}>{platform ? "Remove allowance" : "Disable module"}</Button></DialogFooter>
