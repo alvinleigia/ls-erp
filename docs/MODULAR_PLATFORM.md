@@ -1,3 +1,35 @@
+## P11 commercial invoices and credit notes - staging verified
+
+Source 5c26775 is READY on all four staging aliases. Full-order commercial
+invoices reuse accepted customers, prices, discounts and charges without creating
+a second receivable. Draft/post/cancel, explicit existing-payment applications
+and releases, full credit notes, private INV/CN numbering and immutable history
+use canonical Sales Order ancestry, current profiles/modules, office RLS and
+Restricted sharing. Posted invoices block order cancellation even with Invoicing
+disabled. This increment is not statutory GST or partial/milestone billing.
+
+Company invoice/credit templates reuse the shared structured editor and issuance
+engine. Issued files and replacements are immutable; credited invoice originals
+require explicit acknowledgement and return exact archived bytes. Recovery covers
+both PDF types. Rich template headings now stay with following content; module
+disable confirmation distinguishes payment-plan wording from ordinary modules.
+
+Migration 138 was applied only to staging after a readable encrypted application
+backup. All 139 prior tables' rows, policies and functions remained unchanged;
+forced rollback/preservation rehearsal passed. The 67-case invoice/order/payment/
+receipt regression suite, two browser flows, six layout and four recovery checks,
+build/TypeScript, lint and all four PDF font traces passed. Hosted QA issued real
+private invoice and credit PDFs, credited through the UI, preserved historical
+bytes and order balances, and denied foreign tenants, malformed and cross-origin
+writes. All PDF pages and readable desktop/mobile captures were inspected. Only
+isolated QA tenants had Invoicing enabled; their new templates were disabled after
+verification, with clearly marked synthetic histories retained.
+
+Production deployment dpl_EkQhmuCQqrwuxoRgR5vMMDx9kuFG, all three production aliases,
+GitHub main 4546cb2 and the root production project link are unchanged. No main
+push or production deployment. See docs/COMMERCIAL_INVOICES_P11.md for usage,
+access boundaries, migration and the explicit commercial scope.
+
 ## P10 payment receipt documents - staging verified
 
 Source 22e3237 is READY on all four staging aliases. Receivables reuses the shared
