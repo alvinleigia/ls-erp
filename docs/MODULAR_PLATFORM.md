@@ -1,3 +1,17 @@
+## Participant/document production preflight - P6C
+
+A fresh encrypted pilot snapshot restored and upgraded from 132 to 136
+migrations in an isolated copy. Seven accounts retained all 161 resource/action
+decisions and 1,235 record/action bindings. Original values/IDs, profiles,
+grants, roles, history and both logo references/files are preserved. Eight
+existing-session read-only API checks and Dashboard rendering passed.
+
+The proposed release retains P6B's tested application, with documentation-only
+additions. A main push dry run passed. Production remains open at f9e24db,
+with 132 migrations; no live freeze, migration, push or deployment occurred.
+Execution awaits the separately agreed maintenance window because all tenants
+will briefly lose access. See [P6C runbook](PARTICIPANTS_PRODUCTION_CUTOVER.md).
+
 ## Participant and document staging release - P6B
 
 P1-P5 are deployed to the staging project at ae3e491, with 136 applied

@@ -144,3 +144,6 @@ it is not a new exhaustive test of every existing ERP module or future workflow.
 verified production recovery artifacts, migration/deployment reconciliation and
 access verification before reopening. Staging approval does not publish a
 production company's wording or expand its saved staff profiles.
+
+The [P6C preflight and cutover runbook](PARTICIPANTS_PRODUCTION_CUTOVER.md) records
+the fresh pilot-copy check and the remaining agreed-window execution.
