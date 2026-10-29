@@ -1,11 +1,11 @@
 # Shared customer participation and booking plan
 
-Research date: 2026-10-28. Status: P1-P5 implemented; P6A pilot-copy rehearsal
-and P6B hosted staging release/acceptance complete. See
-[P6B evidence](PARTICIPANTS_STAGING_RELEASE.md) and [P5 delivery evidence](DOCUMENT_ISSUANCE_P5.md).
-R10 production phase 6F is complete.
-No production deployment/migration or alteration of existing customer records is
-part of these increments. Hosted staging deployment evidence is separate from local verification.
+Research date: 2026-10-28. Status: P1-P5 implemented and P6 production release
+complete. Both hosted environments have the 136-migration schema, with separate
+business data. Original pilot values, IDs and access were preserved. See
+[P6C production evidence](PARTICIPANTS_PRODUCTION_RELEASE.md),
+[P6B staging evidence](PARTICIPANTS_STAGING_RELEASE.md) and
+[P5 delivery evidence](DOCUMENT_ISSUANCE_P5.md).
 
 ## Decision
 

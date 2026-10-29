@@ -1,5 +1,8 @@
 # Participant and document release - P6B staging
 
+Follow-up: [P6C production release](PARTICIPANTS_PRODUCTION_RELEASE.md) is complete.
+This document retains the original P6B checkpoint and its observed targets.
+
 Completed on 2026-10-29 (Asia/Kolkata). P1-P5 are deployed and verified on
 [staging](https://ls-erp-staging.vercel.app). Production remains on its earlier
 R10 release. No production migration, deployment or Git push occurred.

@@ -1,5 +1,9 @@
 # Participant/document production cutover - P6C
 
+Execution completed under explicit user approval. See
+[the production release record](PARTICIPANTS_PRODUCTION_RELEASE.md).
+This runbook retains the original preflight checkpoint and cutover procedure.
+
 Prepared on 2026-10-29 (Asia/Kolkata). Read-only production preflight and a fresh
 isolated pilot-copy upgrade passed. Production remains open on R10. No live
 freeze, migration, branch push or deployment has been performed by this checkpoint.

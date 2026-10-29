@@ -1,3 +1,25 @@
+## Participant/document production release - P6C complete
+
+Release 579d642 is pushed to GitHub main and READY in production, with all
+three production domains verified. All 136 migrations are applied; the 137
+history attempts retain the one original rollback exactly. Production is open
+after a 10-minute-30-second access barrier. Staging routing remains unchanged.
+
+The final encrypted backup restored and upgraded in isolation. Original values
+in 132 application tables, all original history rows, profiles, rules, grants,
+assignments, offices, sharing, snapshots and financial rows are preserved.
+Five new tables started empty; no historical facts were invented.
+
+Live ordinary-role checks matched all seven accounts, 161 action decisions and
+1,235 record/action bindings; foreign-tenant reads remain denied. Sixteen API
+status checks, two visually inspected heading captures, final security/role
+verification and exact recovery/download checks for both stored logos passed.
+No business fixtures or transactions were created for production testing.
+
+New requirements/templates remain unpublished; modules and saved staff profiles
+are not expanded by deployment. Post-release notes remain local to avoid a
+second build. See [P6C production evidence](PARTICIPANTS_PRODUCTION_RELEASE.md).
+
 ## Participant/document production preflight - P6C
 
 A fresh encrypted pilot snapshot restored and upgraded from 132 to 136
