@@ -14,6 +14,8 @@ import type { DocumentIdentity, DocumentProvider, DocumentStorage, StoredDocumen
 import { createDocumentService, validateDocumentSize, type DocumentOwner } from "@/platform/documents/service"
 import { documentHash } from "@/platform/documents/hash"
 import { documentContentSchema } from "@/platform/documents/validation"
+import { resolveDocumentLayout } from "@/platform/documents/layout"
+import { orderTemplateValues,orderTemplateBlocks } from "./document-template"
 export type OrderDocumentContext={order:SalesOrder;snapshot:QuotationSnapshot;date:string;office:{id:string;version:number;archived:boolean};company:{id:string;name:string;version:number;archived:boolean}}
 const json=(value:unknown)=>JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue
 export function createOrderDocumentService(db:PrismaClient,identity:DocumentIdentity,providers:readonly DocumentProvider<OrderDocumentContext>[],storage:DocumentStorage,render?:Parameters<typeof createDocumentService<OrderDocumentContext>>[4]) {
@@ -42,8 +44,10 @@ export function createOrderDocumentService(db:PrismaClient,identity:DocumentIden
       const version=(previous?.version??0)+1,reference=`${order.reference}/${provider.code}/${String(version).padStart(3,"0")}`
       const {blocks,evidence}=await provider.blocks(tx,actor,context)
       const payload={format:1 as const,title:content.title,reference,date:context.date,sourceReference:order.reference,company:{id:company.id,name:company.name},issuer:{address:content.address,contact:content.contact,signatory:content.signatory},opening:content.opening,terms:content.terms,branding:content.useTenantLogo?await readDocumentBranding(tx,actor.tenantId):null,blocks}
-      validateDocumentSize(payload)
-      const prepared={providerKey:provider.key,templateVersion:template.version,version,supersedesId:input.supersedesId,payload,evidence}
+      const body=content.layout?resolveDocumentLayout(content.layout,provider.templateCatalog,orderTemplateValues(context,content,reference),orderTemplateBlocks(context,blocks)):undefined
+      const composed={...payload,...(body?{body}:{})}
+      validateDocumentSize(composed)
+      const prepared={providerKey:provider.key,templateVersion:template.version,version,supersedesId:input.supersedesId,payload:composed,evidence}
       return {...prepared,fingerprint:documentHash({prepared,orderVersion:order.version,companyVersion:company.version,officeVersion:office.version,reason:input.reason})}
     },
     async find(tx,actor,sourceId,selector){

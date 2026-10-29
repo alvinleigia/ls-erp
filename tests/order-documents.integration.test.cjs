@@ -176,3 +176,28 @@ test('historical missing property evidence has no live fallback; explicit saved-
  const saved=await crm.saveQuotation(d.id,{version:1,content:{...content(f.items),lines:content(f.items).lines.map(row=>({...row,refreshCatalogItem:true}))}},q.id),current=await crm.getQuotation(saved.id)
  assert.equal(current.snapshot.items[0].documentEvidence.key,'realEstate');assert.equal(JSON.stringify(current.snapshot).includes('refreshCatalogItem'),false);assert.equal((await orders.get(o.id)).snapshot.items[0].documentEvidence,undefined)
 })
+
+
+test('editable layouts preview sample data without writes, freeze accepted fields and retain current authorization',async()=>{
+ const current=await templates().get(company.id,ACK),layout=structuredClone(current.content.layout)
+ layout.content.unshift({type:'paragraph',content:[{type:'text',text:'QA Welcome ',marks:[{type:'bold'}]},{type:'documentField',attrs:{key:'customer.name'}},{type:'text',text:' | '},{type:'documentField',attrs:{key:'order.total'}}]})
+ const draft={companyId:company.id,providerKey:ACK,version:current.version,content:{...current.content,layout}}
+ const before={templates:await root.businessDocumentTemplate.count({where:{tenantId:tenant}}),documents:await root.salesOrderDocument.count({where:{tenantId:tenant}}),audits:await root.auditLog.count({where:{tenantId:tenant}})}
+ const sample=await templates().preview(draft);assert.equal(Buffer.from(sample).subarray(0,5).toString(),'%PDF-')
+ assert.deepEqual({templates:await root.businessDocumentTemplate.count({where:{tenantId:tenant}}),documents:await root.salesOrderDocument.count({where:{tenantId:tenant}}),audits:await root.auditLog.count({where:{tenantId:tenant}})},before)
+ await assert.rejects(templates(staff).preview(draft),status(403))
+ const other=await root.businessCompany.create({data:{tenantId:foreignTenant,name:'QA Foreign Preview',code:'QAFOREIGN'}})
+ await assert.rejects(templates().preview({...draft,companyId:other.id}),status(404))
+ const bad=structuredClone(layout);bad.content.unshift({type:'paragraph',content:[{type:'documentField',attrs:{key:'customer.password'}}]})
+ await assert.rejects(async()=>templates().publish({...draft,content:{...draft.content,layout:bad},reviewed:true}),status(400))
+ await assert.rejects(templates().preview({...draft,content:{...draft.content,layout:bad}}),status(400))
+ await templates().publish({...draft,reviewed:true});await assert.rejects(templates().preview(draft),status(409))
+ try{
+  const f=await fixture(),prepared=await docs().prepare(f.order.id,{providerKey:ACK}),first=prepared.payload.body[0]
+  assert.equal(first.type,'paragraph');assert.equal(first.runs[1].text,f.order.snapshot.customer.name);assert.equal(first.runs[0].bold,true);assert.ok(first.runs[3].text.includes('300'))
+  const row=await docs().issue(f.order.id,input(prepared)),frozen=structuredClone(row.snapshot.payload.body),original=objects.get(row.archive.path)
+  await publish(ACK,{opening:'Changed future wording'})
+  await docs().download(f.order.id,row.id,ACK);assert.deepEqual(objects.get(row.archive.path),original)
+  assert.deepEqual((await root.salesOrderDocument.findUnique({where:{tenantId_id:{tenantId:tenant,id:row.id}}})).snapshot.payload.body,frozen)
+ }finally{await publish(ACK,current.content)}
+})

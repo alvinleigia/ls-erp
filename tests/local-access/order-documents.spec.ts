@@ -15,6 +15,41 @@ async function source(context:BrowserContext,userId:string,items:{id:string;vers
 }
 async function publish(context:BrowserContext,companyId:string,providerKey:string){const current=await json(context,`/api/document-templates?${new URLSearchParams({companyId,providerKey})}`);await json(context,'/api/document-templates',200,'PUT',{companyId,providerKey,version:current.version,reviewed:true,content:{...current.content,enabled:true,address:'QA office, Pune',terms:'QA approved company terms'}})}
 
+test('visual template editor inserts dynamic fields, previews without publication and persists a reviewed layout on mobile',async({browser})=>{
+ test.setTimeout(180000)
+ const f=await seed(),{page,context}=await login(browser,f.origin,f.users.admin.email)
+ try{
+  await modules(f,['salesOrders','catalog','realEstate'])
+  await page.goto('/settings/documents')
+  const editor=page.getByRole('textbox',{name:'Document layout',exact:true})
+  await expect(editor).toBeVisible()
+  await expect(page.getByLabel('Document type',{exact:true})).toBeEnabled()
+  await page.getByLabel('Document type',{exact:true}).click();await page.getByRole('menuitemradio',{name:'Booking intimation letter',exact:true}).click()
+  await expect(page.getByLabel('Document title',{exact:true})).toHaveValue('Booking intimation letter')
+  await page.getByLabel('Document type',{exact:true}).click();await page.getByRole('menuitemradio',{name:'Order acknowledgement',exact:true}).click()
+  await expect(page.getByLabel('Document title',{exact:true})).toHaveValue('Order acknowledgement')
+  await page.getByRole('button',{name:'Add paragraph',exact:true}).click();await page.keyboard.type('Dear ')
+  await page.getByLabel('Dynamic field',{exact:true}).click();await page.getByRole('menuitemradio',{name:'Customer name',exact:true}).click()
+  await page.getByRole('button',{name:'Insert field',exact:true}).click()
+  await expect(editor.getByText('Customer name',{exact:true})).toBeVisible()
+  const previewRequest=page.waitForRequest(r=>r.url().endsWith('/api/document-templates/preview'))
+  const downloading=page.waitForEvent('download');await page.getByRole('button',{name:'Download sample preview',exact:true}).click()
+  const download=await downloading;await download.saveAs(test.info().outputPath('p8-template-sample.pdf'))
+  const draft=(await previewRequest).postDataJSON();expect(JSON.stringify(draft.content.layout)).toContain('customer.name')
+  const unchanged=await json(context,`/api/document-templates?${new URLSearchParams({companyId:draft.companyId,providerKey:draft.providerKey})}`)
+  expect(unchanged.version).toBe(0)
+  await page.getByRole('button',{name:'Use starter layout',exact:true}).click();await page.getByRole('button',{name:'Cancel',exact:true}).click()
+  await expect(editor.getByText('Customer name',{exact:true})).toBeVisible()
+  await page.getByLabel('Enable new issuance with this version').check();await page.getByLabel('I have reviewed the wording').check()
+  await page.getByRole('button',{name:'Publish template version',exact:true}).click();await expect(page.getByRole('heading',{name:/version 1$/})).toBeVisible()
+  await expect(page.getByLabel('Document type',{exact:true})).toBeEnabled()
+  await page.reload();await expect(editor.getByText('Customer name',{exact:true})).toBeVisible()
+  await page.setViewportSize({width:390,height:844});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true)
+  await editor.scrollIntoViewIfNeeded();await page.screenshot({path:test.info().outputPath('p8-template-editor-mobile.png'),fullPage:true,animations:'disabled'})
+  await page.setViewportSize({width:1440,height:1000});await page.screenshot({path:test.info().outputPath('p8-template-editor-desktop.png'),fullPage:true,animations:'disabled'})
+ }finally{await context.close();await f.db.end()}
+})
+
 test('reviewed company template, generic preview, immutable issuance, stale draft and linked replacement on desktop/mobile',async({browser})=>{
  test.setTimeout(180000)
  const f=await seed(),{page,context}=await login(browser,f.origin,f.users.admin.email)
