@@ -289,3 +289,43 @@ test('upload failure leaves a draft unissued and module or permission denial pre
  await resetFixtureRoles(root,{where:{tenantId:tenant,userId:manager.id}})
  }finally{storage.uploadQuotationPdf=original;await root.tenantModule.update({where:{tenantId_key:{tenantId:tenant,key:'salesDocuments'}},data:{enabled:true}})}
 })
+
+
+test('custom layouts follow named templates into immutable quotation revisions without changing prices or old designs',async()=>{
+ const {starterDocumentLayout}=require('../platform/documents/layout.ts'),{quotationLayoutCatalog}=require('../modules/sales-documents/quotation-layout-catalog.ts'),{quotationLayoutDocument}=require('../modules/sales-documents/quotation-layout.ts')
+ const layout=starterDocumentLayout(quotationLayoutCatalog);layout.content.unshift({type:'paragraph',content:[{type:'text',text:'Dear '},{type:'documentField',attrs:{key:'customer.name'}},{type:'text',text:' | '},{type:'documentField',attrs:{key:'quote.total'}}]})
+ const template=await crm.saveQuotationTemplate({name:'QA P9 reusable design',content:content({layout})}),selected=await crm.getQuotationTemplate(template.id)
+ const q=await crm.saveQuotation(deal.id,{templateId:template.id,content:selected.content}),first=await crm.getQuotation(q.id,1),frozen=structuredClone(first.snapshot)
+ assert.deepEqual(first.snapshot.content.layout,layout);assert.equal(first.snapshot.template.version,1)
+ const d=quotationLayoutDocument(first);assert.equal(d.body[0].runs[1].text,first.snapshot.customer.name)
+ await crm.saveQuotationTemplate({name:selected.name,version:1,content:{...selected.content,layout:{...layout,content:[{type:'paragraph',content:[{type:'text',text:'New template wording'}]},...layout.content]}}},template.id)
+ assert.deepEqual((await crm.getQuotation(q.id,1)).snapshot,frozen)
+ const bad=structuredClone(layout);bad.content.unshift({type:'paragraph',content:[{type:'documentField',attrs:{key:'customer.password'}}]})
+ await assert.rejects(async()=>crm.saveQuotation(deal.id,{version:1,content:content({layout:bad})},q.id))
+ await crm.saveQuotation(deal.id,{version:1,content:content()},q.id);assert.equal((await crm.getQuotation(q.id,2)).snapshot.content.layout,undefined);assert.deepEqual((await crm.getQuotation(q.id,1)).snapshot,frozen)
+ await assert.rejects(otherCrm.getQuotation(q.id,1),status(404));await assert.rejects(foreign.getQuotation(q.id,1),status(404))
+})
+
+test('layout samples use synthetic facts only, write no documents or audit rows and retain current module/action checks',async()=>{
+ const {starterDocumentLayout}=require('../platform/documents/layout.ts'),{quotationLayoutCatalog}=require('../modules/sales-documents/quotation-layout-catalog.ts'),layout=starterDocumentLayout(quotationLayoutCatalog)
+ const counts=async()=>Promise.all([root.crmQuotation.count({where:{tenantId:tenant}}),root.crmQuotationRevision.count({where:{tenantId:tenant}}),root.crmQuotationTemplate.count({where:{tenantId:tenant}}),root.auditLog.count({where:{tenantId:tenant}})])
+ const before=await counts(),bytes=await crm.previewQuotationLayout({layout});assert.equal(Buffer.from(bytes).subarray(0,5).toString(),'%PDF-');assert.deepEqual(await counts(),before)
+ await assert.rejects(crm.previewQuotationLayout({layout,customerId:contact.id}))
+ await root.tenantModule.update({where:{tenantId_key:{tenantId:tenant,key:'salesDocuments'}},data:{enabled:false}})
+ try{await assert.rejects(crm.previewQuotationLayout({layout}),status(403))}finally{await root.tenantModule.update({where:{tenantId_key:{tenantId:tenant,key:'salesDocuments'}},data:{enabled:true}})}
+ const role=await fixtureProfile(root,{data:{tenantId:tenant,name:'P9 layout reader',nameKey:randomUUID(),permissions:['quotations.read','quotations.export','quotationTemplates.read']}})
+ await fixtureRole(root,{data:{tenantId:tenant,userId:manager.id,roleId:role.id}})
+ try{await assert.rejects(crm.previewQuotationLayout({layout}),status(403))}finally{await resetFixtureRoles(root,{where:{tenantId:tenant,userId:manager.id}})}
+})
+
+test('custom-layout issuance archives exact real PDF bytes once and retains them after template/layout changes',async()=>{
+ const {starterDocumentLayout}=require('../platform/documents/layout.ts'),{quotationLayoutCatalog}=require('../modules/sales-documents/quotation-layout-catalog.ts'),storage=require('../platform/storage/documents.ts')
+ const original={upload:storage.uploadQuotationPdf,remove:storage.removeUnusedPdf},files=new Map()
+ storage.uploadQuotationPdf=async(t,id,version,bytes)=>{const path=t+'/quotations/'+id+'/'+version+'/'+randomUUID()+'.pdf';files.set(path,Buffer.from(bytes));return{path,bytes:bytes.length,sha256:require('node:crypto').createHash('sha256').update(bytes).digest('hex')}}
+ storage.removeUnusedPdf=async path=>files.delete(path)
+ try{
+  const layout=starterDocumentLayout(quotationLayoutCatalog),q=await crm.saveQuotation(deal.id,{content:content({layout})}),first=await crm.issueQuotation(q.id,1),bytes=Buffer.from(files.get(first.path))
+  assert.equal(bytes.subarray(0,5).toString(),'%PDF-');const next=structuredClone(layout);next.content.reverse();await crm.saveQuotation(deal.id,{version:1,content:content({layout:next})},q.id);await crm.issueQuotation(q.id,2)
+  assert.deepEqual(await crm.issueQuotation(q.id,1),first);assert.deepEqual(files.get(first.path),bytes);assert.equal(files.size,2)
+ }finally{storage.uploadQuotationPdf=original.upload;storage.removeUnusedPdf=original.remove}
+})

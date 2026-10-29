@@ -1,4 +1,6 @@
 import { z } from "zod"
+import { documentLayoutSchema,validateDocumentLayout } from "@/platform/documents/layout"
+import { quotationLayoutCatalog } from "./quotation-layout-catalog"
 
 const text = (max: number) => z.string().trim().max(max)
 const decimal = z.string().regex(/^\d{1,12}(\.\d{1,4})?$/, "Enter a positive number with up to four decimal places.")
@@ -20,7 +22,9 @@ export const quotationContentSchema = z.object({
   instalments: z.array(z.object({ label: text(150).min(1), percent: decimal.refine(value => Number(value) > 0 && Number(value) <= 100), days: z.number().int().min(0).max(36500), note: text(300) }).strict()).max(30),
   bank: z.object({ accountName: text(200), accountNumber: text(100), accountType: text(100), bankName: text(200), branch: text(200), routingCode: text(100) }).strict(),
   terms: text(10000),
+  layout: documentLayoutSchema.optional(),
 }).strict().superRefine((data, ctx) => {
+  if(data.layout)try{validateDocumentLayout(data.layout,quotationLayoutCatalog)}catch(error){ctx.addIssue({code:"custom",path:["layout"],message:(error as Error).message})}
   if (data.instalments.some(item => !/^\d{1,12}(\.\d{1,4})?$/.test(item.percent))) return
   const total = data.instalments.reduce((sum, item) => { const [whole, decimal = ""] = item.percent.split("."); return sum + BigInt(whole) * BigInt(10000) + BigInt(decimal.padEnd(4, "0")) }, BigInt(0))
   if (data.instalments.length && total !== BigInt(1000000)) ctx.addIssue({ code: "custom", path: ["instalments"], message: "Instalment percentages must total exactly 100%." })

@@ -20,7 +20,7 @@ export const documentLayoutSchema = z.object({ type: z.literal("doc"), content: 
   if (JSON.stringify(value).length > 60000) ctx.addIssue({ code: "custom", message: "Keep the layout under 60,000 characters." })
 })
 export type DocumentLayout = z.infer<typeof documentLayoutSchema>
-export type TemplateCatalog = { fields: { key: string; label: string }[]; sections: { key: string; label: string; required: boolean }[] }
+export type TemplateCatalog = { fields: { key: string; label: string }[]; sections: { key: string; label: string; required: boolean }[]; starter?: DocumentLayout }
 export type DocumentRun = { text: string; bold?: boolean; italic?: boolean }
 export type DocumentFlow = ({ type: "paragraph" | "heading"; level?: number; align: "left" | "center" | "right"; runs: DocumentRun[] } | { type: "section"; blocks: DocumentBlock[] } | { type: "pageBreak" })[]
 
@@ -41,6 +41,7 @@ export function validateDocumentLayout(value: unknown, catalog: TemplateCatalog)
   return layout
 }
 export function starterDocumentLayout(catalog: TemplateCatalog): DocumentLayout {
+  if(catalog.starter)return structuredClone(validateDocumentLayout(catalog.starter,catalog))
   const field = (key: string) => ({ type: "paragraph" as const, content: [{ type: "documentField" as const, attrs: { key } }] })
   return { type: "doc", content: [field("template.opening"), ...catalog.sections.map(row => ({ type: "documentSection" as const, attrs: { key: row.key } })), { type: "heading", attrs: { level: 2 }, content: [{ type: "text", text: "Terms and notes" }] }, field("template.terms")] }
 }

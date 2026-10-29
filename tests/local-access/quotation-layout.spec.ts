@@ -1,0 +1,45 @@
+import { test,expect } from '@playwright/test'
+import { seed,login,json } from './fixtures'
+import { emptyQuotationContent } from '../../modules/sales-documents/quotation-validation'
+
+test('quotation layout edits preview without saving and persist only in a new immutable version',async({browser})=>{
+ test.setTimeout(180000)
+ const f=await seed(),{page,context}=await login(browser,f.origin,f.users.admin.email)
+ try{
+  page.setDefaultTimeout(15000)
+  const contact=await json(context,'/api/crm/contacts',201,'POST',{name:'QA Layout Customer'})
+  const pipeline=await json(context,'/api/crm/pipelines',201,'POST',{name:'QA layout pipeline',stages:[{name:'Open',kind:'OPEN',probability:10,color:'#123456'},{name:'Won',kind:'WON',probability:100,color:'#00aa00'},{name:'Lost',kind:'LOST',probability:0,color:'#aa0000'}]})
+  const deal=await json(context,'/api/crm/opportunities',201,'POST',{title:'QA layout source',contactId:contact.id,assignedUserId:f.users.admin.id,pipelineId:pipeline.id,stageId:pipeline.stages[0].id,amount:'100000',currency:'INR',expectedCloseOn:'2027-01-01'})
+  const quote=await json(context,`/api/crm/opportunities/${deal.id}/quotations`,201,'POST',{content:{...structuredClone(emptyQuotationContent),supplierName:'QA Industries',currency:'INR',lines:[{description:'Shared service',quantity:'1',unit:'each',rate:'100000'}],instalments:[{label:'Booking',percent:'10',days:0,note:''},{label:'Balance',percent:'90',days:30,note:''}]}})
+  const original=(await json(context,`/api/crm/quotations/${quote.id}?revision=1`)).snapshot
+  await page.goto(`/crm/quotations/${quote.id}`)
+  await page.getByRole('tab',{name:'PDF layout',exact:true}).click()
+  await page.getByRole('button',{name:'Edit pdf layout',exact:true}).click()
+  const dialog=page.getByRole('dialog',{name:'Edit record',exact:true})
+  await dialog.getByLabel('Use a custom PDF layout',{exact:true}).check()
+  const editor=dialog.getByRole('textbox',{name:'Document layout',exact:true})
+  await expect(editor).toBeVisible()
+  await dialog.getByRole('button',{name:'Add paragraph',exact:true}).click();await page.keyboard.type('Dear ')
+  await dialog.getByLabel('Dynamic field',{exact:true}).click()
+  const menu=page.getByRole('menu');await expect(menu).toBeVisible()
+  const menuBounds=await menu.boundingBox();expect(menuBounds!.y).toBeGreaterThanOrEqual(0);expect(menuBounds!.y+menuBounds!.height).toBeLessThanOrEqual(page.viewportSize()!.height)
+  await page.getByRole('menuitemradio',{name:'Customer name',exact:true}).click();await expect(menu).toBeHidden()
+  await dialog.getByRole('button',{name:'Insert field',exact:true}).click();await expect(editor.getByText('Customer name',{exact:true})).toBeVisible()
+  const downloading=page.waitForEvent('download');await dialog.getByRole('button',{name:'Download layout sample',exact:true}).click();await(await downloading).saveAs(test.info().outputPath('p9-layout-sample.pdf'))
+  expect((await json(context,`/api/crm/quotations/${quote.id}`)).revision).toBe(1)
+  await page.setViewportSize({width:390,height:844});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true)
+  expect(await dialog.locator('form').evaluate(node=>node.scrollWidth<=node.clientWidth)).toBe(true)
+  await editor.scrollIntoViewIfNeeded();await page.screenshot({path:test.info().outputPath('p9-layout-editor-mobile.png'),fullPage:true,animations:'disabled'})
+  await page.setViewportSize({width:1440,height:1000});await page.screenshot({path:test.info().outputPath('p9-layout-editor-desktop.png'),fullPage:true,animations:'disabled'})
+  await dialog.getByRole('button',{name:'Save new version',exact:true}).click();await expect(dialog).toBeHidden()
+  const saved=await json(context,`/api/crm/quotations/${quote.id}`)
+  expect(saved.revision).toBe(2);expect(JSON.stringify(saved.snapshot.content.layout)).toContain('customer.name')
+  expect(saved.snapshot.calculation).toEqual(original.calculation)
+  expect((await json(context,`/api/crm/quotations/${quote.id}?revision=1`)).snapshot).toEqual(original)
+  const pdf=await context.request.get(`/api/crm/quotations/${quote.id}/pdf?revision=2`);expect(pdf.status()).toBe(200);expect((await pdf.body()).subarray(0,5).toString()).toBe('%PDF-')
+  await page.reload();await page.getByRole('tab',{name:'PDF layout',exact:true}).click();await expect(page.getByText('Saved custom layout',{exact:true})).toBeVisible()
+  await page.getByRole('button',{name:'Edit pdf layout',exact:true}).click();await dialog.getByLabel('Use a custom PDF layout',{exact:true}).click()
+  await expect(page.getByRole('dialog',{name:'Use the standard PDF layout?',exact:true})).toBeVisible();await page.getByRole('button',{name:'Cancel',exact:true}).last().click()
+  await expect(editor.getByText('Customer name',{exact:true})).toBeVisible()
+ }finally{await context.close();await f.db.end()}
+})

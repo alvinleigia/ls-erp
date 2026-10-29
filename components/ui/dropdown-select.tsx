@@ -25,7 +25,7 @@ export function DropdownSelect({ id, label, value, options, onValueChange, disab
         <ChevronDown className="size-4 text-muted-foreground" aria-hidden="true" />
       </Button>
     </DropdownMenuTrigger>
-    <DropdownMenuContent align="start" className="min-w-[var(--radix-dropdown-menu-trigger-width)]">
+    <DropdownMenuContent align="start" className="max-h-[var(--radix-dropdown-menu-content-available-height)] min-w-[var(--radix-dropdown-menu-trigger-width)] max-w-[calc(100vw-1rem)] overflow-y-auto">
       {label && <DropdownMenuLabel className="text-xs text-muted-foreground">{label}</DropdownMenuLabel>}
       <DropdownMenuRadioGroup value={value} onValueChange={onValueChange}>
         {options.map(option => <DropdownMenuRadioItem key={option.value} value={option.value} disabled={option.disabled}>{option.label}</DropdownMenuRadioItem>)}

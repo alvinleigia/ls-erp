@@ -1,4 +1,7 @@
 import { recordActionAccess } from "@/platform/access/record-actions"
+import { documentLayoutSchema } from "@/platform/documents/layout"
+import { z } from "zod"
+import { quotationLayoutSample } from "./quotation-layout-sample"
 import { quotationRecordScope } from "@/platform/access/record-scope"
 import { recordLimits } from "@/platform/access/rules"
 import { termText } from "@/platform/terminology/message"
@@ -57,6 +60,11 @@ export function createQuotationService({ run: checkedRun, audit, opportunityScop
     return row
   }
   return {
+    async previewQuotationLayout(input:unknown){
+      const {layout}=z.object({layout:documentLayoutSchema}).strict().parse(input)
+      const paymentPlans=await run({any:["quotationTemplates.create","quotationTemplates.edit","quotations.create","quotations.edit"]},async(_tx,_actor,paymentPlans)=>paymentPlans)
+      return buildQuotationPdf({id:"SAMPLE",revision:1,revisionCreatedAt:"2026-01-01",snapshot:quotationLayoutSample(layout,paymentPlans)},true)
+    },
     quotationDefaults(opportunityId: string) {
       return run("quotations.create", async (tx, actor, paymentPlans) => {
         const row = await opportunity(tx, actor, opportunityId)

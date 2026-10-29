@@ -1,8 +1,11 @@
 "use client"
 import { useTerminology, useTerminologyReader } from "@/platform/terminology/provider"
-import { withRecordView, useRecordView, AccessRecordForm } from "@/platform/access/record-view"
+import { withRecordView, useRecordView, AccessRecordForm, AccessSummarySection } from "@/platform/access/record-view"
 import { QuotationPdfActions } from "./quotation-pdf-actions"
 import { QuotationSummary } from "./quotation-summary"
+import { DocumentLayoutEditor } from "@/platform/documents/layout-editor"
+import { starterDocumentLayout } from "@/platform/documents/layout"
+import { quotationLayoutCatalog } from "../quotation-layout-catalog"
 import * as React from "react"
 import { useBusinessModules } from "@/platform/module-provider"
 import Link from "@/platform/access/link"
@@ -79,7 +82,7 @@ function QuotationEditorBody({ id, opportunityId: initialOpportunityId, template
   const [value, setValue] = React.useState<QuotationContent>(emptyQuotationContent), [name, setName] = React.useState(""), [archived, setArchived] = React.useState(false)
   const [version, setVersion] = React.useState<number>(), [document, setDocument] = React.useState<Document | null>(null), [context, setContext] = React.useState<{ label: string; value: string }[]>([])
   const [error, setError] = React.useState(""), [loading, setLoading] = React.useState(true), [failed, setFailed] = React.useState(false), [saving, setSaving] = React.useState(false), [canManage, setCanManage] = React.useState(false)
-  const [templateId, setTemplateId] = React.useState(""), [confirm, setConfirm] = React.useState<"template" | "archive" | null>(null)
+  const [templateId, setTemplateId] = React.useState(""), [confirm, setConfirm] = React.useState<"template" | "archive" | "layout" | null>(null)
   React.useEffect(() => {
     const controller = new AbortController()
     setLoading(true); setFailed(false); setError("")
@@ -123,6 +126,11 @@ function QuotationEditorBody({ id, opportunityId: initialOpportunityId, template
     setConfirm(null); setSaving(true); setError("")
     try { const row = await request<Template>(`/api/crm/quotation-templates/${templateId}`); if (!plansEnabled && row.content.instalments.length) throw new Error(term("paymentPlans.paymentPlan.singular", "This template contains a payment plan.", "This template contains a {label}.") + " " + term("salesDocuments.quotation.singular", "Enable Payment Plans or choose a quotation-only template.", "Enable Payment Plans or choose a {label}-only template.")); setValue({ ...row.content, currency: value.currency, bookingDate: value.bookingDate, validUntil: value.validUntil }) } catch (error) { setError((error as Error).message) } finally { setSaving(false) }
   }
+  async function previewLayout(){
+    if(!value.layout)return
+    setSaving(true);setError("")
+    try{const r=await fetch('/api/crm/quotation-layout/preview',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({layout:value.layout})});if(!r.ok)throw Error((await r.json()).error);const url=URL.createObjectURL(await r.blob()),link=window.document.createElement('a');link.href=url;link.download='quotation-layout-sample.pdf';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000)}catch(e){setError((e as Error).message)}finally{setSaving(false)}
+  }
   const editable = !failed && !unavailable && !scheduleLocked && !oldVersion && (!template || canManage)
   if (loading) return <p>Loading document…</p>
   return <div className={pageClass}>
@@ -139,10 +147,12 @@ function QuotationEditorBody({ id, opportunityId: initialOpportunityId, template
         { value: "pricing", label: "Pricing and charges", content: <QuotationSummary value={value} snapshot={document?.snapshot} section="pricing" canEdit={editable} /> },
         ...(plansEnabled || value.instalments.length ? [{ value: "payments", label: term("paymentPlans.paymentPlan.singular", "Payment plan"), content: <QuotationSummary value={value} snapshot={document?.snapshot} section="payments" canEdit={editable} /> }] : []),
         { value: "terms", label: "Bank and terms", content: <QuotationSummary value={value} snapshot={document?.snapshot} section="terms" canEdit={editable} /> },
+        { value: "layout", label: "PDF layout", content: <AccessSummarySection title="PDF layout" fields={[{label:"Layout",value:value.layout?"Saved custom layout":"Standard layout"}]} canEdit={editable}><p>Saved versions retain their layout and accepted values. Issued downloads use the archived file.</p></AccessSummarySection> },
       ]}>
     {template && <Section title="Template configuration"><div className="max-w-md space-y-4"><FormField id="template-name" label="Template name" error={errors.name}><Input id="template-name" required maxLength={150} value={name} disabled={!canManage || saving} onChange={event => setName(event.target.value)} /></FormField><label className="flex items-center gap-2 text-sm"><Checkbox checked={archived} disabled={!canManage || saving} onChange={event => event.target.checked ? setConfirm("archive") : setArchived(false)} />Archived</label></div></Section>}
     {!template && !oldVersion && !scheduleLocked && <Section title="Start from a template" description={`Applying a template replaces document contents. ${term("crm.contact.singular", "Customer")} and linked record details are retained.`}><div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-end"><FormField id="quotation-template" label="Template" className="min-w-0 flex-1"><RecordSelect id="quotation-template" endpoint="/api/crm/quotation-templates" value={templateId} onChange={setTemplateId} disabled={saving || failed} /></FormField><Button type="button" variant="outline" disabled={!templateId || saving || failed} onClick={() => setConfirm("template")}>Apply template</Button></div></Section>}
     {context.length > 0 && <Section title="Linked records"><dl className="grid gap-3 sm:grid-cols-3">{context.map(item => <div key={item.label}><dt className="text-sm text-muted-foreground">{item.label}</dt><dd>{item.value}</dd></div>)}</dl></Section>}
+    <Section title="PDF layout" description="Reuse the same layout in a named quotation template, or customise this document. Saved revisions keep their design and accepted data."><label className="flex items-center gap-2 text-sm"><Checkbox checked={!!value.layout} disabled={!editable||saving} onChange={event=>{if(event.target.checked)setValue({...value,layout:starterDocumentLayout(quotationLayoutCatalog)});else setConfirm("layout")}}/>Use a custom PDF layout</label>{value.layout&&<div className="mt-4 space-y-4"><DocumentLayoutEditor value={value.layout} catalog={quotationLayoutCatalog} disabled={!editable||saving} onChange={layout=>setValue({...value,layout})}/><Button type="button" variant="outline" disabled={saving||!editable} onClick={previewLayout}>Download layout sample</Button><p className="text-xs text-muted-foreground">The sample uses example data. Preview a saved version for its actual customer, prices, instalments, logo and registration QR. Layout editing never records a payment.</p></div>}</Section>
     <QuotationContentFields paymentPlansEnabled={plansEnabled} errors={errors} settings={document?.snapshot || settings} value={value} onChange={setValue} disabled={saving || failed || unavailable || scheduleLocked || oldVersion || (template && !canManage)} template={template} onError={setError} />
-  </AccessRecordForm><Dialog open={!!confirm} onOpenChange={open => !open && setConfirm(null)}><DialogContent><DialogHeader><DialogTitle>{confirm === "archive" ? "Archive this template?" : "Apply this template?"}</DialogTitle><DialogDescription>{confirm === "archive" ? "The template will be unavailable for new documents after you save. Existing versions are preserved." : "This replaces your current document fields. Previously saved versions remain unchanged."}</DialogDescription></DialogHeader><DialogFooter><Button variant="outline" onClick={() => setConfirm(null)}>Cancel</Button><Button onClick={() => confirm === "archive" ? (setArchived(true), setConfirm(null)) : void applyTemplate()}>{confirm === "archive" ? "Archive" : "Apply template"}</Button></DialogFooter></DialogContent></Dialog></div>
+  </AccessRecordForm><Dialog open={!!confirm} onOpenChange={open => !open && setConfirm(null)}><DialogContent><DialogHeader><DialogTitle>{confirm === "layout" ? "Use the standard PDF layout?" : confirm === "archive" ? "Archive this template?" : "Apply this template?"}</DialogTitle><DialogDescription>{confirm === "layout" ? "This removes the unsaved custom layout. Previously saved versions and issued files stay unchanged." : confirm === "archive" ? "The template will be unavailable for new documents after you save. Existing versions are preserved." : "This replaces your current document fields. Previously saved versions remain unchanged."}</DialogDescription></DialogHeader><DialogFooter><Button variant="outline" onClick={() => setConfirm(null)}>Cancel</Button><Button onClick={() => confirm === "layout" ? (setValue(({layout: _layout, ...rest})=>{void _layout;return rest}),setConfirm(null)) : confirm === "archive" ? (setArchived(true), setConfirm(null)) : void applyTemplate()}>{confirm === "layout" ? "Use standard layout" : confirm === "archive" ? "Archive" : "Apply template"}</Button></DialogFooter></DialogContent></Dialog></div>
 }

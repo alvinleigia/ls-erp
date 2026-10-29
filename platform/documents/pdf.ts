@@ -5,11 +5,13 @@ import path from "node:path"
 import { downloadDocumentLogo } from "../branding/storage"
 import { BusinessError } from "../policy"
 import type { DocumentPayload } from "./contracts"
+import type { PrintableDocument } from "./contracts"
+import QRCode from "qrcode"
 import type { DocumentFlow } from "./layout"
 
 // Registered providers supply plain text and tables. No HTML, expressions,
 // arbitrary image URLs or industry-specific fields enter this renderer.
-export async function renderBusinessDocument(document: DocumentPayload, preview = false) {
+export async function renderBusinessDocument(document: PrintableDocument, preview = false) {
   const pdf = await PDFDocument.create(); pdf.registerFontkit(fontkit)
   const font = await pdf.embedFont(await readFile(path.join(process.cwd(), "public/assets/fonts/NotoSans-Regular.ttf")), { subset: true })
   const variants: Record<string,PDFFont> = { regular:font }
@@ -85,23 +87,26 @@ export async function renderBusinessDocument(document: DocumentPayload, preview 
     }
     y-=13
   }
-  if (document.branding?.logo) {
-    const logo=await pdf.embedPng(await downloadDocumentLogo(document.branding.logo.path)),scaled=logo.scale(Math.min(145/logo.width,55/logo.height))
+  if(document.logoDataUrl&&(!/^data:image\/png;base64,[A-Za-z0-9+/]+=*$/.test(document.logoDataUrl)||document.logoDataUrl.length>400000))throw new BusinessError(400,"Use a bounded PNG document logo.")
+  if (document.logoDataUrl||document.branding?.logo) {
+    const logo=await pdf.embedPng(document.logoDataUrl?Buffer.from(document.logoDataUrl.split(',')[1],'base64'):await downloadDocumentLogo(document.branding!.logo!.path)),scaled=logo.scale(Math.min(145/logo.width,55/logo.height))
     page.drawImage(logo,{x:margin,y:y-scaled.height,width:scaled.width,height:scaled.height});y-=68
   }
   paragraph(document.company.name,17);paragraph(document.title,20)
   paragraph(`${document.reference} | ${document.date}`,9,muted)
   if (preview) paragraph("DRAFT PREVIEW - NOT ISSUED",10,muted)
   if (document.issuer.address) paragraph(document.issuer.address,9,muted)
-  function drawBlocks(blocks:DocumentPayload["blocks"]){for (const block of blocks) {
+  async function drawBlocks(blocks:DocumentPayload["blocks"]){for (const block of blocks) {
     let following=49
     if(block.table&&!block.paragraphs?.length){const t=block.table,total=t.widths.reduce((a,b)=>a+b,0),count=(row:string[])=>Math.max(...row.map((value,i)=>wrap(value,width*t.widths[i]/total-12,9).length),1);following=Math.min(240,(count(t.headings)+count(t.rows[0]??t.headings))*14+30)}
     section(block.title,following);for (const text of block.paragraphs??[]) paragraph(text);if (block.table) table(block.table.headings,block.table.rows,block.table.widths)
+    if(block.qrCode){if(block.qrCode.length>1000||!/^https?:\/\//.test(block.qrCode))throw new BusinessError(400,"Invalid document registration link.");ensure(90);const image=await pdf.embedPng(await QRCode.toBuffer(block.qrCode,{width:240,margin:2,errorCorrectionLevel:'M'}));page.drawImage(image,{x:margin,y:y-80,width:80,height:80});y-=92}
   }}
-  if(document.body){for(const node of document.body){if(node.type==="section")drawBlocks(node.blocks);else if(node.type==="pageBreak")nextPage();else formatted(node)}}
-  else{paragraph(document.opening);drawBlocks(document.blocks);if (document.terms) { section("Terms and notes");paragraph(document.terms) }}
-  section("Issued by");paragraph(document.company.name);paragraph(document.issuer.signatory)
+  if(document.body){for(const node of document.body){if(node.type==="section")await drawBlocks(node.blocks);else if(node.type==="pageBreak")nextPage();else formatted(node)}}
+  else{paragraph(document.opening);await drawBlocks(document.blocks);if (document.terms) { section("Terms and notes");paragraph(document.terms) }}
+  if(document.showSignatory!==false){section("Issued by");paragraph(document.company.name);paragraph(document.issuer.signatory)}
   if (document.issuer.contact) paragraph(document.issuer.contact,9,muted)
+  if(document.notice)paragraph(document.notice,9,muted)
   pages.forEach((p,i)=>p.drawText(`${preview?"DRAFT | ":""}${document.reference} | Page ${i+1} / ${pages.length}`,{x:margin,y:34,size:8,font,color:muted}))
   pdf.setTitle(document.title);pdf.setAuthor(document.company.name);pdf.setSubject(document.reference)
   return pdf.save()

@@ -62,10 +62,10 @@ export function DocumentLayoutEditor({ value, catalog, disabled, onChange }: { v
       <Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => editor?.chain().focus().insertContent({ type: "documentPageBreak" }).run()}>Page break</Button>
       <Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => setReset(true)}>Use starter layout</Button>
     </div>
-    <div className="grid items-end gap-3 sm:grid-cols-[1fr_auto_1fr_auto]">
-      <FormField id="template-insert-field" label="Dynamic field"><Select id="template-insert-field" value={field} onValueChange={setField} disabled={busy}>{catalog.fields.map(row => <option key={row.key} value={row.key}>{row.label}</option>)}</Select></FormField>
+    <div className="grid items-end gap-3 sm:grid-cols-[minmax(0,1fr)_auto]">
+      <FormField id="template-insert-field" label="Dynamic field" className="min-w-0"><Select id="template-insert-field" className="w-full" value={field} onValueChange={setField} disabled={busy}>{catalog.fields.map(row => <option key={row.key} value={row.key}>{row.label}</option>)}</Select></FormField>
       <Button type="button" variant="outline" disabled={busy || !field} onClick={() => editor?.chain().focus().insertContent({ type: "documentField", attrs: { key: field } }).run()}>Insert field</Button>
-      <FormField id="template-insert-section" label="Dynamic section"><Select id="template-insert-section" value={section} onValueChange={setSection} disabled={busy}>{catalog.sections.map(row => <option key={row.key} value={row.key}>{row.label}{row.required ? " (required)" : ""}</option>)}</Select></FormField>
+      <FormField id="template-insert-section" label="Dynamic section" className="min-w-0"><Select id="template-insert-section" className="w-full" value={section} onValueChange={setSection} disabled={busy}>{catalog.sections.map(row => <option key={row.key} value={row.key}>{row.label}{row.required ? " (required)" : ""}</option>)}</Select></FormField>
       <Button type="button" variant="outline" disabled={busy || !section} onClick={() => editor?.chain().focus().insertContent({ type: "documentSection", attrs: { key: section } }).run()}>Insert section</Button>
     </div>
     <div className="rounded-lg border bg-background"><EditorContent editor={editor} /></div>
