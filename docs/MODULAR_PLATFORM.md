@@ -1,3 +1,16 @@
+## P7 history-refresh timeout resolved on staging
+
+Commit 5a5deee is READY on staging. History counts only the authorized page in
+one grouped child query, with the same permissions, office RLS, DTO and 20-second
+transaction limit. No migration or data backfill was needed. At 2,116 retained
+rows, three hosted requests succeeded in 3.4-3.6 seconds; previously history
+failed after about 27 seconds. A fresh 61-row import completed all five history
+refreshes without an error, retaining the correct 59 imports and two corrections.
+All 33 import/team, 26 office and two local browser checks passed. Existing
+history values were preserved; desktop/mobile captures were inspected. This
+resolves the open issue in the earlier P7 measurement checkpoint below. All four
+staging aliases are current; production remains unchanged. See [P7 verification](ENQUIRY_IMPORT_PERFORMANCE_P7.md).
+
 ## P7 performance measured - history optimization remains
 
 Hosted 1,000-row comparisons measured 68.5% less row-processing time: about

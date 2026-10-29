@@ -1,14 +1,52 @@
 # Enquiry import performance - P7
 
 Deployed and verified on [staging](https://ls-erp-staging.vercel.app) on
-2026-10-29 (Asia/Kolkata), from clean checkout `2cd77e1`.
-Deployment: `dpl_6KCrthGan54RRHVLAWCfc36ccryA` (READY).
+2026-10-29 (Asia/Kolkata), including the history fix from clean checkout `5a5deee`.
+Deployment: `dpl_BrAcTYddsnhXGDkaZnZVdR8EUygw` (READY).
+The initial batching release and measured comparison below used `2cd77e1`.
 Production remains unchanged at `579d642`; its deployment and three aliases
 were compared before and after release. The root checkout's production project
 link was retained; only the separate staging project was promoted.
 
 This change needs no database migration and does not rewrite existing imports
 or customer records. No Git branch was pushed as part of this CLI deployment.
+
+## History-refresh fix verified
+
+History now loads the authorized parent page without correlated relation counts,
+then groups child-row counts once for only the selected import IDs and tenant.
+The same transaction, fresh authorization, creator restriction, native office
+RLS, pagination order and response fields remain in place. Empty results skip
+the child query, and parents without children retain a zero row count. Counts
+still include invalid/duplicate input rows. No counter cache, schema migration,
+data backfill, security exception or increased timeout was introduced.
+
+The original failing QA tenant retained seven imports and 2,116 staged rows,
+including both completed 1,000-row benchmark imports. Three consecutive hosted
+history requests returned HTTP 200 in **3,626 ms, 3,525 ms and 3,392 ms**. The old
+endpoint returned HTTP 500 after approximately 27 seconds at this retained volume.
+Pagination, a wider page, an empty page and both 1,000-row counts were verified.
+
+A fresh browser import completed without pausing or a history error: 61 input
+rows, 59 imported, one invalid email and one duplicate, with the expected two-row
+correction file. All five automatic history refreshes returned HTTP 200. Returning
+to Your imports showed the correct completed entry. Every existing history entry
+and its count was unchanged. Desktop/mobile history captures were visually
+inspected; another tenant could not retrieve the new import.
+
+Validation passed: 33 native import/team checks, 26 native office checks, two
+local browser checks, production build/TypeScript, targeted ESLint and whitespace
+checks. Added regressions cover multiple 1,000-row jobs, mixed and empty jobs,
+pagination, creator/tenant privacy, suspended accounts and office revocation.
+An initial office run used incompatible general fixtures, and concurrent fixture
+creation interrupted an initial long import on a serialization safeguard. The
+final dedicated office run and standalone import run passed; no application
+guard or timeout was weakened. The hosted test's initial broad alert selector
+was corrected to exclude Next.js's empty route-announcement element.
+
+All four staging aliases are on the fix. Production remains unchanged. Private
+query probes, test logs, hosted timings and captures are under ignored
+`tmp/import-performance/history-fix`.
 
 ## Measured hosted comparison - 2026-10-29
 
@@ -35,7 +73,7 @@ history refreshes for both versions. JSON sizes are decoded response-body sizes,
 not compressed network traffic. This is one sequential staging comparison,
 not a production timing guarantee.
 
-**Outstanding issue:** once multiple large imports accumulated, the history
+**Issue found during the benchmark (resolved above):** once multiple large imports accumulated, the history
 endpoint (`GET /api/crm/enquiry-imports`) returned HTTP 500. Runtime logs confirmed
 an expired 20-second transaction; a repeat request also failed. The history
 implementation is unchanged between the baseline and P7. It counts child rows
@@ -46,8 +84,8 @@ the existing ready job was resumed through the normal API to measure saving.
 All 1,000 rows were subsequently confirmed imported. The final history refresh
 still returned 500 after approximately 27 seconds.
 
-Optimize the history row-count path before production promotion, retaining its
-current privacy rules and transaction limit. No application code, database
+The grouped-count fix above resolves this issue while retaining its privacy
+rules and transaction limit. No application code, database
 schema, permissions, module settings or production data changed during this
 measurement. Only the dedicated QA-A alias temporarily served the baseline;
 it was restored to P7, and all four staging plus three production aliases were
