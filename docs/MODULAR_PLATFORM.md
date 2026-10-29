@@ -1,3 +1,17 @@
+## P7 import performance and history fix released to production
+
+GitHub main and production now use 4546cb2; deployment
+dpl_EkQhmuCQqrwuxoRgR5vMMDx9kuFG is READY on all three production aliases.
+Application code matches verified staging, whose four aliases are unchanged.
+The fresh encrypted application backup restored successfully, including 138
+tables, owner/ACL and role metadata, and two stored objects. No migration or
+maintenance block was needed. Read-only tenant checks passed across dashboard,
+workspace, CRM, projects and quotations; platform listing remained forbidden.
+Import history returned HTTP 200 in 4.2, 2.6 and 2.5 seconds for three retained
+jobs/2,497 rows. Template download and browser history/dashboard checks passed;
+heading-only captures were inspected. No production import/test records were
+created. Refresh open ERP tabs. See [P7 release evidence](ENQUIRY_IMPORT_PERFORMANCE_P7.md).
+
 ## P7 history-refresh timeout resolved on staging
 
 Commit 5a5deee is READY on staging. History counts only the authorized page in

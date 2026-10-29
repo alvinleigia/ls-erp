@@ -4,12 +4,43 @@ Deployed and verified on [staging](https://ls-erp-staging.vercel.app) on
 2026-10-29 (Asia/Kolkata), including the history fix from clean checkout `5a5deee`.
 Deployment: `dpl_BrAcTYddsnhXGDkaZnZVdR8EUygw` (READY).
 The initial batching release and measured comparison below used `2cd77e1`.
-Production remains unchanged at `579d642`; its deployment and three aliases
-were compared before and after release. The root checkout's production project
-link was retained; only the separate staging project was promoted.
+Production was subsequently released from `4546cb2` on the same date after
+the user authorized release. Its application code matches the staging build;
+the intervening commit only records verification. See the release checks below.
 
 This change needs no database migration and does not rewrite existing imports
-or customer records. No Git branch was pushed as part of this CLI deployment.
+or customer records. The earlier staging release used the CLI; production used
+one Git push to `main` and its normal Vercel build.
+
+## Production release - 2026-10-29
+
+Source `4546cb296407147964334a4d07d4020444a5c63d` is on GitHub `main` and
+deployment `dpl_EkQhmuCQqrwuxoRgR5vMMDx9kuFG` is READY. All three production
+aliases serve it. The four staging aliases still serve the verified staging
+deployment above. The root checkout remains linked to the production project.
+
+Before release, a fresh encrypted application backup was restored into an
+isolated local database: 138 tables, 136 applied migrations, owner/ACL and role
+metadata, and two referenced storage objects verified. There were no pending
+migrations. This is application recovery evidence, not full Supabase platform
+recovery certification. Private archives and restore evidence remain ignored
+under `backups/participants`; no credentials or client records are committed.
+The previous READY production deployment is retained for code rollback.
+
+Read-only checks using the existing tenant session passed after deployment:
+dashboard, modules, workspace office, enquiries, opportunities, projects and
+quotations returned HTTP 200; the tenant-admin platform tenant-list request
+remained denied with HTTP 403. Three import-history requests returned HTTP 200
+in 4,226 ms, 2,586 ms and 2,451 ms. The history page reported three retained jobs
+and 2,497 rows, matching the preflight aggregate. Template download succeeded.
+The browser rendered import history without an error banner and the dashboard
+without page errors or horizontal overflow; heading-only captures were inspected
+to avoid recording client rows. Production testing did not upload/import data.
+
+No maintenance block, migration, configuration change or business-data rewrite
+was required. Refresh existing ERP tabs to load the new import interface.
+Private deployment and smoke receipts are under ignored
+`tmp/import-performance/production-release`.
 
 ## History-refresh fix verified
 
@@ -44,7 +75,8 @@ final dedicated office run and standalone import run passed; no application
 guard or timeout was weakened. The hosted test's initial broad alert selector
 was corrected to exclude Next.js's empty route-announcement element.
 
-All four staging aliases are on the fix. Production remains unchanged. Private
+At the staging checkpoint, all four staging aliases were on the fix and
+production was unchanged. Private
 query probes, test logs, hosted timings and captures are under ignored
 `tmp/import-performance/history-fix`.
 
