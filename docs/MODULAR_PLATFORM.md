@@ -1,3 +1,23 @@
+## P9 quotation and payment-plan layouts - staging verified
+
+Source 014bf50 is READY on all four staging aliases. Quotations and existing
+named templates reuse the shared formatted editor, approved fields, required
+source sections and sample preview. Optional layouts live in immutable quotation
+snapshots; standard designs and archived files remain unchanged until explicit
+new versions. Source totals, applicants, charge conditions and payment schedules
+remain authoritative; no payment receipt or ledger entry is invented.
+
+All 50 focused native checks and four final local browser cases passed, plus
+build/TypeScript, lint, whitespace and font tracing. Hosted synthetic QA verified
+named-template use, sample without saving, saved field/layout reload, unchanged
+prior revision/prices, actual saved PDF, tenant denial and strict input/origin
+checks. PDF pages and desktop/mobile captures were inspected. Longer fixed-choice
+menus now stay within the viewport; editor controls fit narrow panels.
+
+No migration, environment change, hosted database scripts, Git push or production
+write. Production aliases and main remain at 4546cb2. See
+docs/QUOTATION_LAYOUTS_P9.md for usage, boundaries and evidence limits.
+
 ## P8 shared document template editor - staging verified
 
 Source 6030380 is READY on all four staging aliases. The shared editor adds

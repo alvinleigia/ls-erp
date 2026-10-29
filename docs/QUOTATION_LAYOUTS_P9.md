@@ -1,5 +1,10 @@
 # Quotation and payment-plan PDF layouts - P9
 
+Deployed and verified on staging on 2026-10-29 from `014bf50`.
+Deployment `dpl_5A5WvBsNZbTVJEqfCnE2s9cnvfrA` is READY on all four staging
+aliases. Production and GitHub main remain at `4546cb2`; all three production
+aliases are unchanged. No migration, environment change or production write.
+
 ## Usage
 
 Open a quotation or a named quotation template, select **PDF layout**, then
@@ -66,5 +71,14 @@ until confirmation, so its test uses click rather than an immediate-state unchec
 Production build/TypeScript, targeted lint, whitespace and all four font-face
 traces for sample/PDF/issuance passed. Generated PDF pages and desktop/mobile
 captures were inspected. The owned disposable localhost fixture was removed.
-Deployment and hosted results are recorded after verification; production remains
-outside this phase.
+Hosted QA used ordinary APIs and bundled Chromium with normal HTTP transport,
+without SQL, seeds, resets or network mocks. A dedicated synthetic named template
+was applied to a QA quotation; sample preview made no save, version 2 retained
+its custom field/layout after reload, version 1 and prices stayed unchanged, and
+the actual saved PDF resolved the QA customer and saved schedule. Cross-tenant
+quotation/template access, unknown fields, extra customer IDs and cross-origin
+sample requests were denied. No page errors or desktop/mobile overflow occurred.
+The synthetic named template was archived after verification; the clearly named
+QA source/quotation remain in the isolated staging tenant. No hosted PDF was
+issued; real rendering plus exact-file issuance were verified in the native
+storage-adapter tests. Hosted PDF pages and captures were visually inspected.
