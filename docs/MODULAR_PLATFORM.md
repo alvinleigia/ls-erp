@@ -1,11 +1,13 @@
-## Enquiry import performance - P7 local
+## Enquiry import performance - P7 staging verified
 
-The local staging branch now processes up to 25 rows per request with a
-cooperative time budget, compact progress counts and request-local choice
-lookups. Per-row authorization, atomic saves, duplicate handling, audits and
-correction downloads remain enforced. No schema or customer-data migration is
-needed. Hosted deployment is pending renewed Vercel access; production remains
-unchanged. See [P7 implementation and verification](ENQUIRY_IMPORT_PERFORMANCE_P7.md).
+Commit 2cd77e1 is READY on the separate staging project, with all four staging
+aliases verified. Imports use up to 25 rows per request, a cooperative time
+budget, compact progress and request-local choice lookups. All 32 native checks
+and two local browser checks passed; the 1,000-row test used 80 processing
+requests. Hosted QA verified 59 imports, two correction rows, reload, mobile
+rendering and foreign-tenant denial using six processing requests for 61 rows.
+No schema/data migration or Git push was needed. Production and its three
+aliases remain unchanged at 579d642. See [P7 implementation and verification](ENQUIRY_IMPORT_PERFORMANCE_P7.md).
 
 ## Participant/document production release - P6C complete
 

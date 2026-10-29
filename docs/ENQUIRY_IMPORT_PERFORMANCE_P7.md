@@ -1,8 +1,14 @@
 # Enquiry import performance - P7
 
-Implemented on the local `staging` branch. Hosted staging deployment requires
-renewed Vercel CLI access. Production remains unchanged. This change needs no
-database migration and does not rewrite existing imports or customer records.
+Deployed and verified on [staging](https://ls-erp-staging.vercel.app) on
+2026-10-29 (Asia/Kolkata), from clean checkout `2cd77e1`.
+Deployment: `dpl_6KCrthGan54RRHVLAWCfc36ccryA` (READY).
+Production remains unchanged at `579d642`; its deployment and three aliases
+were compared before and after release. The root checkout's production project
+link was retained; only the separate staging project was promoted.
+
+This change needs no database migration and does not rewrite existing imports
+or customer records. No Git branch was pushed as part of this CLI deployment.
 
 ## Processing contract
 
@@ -52,6 +58,16 @@ rows. This request reduction is not an equivalent elapsed-time speed guarantee.
   Local elapsed time is not a hosted performance guarantee. An initial run hit
   its 240-second benchmark test timeout; the final benchmark allows 900 seconds,
   without changing any application request/transaction limits.
+- Hosted staging acceptance used only an existing synthetic QA tenant through
+  the normal browser and HTTP APIs. A fresh 61-row import used three validation
+  and three import requests: 59 imported, one invalid email and one duplicate.
+  Compact response bodies, saved reload, both correction rows/download and
+  foreign-tenant denial passed. Desktop/mobile captures were visually checked.
+  The complete check took 57 seconds, including browser work and screenshots;
+  this is not an isolated server-throughput measurement.
+- All four staging aliases resolve to the new deployment. Production's existing
+  deployment and all three aliases are unchanged. No hosted fixture/seed/reset
+  script or production business mutation was used.
 
 Repeat the isolated native suite with `npm.cmd run test:crm:team-intake`.
 After `npm.cmd run build`, add `--browser` to the underlying runner for the
