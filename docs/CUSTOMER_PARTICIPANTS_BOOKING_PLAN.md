@@ -1,7 +1,8 @@
 # Shared customer participation and booking plan
 
-Research date: 2026-10-28. Status: phased implementation authorized; P1-P4
-are verified locally on the `staging` branch. See [P4 delivery evidence](BOOKING_COMPOSITION_P4.md).
+Research date: 2026-10-28. Status: P1-P5 implemented; P6A pilot-copy rehearsal
+and P6B hosted staging release/acceptance complete. See
+[P6B evidence](PARTICIPANTS_STAGING_RELEASE.md) and [P5 delivery evidence](DOCUMENT_ISSUANCE_P5.md).
 R10 production phase 6F is complete.
 No production deployment/migration or alteration of existing customer records is
 part of these increments. Hosted staging deployment evidence is separate from local verification.

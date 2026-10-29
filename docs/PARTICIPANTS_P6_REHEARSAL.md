@@ -1,5 +1,8 @@
 # Participant and document release - P6A pilot rehearsal
 
+Follow-up: [P6B hosted staging release](PARTICIPANTS_STAGING_RELEASE.md) is complete.
+This document retains the original P6A checkpoint and its observed targets.
+
 Completed locally on 2026-10-29 (Asia/Kolkata). This checkpoint verifies a fresh
 protected pilot copy, the four pending migrations and preserved access. It does
 not deploy P1-P5, approve production maintenance or complete hosted acceptance.

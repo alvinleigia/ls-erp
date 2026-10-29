@@ -1,3 +1,25 @@
+## Participant and document staging release - P6B
+
+P1-P5 are deployed to the staging project at ae3e491, with 136 applied
+migrations and zero pending. Production remains at f9e24db with 132 applied
+migrations; no production mutation or Git push occurred.
+
+A refreshed staging copy retained all original values, grants and snapshots.
+199 accounts matched over 4,577 resource/action checks and 1,932 record/action
+bindings. A final encrypted staging backup restored all application data,
+12 stored files and nine saved references before the hosted four-migration
+cutover. Existing RLS, triggers, ACLs and runtime role attributes were verified.
+
+Hosted synthetic tenant acceptance recorded 160 successful HTTP status checks,
+real private PDF downloads, generic and Real Estate issuance/replacements,
+financial/source freshness and negative access/module tests. Five browser
+captures and ten PDF pages were visually inspected. Temporary QA settings were
+restored; the new test issuer is suspended and has no profile assignments.
+
+Historical records retain their recorded evidence without inferred backfills.
+P6C remains the separately authorized production release gate. See
+[P6B evidence](PARTICIPANTS_STAGING_RELEASE.md).
+
 ## Participant/document pilot rehearsal - P6A (local)
 
 A fresh encrypted online pilot snapshot upgraded from 132 to 136 migrations
