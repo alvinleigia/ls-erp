@@ -1,3 +1,13 @@
+## P7 performance measured - history optimization remains
+
+Hosted 1,000-row comparisons measured 68.5% less row-processing time: about
+36m 03s to 11m 20s, with 400 processing requests reduced to 80. Both versions
+imported every row. The larger retained history exposed an unchanged history
+count query exceeding the 20-second transaction limit. That issue remains
+unfixed and is a production-promotion prerequisite. Processing timings exclude
+history/detail refreshes; the P7 save phase resumed after a history-refresh
+error. QA routing is restored; production is unchanged. See the [P7 measured comparison](ENQUIRY_IMPORT_PERFORMANCE_P7.md).
+
 ## Enquiry import performance - P7 staging verified
 
 Commit 2cd77e1 is READY on the separate staging project, with all four staging

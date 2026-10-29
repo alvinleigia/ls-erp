@@ -10,6 +10,50 @@ link was retained; only the separate staging project was promoted.
 This change needs no database migration and does not rewrite existing imports
 or customer records. No Git branch was pushed as part of this CLI deployment.
 
+## Measured hosted comparison - 2026-10-29
+
+A sequential comparison used the previous staging deployment (`ae3e491`) and
+the P7 deployment (`2cd77e1`). Each received 1,000 unique, valid synthetic rows
+using the same template, tenant, account, creation office, mappings, database and
+Mumbai function region. The CSV payloads were both 220,339 bytes. Each version
+first completed a separate 25-row warm-up. Critical environment settings were
+unchanged since the baseline build.
+
+| Row-processing measure | Previous version | P7 |
+| --- | ---: | ---: |
+| Validation | 17m 24s | 4m 45s |
+| Saving | 18m 39s | 6m 36s |
+| Combined processing | 36m 03s | 11m 20s |
+| Processing POSTs | 400 | 80 |
+| Save-progress JSON bodies | 2,112,168 bytes | 3,702 bytes |
+
+P7 used **68.5% less row-processing time**, 80% fewer processing requests and
+99.8% fewer save-progress JSON bytes in this comparison. Both versions imported
+all 1,000 rows without validation errors or duplicates. Times are independently
+rounded and exclude upload, mapping, human review, final detail reads and import
+history refreshes for both versions. JSON sizes are decoded response-body sizes,
+not compressed network traffic. This is one sequential staging comparison,
+not a production timing guarantee.
+
+**Outstanding issue:** once multiple large imports accumulated, the history
+endpoint (`GET /api/crm/enquiry-imports`) returned HTTP 500. Runtime logs confirmed
+an expired 20-second transaction; a repeat request also failed. The history
+implementation is unchanged between the baseline and P7. It counts child rows
+for each listed import and needs optimization at this larger retained volume.
+Do not treat the successful row-processing measurement as an uninterrupted
+end-to-end pass: P7 completed validation, then its history refresh failed, and
+the existing ready job was resumed through the normal API to measure saving.
+All 1,000 rows were subsequently confirmed imported. The final history refresh
+still returned 500 after approximately 27 seconds.
+
+Optimize the history row-count path before production promotion, retaining its
+current privacy rules and transaction limit. No application code, database
+schema, permissions, module settings or production data changed during this
+measurement. Only the dedicated QA-A alias temporarily served the baseline;
+it was restored to P7, and all four staging plus three production aliases were
+verified afterward. Private measurement samples and diagnostics are under
+ignored `tmp/import-performance/benchmark-1000`.
+
 ## Processing contract
 
 - Validation and import attempt up to 25 rows per request instead of five.
