@@ -19,6 +19,7 @@ test('visual template editor inserts dynamic fields, previews without publicatio
  test.setTimeout(180000)
  const f=await seed(),{page,context}=await login(browser,f.origin,f.users.admin.email)
  try{
+  page.setDefaultTimeout(15000)
   await modules(f,['salesOrders','catalog','realEstate'])
   await page.goto('/settings/documents')
   const editor=page.getByRole('textbox',{name:'Document layout',exact:true})
@@ -26,7 +27,8 @@ test('visual template editor inserts dynamic fields, previews without publicatio
   await expect(page.getByLabel('Document type',{exact:true})).toBeEnabled()
   await page.getByLabel('Document type',{exact:true}).click();await page.getByRole('menuitemradio',{name:'Booking intimation letter',exact:true}).click()
   await expect(page.getByLabel('Document title',{exact:true})).toHaveValue('Booking intimation letter')
-  await page.getByLabel('Document type',{exact:true}).click();await page.getByRole('menuitemradio',{name:'Order acknowledgement',exact:true}).click()
+  await expect(page.getByRole('menu')).toBeHidden()
+  await page.getByLabel('Document type',{exact:true}).press('ArrowDown');await page.getByRole('menuitemradio',{name:'Order acknowledgement',exact:true}).click()
   await expect(page.getByLabel('Document title',{exact:true})).toHaveValue('Order acknowledgement')
   await page.getByRole('button',{name:'Add paragraph',exact:true}).click();await page.keyboard.type('Dear ')
   await page.getByLabel('Dynamic field',{exact:true}).click();await page.getByRole('menuitemradio',{name:'Customer name',exact:true}).click()

@@ -1,7 +1,9 @@
 # Shared document template editor - P8
 
-Implementation on the staging branch. Production is unchanged. Verification and
-hosted deployment status are recorded below when complete.
+Deployed and verified on staging on 2026-10-29 from `6030380`.
+Deployment `dpl_FaXavAweiB3GzDnyMmcMeiUeWUsj` is READY on all four staging
+aliases. Production and GitHub main remain at `4546cb2`; all three production
+aliases are unchanged. No migration, environment change or production write.
 
 ## Scope and usage
 
@@ -95,8 +97,30 @@ Browser testing caught and corrected editing usability/state issues: Add
 paragraph avoids replacing a selected source section, and read-only/busy changes
 do not emit content updates or lock the untouched document selector. Eight
 existing booking/participant browser scenarios passed before those final UI
-fixes. Final editor browser acceptance and hosted deployment remain pending;
-do not treat this local implementation as deployed.
+fixes. All three final editor/issuance browser scenarios passed against the
+completed production build: type switching, dynamic-field insertion, sample
+download without publication, starter-replacement cancellation, reviewed
+publication, reload, mobile overflow, stale preview and exact replacement files.
+Desktop/mobile editor captures were inspected. The fixture explicitly enables
+the modules required by the selected provider; menu transitions are awaited.
+
+Hosted staging acceptance passed using only normal API/UI actions in the
+existing synthetic QA tenants. A dedicated test company published a disabled
+template at version 1. The sample preview did not publish a version; its PDF
+resolved Customer name to Sample Customer and remained marked DRAFT. Reselecting
+the company after a full reload recovered the saved field. Another tenant was
+denied both template Read and sample preview; an unknown field was rejected
+without changing the published version. Desktop/mobile captures and the actual
+hosted sample PDF were inspected. No hosted booking, customer, payment or issued
+PDF was created. The initial-attempt QA company was archived through its normal
+API; the final test company remains available with issuance disabled.
+
+Installed Chrome requests stalled in this test environment. The final hosted
+run used bundled Chromium with its normal transport and real server responses,
+without request mocks or a transport bridge. Source code is identical to the
+verified local build; later test/documentation edits need no second deployment.
+Private receipts, attempts and captures remain under ignored
+`tmp/document-editor` and `tmp/industry-release`.
 
 Run `npm.cmd run test:document-editor` for focused native coverage, adding
 `-- --browser` after a completed production build for the editor/issuance browser

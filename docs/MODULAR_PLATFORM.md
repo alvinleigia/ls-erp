@@ -1,3 +1,22 @@
+## P8 shared document template editor - staging verified
+
+Source 6030380 is READY on all four staging aliases. The shared editor adds
+formatted paragraphs/headings, approved dynamic fields, source sections, page
+breaks and sample previews to existing company document templates. Publication
+retains actual-admin review, immutable versions and source-owned issuance.
+Existing templates/files remain unchanged until explicit publication; no schema
+migration, grants, environment update or production write was needed.
+
+All 25 focused native and three final editor/issuance browser checks passed;
+build/TypeScript, lint and font tracing passed. Hosted synthetic QA verified
+preview without publication, saved-field reload, cross-tenant denial and unknown
+field rejection. Desktop/mobile captures and generated PDFs were inspected.
+The final hosted run used bundled Chromium and normal, unmocked HTTP transport.
+No hosted sales/customer/payment/issued-PDF records were created. Production
+and GitHub main remain at 4546cb2. This increment covers existing order/booking
+letters and their schedule tables; standalone payment receipts, quotation PDF
+layouts and named variants remain separate coverage. See [P8 scope and verification](DOCUMENT_TEMPLATE_EDITOR_P8.md).
+
 ## P7 import performance and history fix released to production
 
 GitHub main and production now use 4546cb2; deployment
