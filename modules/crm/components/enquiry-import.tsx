@@ -15,7 +15,7 @@ import { pageClass } from "@/components/erp/page"
 import { Section } from "@/components/erp/section"
 import { Pagination } from "@/components/erp/pagination"
 import { Select } from "@/components/erp/controls"
-import { changeImportDefault, importChoices, importReportColumns, IMPORT_MAX_BYTES, type ImportConfig, type ImportField, type ImportIssue } from "../import-types"
+import { changeImportDefault, importChoices, importReportColumns, IMPORT_MAX_BYTES, type ImportConfig, type ImportField, type ImportIssue, type ImportProgress } from "../import-types"
 
 type Row = { rowNumber: number; values: string[]; status: string; errors: ImportIssue[] }
 type Batch = { id: string; fileName: string; headers: string[]; status: string; fields: ImportField[]; config: ImportConfig; counts: Record<string, number>; items: Row[]; total: number; page: number; pageSize: number; totalPages: number }
@@ -80,20 +80,30 @@ export function EnquiryImport() {
       let next = batch
       if (next.status === "MAPPING") next = await request<Batch>(`${endpoint}/${next.id}`, body("PUT", config))
       setBatch(next); setResult("all")
-      do {
-        next = await request<Batch>(`${endpoint}/${next.id}`, body("POST", { action }))
-        if (stopped.current) return
-        setBatch(next)
-      } while (next.status === "VALIDATING" || next.status === "IMPORTING")
+      let progress: ImportProgress = next
+      try {
+        do {
+          const update = await request<ImportProgress>(`${endpoint}/${next.id}`, body("POST", { action }))
+          progress = update
+          if (stopped.current) return
+          setBatch(current => current?.id === update.id ? { ...current, ...update } : current)
+        } while (progress.status === "VALIDATING" || progress.status === "IMPORTING")
+      } catch (error) {
+        // Refresh committed rows after an interruption without hiding its cause.
+        if (!stopped.current) { try { await open(next.id) } catch { /* Preserve the processing error. */ } }
+        throw error
+      }
+      await open(next.id)
       await refreshHistory()
     })
   }
+  const headers = batch?.headers
   const columns = React.useMemo<ColumnDef<Row>[]>(() => [
     { id: "row", header: "Row", accessorKey: "rowNumber" },
     { id: "status", header: "Result", cell: ({ row }) => <ImportStatus value={row.original.status} /> },
     { id: "errors", header: "What to correct", cell: ({ row }) => <div className="min-w-52 max-w-md whitespace-normal text-sm">{row.original.errors.map((e, i) => <p key={i}><span className="font-medium">{e.field}:</span> {e.message}</p>)}</div> },
-    ...(batch?.headers || []).filter(h => !importReportColumns.includes(h)).map(h => ({ id: `column-${h}`, header: h, cell: ({ row }: { row: { original: Row } }) => <span className="block max-w-64 truncate" title={row.original.values[batch!.headers.indexOf(h)]}>{row.original.values[batch!.headers.indexOf(h)]}</span> })),
-  ], [batch])
+    ...(headers || []).flatMap((h, index) => importReportColumns.includes(h) ? [] : [{ id: `column-${h}`, header: h, cell: ({ row }: { row: { original: Row } }) => <span className="block max-w-64 truncate" title={row.original.values[index]}>{row.original.values[index]}</span> }]),
+  ], [headers])
   const table = useReactTable({ data: batch?.items || [], columns, getCoreRowModel: getCoreRowModel(), manualPagination: true })
   const ready = batch?.counts.READY || 0, failed = (batch?.counts.INVALID || 0) + (batch?.counts.DUPLICATE || 0)
   const totalRows = Object.values(batch?.counts || {}).reduce((sum, n) => sum + n, 0)
@@ -144,8 +154,8 @@ export function EnquiryImport() {
               {["VALIDATING", "IMPORTING"].includes(batch.status) && <Button disabled={busy} loading={busy} onClick={() => process(batch.status === "VALIDATING" ? "validate" : "import")}>Resume {batch.status === "VALIDATING" ? "validation" : "import"}</Button>}
             </div>
           </div>
-          <DataTable table={table} emptyMessage="No rows in this view." />
-          <Pagination page={batch.page} pageSize={batch.pageSize} total={batch.total} totalPages={batch.totalPages} loading={busy} onPageChange={p => act(async () => { await open(batch.id, p, result, batch.pageSize) })} onPageSizeChange={size => act(async () => { await open(batch.id, 1, result, size) })} />
+          {!busy && <><DataTable table={table} emptyMessage="No rows in this view." />
+          <Pagination page={batch.page} pageSize={batch.pageSize} total={batch.total} totalPages={batch.totalPages} loading={busy} onPageChange={p => act(async () => { await open(batch.id, p, result, batch.pageSize) })} onPageSizeChange={size => act(async () => { await open(batch.id, 1, result, size) })} /></>}
           {failed > 0 && <p className="text-sm text-muted-foreground">Correct invalid rows, remove genuine duplicates, then choose Upload another sheet. Unchanged duplicates will be skipped again.</p>}
         </Section>
       </>}

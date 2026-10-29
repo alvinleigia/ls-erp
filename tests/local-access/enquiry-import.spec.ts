@@ -2,6 +2,7 @@ import { test, expect } from "@playwright/test"
 import { readFile } from "node:fs/promises"
 import { parse } from "csv-parse/sync"
 import { seed, login, json } from "./fixtures"
+import type { ImportProgress } from "../../modules/crm/import-types"
 
 test("enquiry upload, review, correction download and reupload use shared CRM controls", async ({ browser }, testInfo) => {
   test.setTimeout(180000)
@@ -58,5 +59,60 @@ test("enquiry upload, review, correction download and reupload use shared CRM co
     await page.reload()
     await expect(page.getByText("1 enquiry imported. 1 row skipped.", { exact: true })).toBeVisible()
     await page.screenshot({ path: testInfo.outputPath("import-complete.png"), fullPage: true })
+  } finally { await context.close(); await fixture.db.end() }
+})
+
+test("compact import progress survives an interruption and reload without losing correction rows", async ({ browser }, testInfo) => {
+  test.setTimeout(180000)
+  const fixture = await seed()
+  const { context, page } = await login(browser, fixture.origin, fixture.users.admin.email)
+  try {
+    let validations = 0, interrupted = false
+    const progress: ImportProgress[] = []
+    await page.route(/\/api\/crm\/enquiry-imports\/[^/?]+$/, async route => {
+      if (route.request().method() === "POST" && route.request().postDataJSON().action === "validate") {
+        if (++validations === 2 && !interrupted) { interrupted = true; await route.abort("connectionreset"); return }
+      }
+      await route.continue()
+    })
+    page.on("response", async response => {
+      if (response.request().method() === "POST" && /\/api\/crm\/enquiry-imports\/[^/?]+$/.test(response.url()) && response.ok()) {
+        progress.push(await response.json())
+      }
+    })
+    const rows = Array.from({ length: 61 }, (_, i) => [`Bulk ${i}`, `bulk-${i}@${fixture.slug}.test`])
+    rows[25][1] = rows[0][1].toUpperCase()
+    rows[60][1] = "invalid-address"
+    await page.goto("/crm/enquiries/import")
+    await page.getByLabel("Enquiry file").setInputFiles({ name: "bulk-leads.csv", mimeType: "text/csv", buffer: Buffer.from([['Name', 'Email'], ...rows].map(row => row.join(',')).join('\n')) })
+    await page.getByRole("button", { name: "Upload and map fields" }).click()
+    await page.getByRole("button", { name: "Validate rows", exact: true }).click()
+    await expect(page.getByRole("alert")).toBeVisible({ timeout: 30000 })
+    await expect.poll(() => progress.length).toBe(1)
+    const firstCount = progress[0].counts.READY
+    expect(firstCount).toBeGreaterThan(0)
+    expect(firstCount).toBeLessThanOrEqual(25)
+    await expect(page.getByText(new RegExp(`Processing paused.*${firstCount} rows processed`))).toBeVisible()
+    expect((await json(context, "/api/crm/enquiries")).total).toBe(0)
+    await page.reload()
+    await page.getByRole("button", { name: "Resume validation" }).click()
+    await expect(page.getByRole("button", { name: "Import 59 ready rows" })).toBeVisible({ timeout: 60000 })
+    await page.getByRole("button", { name: "Import 59 ready rows" }).click()
+    await expect(page.getByText("59 enquiries imported. 2 rows skipped.", { exact: true })).toBeVisible({ timeout: 60000 })
+    expect((await json(context, "/api/crm/enquiries")).total).toBe(59)
+    await expect.poll(() => progress.filter(p => p.status === "COMPLETE").length).toBe(1)
+    expect(progress.every(p => Object.keys(p).sort().join(',') === 'counts,id,status')).toBe(true)
+    expect(progress[0].counts.PENDING).toBe(61 - firstCount)
+    expect(progress.length).toBeGreaterThanOrEqual(6)
+    expect(progress.length).toBeLessThan(26)
+    await page.getByRole("button", { name: "Show import rows", exact: true }).click()
+    await page.getByRole("menuitemradio", { name: "Errors and duplicates", exact: true }).click()
+    await expect(page.getByRole("cell", { name: "Bulk 25", exact: true })).toBeVisible()
+    await expect(page.getByRole("cell", { name: "Bulk 60", exact: true })).toBeVisible()
+    const downloaded = page.waitForEvent("download")
+    await page.getByRole("link", { name: "Download correction sheet" }).click()
+    const correction = parse(await readFile((await (await downloaded).path())!, "utf8"), { bom: true })
+    expect(correction).toHaveLength(3)
+    await page.screenshot({ path: testInfo.outputPath("bulk-import-corrections.png"), fullPage: true })
   } finally { await context.close(); await fixture.db.end() }
 })

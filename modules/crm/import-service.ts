@@ -15,7 +15,7 @@ import { CrmError, type CrmActor } from "./policy"
 import { teamScope } from "@/platform/teams/service"
 import { enquiryFields } from "./custom-fields"
 import { crmListSchema } from "./validation"
-import { baseImportFields, importChoices, importReportColumns, suggestImportMapping, type ImportConfig, type ImportField, type ImportIssue } from "./import-types"
+import { baseImportFields, importReportColumns, suggestImportMapping, type ImportChoice, type ImportConfig, type ImportField, type ImportIssue, type ImportProgress } from "./import-types"
 import { crmCsv } from "./csv"
 
 type Tx = Prisma.TransactionClient
@@ -28,6 +28,8 @@ const contactKeys = ["name", "email", "phone", "addressLine1", "addressLine2", "
 const enquiryKeys = ["title", "requirements", "targetCloseOn", "assignedUserId", "salesTeamId", "sourceId"]
 const clean = (s: string) => s.trim().toLowerCase()
 const phoneText = (s: string) => s.trim().replace(/^'(?=\+)/, "").replace(/[\s().-]/g, "")
+const batchSize = 25
+const batchBudgetMs = 15000
 class RowError extends CrmError {
   constructor(public issues: ImportIssue[], public duplicate = false) { super(400, issues.map(i => `${i.field}: ${i.message}`).join("; ")) }
 }
@@ -38,37 +40,53 @@ function issues(error: unknown): ImportIssue[] {
   throw error // Infrastructure failures are retryable, never reported as bad customer data.
 }
 
-function inputFor(values: string[], config: ImportConfig, fields: ImportField[], extensions: CrmExtensions) {
-  const result: Record<string, unknown> = {}, errors: ImportIssue[] = []
+function inputReader(config: ImportConfig, fields: ImportField[], extensions: CrmExtensions) {
   const available = new Set(fields.map(f => f.key))
-  if ([...Object.keys(config.mapping), ...Object.keys(config.defaults).filter(k => config.defaults[k])].some(k => !available.has(k))) throw new RowError([{ field: "Mapping", message: "A mapped field or module is no longer available. Restore access or upload the sheet again with updated mappings." }])
-  for (const field of fields) {
-    const column = config.mapping[field.key]
-    const raw = (column === undefined ? "" : values[column] || "").trim() || config.defaults[field.key] || field.defaultValue || ""
-    if (!raw) continue
-    if (field.type === "choice") {
-      const choices = importChoices(field, result).filter(c => [c.id, c.name, ...(c.aliases || [])].some(s => clean(s) === clean(raw)))
-      if (choices.length !== 1) errors.push({ field: field.label, message: choices.length ? "More than one match. Use the exact ID or unique code." : `No active matching choice for “${raw.slice(0, 100)}”. Check the spelling or select a default.` })
-      else result[field.key] = choices[0].id
-    } else if (field.type === "boolean") {
-      if (!["yes", "no", "true", "false", "1", "0"].includes(clean(raw))) errors.push({ field: field.label, message: "Use Yes or No." })
-      else result[field.key] = ["yes", "true", "1"].includes(clean(raw))
-    } else if (field.type === "date") {
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(raw) || !Number.isFinite(Date.parse(raw)) || new Date(raw).toISOString().slice(0, 10) !== raw) errors.push({ field: field.label, message: "Use a valid date in YYYY-MM-DD format." })
-      else result[field.key] = raw
-    } else result[field.key] = raw
-  }
-  result.email = clean(String(result.email || ""))
-  result.phone = phoneText(String(result.phone || ""))
-  if (!result.email && !result.phone) errors.push({ field: "Email / phone", message: "Provide an email address or an international phone number." })
-  if (!result.name) errors.push({ field: "Contact name", message: "Enter a contact name." })
-  if (!result.title) result.title = `Enquiry - ${result.name || ""}`
-  if (errors.length) throw new RowError(errors)
-  return {
-    ...Object.fromEntries(enquiryKeys.filter(k => result[k] !== undefined).map(k => [k, result[k]])),
-    newContact: Object.fromEntries(contactKeys.filter(k => result[k] !== undefined).map(k => [k, result[k]])),
-    customFields: Object.fromEntries(fields.filter(f => f.key.startsWith("custom:") && result[f.key] !== undefined).map(f => [f.key.slice(7), result[f.key] as FieldValue])),
-    ...extensions.importInput?.(result),
+  const unavailable = [...Object.keys(config.mapping), ...Object.keys(config.defaults).filter(k => config.defaults[k])].some(k => !available.has(k))
+  // Normalize each choice catalogue once per request, preserving ambiguous aliases
+  // and parent-dependent choices. Saved records still use fresh domain checks.
+  const readers = fields.map(field => {
+    const choices = new Map<string, ImportChoice[]>()
+    for (const choice of field.choices || []) {
+      for (const key of new Set([choice.id, choice.name, ...(choice.aliases || [])].map(clean))) {
+        const matches = choices.get(key)
+        if (matches) matches.push(choice)
+        else choices.set(key, [choice])
+      }
+    }
+    return { field, choices }
+  })
+  return (values: string[]) => {
+    const result: Record<string, unknown> = {}, errors: ImportIssue[] = []
+    if (unavailable) throw new RowError([{ field: "Mapping", message: "A mapped field or module is no longer available. Restore access or upload the sheet again with updated mappings." }])
+    for (const { field, choices: catalogue } of readers) {
+      const column = config.mapping[field.key]
+      const raw = (column === undefined ? "" : values[column] || "").trim() || config.defaults[field.key] || field.defaultValue || ""
+      if (!raw) continue
+      if (field.type === "choice") {
+        const choices = (catalogue.get(clean(raw)) || []).filter(c => !field.dependsOn || (!!result[field.dependsOn] && c.parentId === result[field.dependsOn]))
+        if (choices.length !== 1) errors.push({ field: field.label, message: choices.length ? "More than one match. Use the exact ID or unique code." : `No active matching choice for “${raw.slice(0, 100)}”. Check the spelling or select a default.` })
+        else result[field.key] = choices[0].id
+      } else if (field.type === "boolean") {
+        if (!["yes", "no", "true", "false", "1", "0"].includes(clean(raw))) errors.push({ field: field.label, message: "Use Yes or No." })
+        else result[field.key] = ["yes", "true", "1"].includes(clean(raw))
+      } else if (field.type === "date") {
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(raw) || !Number.isFinite(Date.parse(raw)) || new Date(raw).toISOString().slice(0, 10) !== raw) errors.push({ field: field.label, message: "Use a valid date in YYYY-MM-DD format." })
+        else result[field.key] = raw
+      } else result[field.key] = raw
+    }
+    result.email = clean(String(result.email || ""))
+    result.phone = phoneText(String(result.phone || ""))
+    if (!result.email && !result.phone) errors.push({ field: "Email / phone", message: "Provide an email address or an international phone number." })
+    if (!result.name) errors.push({ field: "Contact name", message: "Enter a contact name." })
+    if (!result.title) result.title = `Enquiry - ${result.name || ""}`
+    if (errors.length) throw new RowError(errors)
+    return {
+      ...Object.fromEntries(enquiryKeys.filter(k => result[k] !== undefined).map(k => [k, result[k]])),
+      newContact: Object.fromEntries(contactKeys.filter(k => result[k] !== undefined).map(k => [k, result[k]])),
+      customFields: Object.fromEntries(fields.filter(f => f.key.startsWith("custom:") && result[f.key] !== undefined).map(f => [f.key.slice(7), result[f.key] as FieldValue])),
+      ...extensions.importInput?.(result),
+    }
   }
 }
 
@@ -166,7 +184,8 @@ export function createEnquiryImportService({ run, audit, readTerms }: CrmService
       })
       return get(id)
     },
-    async processEnquiryImport(id: string, mode: "validate" | "import") {
+    async processEnquiryImport(id: string, mode: "validate" | "import"): Promise<ImportProgress> {
+      const deadline = performance.now() + batchBudgetMs
       const setup = await run(permission, async (tx, actor) => {
         const record = await batch(tx, actor, id)
         if (mode === "import" && record.status === "REVIEW") await tx.crmEnquiryImport.update({ where: { id, tenantId: actor.tenantId }, data: { status: "IMPORTING" } })
@@ -174,10 +193,14 @@ export function createEnquiryImportService({ run, audit, readTerms }: CrmService
           if (record.status === "COMPLETE" || (mode === "validate" && record.status === "REVIEW")) return null
           throw new CrmError(409, "Confirm mapping and finish validation before importing.")
         }
-        const rows = await tx.crmEnquiryImportRow.findMany({ where: { tenantId: actor.tenantId, importId: id, status: mode === "validate" ? "PENDING" : "READY" }, select: { rowNumber: true }, orderBy: { rowNumber: "asc" }, take: 5 })
-        return { rows, fields: await fields(tx, actor) }
+        const rows = await tx.crmEnquiryImportRow.findMany({ where: { tenantId: actor.tenantId, importId: id, status: mode === "validate" ? "PENDING" : "READY" }, select: { rowNumber: true }, orderBy: { rowNumber: "asc" }, take: batchSize })
+        return { rows, readInput: inputReader(record.config as ImportConfig, await fields(tx, actor), extensions) }
       })
+      let processed = 0
       for (const { rowNumber } of setup?.rows || []) {
+        // Always attempt one row so even a slow setup can make durable progress.
+        // Leave headroom under the route's 60-second limit; never interrupt a row.
+        if (processed && performance.now() >= deadline) break
         let email = "", phone = "", authorized = false
         try {
           await run(permission, async (tx, actor) => {
@@ -188,7 +211,7 @@ export function createEnquiryImportService({ run, audit, readTerms }: CrmService
             const config = record.config as ImportConfig, values = row.values as string[]
             email = clean(values[config.mapping.email] || ""); phone = phoneText(values[config.mapping.phone] || "")
             await duplicate(tx, actor, id, rowNumber, email, phone)
-            const input = inputFor(values, config, setup!.fields, extensions)
+            const input = setup!.readInput(values)
             const enquiry = await create(tx, actor, input, mode === "validate", record.id)
             await tx.crmEnquiryImportRow.update({ where: rowKey(actor.tenantId, id, rowNumber), data: { status: mode === "validate" ? "READY" : "IMPORTED", email: email || null, phone: phone || null, errors: [], ...(enquiry ? { enquiryId: enquiry.id } : {}) } })
           })
@@ -201,16 +224,20 @@ export function createEnquiryImportService({ run, audit, readTerms }: CrmService
             await tx.crmEnquiryImportRow.updateMany({ where: { tenantId: actor.tenantId, importId: id, rowNumber, status: mode === "validate" ? "PENDING" : "READY" }, data: { status: isDuplicate ? "DUPLICATE" : "INVALID", errors: json(detail), email: email || null, phone: phone || null } })
           })
         }
+        processed++
       }
-      await run(permission, async (tx, actor) => {
+      return run(permission, async (tx, actor) => {
         const record = await batch(tx, actor, id)
-        if (record.status !== (mode === "validate" ? "VALIDATING" : "IMPORTING")) return
-        if (!await tx.crmEnquiryImportRow.count({ where: { tenantId: actor.tenantId, importId: id, status: mode === "validate" ? "PENDING" : "READY" } })) {
-          await tx.crmEnquiryImport.update({ where: { id, tenantId: actor.tenantId }, data: { status: mode === "validate" ? "REVIEW" : "COMPLETE" } })
+        const grouped = await tx.crmEnquiryImportRow.groupBy({ by: ["status"], where: { tenantId: actor.tenantId, importId: id }, _count: true })
+        const counts = Object.fromEntries(grouped.map(c => [c.status, c._count]))
+        let status = record.status
+        if (status === (mode === "validate" ? "VALIDATING" : "IMPORTING") && !counts[mode === "validate" ? "PENDING" : "READY"]) {
+          status = mode === "validate" ? "REVIEW" : "COMPLETE"
+          await tx.crmEnquiryImport.update({ where: { id, tenantId: actor.tenantId }, data: { status } })
           await audit(tx, actor, `crm.enquiry.import.${mode === "validate" ? "validated" : "completed"}`, id)
         }
+        return { id, status, counts }
       })
-      return get(id)
     },
     downloadEnquiryImportErrors(id: string) {
       return run(permission, async (tx, actor) => {

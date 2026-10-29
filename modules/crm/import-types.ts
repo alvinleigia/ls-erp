@@ -8,6 +8,7 @@ export type ImportField = {
 }
 export type ImportConfig = { mapping: Record<string, number>; defaults: Record<string, string> }
 export type ImportIssue = { field: string; message: string }
+export type ImportProgress = { id: string; status: string; counts: Record<string, number> }
 export const IMPORT_MAX_ROWS = 1000
 export const IMPORT_MAX_BYTES = 3 * 1024 * 1024
 export const importReportColumns = ["Import row", "Import status", "Import errors"]

@@ -29,12 +29,12 @@ const upload = (csv, svc = service) => svc.uploadEnquiryImport("leads.csv", Buff
 async function review(job, config = job.config, svc = service) {
   let result = await svc.configureEnquiryImport(job.id, config)
   while (result.status === "VALIDATING") result = await svc.processEnquiryImport(job.id, "validate")
-  return result
+  return svc.getEnquiryImport(job.id)
 }
 async function finish(job, svc = service) {
   let result
   do { result = await svc.processEnquiryImport(job.id, "import") } while (result.status === "IMPORTING")
-  return result
+  return svc.getEnquiryImport(job.id)
 }
 before(async () => {
   await root.tenant.createMany({ data: [{ id: a, slug: a, name: a }, { id: b, slug: b, name: b }] })
@@ -277,3 +277,60 @@ test("configured template headers and exports preserve mappings, correction rows
 })
 
 test("imports offer flexible and qualification teams, exclude direct-only teams and recheck changed rules", flexibleTeamImport)
+
+test("slow requests checkpoint after a row and resume with fresh service state", async t => {
+  const job = await upload('Name,Email\n' + Array.from({ length: 30 }, (_, i) => `Checkpoint ${i},${prefix}-checkpoint-${i}@example.test`).join('\n'))
+  await service.configureEnquiryImport(job.id, job.config)
+  let tick = 0, progress
+  const clock = t.mock.method(performance, 'now', () => tick++ ? 15001 : 0)
+  try { progress = await service.processEnquiryImport(job.id, 'validate') } finally { clock.mock.restore() }
+  assert.deepEqual(Object.keys(progress).sort(), ['counts', 'id', 'status'])
+  assert.deepEqual(progress.counts, { READY: 1, PENDING: 29 })
+  assert.equal(progress.status, 'VALIDATING')
+  assert.equal(await root.crmEnquiry.count({ where: { tenantId: a, importId: job.id } }), 0)
+  const resumed = createApplicationCrmService(dbA, { tenantId: a, userId: admin.id })
+  do { progress = await resumed.processEnquiryImport(job.id, 'validate') } while (progress.status === 'VALIDATING')
+  assert.equal(progress.counts.READY, 30)
+  assert.equal(progress.status, 'REVIEW')
+})
+
+test("1,000 rows use bounded compact batches with cross-batch duplicates and complete correction results", { timeout: 900000 }, async t => {
+  const started = performance.now()
+  const rows = Array.from({ length: 1000 }, (_, i) => [`Bulk ${i}`, `${prefix}-bulk-${i}@example.test`])
+  rows[24][1] = rows[0][1].toUpperCase()
+  rows[25][1] = rows[1][1]
+  rows[998][1] = 'not-an-email'
+  rows[999][0] = ''
+  const job = await upload(crmCsv(['Name', 'Email'], rows))
+  await service.configureEnquiryImport(job.id, job.config)
+  async function process(mode) {
+    let progress, requests = 0, prior = mode === 'validate' ? 1000 : 996
+    do {
+      progress = await service.processEnquiryImport(job.id, mode); requests++
+      assert.deepEqual(Object.keys(progress).sort(), ['counts', 'id', 'status'])
+      const remaining = progress.counts[mode === 'validate' ? 'PENDING' : 'READY'] || 0
+      assert.ok(prior - remaining <= 25, 'each request respects its row cap')
+      assert.ok(remaining < prior, 'each request makes durable progress')
+      prior = remaining
+    } while (progress.status === (mode === 'validate' ? 'VALIDATING' : 'IMPORTING'))
+    return { progress, requests }
+  }
+  const checked = await process('validate')
+  assert.deepEqual(checked.progress.counts, { READY: 996, INVALID: 2, DUPLICATE: 2 })
+  assert.equal(await root.crmEnquiry.count({ where: { tenantId: a, importId: job.id } }), 0)
+  // An existing contact can arrive after validation. The final duplicate check
+  // must still skip it without creating an orphan or updating the contact.
+  await root.crmContact.create({ data: { tenantId: a, ownerUserId: admin.id, name: 'Concurrent contact', email: rows[30][1] } })
+  const committed = await process('import')
+  assert.deepEqual(committed.progress.counts, { IMPORTED: 995, INVALID: 2, DUPLICATE: 3 })
+  assert.equal(committed.progress.status, 'COMPLETE')
+  assert.equal(await root.crmEnquiry.count({ where: { tenantId: a, importId: job.id } }), 995)
+  const result = await service.getEnquiryImport(job.id, { result: 'errors' })
+  assert.equal(result.total, 5)
+  assert.deepEqual(result.items.map(row => row.rowNumber), [26, 27, 32, 1000, 1001])
+  assert.equal(parse(await service.downloadEnquiryImportErrors(job.id), { bom: true }).length, 6)
+  await service.processEnquiryImport(job.id, 'import')
+  assert.equal(await root.auditLog.count({ where: { tenantId: a, entityId: job.id, event: 'crm.enquiry.import.completed' } }), 1)
+  assert.ok(checked.requests + committed.requests < 200, 'substantially fewer requests than five-row batches')
+  t.diagnostic(JSON.stringify({ rows: 1000, validateRequests: checked.requests, importRequests: committed.requests, elapsedSeconds: Math.round((performance.now() - started) / 1000) }))
+})
