@@ -103,3 +103,5 @@ export function createDocumentService<C>(db: PrismaClient, identity: DocumentIde
   }
 }
 export const validateDocumentSize = (payload: DocumentPayload) => { if (Buffer.byteLength(JSON.stringify(payload)) > 512 * 1024) throw new BusinessError(413, "This document contains too much text. Shorten the template or saved details.") }
+
+export const issuedDocumentSummary=(row:StoredDocument)=>({id:row.id,providerKey:row.providerKey,version:row.version,reference:row.reference,supersedesId:row.supersedesId})

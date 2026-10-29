@@ -858,6 +858,7 @@ model Organization {
 model Tenant {
   documentTemplates BusinessDocumentTemplate[]
   salesOrderSequence SalesOrderSequence?
+  receiptDocumentSequence ReceiptDocumentSequence?
   participantFormConfiguration ParticipantFormConfiguration?
   opportunityParticipants CrmOpportunityParticipant[]
   externalCollaborators ExternalCollaborator[]
@@ -2720,6 +2721,7 @@ model BusinessDocumentTemplate {
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   company BusinessCompany @relation(fields: [tenantId, companyId], references: [tenantId, id], onDelete: Restrict)
   documents SalesOrderDocument[]
+  receiptDocuments OrderReceiptDocument[]
   @@id([tenantId, companyId, providerKey, version])
 }
 
@@ -2803,10 +2805,50 @@ model OrderReceipt {
   account OrderReceivable @relation(fields: [tenantId, orderId], references: [tenantId, orderId], onDelete: Restrict)
   allocations OrderReceiptAllocation[]
   reversal OrderReceiptReversal?
+  documents OrderReceiptDocument[]
   @@id([tenantId, id])
   @@unique([tenantId, orderId, id])
   @@unique([tenantId, requestKey])
   @@index([tenantId, orderId, createdAt(sort: Desc), id])
+}
+
+model ReceiptDocumentSequence {
+  tenantId String @id
+  value Int
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+}
+
+model OrderReceiptDocument {
+  tenantId String
+  id String @default(uuid())
+  orderId String
+  paymentId String
+  companyId String
+  providerKey String
+  templateVersion Int
+  sequence Int
+  version Int
+  reference String
+  requestKey String
+  requestHash String
+  snapshot Json
+  archive Json
+  supersedesId String?
+  reason String @default("")
+  createdBy String
+  createdAt DateTime @default(now())
+  source OrderReceipt @relation(fields: [tenantId, orderId, paymentId], references: [tenantId, orderId, id], onDelete: Restrict)
+  template BusinessDocumentTemplate @relation(fields: [tenantId, companyId, providerKey, templateVersion], references: [tenantId, companyId, providerKey, version], onDelete: Restrict)
+  supersedes OrderReceiptDocument? @relation("ReceiptReplacement", fields: [tenantId, paymentId, supersedesId], references: [tenantId, paymentId, id], onDelete: NoAction)
+  successors OrderReceiptDocument[] @relation("ReceiptReplacement")
+  @@id([tenantId, id])
+  @@unique([tenantId, requestKey])
+  @@unique([tenantId, reference])
+  @@unique([tenantId, paymentId, version])
+  @@unique([tenantId, paymentId, id])
+  @@unique([tenantId, sequence, version])
+  @@unique([tenantId, supersedesId])
+  @@index([tenantId, paymentId, createdAt(sort: Desc), id])
 }
 
 model OrderReceiptAllocation {

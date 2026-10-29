@@ -16,6 +16,8 @@ const nextConfig: NextConfig = {
     "/api/sales-orders/*/documents/preview": ["./public/assets/fonts/NotoSans-*.ttf"],
     "/api/sales-orders/*/documents/issue": ["./public/assets/fonts/NotoSans-*.ttf"],
     "/api/document-templates/preview": ["./public/assets/fonts/NotoSans-*.ttf"],
+    "/api/payment-receipts/*/documents/preview": ["./public/assets/fonts/NotoSans-*.ttf"],
+    "/api/payment-receipts/*/documents/issue": ["./public/assets/fonts/NotoSans-*.ttf"],
   },
 };
 

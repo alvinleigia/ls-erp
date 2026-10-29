@@ -24,6 +24,7 @@ type ResourceContract = { policy: ResourceRecordPolicy; ownership: ResourceOwner
 // against the generated Prisma schema. No data/default/scope migration is implied.
 export const resourceRegistry = {
   orderDocuments: { policy: "sales", ownership: { kind: "source", roots: ["SalesOrderDocument"], sources: ["salesOrders"] }, sharing: "salesOrders" },
+  paymentDocuments: { policy: "sales", ownership: { kind: "source", roots: ["OrderReceiptDocument"], sources: ["orderPayments"] }, sharing: "salesOrders" },
   documentTemplates: { policy: "shared", ownership: { kind: "shared", roots: ["BusinessDocumentTemplate"] } },
   receivables: { policy: "sales", ownership: { kind: "source", roots: ["OrderReceivable"], children: ["OrderReceivableLine"], sources: ["salesOrders"] }, sharing: "salesOrders" },
   orderPayments: { policy: "sales", ownership: { kind: "source", roots: ["OrderReceipt"], children: ["OrderReceiptAllocation", "OrderReceiptReversal"], sources: ["salesOrders"] }, sharing: "salesOrders" },
@@ -34,7 +35,7 @@ export const resourceRegistry = {
     availability: { kind: "source", roots: ["CatalogReservationAvailability"], sources: ["catalogItems"] },
   } } },
   dashboard: { policy: "sources", ownership: { kind: "composed", roots: ["CrmEnquiry", "AppointmentOrder", "InventoryOfficeStock"], sources: ["enquiries", "opportunities", "activities", "quotations", "projects", "appointments", "inventoryProducts", "leaveApprovals", "services"] } },
-  auditLogs: { policy: "administrative", ownership: { kind: "composed", roots: ["AuditLog"], sources: ["users", "businessSettings", "participantSettings", "documentTemplates", "orderDocuments", "teams", "contacts", "accounts", "enquiries", "opportunities", "activities", "projects", "quotations", "salesOrders", "receivables", "orderPayments", "catalogItems", "unitReservations", "appointments", "appointmentCoupons", "inventoryProducts", "inventoryCategories", "inventorySuppliers", "inventoryPurchases", "services", "serviceCategories", "leaveApprovals", "leaveDefinitions", "leaveGroups", "shiftTemplates", "shiftSchedules", "shiftPlans", "shiftRoster", "branding", "taxRates", "customFields", "quotationTemplates"] } },
+  auditLogs: { policy: "administrative", ownership: { kind: "composed", roots: ["AuditLog"], sources: ["users", "businessSettings", "participantSettings", "documentTemplates", "orderDocuments", "paymentDocuments", "teams", "contacts", "accounts", "enquiries", "opportunities", "activities", "projects", "quotations", "salesOrders", "receivables", "orderPayments", "catalogItems", "unitReservations", "appointments", "appointmentCoupons", "inventoryProducts", "inventoryCategories", "inventorySuppliers", "inventoryPurchases", "services", "serviceCategories", "leaveApprovals", "leaveDefinitions", "leaveGroups", "shiftTemplates", "shiftSchedules", "shiftPlans", "shiftRoster", "branding", "taxRates", "customFields", "quotationTemplates"] } },
   users: { policy: "administrative", ownership: { kind: "security", roots: ["User"], children: ["StaffProfile", "StaffCertification", "StaffDocument", "TenantAccessRole", "TenantRoleAssignment", "TenantUserAccess", "Invitation", "BusinessCompany", "BusinessOffice", "BusinessOfficePolicy", "BusinessOfficeGrant", "BusinessCompanyGrant", "ExternalCollaborator"] } },
   assignmentTargets: { policy: "directory", ownership: { kind: "composed", roots: ["User", "BusinessTeamMember", "StaffProfile"], sources: ["teams", "enquiries", "opportunities", "projects"] } },
   restrictedFields: { policy: "shared", ownership: { kind: "composed", roots: ["CustomFieldDefinition", "CrmEnquiryFieldValue", "CrmOpportunityFieldValue", "RealEstateProjectFieldValue"], sources: ["customFields", "enquiries", "opportunities", "projects"] } },
@@ -96,6 +97,7 @@ type OwnershipModels<O> = O extends { parts: infer P } ? PartModels<P[keyof P]> 
 type InfrastructureModel = Exclude<Prisma.ModelName, OwnershipModels<typeof resourceRegistry[Resource]["ownership"]>>
 export const infrastructureModels = {
   SalesOrderSequence: "numbering",
+  ReceiptDocumentSequence: "numbering",
   TenantModule: "tenantSecurity", Tenant: "tenantBoundary", TenantDomain: "tenantBoundary",
   Organization: "controlPlane", OrganizationMembership: "controlPlane",
   Account: "authentication", Session: "authentication", VerificationToken: "authentication", PasswordResetToken: "authentication",

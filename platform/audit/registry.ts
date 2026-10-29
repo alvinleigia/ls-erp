@@ -37,6 +37,7 @@ export const auditFamilies: readonly AuditFamily[] = [
   { ...resourceFamily("participantSettings", "participantSettings."), adminOnly: true },
   { ...resourceFamily("documentTemplates", "documentTemplate."), adminOnly: true },
   { prefix:"salesOrder.document.",boundary:"source",read:["orderDocuments.read","salesOrders.read"],modules:["salesOrders"],adminOnly:true },
+  { prefix:"payment.document.",boundary:"source",read:["paymentDocuments.read","orderPayments.read","receivables.read","salesOrders.read"],modules:["receivables","salesOrders"],adminOnly:true },
   resourceFamily("businessSettings", "core.businessSettings."),
   resourceFamily("taxRates", "core.taxRates."),
   resourceFamily("branding", "branding."),

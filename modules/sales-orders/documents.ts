@@ -10,7 +10,7 @@ import { readDocumentBranding } from "@/platform/branding/read"
 import { recordDomainAuditEvent } from "@/lib/domain-audit"
 import type { QuotationSnapshot } from "@/modules/sales-documents/quotation-service"
 import type { ArchivedPdf } from "@/platform/storage/documents"
-import type { DocumentIdentity, DocumentProvider, DocumentStorage, StoredDocument } from "@/platform/documents/contracts"
+import type { DocumentIdentity, DocumentProvider, DocumentStorage } from "@/platform/documents/contracts"
 import { createDocumentService, validateDocumentSize, type DocumentOwner } from "@/platform/documents/service"
 import { documentHash } from "@/platform/documents/hash"
 import { documentContentSchema } from "@/platform/documents/validation"
@@ -82,4 +82,3 @@ export function createOrderDocumentService(db:PrismaClient,identity:DocumentIden
     },
   }
 }
-export const issuedDocumentSummary=(row:StoredDocument)=>({id:row.id,providerKey:row.providerKey,version:row.version,reference:row.reference,supersedesId:row.supersedesId})
