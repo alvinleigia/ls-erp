@@ -54,6 +54,9 @@ edits. Lists and histories are paginated.
   version, writes immutable review evidence and records a strict audit event.
   Native constraints protect identity, revision coherence, exact captured rate
   facts, same-company office references and immutable history.
+  Every intermediate review in a multi-change transaction is checked as well as
+  the final head. Missing intermediate history or component evidence rolls back
+  the transaction; complete atomic reviews remain supported.
 - Published components reference the one existing tenant rate directory, storing
   exact decimal text and decimal evidence. The operational `Tax.percent Float`
   column and its consumers are unchanged. Standardizing all rate storage and

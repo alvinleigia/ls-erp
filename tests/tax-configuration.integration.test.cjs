@@ -64,6 +64,26 @@ test('native current-head proofs prevent history omission and forged rate eviden
  await assert.rejects(root.$transaction(async tx=>{await tx.companyTaxProfile.update({where:{tenantId_id:{tenantId:tenant,id:p.id}},data:{version:{increment:1}}});await tx.companyTaxProfileVersion.create({data:{tenantId:tenant,profileId:p.id,version:2,snapshot,actorId:admin.id}})}),/reviewed rate facts/i)
  assert.equal((await s.getProfile(p.id)).version,1)
 })
+test('native proofs validate intermediate reviews as well as the final transaction head',async()=>{
+ const p=await publish(),snapshot=(await s.getProfile(p.id)).current.snapshot
+ async function append(tx,version,history=true,components=true){
+  await tx.companyTaxProfile.update({where:{tenantId_id:{tenantId:tenant,id:p.id}},data:{version:{increment:1}}})
+  if(history)await tx.companyTaxProfileVersion.create({data:{tenantId:tenant,profileId:p.id,version,snapshot,actorId:admin.id}})
+  if(components)for(const v of snapshot.variants)for(const c of v.components)await tx.companyTaxProfileRate.create({data:{tenantId:tenant,profileId:p.id,profileVersion:version,variantKey:v.key,componentCode:c.code,taxId:c.rateId,name:c.name,percent:c.percent,sourceUpdatedAt:new Date(c.sourceUpdatedAt)}})
+ }
+ await assert.rejects(root.$transaction(async tx=>{await append(tx,2,false,false);await append(tx,3)}),/Every tax profile update requires immutable reviewed history/)
+ await assert.rejects(root.$transaction(async tx=>{await append(tx,2,true,false);await append(tx,3)}),/Every tax profile version must retain complete reviewed rate facts/)
+ assert.equal((await s.getProfile(p.id)).version,1)
+ await root.$transaction(async tx=>{await append(tx,2);await append(tx,3)})
+ assert.equal((await s.getProfile(p.id)).history.length,3)
+ const reg=await root.companyTaxRegistration.findFirstOrThrow({where:{tenantId:tenant}})
+ await assert.rejects(root.$transaction(async tx=>{
+  for(let i=0;i<2;i++)await tx.companyTaxRegistration.update({where:{tenantId_id:{tenantId:tenant,id:reg.id}},data:{version:{increment:1}}})
+  const [r]=await tx.$queryRaw`SELECT app.tax_registration_snapshot(r) snapshot FROM "CompanyTaxRegistration" r WHERE "tenantId"=${tenant} AND id=${reg.id}`
+  await tx.companyTaxRegistrationRevision.create({data:{tenantId:tenant,registrationId:reg.id,version:reg.version+2,snapshot:r.snapshot,actorId:admin.id}})
+ }),/Every registration update requires immutable reviewed history/)
+ assert.equal((await s.getRegistration(reg.id)).version,reg.version)
+})
 test('concurrent reviews admit one expected-version winner and strict audit failure rolls back every config row',async()=>{
  const p=await publish(),result=await Promise.allSettled([publish({id:p.id,code:p.code,version:1}),publish({id:p.id,code:p.code,version:1})]);assert.equal(result.filter(r=>r.status==='fulfilled').length,1);assert.equal((await s.getProfile(p.id)).version,2)
  const before=await root.companyTaxProfile.count({where:{tenantId:tenant}}),broken=new Proxy(db,{get(target,key){if(key==='$transaction')return (fn,opts)=>target.$transaction(tx=>fn(new Proxy(tx,{get(t,k){if(k==='auditLog')return {createMany(){throw Error('QA audit unavailable')}};return Reflect.get(t,k)}})),opts);return Reflect.get(target,key)}})
