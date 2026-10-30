@@ -1,3 +1,45 @@
+## P12 partial and milestone billing - staging verified
+
+Source ae21e2d is READY on all four staging aliases. Commercial invoices now use
+frozen billed allocations, separate from accepted order evidence and received
+payments. Full/remaining, fixed, percentage, accepted payment-plan milestone and
+selected-quantity choices share native allocation/rounding. Draft reservations,
+source locks and deferred proofs prevent overbilling, including read-committed
+writers waiting on the order lock. Fixed shares consume equivalent billing
+quantities; these do not certify delivery or move inventory. Date/note edits retain
+the saved allocation even when another invoice is credited.
+
+The per-order customer statement distinguishes net invoiced, credited, unbilled,
+draft-reserved and available value from received/applied/unapplied payments and
+invoice/order outstanding. Applications share existing order advances without
+creating another payment or debt. Full credit of one partial invoice releases
+only its claims/applications; other invoices and source order payments remain.
+Profiles, parent Read, module activation, office RLS and Restricted sharing remain
+mandatory, with optional payment figures omitted when their rights are missing.
+
+Migration 139 was applied only to staging after a readable encrypted application
+backup. All 146 preceding tables retain their prior columns/rows and policies;
+existing invoices receive full allocations without rewriting numbers, snapshots,
+events, timestamps, applications or archived PDFs. Only four reviewed guards were
+replaced; other prior functions are unchanged. Forced rollback and populated
+history preservation passed with both single-office and independent-office
+fixtures. No historical runtime fallback, module grants or tenant overrides.
+
+The 75-case regression suite, three browser flows, two focused preservation/PDF
+checks, six layout checks, build/TypeScript, lint and four-font tracing passed.
+Hosted QA posted milestone, percentage and quantity invoices, split one advance
+across them, rejected excess/duplicate milestones and typos, credited one invoice,
+issued two real private PDFs and proved unchanged historical bytes and order
+payments. Foreign tenants and cross-origin writes were denied. All PDF pages and
+readable desktop/mobile statements were inspected. Synthetic QA histories remain;
+the temporarily published company templates were disabled after verification.
+
+Production deployment dpl_EkQhmuCQqrwuxoRgR5vMMDx9kuFG, all three production aliases,
+GitHub main 4546cb2 and the root production project link remain unchanged. No main
+push or production deployment. GST, statutory documents, general-ledger posting,
+consolidated multi-order statements and partial credits within one invoice remain
+outside P12. See docs/PARTIAL_BILLING_P12.md for current usage and boundaries.
+
 ## P11 commercial invoices and credit notes - staging verified
 
 Source 5c26775 is READY on all four staging aliases. Full-order commercial
