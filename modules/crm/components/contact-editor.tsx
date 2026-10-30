@@ -1,4 +1,5 @@
 "use client"
+import { PartyTaxIdentities } from "@/platform/tax/party/controls"
 import { useTerminology, useTerminologyReader } from "@/platform/terminology/provider"
 import { withRecordView, useRecordView, AccessRecordForm, AccessSummarySection } from "@/platform/access/record-view"
 import { AccessPageHeader, AccessFormActions } from "@/platform/access/record-page"
@@ -69,7 +70,7 @@ function ContactEditorBody({ id }: { id?: string }) {
     {(!id || contact) && <div>
       <AccessRecordForm id="contact-details" onSubmit={save} saving={saving} error={error} disabled={!canEdit} fingerprint={values} initialSection="Contact details"
         overview={contact && <AccessSummarySection sectionKey="Contact details" title={term("crm.contact.singular", "Contact details", "{label} details")} canEdit={canEdit} fields={[{ label: "Name", value: contact.name }, { label: "Email", value: contact.email }, { label: "Phone", value: contact.phone }, { label: "Alternate phone", value: contact.alternatePhone }, { label: "WhatsApp", value: contact.whatsappPhone }, { label: "Address", value: [contact.addressLine1, contact.addressLine2, contact.city, contact.region, contact.postalCode, contact.country].filter(Boolean).join(", ") }, { label: "Status", value: contact.archived ? "Archived" : "Active" }]} />}
-        tabs={contact ? [
+        tabs={contact ? [{ value: "tax", permission: "contacts.read" as const, label: "Tax details", content: <PartyTaxIdentities endpoint={`/api/crm/contacts/${contact.id}/tax-identities`} /> },
           { value: "accounts", permission: "accounts.read" as const, label: term("crm.account.plural", "Business accounts"), content: <ContactAccounts contactId={contact.id} canEdit={!!contact.canEdit} archived={contact.archived} /> },
           { value: "activities", permission: "activities.read" as const, label: term("crm.activity.plural", "Activities"), content: <WorkList contactId={contact.id} /> },
           { value: "history", permission: "activities.read" as const, label: "Interactions", content: <ContactInteractions contactId={contact.id} /> },

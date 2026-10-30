@@ -32,9 +32,9 @@ facts; a missing registration or rate is not permission to assume one of them.
   rates do not independently establish a supply's statutory tax treatment.
 - `TaxRegistrationType.GST` currently permits supplier directory information. It
   does not establish the issuing company's GST registration.
-- Company registrations and office mappings are available in P13A. Recipient
-  registrations are still pending. Free-text addresses are not authoritative
-  place-of-supply rules.
+- Company registrations, office mappings and versioned recipient tax identities
+  are available in P13A. Recipient selection and frozen supply evidence remain
+  P13B work. Free-text addresses are not authoritative place-of-supply rules.
 - Accepted quotation charges are plain commercial amounts/descriptions. Historical
   charges named GST must not be reclassified or charged again automatically.
 - P12 freezes the accepted agreement separately from `CustomerInvoice.billing`.

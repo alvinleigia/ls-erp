@@ -244,6 +244,7 @@ model TenantModule {
 }
 
 model CrmContact {
+  taxIdentities PartyTaxIdentity[]
   participantRoles CrmOpportunityParticipant[]
   sharingPolicyId String?
   sharingPolicy RecordSharingPolicy? @relation(fields: [tenantId, sharingPolicyId], references: [tenantId, id], onDelete: Restrict)
@@ -286,6 +287,7 @@ model CrmContact {
 }
 
 model CrmAccount {
+  taxIdentities PartyTaxIdentity[]
   participantRoles CrmOpportunityParticipant[]
   sharingPolicyId String?
   sharingPolicy RecordSharingPolicy? @relation(fields: [tenantId, sharingPolicyId], references: [tenantId, id], onDelete: Restrict)
@@ -3406,4 +3408,46 @@ model ParticipantFormConfiguration {
   definition Json
   updatedAt DateTime @updatedAt
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+}
+
+// Shared recipient identity; the owning canonical person/business supplies access.
+model PartyTaxIdentity {
+  id String @id @default(cuid())
+  tenantId String
+  contactId String?
+  accountId String?
+  scheme String
+  countryCode String
+  status String
+  registrationNumber String
+  regionCode String
+  category String
+  legalName String
+  addressLine1 String
+  addressLine2 String
+  city String
+  postalCode String
+  effectiveFrom DateTime @db.Date
+  effectiveTo DateTime? @db.Date
+  archived Boolean @default(false)
+  version Int @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  contact CrmContact? @relation(fields: [tenantId, contactId], references: [tenantId, id], onDelete: Restrict)
+  account CrmAccount? @relation(fields: [tenantId, accountId], references: [tenantId, id], onDelete: Restrict)
+  revisions PartyTaxIdentityRevision[]
+  @@unique([tenantId,id])
+  @@unique([tenantId,contactId,scheme,registrationNumber])
+  @@unique([tenantId,accountId,scheme,registrationNumber])
+}
+model PartyTaxIdentityRevision {
+  id String @id @default(cuid())
+  tenantId String
+  identityId String
+  version Int
+  snapshot Json
+  actorId String
+  createdAt DateTime @default(now())
+  identity PartyTaxIdentity @relation(fields: [tenantId,identityId], references: [tenantId,id], onDelete: Restrict)
+  @@unique([tenantId,identityId,version])
 }

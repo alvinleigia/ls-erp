@@ -1,4 +1,5 @@
 "use client"
+import { PartyTaxIdentities } from "@/platform/tax/party/controls"
 import { useTerminology, useTerminologyReader } from "@/platform/terminology/provider"
 import { withRecordView, useRecordView, AccessRecordForm, AccessSummarySection } from "@/platform/access/record-view"
 import { Section } from "@/components/erp/section"
@@ -63,7 +64,7 @@ function AccountEditorBody({ id }: { id?: string }) {
       <AccessPageHeader title={id ? account?.name || term("crm.account.singular", "Business account") : term("crm.account.singular", "New business account", "New {label}")} backHref="/crm/accounts" backLabel={term("crm.account.plural", "Back to business accounts", "Back to {label}")} actions={<AccessFormActions form="account-form" cancelHref="/crm/accounts" saving={saving} disabled={false} canSave={canEdit} saveLabel={term("crm.account.singular", "Save account", "Save {label}")} />} />
     <AccessRecordForm id="account-form" onSubmit={save} saving={saving} error={error} disabled={!canEdit} fingerprint={values} initialSection="Account details"
       overview={account && <AccessSummarySection sectionKey="Account details" title={term("crm.account.singular", "Account details", "{label} details")} canEdit={canEdit} fields={[{ label: term("crm.account.singular", "Company"), value: account.name }, { label: "Email", value: account.email }, { label: "Phone", value: account.phone }, { label: "Website", value: account.website }, { label: "Notes", value: account.notes }, { label: "Status", value: account.archived ? "Archived" : "Active" }]} />}
-      tabs={account ? [{ value: "contacts", permission: "contacts.read" as const, label: term("crm.contact.plural", "Contacts"), content: <><p className="text-sm text-muted-foreground">{term("crm.account.singular", "Manage company links", "Manage {label} links") + " " + term("crm.contact.singular", "from the contact's page.", "from the {label}'s page.")}</p><RecordList kind="contacts" accountId={account.id} /></> }] : []}>
+      tabs={account ? [{ value: "tax", permission: "accounts.read" as const, label: "Tax details", content: <PartyTaxIdentities endpoint={`/api/crm/accounts/${account.id}/tax-identities`} /> },{ value: "contacts", permission: "contacts.read" as const, label: term("crm.contact.plural", "Contacts"), content: <><p className="text-sm text-muted-foreground">{term("crm.account.singular", "Manage company links", "Manage {label} links") + " " + term("crm.contact.singular", "from the contact's page.", "from the {label}'s page.")}</p><RecordList kind="contacts" accountId={account.id} /></> }] : []}>
 
 
       <Section sectionKey="Account details" title={term("crm.account.singular", "Account details", "{label} details")} description={term("crm.account.singular", "Company information and contact details.", "{label} information and contact details.")}><fieldset disabled={!canEdit || saving} className="grid min-w-0 gap-5 sm:grid-cols-2">

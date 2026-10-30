@@ -1,3 +1,24 @@
+## P13A3 shared customer tax identities - local verification complete
+
+One platform/tax/party contract, service and editor now supports reviewed tax
+identities on canonical people and businesses. CRM supplies only its source
+Read/Edit/Archive probes. Multiple GSTINs, explicit unregistered assessments,
+immutable paginated reviews, archive/restore and stale-draft recovery are shared
+across industries. Missing details remain Not assessed. No Real Estate policy,
+linked-party inheritance or historical financial enrichment is introduced.
+
+Migration 143 adds two empty forced-RLS owner-bound tables, fixed identity and
+per-version proof guards. Rehearsal and forced rollback preserve all prior rows,
+policies and functions. Native/API checks cover concurrent service and direct
+native writes, Restricted access, Read/Edit/Archive bounds, foreign tenants,
+strict audit rollback and immutable history. The existing 123-test tax/operational
+suite, participant snapshot tests, build, lint and desktop/mobile browser flow
+pass. Source versions remain unchanged; accepted documents and PDFs are untouched.
+
+Staging backup/deployment verification is in progress. Production is unchanged.
+See docs/CUSTOMER_TAX_IDENTITIES_P13A3.md. Approved source selection and frozen
+invoice tax evidence remain P13B; statutory issuance remains P13C.
+
 ## P13A2 shared exact tax arithmetic - staging verified
 
 Runtime 1f4ee10 is READY on all four staging aliases with migration 142. One

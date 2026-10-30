@@ -1,3 +1,4 @@
+import { createCrmPartyTaxService } from "./party-tax-service"
 import { introductionForCreate, introductionBoundaryError } from "@/platform/collaborators/attribution"
 import { officeBoundaryError } from "@/platform/companies/record-office"
 import { recordActionAccess } from "@/platform/access/record-actions"
@@ -185,6 +186,7 @@ export function createCrmService<Fields extends object = object, Metadata extend
     ...(install ? install({ run, audit }) : {} as Addons),
     listExtensionChoices(key: string, input: unknown) { return run(workspaceRead, (tx, actor) => extensions.choices(tx, actor, key, input)) },
     ...createSalesService({ run, audit, checkAssignee, readTerms }, extensions),
+    ...createCrmPartyTaxService({ run, audit, runLocked: (requirement, operation) => run(requirement, operation, true) }),
     ...createOpportunityParticipantService({ run, audit, runLocked: (requirement, operation) => run(requirement, operation, true) }, participantPreset),
     ...createActivityTypeService({ run, audit }),
     ...createWorkService({ run, audit, checkAssignee }, extensions),
