@@ -1,22 +1,27 @@
-## P13B1 shared tax agreement calculator - local verification complete
+## P13B1 shared tax agreement calculator - staging verified
 
-One platform/tax/agreement contract calculates exact line discounts, flat
+Runtime 94a870e is READY on all four staging aliases; migration history remains
+at 143. One platform/tax/agreement contract calculates exact line discounts, flat
 percentage components, inclusive/exclusive net and gross amounts and remaining
-frozen tax allocations. Its explicit format/currency precision/policy support
+frozen tax allocations. Its explicit format/currency precision/policy supports
 reuse across modules and industries without current master lookups or industry
 assumptions. Canonical component ordering and remaining-balance apportionment
 keep one-cent portions non-negative and final component totals exact.
 
-Company tax profile administration now offers a read-only saved-version preview
+Company tax profile administration offers a read-only saved-version preview
 with optional partial allocation, changed-rate warnings and stale-version checks.
 It retains actual Tenant Admin authority and creates no business/audit records.
 All 50 unit/native/financial checks and three desktop/mobile browser flows, build
-and lint pass. Screenshots were inspected. Existing commercial invoices, partial
-billing, credits, payments, source snapshots and PDFs remain unchanged.
+and lint pass. Local and hosted screenshots were inspected. All 23 hosted checks
+pass, including frozen rates, stale versions, invalid inputs and foreign tenants.
+The QA profile is disabled and its rates inactive. The local database was removed.
 
-Staging deployment verification is in progress; no database migration is needed.
-Production is unchanged. See docs/TAX_AGREEMENT_P13B1.md. Approved source facts,
-native tax-aware invoice allocation and statutory issuance remain pending.
+Before/after fingerprints preserve all 30 financial/source tables, existing native
+functions, policies and migration checksums exactly. No schema migration or
+production change was performed. Production aliases, GitHub main and the root
+production project link are unchanged. See docs/TAX_AGREEMENT_P13B1.md. Approved
+source facts, native tax-aware invoice allocation and statutory issuance remain
+pending; this preview never reinterprets prior commercial charges or PDF bytes.
 
 ## P13A3 shared customer tax identities - staging verified
 

@@ -11,6 +11,8 @@ and select **Preview calculations** beside a saved profile.
 
 Enter a currency, line price and eligible discount. The saved profile determines
 whether the price includes tax and which percentage components are available.
+The discount uses that same price basis: gross for tax-inclusive prices and net
+for tax-exclusive prices.
 Choose one of its configured jurisdiction variants. A profile without charged
 components uses the explicit no-components choice. This choice is a simulation;
 it does not establish place of supply or tax eligibility.
@@ -91,3 +93,21 @@ discounts, one-cent portions, 300 deterministic split sequences, invalid prior
 allocations, stale profiles, frozen-rate warnings and administrative/tenant
 bounds. Existing commercial invoice, advance, credit, PDF and partial-billing
 tests remain part of the regression suite. No schema migration is added.
+
+## Staging verification - 30 October 2026
+
+Runtime `94a870e` is READY on all four staging aliases. Migration history stays
+at 143. All 50 unit/native/financial tests, three browser flows, build and lint
+pass. Local and hosted desktop/mobile screenshots were inspected.
+
+The 23 hosted checks verify exclusive and inclusive calculations, exact partial
+reconciliation, invalid input/currency precision, client rate injection rejection,
+foreign-tenant denial, frozen rates after directory changes, stale profiles and
+inactive configuration flags. The temporary QA profile is disabled and its rate
+entries are inactive. A before/after comparison confirms that all 30 financial
+and source tables, native functions, policies and migration checksums are
+unchanged. No invoice, payment or commercial source was created by the preview.
+
+The disposable localhost database was removed. Production aliases, GitHub `main`
+and the root production project link remain unchanged. Source tax approval,
+persisted invoice tax allocations and statutory issuance remain future increments.

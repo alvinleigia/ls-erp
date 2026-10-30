@@ -5,7 +5,8 @@ recipient identities are verified on staging, with runtime `0e2d65c` and migrati
 143. See [the configuration guide](TAX_CONFIGURATION_P13A.md),
 [arithmetic contract](TAX_ARITHMETIC_P13A2.md) and
 [recipient identity guide](CUSTOMER_TAX_IDENTITIES_P13A3.md).
-P13B1 adds the shared agreement calculator and read-only saved-profile preview;
+P13B1 is verified on staging at runtime `94a870e`, adding the shared agreement
+calculator and read-only saved-profile preview without a new migration;
 see [its scope and remaining work](TAX_AGREEMENT_P13B1.md). Approved statutory
 source facts, native tax-aware invoice allocation and issuance remain pending.
 Production remains unchanged.
