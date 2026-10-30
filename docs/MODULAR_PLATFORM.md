@@ -1,3 +1,35 @@
+## P13A company tax configuration - staging verified
+
+Runtime 3883abd is READY on all four staging aliases. Shared company registrations,
+office bindings and immutable reviewed profiles support business-configured
+supplies; no industry name determines tax treatment. Tenant Admin authority,
+optimistic versions, strict audit transactions and forced tenant RLS remain
+mandatory. One existing rate directory supplies exact frozen component evidence;
+source changes warn without rewriting published history. India GSTIN checks are
+offline structure/check-digit checks, not registration-status verification.
+
+Migration 140 preserves all 146 preceding tables/policies/functions and adds six
+empty configuration tables. Follow-up 141 (728b451) preserves all 152 tables and
+policies while strengthening only the new review proof guard. Every intermediate
+version in a transaction must retain its own complete history and rate evidence.
+Populated migration and forced rollback rehearsals pass. An encrypted staging
+application backup was decrypted/hash checked and its archive list inspected;
+no full restore rehearsal is claimed for this fresh archive.
+
+All 51 regression cases, two isolated browser flows, build and lint pass. The
+final complete regression run passed without timeouts. Hosted QA verified normal
+registration/mapping/profile changes, frozen synthetic rate values, stale-rate
+warnings, foreign-tenant and cross-origin denials. Desktop/mobile header, history
+and footer captures were inspected. Temporary QA configuration was disabled and
+archived, with office mappings cleared and immutable history retained.
+
+Production deployment dpl_EkQhmuCQqrwuxoRgR5vMMDx9kuFG, its three aliases,
+GitHub main 4546cb2 and the root production project link remain unchanged.
+Operational Tax.percent Float and existing amounts/charges remain unchanged.
+Recipient tax identities, common exact arithmetic, approved source facts,
+statutory allocation/numbering/PDFs and electronic invoicing remain P13 work.
+See docs/TAX_CONFIGURATION_P13A.md and docs/GST_LOCALIZATION_P13_PLAN.md.
+
 ## P12 partial and milestone billing - staging verified
 
 Source ae21e2d is READY on all four staging aliases. Commercial invoices now use

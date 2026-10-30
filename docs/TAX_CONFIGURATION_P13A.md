@@ -86,3 +86,29 @@ by this increment. See [the P13 plan](GST_LOCALIZATION_P13_PLAN.md).
   changed-source-rate and admin-boundary checks.
 
 These commands never read hosted database credentials or seed a hosted database.
+
+## Staging verification - 30 October 2026
+
+Runtime `3883abd` is READY on all four staging aliases. Database migration 141
+(`728b451`) adds the per-version proof correction; it changes no application
+code. All 51 native/unit/regression tests pass, including the intermediate-review
+cases and existing invoice/partial-billing/receivable workflows. Two isolated
+browser flows, the build and lint pass. The earlier two receivable timeouts under
+concurrent build load passed separately and in the final complete 51-case run.
+
+Migration 140 preserves all 146 prior tables, policies and functions exactly and
+adds six empty forced-RLS tables. Migration 141 preserves all 152 tables/policies
+and changes only the new tax-review proof function. Both forced rollback
+rehearsals pass. Staging has a verified readable encrypted application backup;
+this archive verification is not a full restore rehearsal.
+
+Hosted QA verified registration creation, office mapping, frozen profile values,
+changed-rate warnings, cross-tenant denial and cross-origin rejection. After the
+master rate changed from a synthetic 18 to 20, version 1 still displayed 18.
+Desktop/mobile top, history and footer screenshots were inspected; the controls
+are reachable without page overflow. Temporary QA profiles/rates were disabled,
+office mappings cleared, and their registration/office/company archived. Review
+history remains. No customer tax treatment was inferred.
+
+Production deployment `dpl_EkQhmuCQqrwuxoRgR5vMMDx9kuFG`, its three aliases,
+GitHub main `4546cb2` and the root production project link remain unchanged.

@@ -1,8 +1,11 @@
 # P13 shared tax foundation and India GST localization
 
-Status: P13A company registration/profile configuration is being implemented and
-verified for staging. Statutory calculations and issuance remain inactive.
-Production remains unchanged. See [the configuration guide](TAX_CONFIGURATION_P13A.md)
+Status: P13A company registration/profile configuration is verified on staging.
+Runtime source `3883abd` is deployed; migration 141 from `728b451` strengthens
+per-version review proofs without changing application code. Company registration,
+office mappings and reviewed profiles are complete for this increment. Recipient
+registrations, common exact arithmetic, statutory calculations and issuance remain
+pending. Production remains unchanged. See [the configuration guide](TAX_CONFIGURATION_P13A.md)
 for the precise increment and remaining work.
 
 ## Confirmed business scope
