@@ -1,9 +1,9 @@
 # P13 shared tax foundation and India GST localization
 
-Status: P13A2 exact operational tax rates/arithmetic passed local verification;
-staging rollout is underway. See [the arithmetic contract](TAX_ARITHMETIC_P13A2.md).
+Status: P13A2 exact operational tax rates/arithmetic is verified on staging,
+with runtime `1f4ee10` and migration 142. See [the arithmetic contract](TAX_ARITHMETIC_P13A2.md).
 P13A company registration/profile configuration is verified on staging.
-Runtime source `3883abd` is deployed; migration 141 from `728b451` strengthens
+The earlier configuration runtime `3883abd` is included; migration 141 from `728b451` strengthens
 per-version review proofs without changing application code. Company registration,
 office mappings and reviewed profiles are complete for this increment. Recipient
 registrations, approved statutory source facts, statutory calculations and issuance

@@ -29,7 +29,9 @@ use the exact result. This is a mechanical test rate, not a legal tax default.
 
 `Tax.percent`, frozen `AppointmentOrderTax.percent` and frozen purchase-line
 `taxPercent` use unconstrained PostgreSQL numeric, represented by Prisma Decimal.
-The API returns canonical decimal strings in these fields. There is no parallel
+The API returns exact decimal strings in these fields. Very small values may use
+exponent notation; the shared arithmetic accepts and normalizes either form.
+There is no parallel
 float field or industry-specific rate directory.
 
 Tax create/update accepts JSON numbers or exact strings, canonicalizing without
@@ -76,3 +78,28 @@ purchase pricing/history preservation and the existing tax-profile flows.
 
 Numeric storage follows PostgreSQL's distinction between exact numeric and
 inexact floating-point types. See the [PostgreSQL 17 numeric documentation](https://www.postgresql.org/docs/17/datatype-numeric.html).
+
+## Staging verification - 30 October 2026
+
+Runtime `1f4ee10` is READY on all four staging aliases. Migration 142 preserves
+all 152 prior tables' data, all policies and all prior stored function definitions.
+The populated migration and forced rollback rehearsal passed, including invalid
+master precision and historical fractional/tiny rate preservation. The fresh
+encrypted application archive was decrypted/hash checked and its restore list
+inspected; this is not a full restore rehearsal.
+
+COPY transfers stalled through the pooler during backup. Only the two identified
+read-only backup sessions were terminated. A standard pg_dump custom archive
+using `--inserts --rows-per-insert=500` completed successfully; migration began
+only after archive verification. No application fallback or data repair was added.
+
+All 123 unit/native/API/permission cases, three browser flows, build and lint
+passed. Two older test fixtures were updated to use their existing explicit
+office grant/captured context contract; application access rules were unchanged.
+Hosted QA verified 12-place string round trips, excess precision rejection, the
+same exact Services/purchase result, preserved purchase amounts after a master
+change, foreign-tenant denial, and inspected desktop/mobile screens. Temporary
+purchase/catalogue records were canceled/inactivated and the new rate archived.
+
+Production deployment `dpl_EkQhmuCQqrwuxoRgR5vMMDx9kuFG`, its three aliases,
+GitHub main `4546cb2` and the root production project link remain unchanged.

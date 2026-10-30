@@ -58,9 +58,9 @@ edits. Lists and histories are paginated.
   the final head. Missing intermediate history or component evidence rolls back
   the transaction; complete atomic reviews remain supported.
 - Published components reference the one existing tenant rate directory, storing
-  exact decimal text and decimal evidence. The operational `Tax.percent Float`
-  column and its consumers are unchanged. Standardizing all rate storage and
-  arithmetic remains a separate P13A increment, before statutory calculations.
+  exact decimal text and decimal evidence. P13A2 now standardizes the directory,
+  operational frozen percentages and shared tax arithmetic; see
+  [the arithmetic contract](TAX_ARITHMETIC_P13A2.md). Existing amounts stay frozen.
 - Historical commercial records remain commercial. This migration adds six empty
   tables and indexes; it backfills no registrations, tax treatments or grants.
   There is no tenant-specific override or historical runtime fallback.
@@ -71,7 +71,7 @@ edits. Lists and histories are paginated.
 
 ## Remaining P13 work
 
-Recipient registrations, reviewed source tax facts, common exact arithmetic,
+Recipient registrations, reviewed source tax facts,
 place-of-supply decisions, line/partial tax allocation, statutory numbering,
 statutory PDFs and applicable electronic-invoicing integration are not activated
 by this increment. See [the P13 plan](GST_LOCALIZATION_P13_PLAN.md).

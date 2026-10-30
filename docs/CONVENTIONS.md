@@ -76,7 +76,7 @@ This is the baseline for new modules (API + UI) in this codebase.
   treatment. India validation is localized; statutory calculations and issuance
   require the later P13 source/financial contracts. Configuration Read grants no
   business-source access. See `docs/TAX_CONFIGURATION_P13A.md`.
-  Rate APIs and frozen operational percentages use canonical decimal strings;
+  Rate APIs and frozen operational percentages use exact decimal strings;
   reuse `platform/tax/arithmetic.ts` for exact percentage sums, rounding,
   inclusive extraction and allocations. Preserve each source's explicit rounding
   policy and saved financial amounts. See `docs/TAX_ARITHMETIC_P13A2.md`.

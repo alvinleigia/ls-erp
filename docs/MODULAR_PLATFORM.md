@@ -1,3 +1,36 @@
+## P13A2 shared exact tax arithmetic - staging verified
+
+Runtime 1f4ee10 is READY on all four staging aliases with migration 142. One
+industry-neutral platform/tax arithmetic contract now serves Appointment service
+and product lines, Inventory purchases, Services previews and synthetic seed
+pricing. Source-specific per-component/combined rounding choices remain explicit;
+inclusive extraction and fractional allocations reconcile exactly. The rate
+directory and frozen operational percentages use numeric/Decimal with exact
+string API values. New master rates permit up to 12 meaningful decimal places;
+invalid/excess precision is rejected rather than rounded into storage.
+
+Migration 142 preserves all 152 prior tables' data, all policies and all prior
+stored functions. No IDs, saved amounts, timestamps, snapshots, grants or PDFs
+were rewritten. Forced rollback, rejected invalid master precision and historical
+fractional/tiny rate preservation passed. A fresh encrypted application archive
+was hash/decryption and restore-list verified. COPY backup transfers stalled at
+the pooler; the two identified read-only backup sessions were closed, and normal
+pg_dump INSERT mode completed before migration. No full restore rehearsal is
+claimed for this archive, and no runtime compatibility/data-repair path was added.
+
+All 123 unit/native/API/permission tests, three browser flows, build and lint
+pass. Booking tax rounding and saved metadata preservation were checked, while
+hosted QA verified exact rate strings, precision rejection, consistent service
+and purchase results, frozen purchase values after master changes and foreign
+isolation. Desktop/mobile screens were inspected. Temporary QA purchase/catalogue
+records were canceled/inactivated and their new rate archived.
+
+Production deployment dpl_EkQhmuCQqrwuxoRgR5vMMDx9kuFG, its three aliases,
+GitHub main 4546cb2 and the root production project link remain unchanged.
+Recipient registrations, approved source/supply/place-of-supply facts, statutory
+tax allocation, numbering/PDFs and electronic invoicing remain later P13 work.
+See docs/TAX_ARITHMETIC_P13A2.md and docs/GST_LOCALIZATION_P13_PLAN.md.
+
 ## P13A company tax configuration - staging verified
 
 Runtime 3883abd is READY on all four staging aliases. Shared company registrations,
