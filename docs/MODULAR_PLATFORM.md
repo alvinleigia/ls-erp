@@ -1,29 +1,38 @@
-## P13B2 quotation tax inputs - local verification and staging migration complete
+## P13B2 quotation tax inputs - staging verified
 
-Saved quotation revisions can capture immutable issuer/recipient/profile versions
-and explicit dated per-line supply evidence through the shared tax contracts.
-Tax preparation is administered with current quotation Edit and existing tax
-administration authority; ordinary source readers retain frozen evidence without
-master-directory access. Saved main parties are never replaced by current CRM
-contacts/accounts. Commercial amounts, adjustments and PDFs remain unchanged.
+Runtime 06378a2 is READY on all four staging aliases, deployment
+dpl_DiKpJYtqUvMhyvL3RTAZ9Aso2F7H. Migration history is 144. Saved quotation
+revisions capture immutable issuer/recipient/profile versions and explicit dated
+per-line supply evidence through shared tax contracts. Current quotation Edit
+and existing tax-administration authority govern preparation; ordinary source
+readers retain frozen evidence without master-directory access. Saved main
+parties never fall back to current CRM contacts/accounts.
 
 Preparation is not pricing/statutory approval. Prepared revisions are blocked
 from order creation until tax-aware acceptance is integrated; ordinary unprepared
-commercial orders remain supported. Price illustrations never classify existing
-commercial charges or automatically amend agreed amounts.
+commercial orders remain supported. Commercial snapshots, amounts and PDF paths
+are unchanged. Illustrations never classify existing charges or amend prices.
 
 All 46 unit/native/financial checks, two desktop/mobile browser flows, build and
-lint pass. A corrected deferred proof was rechecked on a fresh database, with
-forced rollback, immutable graph proof, source scope, business/person recipients,
-changed contacts, acceptance races and strict audit rollback covered. Screenshots
-were inspected. Migration 144 preserves all 154 prior tables, policies and stored
-functions; prior triggers remain alongside the additional acceptance guard. A
-fresh encrypted archive passed decryption/hash and restore-list checks, not a
-full restore rehearsal. Its SQL gate was refreshed before any schema change.
+lint pass. A corrected deferred proof was rerun on a fresh database, including
+forced rollback, immutable graphs, people/business recipients, changed contacts,
+Restricted scope, acceptance races and strict audit rollback. Hosted UI capture
+verified unchanged source snapshots, frozen facts after master archival, stale
+and duplicate rejection, foreign/cross-origin denial and the acceptance gate.
+Local and hosted screenshots were inspected. QA office mapping was restored;
+temporary configuration was archived/disabled. Immutable QA evidence remains.
 
-Staging deployment verification is in progress. Production is unchanged. See
-docs/QUOTATION_TAX_INPUTS_P13B2.md. Pricing approval, tax-aware accepted sources,
-native invoice tax allocations and statutory issuance remain pending.
+Migration 144 preserves all 154 prior tables, policies and stored functions;
+prior triggers remain beside the additional acceptance guard. The encrypted
+archive passed decryption/hash and restore-list checks, not a full restore
+rehearsal. Its obsolete SQL operator was rejected before DDL, then refreshed and
+verified. No hosted migration history was rewritten. The owned localhost fixture
+was removed. Production aliases, GitHub main and the root production link are
+unchanged; this increment has not been pushed to Git.
+
+See docs/QUOTATION_TAX_INPUTS_P13B2.md. Next: P13B3 explicit pricing approval and
+tax-aware accepted snapshots, then native invoice tax allocations. Statutory
+issuance remains P13C; the prepared workflow is not production GST billing.
 
 ## P13B1 shared tax agreement calculator - staging verified
 

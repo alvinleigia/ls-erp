@@ -106,3 +106,29 @@ The corrected deferred proof was rechecked on a newly created database; no
 failed migration checksum or hosted history was rewritten to bypass validation.
 Forced rollback and exact prior row/policy/function preservation are verified,
 including retention of the old triggers beside the new acceptance guard.
+
+## Verified staging release - 2026-10-31
+
+Runtime `06378a2` is READY on all four staging aliases, deployment
+`dpl_DiKpJYtqUvMhyvL3RTAZ9Aso2F7H`. Migration history is 144. All 46
+unit/native/financial checks, two browser flows, build and targeted lint passed.
+Both local and hosted desktop/mobile screenshots were inspected.
+
+Hosted QA captured the inputs through the UI on an isolated tenant. It verified
+unchanged quotation snapshots/version, frozen inputs after master archival,
+stale/duplicate rejection, foreign-tenant and cross-origin denial, and the order
+acceptance gate. The QA office's prior registration mapping was restored;
+temporary issuer/recipient records were archived, the profile disabled and its
+rate made inactive. Immutable source evidence remains in the QA tenant.
+
+The staging cutover preserved exact values in all 154 prior tables, policies and
+stored functions. Its encrypted archive passed decryption/hash and restore-list
+verification, not a full restore rehearsal. A checksum gate rejected an obsolete
+operator before any DDL; the refreshed operator then applied the tested SQL.
+No hosted migration history was rewritten. The owned localhost fixture was
+removed after verification. Production aliases, GitHub main and the root Vercel
+production link remain unchanged; no Git push was performed for this increment.
+
+Next is P13B3: explicit tax-aware pricing approval and accepted-source snapshots,
+followed by native invoice tax allocations. These remain required before calling
+this a complete GST billing workflow or releasing it to production.
