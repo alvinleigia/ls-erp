@@ -12,10 +12,10 @@ const root=client(undefined,true),db=client(tenant),foreignDb=client(foreignTena
 const storage={async upload(t,p,id,bytes){calls.uploads++;const path=`${t}/invoices/${p}/${id}/${randomUUID()}.pdf`;objects.set(path,Buffer.from(bytes));return{path,bytes:bytes.length,sha256:createHash('sha256').update(bytes).digest('hex')}},async remove(path){calls.removed++;objects.delete(path)},async url(path){assert(objects.has(path));return 'https://invoices.example.test/'+path}}
 let admin,staff,manager,outsider,foreign,crm,orders,finance,company,contact,pipeline,stage
 const docs=(user=admin,options={},connection=db)=>applicationInvoiceDocuments(connection,identity(user),{storage,render:async()=>Buffer.from('%PDF-synthetic'),...options})
-async function fixture(amount='30',officeId,opened=true){
+async function fixture(amount='30',officeId,opened=true,overrides={}){
  const create=data=>officeId?root.crmOpportunity.create({data:{...data,tenantId:tenant,officeId,probability:10,expectedCloseOn:new Date(data.expectedCloseOn)}}):crm.createOpportunity(data)
  const d=await create({title:'QA generic sale',contactId:contact.id,assignedUserId:staff.id,pipelineId:pipeline.id,stageId:stage.id,amount:'100',currency:'INR',expectedCloseOn:'2027-01-01'})
- const q=await crm.saveQuotation(d.id,{content:{...structuredClone(emptyQuotationContent),title:'QA service quotation',supplierName:'QA Industries',currency:'INR',lines:[{description:'Shared service',quantity:'1',unit:'each',rate:'100'}],instalments:[{label:'Initial',percent:'20',days:0,note:''},{label:'Balance',percent:'80',days:30,note:''}]}}),o=await orders.create({quotationId:q.id,revision:1,orderedOn:'2026-01-01'})
+ const q=await crm.saveQuotation(d.id,{content:{...structuredClone(emptyQuotationContent),title:'QA service quotation',supplierName:'QA Industries',currency:'INR',lines:[{description:'Shared service',quantity:'1',unit:'each',rate:'100'}],instalments:[{label:'Initial',percent:'20',days:0,note:''},{label:'Balance',percent:'80',days:30,note:''}],...overrides}}),o=await orders.create({quotationId:q.id,revision:1,orderedOn:'2026-01-01'})
  await orders.transition(o.id,{action:'confirm',version:1});if(opened)await finance.open(o.id,{dueDates:[null,null]})
  const payment=opened&&amount!=='0'?await finance.record(o.id,{requestKey:randomUUID(),version:1,amount,receivedOn:'2026-01-01',method:'BANK_TRANSFER',reference:'QA-'+randomUUID(),note:'Internal note not for customer PDF'}):null
  return {deal:d,order:await orders.get(o.id),payment}
@@ -73,7 +73,7 @@ test('tenant, parent Read, action scopes, Restricted ancestry and office access 
  const f=await fixture(),p=await posted(f),s=invoices();await assert.rejects(invoices(outsider).get(p.id),status(404));await assert.rejects(invoices(foreign,foreignDb).get(p.id),status(404));await s.get(p.id);await invoices(manager).get(p.id)
  const sharing=require('../platform/access/sharing-service.ts').createRecordSharingService(db,identity(admin)),v=await sharing.get('opportunities',f.deal.id);await sharing.save('opportunities',f.deal.id,{version:v.version,restricted:true,grants:[]});await assert.rejects(invoices(manager).get(p.id),status(404));assert.equal(await runWithDatabaseActor(manager.id,()=>db.customerInvoice.count({where:{id:p.id}})),0)
  const profile=await fixtureProfile(root,{data:{tenantId:tenant,name:'QA invoice reader',nameKey:randomUUID(),permissions:['customerInvoices.read','salesOrders.read','receivables.read']}});await fixtureRole(root,{data:{tenantId:tenant,userId:staff.id,roleId:profile.id}})
- try{const visible=await invoices(staff).get(p.id);assert.equal(visible.payments,null);await assert.rejects(invoices(staff).choices(p.id,{page:1,q:''}),status(403));await assert.rejects(invoices(staff).transition(p.id,{action:'credit',version:p.version,requestKey:randomUUID(),reason:'No cancel grant',effectiveOn:'2026-01-01'}),status(403))}finally{await resetFixtureRoles(root,{where:{tenantId:tenant,userId:staff.id}})}
+ try{const visible=await invoices(staff).get(p.id);assert.equal(visible.payments,null);assert.equal((await invoices(staff).list(f.order.id)).statement.payments,null);await assert.rejects(invoices(staff).choices(p.id,{page:1,q:''}),status(403));await assert.rejects(invoices(staff).transition(p.id,{action:'credit',version:p.version,requestKey:randomUUID(),reason:'No cancel grant',effectiveOn:'2026-01-01'}),status(403))}finally{await resetFixtureRoles(root,{where:{tenantId:tenant,userId:staff.id}})}
  const office=await root.businessOffice.create({data:{tenantId:tenant,companyId:company.id,name:'QA invoice hidden office',code:'INV-HIDDEN'}}),hidden=await fixture('0',office.id),d=await draft(hidden);await assert.rejects(invoices(staff).get(d.id),status(404));assert.equal(await runWithDatabaseActor(staff.id,()=>db.customerInvoice.count({where:{id:d.id}})),0)
 })
 test('audit failure rolls back posting numbers and full credits including all releases',async()=>{
@@ -91,4 +91,55 @@ test('invoice and credit PDFs reuse real rendering, immutable exact files and ex
 })
 test('credit during invoice rendering invalidates the prepared source and cleans the unused upload',async()=>{
  const f=await fixture(),p=await posted(f),prepared=await docs().prepare(p.id,{providerKey:'commercial-invoice'}),before=objects.size;await assert.rejects(docs(admin,{render:async()=>{await credit(p);return Buffer.from('%PDF-race')}}).issue(p.id,documentInput(prepared)),status(409));assert.equal(objects.size,before);assert.equal(await root.customerInvoiceDocument.count({where:{tenantId:tenant,invoiceId:p.id}}),0)
+})
+
+test('fixed, percentage and balance drafts reserve exactly one accepted order; credits release only their invoice share',async()=>{
+ const f=await fixture(),a=await draft(f,{billing:{mode:'AMOUNT',value:'20',label:'Booking'}}),b=await draft(f,{billing:{mode:'PERCENT',value:'30',label:'Progress'}}),c=await draft(f,{billing:{mode:'BALANCE',label:'Final'}})
+ assert.equal(a.billing.amount,'20');assert.equal(b.billing.amount,'30.00');assert.equal(c.billing.amount,'50.00');assert.deepEqual(a.snapshot.order,f.order.snapshot)
+ let summary=(await invoices().list(f.order.id)).statement;assert.equal(Number(summary.reserved),100);assert.equal(Number(summary.available),0);await assert.rejects(draft(f,{billing:{mode:'AMOUNT',value:'0.01'}}),status(409))
+ const p=await invoices().transition(a.id,{action:'post',version:1,requestKey:randomUUID()});summary=(await invoices().list(f.order.id)).statement;assert.equal(Number(summary.posted),20);assert.equal(Number(summary.reserved),80);await credit(p);summary=(await invoices().list(f.order.id)).statement;assert.equal(Number(summary.credited),20);assert.equal(Number(summary.available),20)
+ const noteEdit=await invoices().edit(c.id,{version:1,invoiceDate:'2026-01-01',dueOn:null,note:'Date/note changes must not reprice a balance draft',requestKey:randomUUID()});assert.deepEqual(noteEdit.billing,c.billing)
+ const replacement=await draft(f,{billing:{mode:'BALANCE',label:'Replacement booking'}});assert.equal(Number(replacement.billing.amount),20);assert.equal((await finance.get(f.order.id)).paid.toString(),'30')
+})
+
+test('milestones use accepted payable amounts, cannot be billed twice and draft cancellation frees the milestone',async()=>{
+ const f=await fixture(),a=await draft(f,{billing:{mode:'MILESTONE',position:0,label:'Initial demand'}});assert.equal(Number(a.billing.amount),20);await assert.rejects(draft(f,{billing:{mode:'MILESTONE',position:0}}),status(409));const b=await draft(f,{billing:{mode:'MILESTONE',position:1}});assert.equal(Number(b.billing.amount),80)
+ await invoices().transition(a.id,{action:'cancel',version:1,requestKey:randomUUID(),reason:'QA revise initial demand'});assert.equal(Number((await draft(f,{billing:{mode:'MILESTONE',position:0}})).billing.amount),20)
+})
+
+test('selected quantities and mixed fixed shares conserve currency rounding, accepted discounts and final line remainders',async()=>{
+ const f=await fixture('0',undefined,true,{lines:[{description:'Three units',quantity:'3',unit:'each',rate:'33.3333'}]}),rows=[]
+ for(let n=0;n<3;n++)rows.push(await draft(f,{billing:{mode:'LINES',lines:[{lineIndex:0,quantity:'1'}]}}))
+ assert.deepEqual(rows.map(r=>r.billing.amount),['33.33','33.34','33.33']);const summary=(await invoices().list(f.order.id)).statement;assert.equal(Number(summary.available),0);assert.equal(Number(summary.lines[0].quantity),0);await assert.rejects(draft(f,{billing:{mode:'LINES',lines:[{lineIndex:0,quantity:'1'}]}}),status(409))
+ const g=await fixture('0',undefined,true,{lines:[{description:'Discounted service',quantity:'2',unit:'each',rate:'75'}],discount:'50'}),first=await draft(g,{billing:{mode:'AMOUNT',value:'25'}});assert.equal(Number(first.billing.allocations[0].quantity),0.5);const second=await draft(g,{billing:{mode:'LINES',lines:[{lineIndex:0,quantity:'1'}]}}),last=await draft(g,{billing:{mode:'BALANCE'}});assert.equal(Number(second.billing.amount),50);assert.equal(Number(last.billing.amount),25);assert.equal(Number(last.billing.allocations[0].quantity),0.5)
+})
+
+test('an advance is applied across partial invoices once, and crediting one preserves other invoices and order payments',async()=>{
+ const f=await fixture('80'),a=await draft(f,{billing:{mode:'AMOUNT',value:'20'}}),b=await draft(f,{billing:{mode:'BALANCE'}}),pa=await invoices().transition(a.id,{action:'post',version:1,requestKey:randomUUID()}),pb=await invoices().transition(b.id,{action:'post',version:1,requestKey:randomUUID()})
+ await invoices().apply(pa.id,{requestKey:randomUUID(),paymentId:f.payment.id,amount:'20'});await invoices().apply(pb.id,{requestKey:randomUUID(),paymentId:f.payment.id,amount:'60'});await assert.rejects(invoices().apply(pb.id,{requestKey:randomUUID(),paymentId:f.payment.id,amount:'0.01'}),status(409));let s=(await invoices().list(f.order.id)).statement;assert.equal(s.payments.received,'80');assert.equal(s.payments.unapplied,'0');assert.equal(Number(s.payments.invoiceOutstanding),20)
+ await credit(pa);s=(await invoices().list(f.order.id)).statement;assert.equal(s.payments.received,'80');assert.equal(s.payments.unapplied,'20');assert.equal(Number(s.posted),80);assert.equal((await invoices().get(pb.id)).payments.paid,'60');assert.equal((await finance.get(f.order.id)).outstanding.toString(),'20')
+})
+
+test('concurrent partial drafts cannot overbill, and draft edits release capacity without rewriting posted allocations',async()=>{
+ const f=await fixture(),results=await Promise.allSettled([draft(f,{billing:{mode:'PERCENT',value:'80'}}),draft(f,{billing:{mode:'PERCENT',value:'80'}})]);assert.equal(results.filter(r=>r.status==='fulfilled').length,1);const d=results.find(r=>r.status==='fulfilled').value
+ const edited=await invoices().edit(d.id,{version:1,invoiceDate:'2026-01-01',dueOn:null,note:'Reduced',requestKey:randomUUID(),billing:{mode:'AMOUNT',value:'40'}});assert.equal(Number(edited.billing.amount),40);assert.equal(Number((await draft(f,{billing:{mode:'BALANCE'}})).billing.amount),60)
+ const p=await invoices().transition(edited.id,{action:'post',version:2,requestKey:randomUUID()});await assert.rejects(root.customerInvoice.update({where:{tenantId_id:{tenantId:tenant,id:p.id}},data:{billing:{...p.billing,amount:'1'},version:{increment:1}}}),/immutable|full credit/)
+})
+
+test('partial PDF facts contain only this billed share while accepted source snapshots and historical files remain exact',async()=>{
+ const f=await fixture(),d=await draft(f,{billing:{mode:'PERCENT',value:'20',label:'Booking demand'}}),p=await invoices().transition(d.id,{action:'post',version:1,requestKey:randomUUID()}),s=docs(admin,{render:renderBusinessDocument}),prepared=await s.prepare(p.id,{providerKey:'commercial-invoice'})
+ assert.deepEqual(prepared.payload.blocks.find(b=>b.key==='totals').table.rows,[['Accepted order total (reference)','INR 100.00'],['Amount billed by this invoice','INR 20.00']]);assert.equal(Number(prepared.evidence.total),20);assert.equal(Number(prepared.evidence.billing.amount),20);assert.equal(Number(p.snapshot.total),100);assert.equal(prepared.payload.body.some(n=>n.type==='section'&&n.blocks.some(b=>b.table?.rows.some(r=>r.includes('INR 20.00')))),true)
+ const issued=await s.issue(p.id,documentInput(prepared));fs.writeFileSync('tmp/customer-invoices/partial-invoice.pdf',objects.get(issued.archive.path));await credit(p);await s.download(p.id,issued.id,'commercial-invoice',true);assert.equal((await s.prepare(p.id,{providerKey:'commercial-credit-note'})).evidence.total,'20.00')
+})
+
+test('native read-committed writers cannot exceed the contract while waiting on its source lock',async()=>{
+ const f=await fixture(),template=await draft(f);await invoices().transition(template.id,{action:'cancel',version:1,requestKey:randomUUID(),reason:'QA native concurrent source'})
+ let acquired,release;const locked=new Promise(r=>acquired=r),gate=new Promise(r=>release=r)
+ const write=hold=>root.$transaction(async tx=>{const key=randomUUID(),row=await tx.customerInvoice.create({data:{tenantId:tenant,orderId:f.order.id,requestKey:key,invoiceDate:new Date('2026-01-01'),snapshot:template.snapshot,billing:{request:{mode:'AMOUNT',value:'80',label:'QA native'}},createdBy:admin.id,actorName:'QA native'}});await tx.customerInvoiceEvent.create({data:{tenantId:tenant,invoiceId:row.id,version:1,status:'DRAFT',actorId:admin.id,actorName:'QA native',requestKey:key,requestHash:'c'.repeat(64)}});if(hold){acquired();await gate}return row},{isolationLevel:'ReadCommitted',timeout:20000})
+ const first=write(true);await locked;const second=write(false);const waiting=Promise.allSettled([first,second]);await new Promise(r=>setTimeout(r,150));release();const results=await waiting;assert.equal(results.filter(r=>r.status==='fulfilled').length,1);assert.equal(Number((await invoices().list(f.order.id)).statement.reserved),80)
+})
+
+test('currency precision, invalid selections and zero-price source lines keep positive exact invoice totals',async()=>{
+ const f=await fixture('0',undefined,true,{currency:'JPY'});await assert.rejects(draft(f,{billing:{mode:'AMOUNT',value:'0.01'}}),status(409));await assert.rejects(draft(f,{billing:{mode:'PERCENT',value:'101'}}),status(409));await assert.rejects(draft(f,{billing:{mode:'LINES',lines:[{lineIndex:0,quantity:'1'},{lineIndex:0,quantity:'1'}]}}),status(409));assert.equal((await draft(f,{billing:{mode:'PERCENT',value:'33.3333'}})).billing.amount,'33');assert.equal((await draft(f,{billing:{mode:'BALANCE'}})).billing.amount,'67')
+ const g=await fixture('0',undefined,true,{lines:[{description:'Unpriced first item',quantity:'1',unit:'each',rate:'0'},{description:'Unpriced second item',quantity:'1',unit:'each',rate:'0'}],charges:[{label:'Agreed charge',group:'',kind:'FIXED',value:'100',basis:'BASE',included:true,due:''}]}),a=await draft(g,{billing:{mode:'LINES',lines:[{lineIndex:0,quantity:'1'}]}}),b=await draft(g,{billing:{mode:'BALANCE'}});assert.equal(Number(a.billing.amount),50);assert.equal(Number(b.billing.amount),50);assert.equal(Number((await invoices().list(g.order.id)).statement.available),0)
 })

@@ -1614,9 +1614,20 @@ export const staffWorkplaceSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("cancel"), staffId: workplaceId, version: z.number().int().min(0).max(2147483647), assignmentId: workplaceId }).strict(),
 ])
 
-const invoiceDraftFields={invoiceDate:z.iso.date(),dueOn:z.iso.date().nullable(),note:z.string().trim().max(6000),requestKey:z.uuid()}
+const billingDecimal=z.string().regex(/^\d{1,12}(\.\d{1,12})?$/)
+const billingLabel=z.string().trim().max(200).default('')
+export const invoiceBillingSchema=z.discriminatedUnion('mode',[
+ z.object({mode:z.literal('FULL'),label:billingLabel}).strict(),
+ z.object({mode:z.literal('BALANCE'),label:billingLabel}).strict(),
+ z.object({mode:z.literal('AMOUNT'),label:billingLabel,value:billingDecimal}).strict(),
+ z.object({mode:z.literal('PERCENT'),label:billingLabel,value:billingDecimal}).strict(),
+ z.object({mode:z.literal('MILESTONE'),label:billingLabel,position:z.number().int().min(0).max(100)}).strict(),
+ z.object({mode:z.literal('LINES'),label:billingLabel,lines:z.array(z.object({lineIndex:z.number().int().min(0).max(99),quantity:billingDecimal}).strict()).min(1).max(100)}).strict(),
+])
+export type InvoiceBillingInput=z.infer<typeof invoiceBillingSchema>
+const invoiceDraftFields={invoiceDate:z.iso.date(),dueOn:z.iso.date().nullable(),note:z.string().trim().max(6000),requestKey:z.uuid(),billing:invoiceBillingSchema.default({mode:'FULL',label:''})}
 export const customerInvoiceCreateSchema=z.object(invoiceDraftFields).strict()
-export const customerInvoiceEditSchema=z.object({...invoiceDraftFields,version:z.number().int().positive()}).strict()
+export const customerInvoiceEditSchema=z.object({...invoiceDraftFields,billing:invoiceBillingSchema.optional(),version:z.number().int().positive()}).strict()
 export const customerInvoiceTransitionSchema=z.discriminatedUnion('action',[
  z.object({action:z.literal('post'),version:z.number().int().positive(),requestKey:z.uuid()}).strict(),
  z.object({action:z.literal('cancel'),version:z.number().int().positive(),requestKey:z.uuid(),reason:z.string().trim().min(1).max(2000)}).strict(),

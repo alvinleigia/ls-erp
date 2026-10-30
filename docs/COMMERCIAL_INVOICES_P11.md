@@ -1,5 +1,9 @@
 # P11 commercial invoices and credit notes
 
+P12 extends this foundation with partial and milestone billing. See
+[the current billing guide](PARTIAL_BILLING_P12.md); the full-order-only limits
+below describe the original P11 increment.
+
 Commercial invoices reuse accepted Sales Orders, existing receivables and posted
 payments. They work across industries; Real Estate remains a source adapter.
 This increment is commercial invoicing/payment requests, not statutory GST

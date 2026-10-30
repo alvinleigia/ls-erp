@@ -2906,6 +2906,7 @@ model CustomerInvoice {
   dueOn DateTime? @db.Date
   note String @default("")
   snapshot Json
+  billing Json
   createdBy String
   actorName String
   createdAt DateTime @default(now())
