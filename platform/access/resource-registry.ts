@@ -90,7 +90,7 @@ export const resourceRegistry = {
   customFields: { policy: "shared", ownership: { kind: "shared", roots: ["CustomFieldDefinition"], children: ["CustomFieldOption"] } },
   projects: { policy: "projects", record: "RealEstateProject", ownership: { kind: "office", roots: ["RealEstateProject"], children: ["RealEstateProjectMember", "RealEstateProjectCategory", "RealEstateUnit", "RealEstateProjectFieldValue"] }, sharing: "projects" },
   projectSettings: { policy: "shared", ownership: { kind: "shared", roots: ["RealEstateProjectStatus", "RealEstatePropertyCategory", "RealEstateBuyingTimeframe"] } },
-  quotations: { policy: "sales", record: "CrmQuotation", ownership: { kind: "source", roots: ["CrmQuotation"], children: ["CrmQuotationRevision"], sources: ["opportunities"] }, sharing: "quotations" },
+  quotations: { policy: "sales", record: "CrmQuotation", ownership: { kind: "source", roots: ["CrmQuotation"], children: ["CrmQuotationRevision", "QuotationTaxInputReview", "QuotationTaxInputLine"], sources: ["opportunities"] }, sharing: "quotations" },
   quotationTemplates: { policy: "shared", ownership: { kind: "shared", roots: ["CrmQuotationTemplate"] } },
 } as const satisfies Record<Resource, ResourceContract>
 

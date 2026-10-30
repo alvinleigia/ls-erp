@@ -29,6 +29,13 @@ This is the baseline for new modules (API + UI) in this codebase.
 
 ## Shared tax contracts
 
+- Prepared source tax inputs use immutable native source/master-version links
+  and `platform/tax/source-inputs.ts`. The source owns authorization and storage;
+  no industry or current-contact fallback can supply missing saved identity.
+  Preparation is not pricing approval. Prepared quotation revisions remain
+  blocked from order acceptance until the tax-aware pricing contract is bound.
+  See `docs/QUOTATION_TAX_INPUTS_P13B2.md`.
+
 - Tax agreement calculation uses `platform/tax/agreement.ts` and its explicit
   format/policy. Callers authorize and resolve source facts first; calculation
   never grants access, chooses statutory eligibility or reinterprets commercial

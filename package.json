@@ -151,7 +151,8 @@
     "test:tax-arithmetic": "node scripts/test-sales-orders.cjs --tax-arithmetic",
     "test:tax-arithmetic:browser": "node scripts/test-sales-orders.cjs --tax-arithmetic --browser-only",
     "test:party-tax": "node scripts/test-sales-orders.cjs --party-tax",
-    "test:tax-agreement": "node scripts/test-sales-orders.cjs --tax-agreement"
+    "test:tax-agreement": "node scripts/test-sales-orders.cjs --tax-agreement",
+    "test:tax-inputs": "node scripts/test-sales-orders.cjs --tax-inputs"
   },
   "dependencies": {
     "@pdf-lib/fontkit": "^1.1.1",

@@ -7,8 +7,10 @@ recipient identities are verified on staging, with runtime `0e2d65c` and migrati
 [recipient identity guide](CUSTOMER_TAX_IDENTITIES_P13A3.md).
 P13B1 is verified on staging at runtime `94a870e`, adding the shared agreement
 calculator and read-only saved-profile preview without a new migration;
-see [its scope and remaining work](TAX_AGREEMENT_P13B1.md). Approved statutory
-source facts, native tax-aware invoice allocation and issuance remain pending.
+see [its scope and remaining work](TAX_AGREEMENT_P13B1.md). P13B2 captures immutable
+[quotation tax inputs](QUOTATION_TAX_INPUTS_P13B2.md) while deliberately blocking
+prepared revisions from order acceptance pending tax-aware pricing approval.
+Approved statutory source facts, native invoice tax allocation and issuance remain pending.
 Production remains unchanged.
 
 ## Confirmed business scope

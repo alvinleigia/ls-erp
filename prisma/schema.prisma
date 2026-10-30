@@ -980,6 +980,7 @@ model BusinessCompany {
 }
 
 model BusinessOffice {
+  taxInputs QuotationTaxInputReview[]
   taxRegistration OfficeTaxRegistration?
   stockBalances InventoryOfficeStock[]
   stockMovements InventoryStockMovement[]
@@ -2666,6 +2667,7 @@ model CrmQuotation {
 }
 
 model CrmQuotationRevision {
+  taxInputs QuotationTaxInputReview[]
   tenantId String
   quotationId String
   number Int
@@ -2925,6 +2927,7 @@ model CompanyTaxRegistration {
 }
 
 model CompanyTaxRegistrationRevision {
+  taxInputs QuotationTaxInputReview[]
   tenantId String
   registrationId String
   version Int
@@ -2968,6 +2971,7 @@ model CompanyTaxProfile {
 }
 
 model CompanyTaxProfileVersion {
+  taxInputLines QuotationTaxInputLine[]
   tenantId String
   profileId String
   version Int
@@ -3441,6 +3445,7 @@ model PartyTaxIdentity {
   @@unique([tenantId,accountId,scheme,registrationNumber])
 }
 model PartyTaxIdentityRevision {
+  taxInputs QuotationTaxInputReview[]
   id String @id @default(cuid())
   tenantId String
   identityId String
@@ -3450,4 +3455,45 @@ model PartyTaxIdentityRevision {
   createdAt DateTime @default(now())
   identity PartyTaxIdentity @relation(fields: [tenantId,identityId], references: [tenantId,id], onDelete: Restrict)
   @@unique([tenantId,identityId,version])
+}
+
+model QuotationTaxInputReview {
+ id String @id @default(cuid())
+ tenantId String
+ quotationId String
+ revision Int
+ officeId String
+ companyId String
+ mappingVersion Int
+ issuerId String
+ issuerVersion Int
+ recipientId String
+ recipientVersion Int
+ proposedSupplyOn DateTime @db.Date
+ issuerSnapshot Json
+ recipientSnapshot Json
+ createdBy String
+ createdAt DateTime @default(now())
+ source CrmQuotationRevision @relation(fields:[tenantId,quotationId,revision],references:[tenantId,quotationId,number],onDelete:Restrict)
+ office BusinessOffice @relation(fields:[tenantId,companyId,officeId],references:[tenantId,companyId,id],onDelete:Restrict)
+ issuer CompanyTaxRegistrationRevision @relation(fields:[tenantId,issuerId,issuerVersion],references:[tenantId,registrationId,version],onDelete:Restrict)
+ recipient PartyTaxIdentityRevision @relation(fields:[tenantId,recipientId,recipientVersion],references:[tenantId,identityId,version],onDelete:Restrict)
+ lines QuotationTaxInputLine[]
+ @@unique([tenantId,id])
+ @@unique([tenantId,quotationId,revision])
+}
+model QuotationTaxInputLine {
+ tenantId String
+ reviewId String
+ lineIndex Int
+ profileId String
+ profileVersion Int
+ profileSnapshot Json
+ variant String
+ placeCountryCode String
+ placeRegionCode String
+ placeBasis String
+ review QuotationTaxInputReview @relation(fields:[tenantId,reviewId],references:[tenantId,id],onDelete:Restrict)
+ profile CompanyTaxProfileVersion @relation(fields:[tenantId,profileId,profileVersion],references:[tenantId,profileId,version],onDelete:Restrict)
+ @@id([tenantId,reviewId,lineIndex])
 }

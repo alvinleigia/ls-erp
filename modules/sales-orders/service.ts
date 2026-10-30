@@ -1,3 +1,4 @@
+import { taxPreparationError } from "@/platform/tax/source-errors"
 import { lockTenantOperations } from "@/platform/transactions/tenant-lock"
 import { businessDate } from "@/lib/business-time"
 import { officeBoundaryError } from "@/platform/companies/record-office"
@@ -31,6 +32,7 @@ export function createSalesOrderService(db: PrismaClient, identity: Pick<Busines
         }, { isolationLevel: write ? "ReadCommitted" : "Serializable", maxWait: 20000, timeout: 20000 })
       } catch (e) {
         const officeError = officeBoundaryError(e); if (officeError) throw officeError
+        const taxError=taxPreparationError(e);if(taxError)throw taxError
         if ((serializationConflict(e) || (e as { code?: string }).code === "P2002") && attempt < 3) continue
         if (serializationConflict(e) || (e as { code?: string }).code === "P2002") throw new BusinessError(409, "This order changed. Refresh and try again.")
         throw e
