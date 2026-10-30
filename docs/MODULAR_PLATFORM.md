@@ -1,19 +1,38 @@
-## P13B3 pricing approval - locally verified; staging release in progress
+## P13B3 quotation tax pricing and order acceptance - staging verified
 
-Prepared quotation tax inputs now have separate immutable pricing approval.
-Shared exact calculation allocates source discounts and reconciles the unchanged
-quoted gross. Orders freeze accepted tax evidence natively; commercial invoice
-creation is blocked until native tax allocations are integrated. INR, charge-free
-quotations are supported; unclassified charges and price mismatches stay blocked.
-No industry dependency, historical amount change or permission override is added.
+Runtime 84d34e3 is READY on all four staging aliases, deployment
+dpl_7ykiEe4QhBvxGZYU8A3yXrC81KVQ. Migration history is 145. Prepared quotation
+inputs have separate immutable pricing approval using the shared exact agreement
+contract. Source discounts are allocated deterministically and gross must equal
+the unchanged quoted agreement. Orders freeze approved tax evidence natively and
+retain the original quotation snapshot. No industry-specific dependency, access
+override, historical price rewrite or archived-PDF change was introduced.
 
-All 55 unit/native/financial checks and two desktop/mobile browser flows pass,
-along with build and targeted lint. Local screenshots were inspected. Migration
-rehearsal proves forced rollback and preservation of all 156 prior tables and
-policies; only the P13B2 order guard is replaced, and other functions are retained.
-Staging backup, migration and hosted verification are next. Production unchanged.
-See docs/QUOTATION_TAX_PRICING_P13B3.md. Native tax invoice allocations remain
-P13B4; statutory issuance remains P13C.
+Current approval scope is INR quotations without unclassified commercial charge
+rows. Price differences, stale master facts and unsupported currency conversion
+stay blocked. Preparation alone cannot create an order. Tax-aware orders cannot
+fall back to commercial invoicing; native tax invoice allocations remain P13B4.
+Pricing review does not certify statutory eligibility; issuance remains P13C.
+
+All 55 unit/native/financial checks, two desktop/mobile browser flows, build and
+lint pass. Native proof covers exact component/discount rounding, wrong-source
+and tampered evidence, stale/duplicate approval, tenant/Restricted access,
+concurrent approval and audit rollback of both approval and accepted order facts.
+Hosted QA verified UI approval, approved acceptance, unchanged source snapshots,
+frozen evidence after master archival, unapproved order rejection and the invoice
+gate. Local and hosted screenshots were inspected. QA order cancellation and
+configuration cleanup are complete; immutable QA evidence remains.
+
+Migration rehearsal proves forced rollback. Staging cutover preserves all 156
+prior tables and existing policies; only the P13B2 acceptance guard is replaced,
+with other functions and previous triggers retained. A fresh encrypted custom
+archive passed decryption/hash and restore-list verification, not a full restore
+rehearsal. No migration history was rewritten. The owned localhost fixture was
+removed. Production aliases, GitHub main and the root production link remain
+unchanged. No Git push or production deployment occurred.
+
+See docs/QUOTATION_TAX_PRICING_P13B3.md. Next: P13B4 frozen native tax allocations
+for partial/final invoices and credits, followed by P13C statutory documents.
 
 ## P13B2 quotation tax inputs - staging verified
 

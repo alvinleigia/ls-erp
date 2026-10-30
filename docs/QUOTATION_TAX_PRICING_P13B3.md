@@ -93,3 +93,31 @@ concurrent approval, audit rollback, accepted evidence and the commercial invoic
 gate, alongside the preceding preparation and financial regressions. The migration
 rehearsal checks forced rollback and all prior data/policies/functions, allowing
 only the explicitly replaced P13B2 order guard.
+
+## Verified staging release - 2026-10-31
+
+Runtime `84d34e3` is READY on all four staging aliases, deployment
+`dpl_7ykiEe4QhBvxGZYU8A3yXrC81KVQ`. Migration history is 145. All 55
+unit/native/financial checks, two desktop/mobile browser flows, build and targeted
+lint passed. Local and hosted desktop/mobile screenshots were inspected.
+
+Hosted isolated QA verified preparation and pricing approval through the UI,
+unchanged quotation snapshots, approved order creation, frozen accepted evidence,
+stale/duplicate and foreign/cross-origin denial, the unapproved-order gate and
+the commercial invoice block. Evidence remained unchanged after master archival.
+The QA order was confirmed for the invoice check and then cancelled without
+collecting money. Its immutable history remains. The office's prior registration
+mapping was restored; temporary issuer/recipient records were archived, the
+profile disabled and its rate made inactive.
+
+Before migration, a fresh 2,557,424-byte custom archive was encrypted and verified
+by decryption/hash and restore-list checks. This was not a full restore rehearsal.
+The migration preserved exact values in all 156 prior tables and existing access
+policies. Only the explicitly reviewed P13B2 acceptance function was replaced;
+other stored functions and all existing triggers were retained. No history
+checksum was rewritten. The owned localhost fixture was removed.
+
+Production aliases, GitHub main and the root Vercel production link remain
+unchanged. This increment is committed locally and deployed to staging through
+the isolated release checkout; no Git push or production deployment occurred.
+P13B4 tax-aware partial/final invoice allocations remain the next increment.
