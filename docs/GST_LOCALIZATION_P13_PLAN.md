@@ -10,6 +10,9 @@ calculator and read-only saved-profile preview without a new migration;
 see [its scope and remaining work](TAX_AGREEMENT_P13B1.md). P13B2 captures immutable
 [quotation tax inputs](QUOTATION_TAX_INPUTS_P13B2.md) while deliberately blocking
 prepared revisions from order acceptance pending tax-aware pricing approval.
+P13B3 implements separate [pricing approval and frozen order evidence](QUOTATION_TAX_PRICING_P13B3.md):
+only exactly reconciled INR prices enter tax-aware orders. Unclassified commercial
+charges stay blocked, and native tax invoice allocations remain P13B4 work.
 Approved statutory source facts, native invoice tax allocation and issuance remain pending.
 Production remains unchanged.
 

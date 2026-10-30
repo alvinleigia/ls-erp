@@ -8,9 +8,11 @@ import { OrderReceivables } from "@/modules/receivables/components/order-receiva
 import { CollectionFollowUps } from "@/application/receivables/follow-ups"
 import { OrderDocuments } from "@/modules/sales-orders/components/documents"
 import { OrderInvoices } from "@/modules/customer-invoices/components"
+import { OrderTaxAgreement } from "@/modules/sales-orders/components/tax-agreement"
 export function SalesOrderDetail({ id }: { id: string }) {
   const modules = useBusinessModules()
   return <OrderDetail id={id} renderRelated={version => <div key={version} className="space-y-6">
+    <OrderTaxAgreement orderId={id}/>
     {modules.enabled("invoicing")&&modules.can("customerInvoices.read")&&<OrderInvoices orderId={id}/>}
     {modules.can("orderDocuments.read")&&<OrderDocuments orderId={id}/>}
     {modules.enabled("catalog") && modules.can("catalogItems.read") && modules.can("unitReservations.read") && <OrderReservations orderId={id} />}

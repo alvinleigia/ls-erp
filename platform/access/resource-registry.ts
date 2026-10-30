@@ -33,7 +33,7 @@ export const resourceRegistry = {
   receivables: { policy: "sales", ownership: { kind: "source", roots: ["OrderReceivable"], children: ["OrderReceivableLine"], sources: ["salesOrders"] }, sharing: "salesOrders" },
   orderPayments: { policy: "sales", ownership: { kind: "source", roots: ["OrderReceipt"], children: ["OrderReceiptAllocation", "OrderReceiptReversal"], sources: ["salesOrders"] }, sharing: "salesOrders" },
   unitReservations: { policy: "sales", ownership: { kind: "source", roots: ["UnitReservation"], children: ["UnitReservationEvent"], sources: ["salesOrders", "catalogItems"] }, sharing: "salesOrders" },
-  salesOrders: { policy: "sales", record: "SalesOrder", ownership: { kind: "source", roots: ["SalesOrder"], children: ["SalesOrderEvent"], sources: ["quotations"] }, sharing: "salesOrders" },
+  salesOrders: { policy: "sales", record: "SalesOrder", ownership: { kind: "source", roots: ["SalesOrder"], children: ["SalesOrderEvent", "SalesOrderTaxAcceptance"], sources: ["quotations"] }, sharing: "salesOrders" },
   catalogItems: { policy: "projects", ownership: { kind: "split", description: "General catalog items are shared. Industry units inherit their project; reservation availability never grants access to private orders.", parts: {
     catalog: { kind: "shared", roots: ["CatalogItem"] }, units: { kind: "source", roots: ["RealEstateUnit"], sources: ["projects"] },
     availability: { kind: "source", roots: ["CatalogReservationAvailability"], sources: ["catalogItems"] },
@@ -90,7 +90,7 @@ export const resourceRegistry = {
   customFields: { policy: "shared", ownership: { kind: "shared", roots: ["CustomFieldDefinition"], children: ["CustomFieldOption"] } },
   projects: { policy: "projects", record: "RealEstateProject", ownership: { kind: "office", roots: ["RealEstateProject"], children: ["RealEstateProjectMember", "RealEstateProjectCategory", "RealEstateUnit", "RealEstateProjectFieldValue"] }, sharing: "projects" },
   projectSettings: { policy: "shared", ownership: { kind: "shared", roots: ["RealEstateProjectStatus", "RealEstatePropertyCategory", "RealEstateBuyingTimeframe"] } },
-  quotations: { policy: "sales", record: "CrmQuotation", ownership: { kind: "source", roots: ["CrmQuotation"], children: ["CrmQuotationRevision", "QuotationTaxInputReview", "QuotationTaxInputLine"], sources: ["opportunities"] }, sharing: "quotations" },
+  quotations: { policy: "sales", record: "CrmQuotation", ownership: { kind: "source", roots: ["CrmQuotation"], children: ["CrmQuotationRevision", "QuotationTaxInputReview", "QuotationTaxInputLine", "QuotationTaxPricingApproval"], sources: ["opportunities"] }, sharing: "quotations" },
   quotationTemplates: { policy: "shared", ownership: { kind: "shared", roots: ["CrmQuotationTemplate"] } },
 } as const satisfies Record<Resource, ResourceContract>
 

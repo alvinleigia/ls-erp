@@ -6,6 +6,7 @@ import { Textarea } from '@/components/erp/controls'
 import { RecordSelect } from '@/components/erp/record-select'
 import { FormField } from '@/components/form-field'
 import { moneyText,type TaxAgreement } from './agreement'
+import { SourceTaxPricing } from './source-pricing-controls'
 
 type Choice={id:string;name:string;version:number;variants?:string[]}
 type Line={lineIndex:number;profileId:string;profileVersion:number;variant:string;placeRegionCode:string;placeBasis:string;name?:string;variants?:string[];pending?:boolean}
@@ -35,6 +36,7 @@ export function SourceTaxInputs({endpoint,revision}:{endpoint:string;revision:nu
     <Button type="button" loading={busy} disabled={!reviewed||!date||!recipient||lines.some(l=>!l.profileVersion||l.pending||l.placeRegionCode.length!==2||l.placeBasis.trim().length<10)} onClick={()=>void save()}>Save reviewed tax inputs</Button>
    </div>:<p>{data.reason}</p>}
   </>}
+  {data?.review&&<SourceTaxPricing key={data.review.id} endpoint={`${endpoint}/pricing`} revision={revision}/>}
   <Button type="button" variant="outline" disabled={busy} onClick={()=>setRefresh(v=>v+1)}>Reload saved preparation (discard draft)</Button>
  </section>
 }

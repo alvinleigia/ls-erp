@@ -2681,6 +2681,7 @@ model CrmQuotationRevision {
 }
 
 model SalesOrder {
+  taxAcceptance SalesOrderTaxAcceptance?
   invoices CustomerInvoice[]
   documents SalesOrderDocument[]
   reference String?
@@ -3458,6 +3459,7 @@ model PartyTaxIdentityRevision {
 }
 
 model QuotationTaxInputReview {
+ approval QuotationTaxPricingApproval?
  id String @id @default(cuid())
  tenantId String
  quotationId String
@@ -3496,4 +3498,28 @@ model QuotationTaxInputLine {
  review QuotationTaxInputReview @relation(fields:[tenantId,reviewId],references:[tenantId,id],onDelete:Restrict)
  profile CompanyTaxProfileVersion @relation(fields:[tenantId,profileId,profileVersion],references:[tenantId,profileId,version],onDelete:Restrict)
  @@id([tenantId,reviewId,lineIndex])
+}
+
+model QuotationTaxPricingApproval {
+ id String @id @default(cuid())
+ tenantId String
+ reviewId String
+ agreement Json
+ basisReference String
+ createdBy String
+ createdAt DateTime @default(now())
+ review QuotationTaxInputReview @relation(fields:[tenantId,reviewId],references:[tenantId,id],onDelete:Restrict)
+ acceptances SalesOrderTaxAcceptance[]
+ @@unique([tenantId,id])
+ @@unique([tenantId,reviewId])
+}
+model SalesOrderTaxAcceptance {
+ tenantId String
+ orderId String
+ approvalId String
+ snapshot Json
+ createdAt DateTime @default(now())
+ source SalesOrder @relation(fields:[tenantId,orderId],references:[tenantId,id],onDelete:Restrict)
+ approval QuotationTaxPricingApproval @relation(fields:[tenantId,approvalId],references:[tenantId,id],onDelete:Restrict)
+ @@id([tenantId,orderId])
 }

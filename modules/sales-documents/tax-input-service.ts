@@ -10,6 +10,7 @@ import { recordDomainAuditEvent } from '@/lib/domain-audit'
 import { participantSnapshotSchema } from '@/platform/participants/validation'
 import { previewProfileSnapshotSchema } from '@/platform/tax/agreement-preview'
 import { taxInputQuery,taxInputSaveSchema,taxInputIllustration,withinTaxDates } from '@/platform/tax/source-inputs'
+import { sourceTaxPricing,taxPricingApprovalSchema } from '@/platform/tax/source-pricing'
 import type { QuotationSnapshot } from './quotation-service'
 
 type Tx=Prisma.TransactionClient
@@ -40,10 +41,31 @@ export function createQuotationTaxInputService(db:PrismaClient,identity:Identity
   return {office,party,mapping,registration,reason}
  }
  return {
+  pricing(id:string,input:unknown){const q=taxInputQuery.parse(input);return run(false,async(tx,a)=>{
+   const s=await source(tx,a,id,q.revision),review=await tx.quotationTaxInputReview.findUnique({where:{tenantId_quotationId_revision:{tenantId:a.tenantId,quotationId:id,revision:q.revision}},include:{lines:{orderBy:{lineIndex:'asc'}},approval:true}})
+   if(!review)return {reviewId:null,approval:null,canApprove:false,reason:'Prepare this saved revision before reviewing tax-aware pricing.',pricing:null}
+   const pricing=sourceTaxPricing({currency:s.snapshot.content.currency,consideration:s.snapshot.calculation.consideration,discount:s.snapshot.calculation.discount,charges:s.snapshot.content.charges,lines:s.snapshot.calculation.lines},review.lines)
+   const editable=a.role==='ADMIN'&&permits(a,'taxProfiles.read')&&permits(a,'quotations.edit')&&!!await tx.crmQuotation.findFirst({where:{...quotationRecordScope(a,'edit'),id},select:{id:true}})
+   const reason=review.approval?'Pricing approval is immutable; orders retain its exact tax agreement.':pricing.reason||(!editable?'Tax administrators with quotation Edit access approve pricing.':(await setup(tx,a,s)).reason)
+   return {reviewId:review.id,approval:review.approval,canApprove:!review.approval&&!reason,reason,pricing}
+  })},
+  approvePricing(id:string,input:unknown){const v=taxPricingApprovalSchema.parse(input);return run(true,async(tx,a)=>{
+   await tx.$queryRaw`SELECT id FROM "CrmQuotation" WHERE "tenantId"=${a.tenantId} AND id=${id} FOR UPDATE`
+   const s=await source(tx,a,id,v.revision,true),d=await setup(tx,a,s);if(d.reason)throw new BusinessError(409,d.reason)
+   const review=await tx.quotationTaxInputReview.findUnique({where:{tenantId_quotationId_revision:{tenantId:a.tenantId,quotationId:id,revision:v.revision}},include:{lines:{orderBy:{lineIndex:'asc'}},approval:true}})
+   if(!review||review.id!==v.reviewId)throw new BusinessError(409,'Tax preparation changed. Reload the saved review.')
+   if(review.approval)throw new BusinessError(409,'Pricing is already approved. Open its saved evidence.')
+   const pricing=sourceTaxPricing({currency:s.snapshot.content.currency,consideration:s.snapshot.calculation.consideration,discount:s.snapshot.calculation.discount,charges:s.snapshot.content.charges,lines:s.snapshot.calculation.lines},review.lines)
+   if(pricing.reason||!pricing.agreement)throw new BusinessError(409,pricing.reason)
+   if(v.expectedGross!==pricing.gross)throw new BusinessError(409,'The reviewed total changed. Reload before approving pricing.')
+   const approval=await tx.quotationTaxPricingApproval.create({data:{tenantId:a.tenantId,reviewId:review.id,agreement:json(pricing.agreement),basisReference:v.basisReference,createdBy:a.userId}})
+   await recordDomainAuditEvent(tx,{tenantId:a.tenantId,actorUserId:a.userId,actorRole:a.role,requestId:a.requestId,event:'crm.quotation.taxPricing.approved',entityType:'CrmQuotation',entityId:id,after:{approvalId:approval.id,reviewId:review.id,revision:v.revision,gross:pricing.gross}})
+   return {id:approval.id,revision:v.revision}
+  })},
   get(id:string,input:unknown){const q=taxInputQuery.parse(input);return run(false,async(tx,a)=>{
    const s=await source(tx,a,id,q.revision),review=await tx.quotationTaxInputReview.findUnique({where:{tenantId_quotationId_revision:{tenantId:a.tenantId,quotationId:id,revision:q.revision}},include:{lines:{orderBy:{lineIndex:'asc'}}}})
    const base={revision:q.revision,review,source:{title:s.snapshot.content.title,currency:s.snapshot.content.currency,consideration:s.snapshot.calculation.consideration,lines:s.snapshot.calculation.lines.map((l,i)=>({index:i,description:l.description,amount:l.amount}))}}
-   if(review)return {...base,canPrepare:false,reason:'Prepared inputs are immutable. Tax-aware pricing approval is required before order acceptance.',illustration:taxInputIllustration({currency:s.snapshot.content.currency,consideration:s.snapshot.calculation.consideration,discount:s.snapshot.calculation.discount,charges:s.snapshot.content.charges,lines:s.snapshot.calculation.lines},review.lines)}
+   if(review)return {...base,canPrepare:false,reason:'Prepared inputs are immutable. Order acceptance uses a separate saved pricing approval.',illustration:taxInputIllustration({currency:s.snapshot.content.currency,consideration:s.snapshot.calculation.consideration,discount:s.snapshot.calculation.discount,charges:s.snapshot.content.charges,lines:s.snapshot.calculation.lines},review.lines)}
    if(a.role!=='ADMIN'||!permits(a,'taxProfiles.read')||!permits(a,'quotations.edit')||!await tx.crmQuotation.findFirst({where:{...quotationRecordScope(a,'edit'),id},select:{id:true}}))return {...base,canPrepare:false,reason:'Tax administrators with quotation Edit access can prepare inputs.'}
    const d=await setup(tx,a,s);return {...base,canPrepare:!d.reason,reason:d.reason,party:d.party,issuer:d.registration?{id:d.registration.id,version:d.registration.version,label:d.registration.label,legalName:d.registration.legalName,registrationNumber:d.registration.registrationNumber,category:d.registration.category,mappingVersion:d.mapping!.version}:null}
   })},

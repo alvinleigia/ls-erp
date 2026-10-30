@@ -1,5 +1,9 @@
 # P13B2 reviewed source tax inputs
 
+P13B3 adds separate [pricing approval and accepted order evidence](QUOTATION_TAX_PRICING_P13B3.md).
+Preparation alone still cannot create an order. The historical P13B2 release
+boundary below records the prerequisite gate before that integration.
+
 Tax preparation now belongs to a specific saved quotation revision. It captures
 reviewed tax identities and profiles without changing the commercial source,
 accepted amounts, billing allocations or archived PDF bytes. Shared validation,

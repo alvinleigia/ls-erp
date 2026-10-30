@@ -29,11 +29,18 @@ This is the baseline for new modules (API + UI) in this codebase.
 
 ## Shared tax contracts
 
+- Source pricing approval uses `platform/tax/source-pricing.ts`, the frozen
+  preparation and exact reconciliation to the unchanged agreement. Source owners
+  retain Read/Edit authority; native Sales Order acceptance freezes its approved
+  evidence atomically. No current-master enrichment or commercial-charge label
+  inference is allowed. Tax-aware orders stay outside commercial invoicing until
+  native tax allocations are integrated. See `docs/QUOTATION_TAX_PRICING_P13B3.md`.
+
 - Prepared source tax inputs use immutable native source/master-version links
   and `platform/tax/source-inputs.ts`. The source owns authorization and storage;
   no industry or current-contact fallback can supply missing saved identity.
-  Preparation is not pricing approval. Prepared quotation revisions remain
-  blocked from order acceptance until the tax-aware pricing contract is bound.
+  Preparation is not pricing approval. Prepared quotation revisions require
+  separate immutable pricing approval before order acceptance.
   See `docs/QUOTATION_TAX_INPUTS_P13B2.md`.
 
 - Tax agreement calculation uses `platform/tax/agreement.ts` and its explicit

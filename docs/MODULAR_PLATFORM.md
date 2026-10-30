@@ -1,3 +1,20 @@
+## P13B3 pricing approval - locally verified; staging release in progress
+
+Prepared quotation tax inputs now have separate immutable pricing approval.
+Shared exact calculation allocates source discounts and reconciles the unchanged
+quoted gross. Orders freeze accepted tax evidence natively; commercial invoice
+creation is blocked until native tax allocations are integrated. INR, charge-free
+quotations are supported; unclassified charges and price mismatches stay blocked.
+No industry dependency, historical amount change or permission override is added.
+
+All 55 unit/native/financial checks and two desktop/mobile browser flows pass,
+along with build and targeted lint. Local screenshots were inspected. Migration
+rehearsal proves forced rollback and preservation of all 156 prior tables and
+policies; only the P13B2 order guard is replaced, and other functions are retained.
+Staging backup, migration and hosted verification are next. Production unchanged.
+See docs/QUOTATION_TAX_PRICING_P13B3.md. Native tax invoice allocations remain
+P13B4; statutory issuance remains P13C.
+
 ## P13B2 quotation tax inputs - staging verified
 
 Runtime 06378a2 is READY on all four staging aliases, deployment
