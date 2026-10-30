@@ -73,3 +73,27 @@ flow. The suite never reads hosted credentials or seeds/resets hosted databases.
 The migration rehearsal verifies forced rollback and exact preservation of all
 prior rows, policies and stored functions, and admission checks cover both new
 models under their canonical contact/account resources.
+
+## Staging verification - 30 October 2026
+
+Runtime `0e2d65c` is READY on all four staging aliases, with migration 143 applied.
+The existing 123-test tax/operational suite and 28 focused identity, ownership
+and participant-snapshot checks pass. The build, lint and isolated browser flow
+pass, including stale-draft recovery, failed-access load handling and both owner
+types. Desktop/mobile screenshots were inspected locally and on hosted staging.
+
+The 34 hosted API checks cover creation, duplicates, conflicting assessments,
+immutable reviews, stale versions, foreign-tenant denial and archive/restore
+boundaries for people and businesses. The QA identities and their source records
+are archived. Hosted read-only UI checks confirm archived owners cannot create
+identities and retain accessible history.
+
+A fresh encrypted staging archive passed decryption/hash and restore-list checks
+before migration. This is not a full restore rehearsal. The migration preserved
+all 152 prior tables' rows, existing policies and stored functions exactly; the
+two new tables were empty before hosted QA. No prior source, financial amount,
+accepted snapshot, profile grant or PDF was changed. The disposable localhost
+database was removed after testing.
+
+Production aliases, GitHub `main` and the root production project link remain
+unchanged. No production release or production database access was performed.

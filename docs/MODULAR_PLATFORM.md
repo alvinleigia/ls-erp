@@ -1,6 +1,7 @@
-## P13A3 shared customer tax identities - local verification complete
+## P13A3 shared customer tax identities - staging verified
 
-One platform/tax/party contract, service and editor now supports reviewed tax
+Runtime 0e2d65c is READY on all four staging aliases with migration 143. One
+platform/tax/party contract, service and editor now supports reviewed tax
 identities on canonical people and businesses. CRM supplies only its source
 Read/Edit/Archive probes. Multiple GSTINs, explicit unregistered assessments,
 immutable paginated reviews, archive/restore and stale-draft recovery are shared
@@ -8,14 +9,19 @@ across industries. Missing details remain Not assessed. No Real Estate policy,
 linked-party inheritance or historical financial enrichment is introduced.
 
 Migration 143 adds two empty forced-RLS owner-bound tables, fixed identity and
-per-version proof guards. Rehearsal and forced rollback preserve all prior rows,
-policies and functions. Native/API checks cover concurrent service and direct
-native writes, Restricted access, Read/Edit/Archive bounds, foreign tenants,
-strict audit rollback and immutable history. The existing 123-test tax/operational
-suite, participant snapshot tests, build, lint and desktop/mobile browser flow
-pass. Source versions remain unchanged; accepted documents and PDFs are untouched.
+per-version proof guards. Forced rollback and staging migration preserve all
+152 prior tables, existing policies and functions exactly. A fresh encrypted
+application archive passed decryption/hash and restore-list checks; no full
+restore rehearsal is claimed. No source values, grants or PDFs were rewritten.
 
-Staging backup/deployment verification is in progress. Production is unchanged.
+The existing 123-test tax/operational suite, 28 focused native/API/ownership and
+participant-snapshot checks, build, lint and isolated desktop/mobile browser flow
+pass. Concurrent service/direct native writes, source action and Restricted Read
+bounds, strict audit rollback and immutable history are checked. All 34 hosted
+API checks pass; hosted desktop/mobile screenshots were inspected. QA sources
+and identities are archived, and the disposable local database was removed.
+
+Production aliases, GitHub main and the root production link are unchanged.
 See docs/CUSTOMER_TAX_IDENTITIES_P13A3.md. Approved source selection and frozen
 invoice tax evidence remain P13B; statutory issuance remains P13C.
 
