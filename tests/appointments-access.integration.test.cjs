@@ -832,6 +832,18 @@ test('omitted booking taxes use catalog defaults; explicit empty selections and 
  assert.equal(free.totalCents,0);assert.equal(free.lines[0].unitPriceCents,0);assert.equal(free.productLines[0].unitPriceCents,0)
 })
 
+test('shared exact tax arithmetic fixes half-cent bookings without repricing saved metadata',async()=>{
+ await root.query('UPDATE "Tax" SET percent=64.6,"isActive"=true WHERE id=$1',[pricingTax])
+ try{
+  const payload=newOrderPayload('2039-07-20',{status:'DRAFT',lines:[{...bookingPayload().lines[0],unitPriceCents:250,taxIds:[pricingTax]}],productLines:[]})
+  const saved=(await ok(await call('/orders','POST',payload),201)).order
+  assert.equal(saved.taxCents,162);assert.equal(saved.totalCents,412);assert.equal(saved.taxes[0].percent,'64.6')
+  await root.query('UPDATE "Tax" SET percent=65,"isActive"=false WHERE id=$1',[pricingTax])
+  const note=(await ok(await patchOrder(saved.id,{internalNote:'Do not reprice saved tax'}))).order
+  assert.equal(note.taxCents,162);assert.equal(note.totalCents,412);assert.equal(note.taxes[0].percent,'64.6')
+ }finally{await root.query('UPDATE "Tax" SET percent=18,"isActive"=true WHERE id=$1',[pricingTax])}
+})
+
 test('tax selection rejects unavailable IDs, deduplicates valid IDs and preserves inclusive pennies',async()=>{
  const payload=newOrderPayload('2039-07-02',{status:'DRAFT'})
  const before=await orderCounts()

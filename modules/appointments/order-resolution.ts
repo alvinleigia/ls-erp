@@ -1,3 +1,4 @@
+import { allocateMinor, decimalText, inclusiveTaxMinor, percentageMinor, type DecimalInput } from "@/platform/tax/arithmetic"
 import type { Prisma } from "@prisma/client"
 import type { AppointmentOrderCouponHint } from "@/types/appointments"
 import { requireServicesAccess } from "@/modules/services/policy"
@@ -25,7 +26,7 @@ export type ResolvedOrderLine = {
   discountValue: number
   taxMode: "INCLUSIVE" | "EXCLUSIVE"
   taxIds: string[]
-  taxPercents: Array<{ id: string; name: string; percent: number }>
+  taxPercents: Array<{ id: string; name: string; percent: string }>
   lineSubtotalCents: number
   lineDiscountCents: number
   lineTaxCents: number
@@ -44,7 +45,7 @@ export type ResolvedOrderProductLine = {
   discountValue: number
   taxMode: "INCLUSIVE" | "EXCLUSIVE"
   taxIds: string[]
-  taxPercents: Array<{ id: string; name: string; percent: number }>
+  taxPercents: Array<{ id: string; name: string; percent: string }>
   lineSubtotalCents: number
   lineDiscountCents: number
   lineTaxCents: number
@@ -56,12 +57,12 @@ export type ResolvedOrderProductLine = {
 type ResolvedOrderTax = {
   taxId: string
   name: string
-  percent: number
+  percent: string
   taxCents: number
 }
 
 type ResolveOrderOptions = {
-  savedTaxes?: ReadonlyArray<{ taxId: string | null; name: string; percent: number }>
+  savedTaxes?: ReadonlyArray<{ taxId: string | null; name: string; percent: DecimalInput }>
   savedLines?: ReadonlyArray<{ id: string; serviceId: string; quantity: number; durationMinutes: number }>
   db?: Prisma.TransactionClient
   actor?: BusinessActor
@@ -70,47 +71,9 @@ type ResolveOrderOptions = {
   tenantId?: string
 }
 
-const sumPercent = (values: number[]) =>
-  values.reduce((sum, value) => sum + Math.max(0, value), 0)
-
-const extractTaxFromInclusiveGross = (
-  grossCents: number,
-  taxes: Array<{ percent: number }>
-) => {
-  const totalPercent = sumPercent(taxes.map((tax) => tax.percent))
-  if (grossCents <= 0 || totalPercent <= 0) return 0
-  const netCents = Math.round((grossCents * 100) / (100 + totalPercent))
-  return Math.max(0, grossCents - netCents)
-}
-
-const calculateExclusiveTaxFromNet = (
-  netCents: number,
-  taxes: Array<{ percent: number }>
-) =>
-  taxes.reduce(
-    (sum, tax) =>
-      sum + Math.max(0, Math.round((Math.max(0, netCents) * Math.max(0, tax.percent)) / 100)),
-    0
-  )
-
-const allocateCouponByWeight = (amounts: number[], couponCents: number) => {
-  const total = amounts.reduce((sum, value) => sum + Math.max(0, value), 0)
-  if (total <= 0 || couponCents <= 0) return amounts.map(() => 0)
-
-  const rawAllocations = amounts.map((value) => ({
-    base: Math.floor((couponCents * Math.max(0, value)) / total),
-    remainder: (couponCents * Math.max(0, value)) % total,
-  }))
-  let remaining = couponCents - rawAllocations.reduce((sum, item) => sum + item.base, 0)
-  const ranked = rawAllocations
-    .map((item, index) => ({ ...item, index }))
-    .sort((a, b) => b.remainder - a.remainder)
-  for (let i = 0; i < ranked.length && remaining > 0; i += 1) {
-    rawAllocations[ranked[i].index].base += 1
-    remaining -= 1
-  }
-  return rawAllocations.map((item) => item.base)
-}
+const extractTaxFromInclusiveGross = (grossCents:number,taxes:Array<{percent:string}>) => inclusiveTaxMinor(grossCents,taxes.map(t=>t.percent))
+const calculateExclusiveTaxFromNet = (netCents:number,taxes:Array<{percent:string}>) => taxes.reduce((sum,t)=>sum+percentageMinor(netCents,t.percent),0)
+const allocateCouponByWeight = (weights:readonly DecimalInput[],amount:number) => allocateMinor(amount,weights)
 
 type CouponScopeLine = {
   lineType: "SERVICE" | "PRODUCT"
@@ -294,9 +257,9 @@ export const resolveOrderData = async (
   const taxIds = [...new Set([...serviceTaxIds.flat(), ...productTaxIds.flat()])]
   const currentTaxes = taxIds.length ? await db.tax.findMany({ where: { tenantId, id: { in: taxIds }, isActive: true },
     select: { id: true, name: true, percent: true } }) : []
-  const taxMap = new Map(currentTaxes.map(tax => [tax.id, tax]))
+  const taxMap = new Map(currentTaxes.map(tax => [tax.id, {...tax,percent:tax.percent.toString()}]))
   // Scheduling/status validation may use saved tax definitions; only financial edits reprice.
-  for (const tax of options.savedTaxes ?? []) if (tax.taxId && taxIds.includes(tax.taxId)) taxMap.set(tax.taxId, { id: tax.taxId, name: tax.name, percent: tax.percent })
+  for (const tax of options.savedTaxes ?? []) if (tax.taxId && taxIds.includes(tax.taxId)) taxMap.set(tax.taxId, { id: tax.taxId, name: tax.name, percent: decimalText(tax.percent) })
   if (taxIds.some(id => !taxMap.has(id))) throw new BusinessError(400, "A selected or default tax is inactive or unavailable. Review the booking taxes.")
 
   const lines: ResolvedOrderLine[] = []
@@ -567,7 +530,7 @@ export const resolveOrderData = async (
     // Recomputing tax from rounded net can otherwise add/remove a cent.
     const taxShares = line.taxMode === "INCLUSIVE" && allocations[index] === 0
       ? allocateCouponByWeight(line.taxPercents.map(tax => tax.percent), line.lineTaxCents)
-      : line.taxPercents.map(tax => Math.max(0, Math.round(netAfterCoupon * Math.max(0, tax.percent) / 100)))
+      : line.taxPercents.map(tax => percentageMinor(netAfterCoupon,tax.percent))
     line.lineTaxCents = taxShares.reduce((sum, value) => sum + value, 0)
     line.lineTotalCents = netAfterCoupon + line.lineTaxCents
     line.taxPercents.forEach((tax, taxIndex) => {

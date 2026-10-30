@@ -110,7 +110,7 @@ export type PurchaseOrderItemRow = {
   quantity: number
   receivedQty: number
   unitCostCents: number
-  taxPercent: number
+  taxPercent: string
   lineSubtotalCents: number
   lineTaxCents: number
   lineTotalCents: number

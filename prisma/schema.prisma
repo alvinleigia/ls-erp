@@ -1530,7 +1530,7 @@ model Tax {
   id                String                @id @default(cuid())
   tenantId          String?
   name              String
-  percent           Float
+  percent           Decimal @db.Decimal
   isActive          Boolean               @default(true)
   sortOrder         Int                   @default(0)
   services          ServiceTax[]
@@ -1563,7 +1563,7 @@ model AppointmentOrderTax {
   orderId   String
   taxId     String?
   name      String
-  percent   Float
+  percent   Decimal @db.Decimal
   taxCents  Int              @default(0)
   order     AppointmentOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
   tax       Tax?             @relation(fields: [taxId], references: [id], onDelete: SetNull)
@@ -2245,7 +2245,7 @@ model PurchaseOrderItem {
   quantity          Int
   receivedQty       Int                      @default(0)
   unitCostCents     Int
-  taxPercent        Float                    @default(0)
+  taxPercent        Decimal @db.Decimal                    @default(0)
   lineSubtotalCents Int                      @default(0)
   lineTaxCents      Int                      @default(0)
   lineTotalCents    Int                      @default(0)

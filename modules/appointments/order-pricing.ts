@@ -1,3 +1,4 @@
+import { percentageMinor, type DecimalInput } from "@/platform/tax/arithmetic"
 import type { DiscountType } from "@prisma/client"
 
 // Stored subtotals mix quoted inclusive/exclusive prices. Derive a net display
@@ -33,7 +34,7 @@ export type CalculatedCoupon = CouponRule & {
 export type TaxRule = {
   id: string
   name: string
-  percent: number
+  percent: DecimalInput
 }
 
 export type CalculatedTax = TaxRule & {
@@ -49,7 +50,7 @@ export const calculateDiscountCents = (
   if (discountType === "AMOUNT") {
     return Math.min(lineSubtotalCents, Math.round(discountValue * 100))
   }
-  const percentDiscount = Math.round((lineSubtotalCents * discountValue) / 100)
+  const percentDiscount = percentageMinor(lineSubtotalCents,discountValue)
   return Math.min(lineSubtotalCents, percentDiscount)
 }
 
@@ -109,6 +110,6 @@ export const calculateTaxBreakdown = (
     ...tax,
     taxCents: Math.max(
       0,
-      Math.round((Math.max(0, taxableAmountCents) * Math.max(0, tax.percent)) / 100)
+      percentageMinor(Math.max(0,taxableAmountCents),tax.percent)
     ),
   }))

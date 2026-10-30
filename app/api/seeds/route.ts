@@ -1,3 +1,4 @@
+import { percentageMinor } from "@/platform/tax/arithmetic"
 import { dateKeyToUtcDate, addDaysToDateKey } from "@/lib/business-time"
 import { createInventoryCategory, updateInventoryCategory } from "@/modules/inventory/category-service"
 import { createSupplier, updateSupplier } from "@/modules/inventory/supplier-service"
@@ -1136,8 +1137,8 @@ const seedAppointments = async (tenantId: string, tenantSlug: string) => {
         .map((tax) => ({
           taxId: tax.id,
           name: tax.name,
-          percent: tax.percent,
-          taxCents: Math.max(0, Math.round((lineSubtotalCents * tax.percent) / 100)),
+          percent: tax.percent.toString(),
+          taxCents: percentageMinor(lineSubtotalCents,tax.percent),
         }))
       const lineTaxCents = lineTaxEntries.reduce((sum, entry) => sum + entry.taxCents, 0)
       const lineTotalCents = lineSubtotalCents + lineTaxCents
@@ -1168,7 +1169,7 @@ const seedAppointments = async (tenantId: string, tenantSlug: string) => {
     const taxCents = orderLineCreates.reduce((sum, line) => sum + line.lineTaxCents, 0)
     const totalCents = orderLineCreates.reduce((sum, line) => sum + line.lineTotalCents, 0)
 
-    const orderTaxMap = new Map<string, { taxId: string; name: string; percent: number; taxCents: number }>()
+    const orderTaxMap = new Map<string, { taxId: string; name: string; percent: string; taxCents: number }>()
     for (const line of orderLineCreates) {
       for (const entry of line._taxEntries) {
         const key = entry.taxId

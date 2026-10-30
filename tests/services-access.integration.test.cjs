@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
+const {bookingContext}=require('./helpers/booking-context.cjs')
 const {grantPgFixtureUsers}=require("./helpers/access-fixtures.cjs")
 const { test, before, after } = require('node:test')
 const assert = require('node:assert/strict')
@@ -28,9 +29,9 @@ const {servicesNavigation}=require('../application/navigation.ts')
 const {workspaceRead}=require('../platform/access/catalog.ts'),{satisfies}=require('../platform/access/policy.ts')
 const suffix=require('node:crypto').randomUUID().replaceAll('-',''), a=`svc_a_${suffix}`, b=`svc_b_${suffix}`, rid=`svc_role_${suffix}`
 const session=(tenant=a,role='ADMIN')=>({user:{id:`${tenant}_${role.toLowerCase()}`,tenantId:tenant,role}})
-const req=(method,body,tenant=a,endpoint='/services')=>new Request(`http://${tenant}.localhost/api${endpoint}`,{method,headers:{host:`${tenant}.localhost`,'Content-Type':'application/json'},...(body===undefined?{}:{body:JSON.stringify(body)})})
+const req=(method,body,tenant=a,endpoint='/services',captured={})=>new Request(`http://${tenant}.localhost/api${endpoint}`,{method,headers:{host:`${tenant}.localhost`,'Content-Type':'application/json',...captured},...(body===undefined?{}:{body:JSON.stringify(body)})})
 const invoke=(name,method,body,id,tenant=a,role='ADMIN',query='')=>sessions.run(session(tenant,role),()=> (id?routes[name].detail:routes[name].list)[method](req(method,body,tenant,`/${name}${query}`),{params:Promise.resolve({id})}))
-const call=(route,method,body,id,role='ADMIN')=>sessions.run(session(a,role),()=>route[method](req(method,body),{params:Promise.resolve({id})}))
+const call=async(route,method,body,id,role='ADMIN')=>{const captured=await bookingContext(root,a,a+'_'+role.toLowerCase());return sessions.run(session(a,role),()=>route[method](req(method,body,a,'/services',captured),{params:Promise.resolve({id})}))}
 const perms=p=>root.query('UPDATE "TenantAccessRole" SET permissions=$1 WHERE id=$2',[p,rid])
 const flag=(enabled,allowed=true)=>root.query('UPDATE "TenantModule" SET enabled=$1,allowed=$2 WHERE "tenantId"=$3 AND key=\'services\'',[enabled,allowed,a])
 async function ok(response,status=200){const data=await response.json();assert.equal(response.status,status,JSON.stringify({data,errors}));return data}

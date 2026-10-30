@@ -1,11 +1,13 @@
 # P13 shared tax foundation and India GST localization
 
-Status: P13A company registration/profile configuration is verified on staging.
+Status: P13A2 exact operational tax rates/arithmetic passed local verification;
+staging rollout is underway. See [the arithmetic contract](TAX_ARITHMETIC_P13A2.md).
+P13A company registration/profile configuration is verified on staging.
 Runtime source `3883abd` is deployed; migration 141 from `728b451` strengthens
 per-version review proofs without changing application code. Company registration,
 office mappings and reviewed profiles are complete for this increment. Recipient
-registrations, common exact arithmetic, statutory calculations and issuance remain
-pending. Production remains unchanged. See [the configuration guide](TAX_CONFIGURATION_P13A.md)
+registrations, approved statutory source facts, statutory calculations and issuance
+remain pending. Production remains unchanged. See [the configuration guide](TAX_CONFIGURATION_P13A.md)
 for the precise increment and remaining work.
 
 ## Confirmed business scope
@@ -25,13 +27,14 @@ facts; a missing registration or rate is not permission to assume one of them.
 
 ## Current code boundaries
 
-- `Tax` is a tenant-owned percentage directory with `percent Float`, used by
-  Services, Inventory and operational appointment orders. It has no GST component,
-  registration, jurisdiction or statutory-document identity.
+- `Tax` is the one tenant-owned exact percentage directory used by Services,
+  Inventory, operational appointment orders and reviewed company profiles. Its
+  rates do not independently establish a supply's statutory tax treatment.
 - `TaxRegistrationType.GST` currently permits supplier directory information. It
   does not establish the issuing company's GST registration.
-- Business Company/Office and CRM Contact/Account do not have structured GST
-  registrations. Free-text addresses are not authoritative place-of-supply rules.
+- Company registrations and office mappings are available in P13A. Recipient
+  registrations are still pending. Free-text addresses are not authoritative
+  place-of-supply rules.
 - Accepted quotation charges are plain commercial amounts/descriptions. Historical
   charges named GST must not be reclassified or charged again automatically.
 - P12 freezes the accepted agreement separately from `CustomerInvoice.billing`.

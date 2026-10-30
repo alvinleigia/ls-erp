@@ -29,8 +29,8 @@ before(async()=>{
 
  await grantPgFixtureUsers(root,[a,b])
  // This permission-focused test requires an explicit office grant and selected office for native stock visibility.
- await root.query(`INSERT INTO "BusinessOfficePolicy"("tenantId","userId","creationOfficeId",version,"updatedAt") SELECT $1,$2,id,1,now() FROM "BusinessOffice" WHERE "tenantId"=$1 AND "isInitial"`,[a,a+'_manager'])
- await root.query(`INSERT INTO "BusinessOfficeGrant"("tenantId","userId","officeId") SELECT $1,$2,id FROM "BusinessOffice" WHERE "tenantId"=$1 AND "isInitial"`,[a,a+'_manager'])
+ await root.query(`INSERT INTO "BusinessOfficePolicy"("tenantId","userId","creationOfficeId",version,"updatedAt") SELECT $1,$2,id,1,now() FROM "BusinessOffice" WHERE "tenantId"=$1 AND "isInitial" ON CONFLICT DO NOTHING`,[a,a+'_manager'])
+ await root.query(`INSERT INTO "BusinessOfficeGrant"("tenantId","userId","officeId") SELECT $1,$2,id FROM "BusinessOffice" WHERE "tenantId"=$1 AND "isInitial" ON CONFLICT DO NOTHING`,[a,a+'_manager'])
 })
 after(async()=>{
  for(const tenant of [a,b])for(const table of ['RealEstateProjectStatus','RealEstatePropertyCategory','RealEstateBuyingTimeframe'])await root.query(`DELETE FROM "${table}" WHERE "tenantId"=$1`,[tenant])

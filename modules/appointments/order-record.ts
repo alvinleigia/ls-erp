@@ -57,7 +57,7 @@ export const serializeAppointmentOrder = (
     id: tax.id,
     taxId: tax.taxId,
     name: tax.name,
-    percent: tax.percent,
+    percent: tax.percent.toString(),
     taxCents: tax.taxCents,
   })),
   lines: order.lines.map((line) => ({

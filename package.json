@@ -147,7 +147,9 @@
     "test:release-r10": "node --test tests/release-readiness-r10.test.cjs tests/storage-recovery.test.cjs",
     "test:release-r10:recovery": "node scripts/test-sales-orders.cjs --architecture-baseline --release-recovery",
     "test:tax-configuration": "node scripts/test-sales-orders.cjs --tax-foundation",
-    "test:tax-configuration:browser": "node scripts/test-sales-orders.cjs --tax-foundation --browser-only"
+    "test:tax-configuration:browser": "node scripts/test-sales-orders.cjs --tax-foundation --browser-only",
+    "test:tax-arithmetic": "node scripts/test-sales-orders.cjs --tax-arithmetic",
+    "test:tax-arithmetic:browser": "node scripts/test-sales-orders.cjs --tax-arithmetic --browser-only"
   },
   "dependencies": {
     "@pdf-lib/fontkit": "^1.1.1",

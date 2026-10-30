@@ -109,7 +109,7 @@ export type EmailDeliveryStatus = {
 export type TaxRow = {
   id: string
   name: string
-  percent: number
+  percent: string
   isActive: boolean
   sortOrder: number
   createdAt: string

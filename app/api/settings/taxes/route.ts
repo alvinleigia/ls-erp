@@ -38,7 +38,7 @@ const ensureAuthorized = async (actor: BusinessActor) => {
 const serializeTax = (tax: {
   id: string
   name: string
-  percent: number
+  percent: Prisma.Decimal
   isActive: boolean
   sortOrder: number
   createdAt: Date
@@ -46,7 +46,7 @@ const serializeTax = (tax: {
 }): TaxRow => ({
   id: tax.id,
   name: tax.name,
-  percent: tax.percent,
+  percent: tax.percent.toString(),
   isActive: tax.isActive,
   sortOrder: tax.sortOrder,
   createdAt: tax.createdAt.toISOString(),

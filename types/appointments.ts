@@ -290,7 +290,7 @@ export type AppointmentOrderTaxRow = {
   id: string
   taxId: string | null
   name: string
-  percent: number
+  percent: string
   taxCents: number
 }
 

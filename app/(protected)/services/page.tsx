@@ -1,4 +1,5 @@
 "use client"
+import { inclusiveTaxMinor,percentageMinor,sumRates } from "@/platform/tax/arithmetic"
 
 import * as React from "react"
 import { useCurrentResourceAction } from "@/platform/access/view-guard"
@@ -257,10 +258,10 @@ export default function ServicesPage() {
   const taxSummary = React.useCallback(
     (service: ServiceRow) => {
       const taxes = resolveTaxes(service)
-      if (!taxes.length) return { label: "None", percentTotal: 0 }
+      if (!taxes.length) return { label: "None", percentTotal: '0' }
       return {
         label: taxes.map((tax) => `${tax.name} ${tax.percent}%`).join(", "),
-        percentTotal: taxes.reduce((sum, tax) => sum + Math.max(0, tax.percent), 0),
+        percentTotal: sumRates(taxes.map(tax=>tax.percent)),
       }
     },
     [resolveTaxes]
@@ -270,12 +271,11 @@ export default function ServicesPage() {
     (service: ServiceRow) => {
       const base = Math.max(0, service.priceCents)
       const { percentTotal } = taxSummary(service)
-      if (percentTotal <= 0 || base <= 0) return 0
+      if (percentTotal === "0" || base <= 0) return 0
       if (service.taxMode === "INCLUSIVE") {
-        const net = Math.round((base * 100) / (100 + percentTotal))
-        return Math.max(0, base - net)
+        return inclusiveTaxMinor(base,[percentTotal])
       }
-      return Math.max(0, Math.round((base * percentTotal) / 100))
+      return percentageMinor(base,percentTotal)
     },
     [taxSummary]
   )

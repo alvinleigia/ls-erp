@@ -28,14 +28,14 @@ import type { TaxRow } from "@/types/scheduling"
 
 type TaxFormValues = {
   name: string
-  percent: number
+  percent: string
   isActive: boolean
   sortOrder: number
 }
 
 const defaultTaxFormValues: TaxFormValues = {
   name: "",
-  percent: 0,
+  percent: '0',
   isActive: true,
   sortOrder: 0,
 }
@@ -268,12 +268,12 @@ export default function SettingsTaxesPage() {
                 id="tax-percent"
                 type="number"
                 min={0}
-                step="0.01"
+                step="any"
                 value={formValues.percent}
                 onChange={(event) =>
                   setFormValues((prev) => ({
                     ...prev,
-                    percent: Math.max(0, Number(event.target.value || 0)),
+                    percent: event.target.value,
                   }))
                 }
               />

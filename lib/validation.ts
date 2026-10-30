@@ -1,3 +1,4 @@
+import { taxRateInputSchema } from "@/platform/tax/rate-input"
 import { attributionFilterShape, validateAttributionFilters } from "@/platform/collaborators/report-validation"
 import { recordRulesSchema } from "@/platform/access/rules"
 import { initialOfficeMembershipSchema } from "@/platform/companies/membership-validation"
@@ -386,7 +387,7 @@ export type AppSettingsInput = z.infer<typeof appSettingsSchema>
 
 export const taxCreateSchema = z.object({
   name: z.string().trim().min(1).max(120),
-  percent: z.coerce.number().min(0).max(100),
+  percent: taxRateInputSchema,
   isActive: z.boolean().optional().default(true),
   sortOrder: z.coerce.number().int().min(0).max(9999).optional(),
 })

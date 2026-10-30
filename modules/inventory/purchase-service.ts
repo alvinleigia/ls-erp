@@ -1,3 +1,4 @@
+import { percentageMinor,sumRates } from "@/platform/tax/arithmetic"
 import { inventoryMutation } from "./transaction"
 import { Prisma } from "@prisma/client"
 import { z } from "zod"
@@ -36,7 +37,7 @@ export const serializePurchaseOrder = (order: LabelledPurchase) => ({
   taxCents: order.taxCents,
   totalCents: order.totalCents,
   createdAt: order.createdAt.toISOString(),
-  items: order.items,
+  items: order.items.map(item=>({...item,taxPercent:item.taxPercent.toString()})),
 })
 
 const purchaseOrderSelect = {
@@ -134,7 +135,7 @@ export async function createPurchase(actor: BusinessActor, data: CreatePurchaseO
     const taxMap = new Map(
       products.map((product) => [
         product.id,
-        product.taxes.reduce((sum, item) => sum + Math.max(0, item.tax.percent), 0),
+        sumRates(product.taxes.map(item=>item.tax.percent)),
       ])
     )
 
@@ -152,9 +153,9 @@ export async function createPurchase(actor: BusinessActor, data: CreatePurchaseO
     const linePayload = data.items.map((item) => {
       const quantity = Math.max(1, item.quantity)
       const unitCostCents = Math.max(0, item.unitCostCents)
-      const taxPercent = taxMap.get(item.productId) ?? 0
+      const taxPercent = taxMap.get(item.productId) ?? '0'
       const lineSubtotalCents = quantity * unitCostCents
-      const lineTaxCents = Math.round((lineSubtotalCents * taxPercent) / 100)
+      const lineTaxCents = percentageMinor(lineSubtotalCents,taxPercent)
       const lineTotalCents = lineSubtotalCents + lineTaxCents
       return {
         ...item,
