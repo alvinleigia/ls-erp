@@ -953,6 +953,8 @@ model Tenant {
 
 // Operating structure within a tenant. Platform Organization remains separate.
 model BusinessCompany {
+  taxRegistrations CompanyTaxRegistration[]
+  taxProfiles CompanyTaxProfile[]
   documentTemplates BusinessDocumentTemplate[]
   officeGrants BusinessCompanyGrant[]
   id String @id @default(cuid())
@@ -976,6 +978,7 @@ model BusinessCompany {
 }
 
 model BusinessOffice {
+  taxRegistration OfficeTaxRegistration?
   stockBalances InventoryOfficeStock[]
   stockMovements InventoryStockMovement[]
   purchaseOrders PurchaseOrder[]
@@ -1015,6 +1018,7 @@ model BusinessOffice {
   @@unique([tenantId, id])
   @@unique([tenantId, companyId, code])
   @@index([tenantId, companyId, archived])
+  @@unique([tenantId, companyId, id])
 }
 
 model BusinessOfficePolicy {
@@ -1522,6 +1526,7 @@ model Coupon {
 }
 
 model Tax {
+  profileRates CompanyTaxProfileRate[]
   id                String                @id @default(cuid())
   tenantId          String?
   name              String
@@ -1539,6 +1544,7 @@ model Tax {
   @@index([tenantId])
   @@index([isActive])
   @@index([sortOrder])
+  @@unique([tenantId, id])
 }
 
 model ServiceTax {
@@ -2883,6 +2889,108 @@ model OrderReceiptReversal {
   @@id([tenantId, paymentId])
   @@unique([tenantId, orderId, paymentId])
   @@unique([tenantId, requestKey])
+}
+
+model CompanyTaxRegistration {
+  tenantId String
+  id String @default(cuid())
+  companyId String
+  scheme String
+  countryCode String
+  registrationNumber String
+  regionCode String
+  label String
+  legalName String
+  addressLine1 String
+  addressLine2 String @default("")
+  city String
+  postalCode String
+  category String
+  eInvoicePolicy String @default("UNASSESSED")
+  effectiveFrom DateTime @db.Date
+  effectiveTo DateTime? @db.Date
+  archived Boolean @default(false)
+  version Int @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  company BusinessCompany @relation(fields:[tenantId,companyId],references:[tenantId,id],onDelete:Restrict)
+  revisions CompanyTaxRegistrationRevision[]
+  offices OfficeTaxRegistration[]
+  @@id([tenantId,id])
+  @@unique([tenantId,companyId,id])
+  @@unique([tenantId,scheme,registrationNumber])
+  @@index([tenantId,companyId,archived,label,id])
+}
+
+model CompanyTaxRegistrationRevision {
+  tenantId String
+  registrationId String
+  version Int
+  snapshot Json
+  actorId String
+  createdAt DateTime @default(now())
+  source CompanyTaxRegistration @relation(fields:[tenantId,registrationId],references:[tenantId,id],onDelete:Restrict)
+  @@id([tenantId,registrationId,version])
+}
+
+model OfficeTaxRegistration {
+  tenantId String
+  officeId String
+  companyId String
+  registrationId String?
+  version Int @default(1)
+  updatedAt DateTime @updatedAt
+  office BusinessOffice @relation(fields:[tenantId,companyId,officeId],references:[tenantId,companyId,id],onDelete:Restrict)
+  registration CompanyTaxRegistration? @relation(fields:[tenantId,companyId,registrationId],references:[tenantId,companyId,id],onDelete:Restrict)
+  @@id([tenantId,officeId])
+  @@index([tenantId,registrationId])
+  @@unique([tenantId,companyId,officeId])
+}
+
+model CompanyTaxProfile {
+  tenantId String
+  id String @default(cuid())
+  companyId String
+  code String
+  name String
+  scheme String
+  enabled Boolean @default(false)
+  version Int @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  company BusinessCompany @relation(fields:[tenantId,companyId],references:[tenantId,id],onDelete:Restrict)
+  versions CompanyTaxProfileVersion[]
+  @@id([tenantId,id])
+  @@unique([tenantId,companyId,code])
+  @@index([tenantId,companyId,enabled,name,id])
+}
+
+model CompanyTaxProfileVersion {
+  tenantId String
+  profileId String
+  version Int
+  snapshot Json
+  actorId String
+  createdAt DateTime @default(now())
+  source CompanyTaxProfile @relation(fields:[tenantId,profileId],references:[tenantId,id],onDelete:Restrict)
+  rates CompanyTaxProfileRate[]
+  @@id([tenantId,profileId,version])
+}
+
+model CompanyTaxProfileRate {
+  tenantId String
+  profileId String
+  profileVersion Int
+  variantKey String
+  componentCode String
+  taxId String
+  name String
+  percent Decimal @db.Decimal(20,12)
+  sourceUpdatedAt DateTime
+  source CompanyTaxProfileVersion @relation(fields:[tenantId,profileId,profileVersion],references:[tenantId,profileId,version],onDelete:Restrict)
+  tax Tax @relation(fields:[tenantId,taxId],references:[tenantId,id],onDelete:Restrict)
+  @@id([tenantId,profileId,profileVersion,variantKey,componentCode])
+  @@index([tenantId,taxId])
 }
 
 model CustomerInvoiceSequence {

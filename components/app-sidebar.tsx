@@ -210,6 +210,7 @@ export function AppSidebar({ brandingLogo, brandingName }: { brandingLogo?: stri
               { title: "Access profiles", href: "/settings/roles", icon: UsersIcon, isActive: (current) => current.startsWith("/settings/roles") },
               { title: "Modules", href: "/settings/modules", icon: PackageIcon, isActive: (current) => current === "/settings/modules" },
               { title: "Terminology", href: "/settings/terminology", icon: TagIcon, isActive: (current) => current === "/settings/terminology" },
+              { title: "Company tax profiles", href: "/settings/tax-profiles", icon: TagIcon, isActive: (current) => current === "/settings/tax-profiles" },
               { title: "Taxes", href: "/settings/taxes", icon: TagIcon, isActive: (current) => current === "/settings/taxes" },
               { title: "Seeds", href: "/settings/seeds", icon: PackageIcon, isActive: (current) => current === "/settings/seeds" },
             ],
@@ -226,6 +227,7 @@ export function AppSidebar({ brandingLogo, brandingName }: { brandingLogo?: stri
         if (item.href === "/settings/customer-details") return can("participantSettings.read")
         if (item.href === "/settings/documents") return can("documentTemplates.read")
         if (item.href === "/settings/branding") return can("branding.read")
+        if (item.href === "/settings/tax-profiles") return role === "ADMIN" && can("taxProfiles.read")
         if (item.href === "/settings/taxes") return can("taxRates.read")
         return true
       })

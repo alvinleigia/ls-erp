@@ -1,0 +1,75 @@
+import { test,expect } from '@playwright/test'
+import { seed,login,json } from './fixtures'
+
+test('company registrations, office mapping and versioned profiles work on desktop/mobile without granting staff access',async({browser},info)=>{
+ test.setTimeout(180_000)
+ const f=await seed(),a=await login(browser,f.origin,f.users.admin.email)
+ let staff:Awaited<ReturnType<typeof login>>|undefined
+ try{
+  const companies=await json(a.context,'/api/companies'),company=companies.items[0]
+  await a.page.goto('/settings/tax-profiles')
+  await expect(a.page.getByRole('heading',{name:'Company tax profiles',exact:true})).toBeVisible()
+  await a.page.locator('#tax-company').click();await a.page.getByRole('option',{name:new RegExp(company.name)}).click()
+  await a.page.getByRole('button',{name:'New registration',exact:true}).click()
+  await a.page.getByLabel('Registration label',{exact:true}).fill('QA reviewed main registration')
+  await a.page.getByLabel('GSTIN',{exact:true}).fill('27AAPFU0939F1ZV')
+  await a.page.getByLabel('Registered legal name',{exact:true}).fill('QA Synthetic Industries')
+  await a.page.getByLabel('Legal address line 1',{exact:true}).fill('QA synthetic address')
+  await a.page.getByLabel('City',{exact:true}).fill('Pune');await a.page.getByLabel('PIN code',{exact:true}).fill('411001')
+  await a.page.getByLabel('Effective from',{exact:true}).fill('2026-01-01')
+  await expect(a.page.getByRole('button',{name:'Save registration',exact:true})).toBeDisabled()
+  await a.page.getByLabel('I have reviewed this configuration and its applicable business treatment.',{exact:true}).check()
+  await a.page.getByRole('button',{name:'Save registration',exact:true}).click()
+  await expect(a.page.getByRole('cell',{name:'QA reviewed main registration',exact:true})).toBeVisible()
+  const reg=(await json(a.context,'/api/tax-configuration/registrations?status=all')).items[0]
+  await a.page.getByRole('button',{name:'Office mappings',exact:true}).click()
+  await a.page.getByRole('button',{name:'Change mapping',exact:true}).first().click()
+  await a.page.getByLabel('Company GST registration',{exact:true}).click();await a.page.getByRole('option',{name:/QA reviewed main registration/}).click()
+  await a.page.getByRole('button',{name:'Save office mapping',exact:true}).click();await expect(a.page.getByRole('dialog')).toHaveCount(0)
+  await a.page.getByRole('button',{name:'Tax profiles',exact:true}).click();await a.page.getByRole('button',{name:'New tax profile',exact:true}).click()
+  await a.page.getByLabel('Profile code',{exact:true}).fill('QA-GENERIC')
+  await a.page.getByLabel('Profile name',{exact:true}).fill('QA business reviewed non-GST supply')
+  await a.page.getByLabel('Tax treatment',{exact:true}).selectOption('NON_GST')
+  await a.page.getByLabel('Approved basis / exemption reference',{exact:true}).fill('QA synthetic treatment, not a legal determination')
+  await a.page.getByLabel('I have reviewed this configuration and its applicable business treatment.',{exact:true}).check()
+  await a.page.getByRole('button',{name:'Publish profile version',exact:true}).click();await expect(a.page.getByRole('dialog')).toHaveCount(0)
+  await a.page.getByRole('button',{name:'Review / edit',exact:true}).click()
+  await a.page.getByLabel('Profile name',{exact:true}).fill('QA revised generic supply')
+  await a.page.getByLabel('I have reviewed this configuration and its applicable business treatment.',{exact:true}).check()
+  await a.page.getByRole('button',{name:'Publish profile version',exact:true}).click();await expect(a.page.getByRole('dialog')).toHaveCount(0)
+  await a.page.getByRole('button',{name:'Review / edit',exact:true}).click();await a.page.getByText('Reviewed version history',{exact:true}).click()
+  await expect(a.page.getByText('Version 2 -',{exact:false})).toBeVisible();await expect(a.page.getByText('Version 1 -',{exact:false})).toBeVisible()
+  await a.page.screenshot({path:info.outputPath('tax-profile-desktop.png'),fullPage:true,animations:'disabled'})
+  await a.page.setViewportSize({width:390,height:844});await a.page.screenshot({path:info.outputPath('tax-profile-mobile.png'),fullPage:true,animations:'disabled'})
+  expect(await a.page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true)
+  await a.page.getByRole('button',{name:'Cancel',exact:true}).click()
+  await json(a.context,`/api/tax-configuration/registrations/${reg.id}`,400,'PUT',{...reg,reviewed:true})
+  staff=await login(browser,f.origin,f.users.manager.email);await json(staff.context,'/api/tax-configuration/profiles',403)
+  await staff.page.goto('/settings/tax-profiles');await expect(staff.page.getByRole('heading',{name:'Access unavailable',exact:true})).toBeVisible()
+ }finally{await staff?.context.close();await a.context.close();await f.db.end()}
+})
+
+test('charged profiles use existing rates and warn when their current directory values change',async({browser})=>{
+ test.setTimeout(150_000);const f=await seed(),a=await login(browser,f.origin,f.users.admin.email)
+ try{
+  const company=(await json(a.context,'/api/companies')).items[0]
+  const {tax:rate}=await json(a.context,'/api/settings/taxes',201,'POST',{name:'QA Synthetic rate',percent:18})
+  await a.page.goto('/settings/tax-profiles');await a.page.locator('#tax-company').click();await a.page.getByRole('option',{name:new RegExp(company.name)}).click()
+  await a.page.getByRole('button',{name:'Tax profiles',exact:true}).click();await a.page.getByRole('button',{name:'New tax profile',exact:true}).click()
+  await a.page.getByLabel('Profile code',{exact:true}).fill('QA-CHARGED');await a.page.getByLabel('Profile name',{exact:true}).fill('QA synthetic service')
+  await a.page.getByLabel('Configure inter-state components',{exact:true}).check()
+  await a.page.getByLabel('Inter-state IGST rate',{exact:true}).click();await a.page.getByRole('option',{name:/QA Synthetic rate/}).click()
+  await a.page.getByLabel('Enable this reviewed configuration',{exact:true}).check();await a.page.getByLabel('I have reviewed this configuration and its applicable business treatment.',{exact:true}).check()
+  await a.page.getByRole('button',{name:'Publish profile version',exact:true}).click();await expect(a.page.getByRole('dialog')).toHaveCount(0)
+  await json(a.context,`/api/settings/taxes/${rate.id}`,200,'PATCH',{name:'QA Synthetic rate',percent:20,isActive:true})
+  await a.page.getByRole('button',{name:'Review / edit',exact:true}).click();await expect(a.page.getByRole('status').filter({hasText:'Source rates changed'})).toBeVisible()
+  const p=(await json(a.context,'/api/tax-configuration/profiles?status=all')).items[0],detail=await json(a.context,`/api/tax-configuration/profiles/${p.id}`)
+  expect(detail.current.snapshot.variants[0].components[0].percent).toBe('18')
+  await a.page.getByLabel('Profile name',{exact:true}).fill('QA unsaved local draft')
+  await json(a.context,'/api/tax-configuration/profiles',200,'POST',{companyId:company.id,id:p.id,code:p.code,version:1,reviewed:true,body:{name:'QA remote review',scheme:'IN_GST',enabled:false,supplyKind:'SERVICES',treatment:'NIL_RATED',classificationKind:'NONE',classificationCode:'',basisReference:'',priceBasis:'EXCLUSIVE',zeroRatedMode:'NOT_APPLICABLE',variants:[]}})
+  await a.page.getByLabel('I have reviewed this configuration and its applicable business treatment.',{exact:true}).check();await a.page.getByRole('button',{name:'Publish profile version',exact:true}).click()
+  await expect(a.page.getByRole('alert')).toContainText('Tax profile changed. Reload before publishing.')
+  await expect(a.page.getByLabel('Profile name',{exact:true})).toHaveValue('QA unsaved local draft')
+  await a.page.getByRole('button',{name:'Reload saved data (discard edits)',exact:true}).click();await expect(a.page.getByLabel('Profile name',{exact:true})).toHaveValue('QA remote review')
+ }finally{await a.context.close();await f.db.end()}
+})

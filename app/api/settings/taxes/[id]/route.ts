@@ -144,6 +144,7 @@ async function handleDELETE(request: Request,
     logApiRequestSuccess(logContext, 200, { taxId: id, result: "deleted" })
     return withRequestId(response, logContext.requestId)
   } catch (error) {
+    if ((error as { code?: string }).code === 'P2003') return withRequestId(NextResponse.json({ error: 'Tax is used by saved records or tax profiles. Archive it instead.' }, { status: 409 }), logContext.requestId)
     logApiRequestError(logContext, error, 500, { taxId: id })
     const response = NextResponse.json({ error: "Unable to delete tax." }, { status: 500 })
     return withRequestId(response, logContext.requestId)

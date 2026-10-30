@@ -145,7 +145,9 @@
     "test:dates": "node --require ./tests/register.cjs --test tests/date-display.test.cjs tests/work-history-format.test.cjs",
     "release:r10:source": "node scripts/release-readiness-r10.cjs",
     "test:release-r10": "node --test tests/release-readiness-r10.test.cjs tests/storage-recovery.test.cjs",
-    "test:release-r10:recovery": "node scripts/test-sales-orders.cjs --architecture-baseline --release-recovery"
+    "test:release-r10:recovery": "node scripts/test-sales-orders.cjs --architecture-baseline --release-recovery",
+    "test:tax-configuration": "node scripts/test-sales-orders.cjs --tax-foundation",
+    "test:tax-configuration:browser": "node scripts/test-sales-orders.cjs --tax-foundation --browser-only"
   },
   "dependencies": {
     "@pdf-lib/fontkit": "^1.1.1",

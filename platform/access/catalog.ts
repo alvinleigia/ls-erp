@@ -5,6 +5,7 @@ export type PermissionAction = typeof permissionActions[number]
 const editable = ["read", "create", "edit"] as const
 const records = ["read", "create", "edit", "archive"] as const
 export const accessResources = {
+  taxProfiles: { name: "Company tax configuration (tenant administrator)", module: "core", actions: ["read", "edit"] },
   customerInvoices: { name: "Commercial invoices (confirm posts; cancel cancels a draft or fully credits a posted invoice)", module: "invoicing", actions: ["read", "create", "edit", "confirm", "cancel"], createOnRecord: true },
   invoicePayments: { name: "Invoice payment applications (cancel releases an application; no money transfer)", module: "invoicing", actions: ["read", "create", "cancel"], createOnRecord: true },
   invoiceDocuments: { name: "Invoice and credit-note PDFs", module: "invoicing", actions: ["read", "create", "export"], createOnRecord: true },

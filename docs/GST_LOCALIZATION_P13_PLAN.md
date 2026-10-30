@@ -1,13 +1,16 @@
 # P13 shared tax foundation and India GST localization
 
-Status: design and code inventory only. P12 remains the deployed staging release.
-No tax rates, GST classification, statutory issuance or database migration has
-been activated by this plan. Production remains unchanged.
+Status: P13A company registration/profile configuration is being implemented and
+verified for staging. Statutory calculations and issuance remain inactive.
+Production remains unchanged. See [the configuration guide](TAX_CONFIGURATION_P13A.md)
+for the precise increment and remaining work.
 
-## Decision needed before implementing tax treatment
+## Confirmed business scope
 
-Confirm whether Ewissen's first statutory documents must cover property sales,
-brokerage/services, or both. The supplied booking/CIF PDFs do not establish the
+The user confirmed support for both property sales and brokerage/services, with
+configuration per business and shared foundations across industries. This is
+not approval of a particular rate or statutory treatment.
+The supplied booking/CIF PDFs do not establish the
 applicable tax treatment or provide a statutory tax-invoice specification.
 Do not infer taxable supply, rate, exemption or place of supply from a CRM
 industry label, property category or the text of a saved quotation charge.
