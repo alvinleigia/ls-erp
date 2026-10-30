@@ -1,3 +1,23 @@
+## P13B1 shared tax agreement calculator - local verification complete
+
+One platform/tax/agreement contract calculates exact line discounts, flat
+percentage components, inclusive/exclusive net and gross amounts and remaining
+frozen tax allocations. Its explicit format/currency precision/policy support
+reuse across modules and industries without current master lookups or industry
+assumptions. Canonical component ordering and remaining-balance apportionment
+keep one-cent portions non-negative and final component totals exact.
+
+Company tax profile administration now offers a read-only saved-version preview
+with optional partial allocation, changed-rate warnings and stale-version checks.
+It retains actual Tenant Admin authority and creates no business/audit records.
+All 50 unit/native/financial checks and three desktop/mobile browser flows, build
+and lint pass. Screenshots were inspected. Existing commercial invoices, partial
+billing, credits, payments, source snapshots and PDFs remain unchanged.
+
+Staging deployment verification is in progress; no database migration is needed.
+Production is unchanged. See docs/TAX_AGREEMENT_P13B1.md. Approved source facts,
+native tax-aware invoice allocation and statutory issuance remain pending.
+
 ## P13A3 shared customer tax identities - staging verified
 
 Runtime 0e2d65c is READY on all four staging aliases with migration 143. One

@@ -27,7 +27,14 @@ This is the baseline for new modules (API + UI) in this codebase.
 - UI should only hide/disable; server is source of truth.
 - Tenant provisioning/lifecycle actions must use `canManageTenants` and remain restricted to platform admin users.
 
-## Customer tax identities
+## Shared tax contracts
+
+- Tax agreement calculation uses `platform/tax/agreement.ts` and its explicit
+  format/policy. Callers authorize and resolve source facts first; calculation
+  never grants access, chooses statutory eligibility or reinterprets commercial
+  charges. Partial amounts use remaining frozen component balances and retained
+  actual allocations. The saved-profile preview is read-only administration,
+  not an approval or invoice posting API. See `docs/TAX_AGREEMENT_P13B1.md`.
 
 - Customer tax identities use `platform/tax/party` on canonical person/business
   owners. The source module installs its Read/Edit/Archive scope probe; shared
