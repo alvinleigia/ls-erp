@@ -22,7 +22,7 @@ after(async()=>{await Promise.all(clients.map(c=>c.$disconnect()));await Promise
 const {readOrderTaxAcceptance}=require('../modules/sales-orders/tax-acceptance.ts'),{applicationReceivables}=require('../application/receivables/service.ts'),{applicationCustomerInvoices}=require('../application/customer-invoices/service.ts')
 async function prepared(extra={}){const q=await fixture(extra);await s.save(q.id,input(q));return q}
 async function approvalInput(q){const d=await s.pricing(q.id,{revision:q.version});return {revision:q.version,reviewId:d.reviewId,expectedGross:d.pricing.gross,basisReference:'QA explicit customer-agreed price reconciliation',reviewed:true}}
-test('approved prices create an unchanged order and immutable native acceptance; commercial invoices stay blocked',async()=>{
+test('approved prices create an unchanged order and immutable native acceptance; tax-aware invoices retain native allocations',async()=>{
  const q=await prepared({discount:'0.01',lines:[{description:'One',quantity:'1',rate:'59',unit:''},{description:'Two',quantity:'1',rate:'59',unit:''}]}),before=await crm.getQuotation(q.id),d=await s.pricing(q.id,{revision:1});assert(d.canApprove)
  await s.approvePricing(q.id,await approvalInput(q));const orders=applicationSalesOrders(db,identity(admin)),o=await orders.create({quotationId:q.id,revision:1,orderedOn:'2026-01-01'}),e=(await readOrderTaxAcceptance(db,identity(admin),o.id)).acceptance
  assert.equal(o.consideration.toString(),'117.99');assert.equal(e.snapshot.agreement.grossMinor,11799);assert.deepEqual(e.snapshot.agreement.lines.map(l=>l.discountMinor),[1,0]);assert.deepEqual((await orders.get(o.id)).snapshot,before.snapshot);assert.equal((await crm.getQuotation(q.id)).version,1)
@@ -30,7 +30,7 @@ test('approved prices create an unchanged order and immutable native acceptance;
  const otherQ=await fixture(),otherOrder=await orders.create({quotationId:otherQ.id,revision:1});await assert.rejects(root.salesOrderTaxAcceptance.create({data:{tenantId:tenant,orderId:otherOrder.id,approvalId:e.approvalId,snapshot:e.snapshot}}),/native approved source/)
  await assert.rejects(root.salesOrderTaxAcceptance.delete({where:{tenantId_orderId:{tenantId:tenant,orderId:o.id}}}));await assert.rejects(root.quotationTaxPricingApproval.update({where:{id:e.approvalId},data:{agreement:{}}}))
  await orders.transition(o.id,{action:'confirm',version:1});await applicationReceivables(db,identity(admin)).open(o.id,{dueDates:[null]})
- await assert.rejects(applicationCustomerInvoices(db,identity(admin)).create(o.id,{requestKey:randomUUID(),invoiceDate:'2026-01-01',dueOn:null,note:'QA',billing:{mode:'BALANCE',label:''}}),e=>e.status===409&&/tax-aware orders/i.test(e.message));assert.equal(await root.customerInvoice.count({where:{tenantId:tenant,orderId:o.id}}),0)
+ const invoice=await applicationCustomerInvoices(db,identity(admin)).create(o.id,{requestKey:randomUUID(),invoiceDate:'2026-01-01',dueOn:null,note:'QA',billing:{mode:'BALANCE',label:''}});assert.equal(invoice.snapshot.kind,'TAX_AWARE');assert.equal(invoice.billing.tax.grossMinor,11799)
 })
 test('stale review IDs/totals, duplicate and unauthorized approvals cannot grant acceptance',async()=>{
  const q=await prepared(),v=await approvalInput(q)

@@ -24,7 +24,7 @@ type ResourceContract = { policy: ResourceRecordPolicy; ownership: ResourceOwner
 // against the generated Prisma schema. No data/default/scope migration is implied.
 export const resourceRegistry = {
   taxProfiles: { policy: "administrative", ownership: { kind: "security", roots: ["CompanyTaxRegistration", "OfficeTaxRegistration", "CompanyTaxProfile"], children: ["CompanyTaxRegistrationRevision", "CompanyTaxProfileVersion", "CompanyTaxProfileRate"] } },
-  customerInvoices: { policy: "sales", ownership: { kind: "source", roots: ["CustomerInvoice"], children: ["CustomerCreditNote", "CustomerInvoiceEvent"], sources: ["salesOrders", "receivables"] }, sharing: "salesOrders" },
+  customerInvoices: { policy: "sales", ownership: { kind: "source", roots: ["CustomerInvoice"], children: ["CustomerCreditNote", "CustomerInvoiceEvent", "CustomerInvoiceTaxSnapshot", "CustomerCreditTaxSnapshot"], sources: ["salesOrders", "receivables"] }, sharing: "salesOrders" },
   invoicePayments: { policy: "sales", ownership: { kind: "source", roots: ["InvoicePaymentApplication"], children: ["InvoicePaymentRelease"], sources: ["customerInvoices", "orderPayments"] }, sharing: "salesOrders" },
   invoiceDocuments: { policy: "sales", ownership: { kind: "source", roots: ["CustomerInvoiceDocument"], sources: ["customerInvoices"] }, sharing: "salesOrders" },
   orderDocuments: { policy: "sales", ownership: { kind: "source", roots: ["SalesOrderDocument"], sources: ["salesOrders"] }, sharing: "salesOrders" },

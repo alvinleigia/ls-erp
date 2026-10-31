@@ -29,12 +29,19 @@ This is the baseline for new modules (API + UI) in this codebase.
 
 ## Shared tax contracts
 
+- Invoice tax portions use `platform/tax/invoice-allocation.ts` and actual active
+  saved reservations against the native accepted agreement. Draft edits preserve
+  prior version snapshots; cancellation/full credit releases original components.
+  Never recalculate posted portions from current rates or create another debt.
+  Tax-aware invoice/credit PDF issuance requires separate statutory controls.
+  See `docs/INVOICE_TAX_ALLOCATIONS_P13B4.md`.
+
 - Source pricing approval uses `platform/tax/source-pricing.ts`, the frozen
   preparation and exact reconciliation to the unchanged agreement. Source owners
   retain Read/Edit authority; native Sales Order acceptance freezes its approved
   evidence atomically. No current-master enrichment or commercial-charge label
-  inference is allowed. Tax-aware orders stay outside commercial invoicing until
-  native tax allocations are integrated. See `docs/QUOTATION_TAX_PRICING_P13B3.md`.
+  inference is allowed. Tax-aware orders require native accepted component
+  allocations in invoicing. See `docs/QUOTATION_TAX_PRICING_P13B3.md`.
 
 - Prepared source tax inputs use immutable native source/master-version links
   and `platform/tax/source-inputs.ts`. The source owns authorization and storage;

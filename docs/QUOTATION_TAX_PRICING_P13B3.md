@@ -1,5 +1,10 @@
 # P13B3 quotation tax pricing approval and order evidence
 
+P13B4 adds [native invoice/credit allocations](INVOICE_TAX_ALLOCATIONS_P13B4.md).
+Prepared orders now use those frozen portions for billing; the earlier P13B3
+release boundary below records the gate before that integration. Statutory PDF
+issuance remains separate and blocked pending P13C.
+
 This increment connects prepared quotation tax inputs to an explicit pricing
 review and immutable Sales Order acceptance. The shared calculation and review
 controls live under `platform/tax`; Sales Documents owns source authorization,

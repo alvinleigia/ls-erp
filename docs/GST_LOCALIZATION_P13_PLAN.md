@@ -13,6 +13,9 @@ prepared revisions from order acceptance pending tax-aware pricing approval.
 P13B3 implements separate [pricing approval and frozen order evidence](QUOTATION_TAX_PRICING_P13B3.md):
 only exactly reconciled INR prices enter tax-aware orders. Unclassified commercial
 charges stay blocked, and native tax invoice allocations remain P13B4 work.
+P13B4 integrates [native billed tax portions and full-credit reversal](INVOICE_TAX_ALLOCATIONS_P13B4.md)
+using the accepted agreement, with statutory invoice/credit PDF issuance still
+blocked pending P13C. Existing internal INV/CN identities are not statutory series.
 Approved statutory source facts, native invoice tax allocation and issuance remain pending.
 Production remains unchanged.
 

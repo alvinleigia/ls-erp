@@ -1,3 +1,22 @@
+## P13B4 invoice tax allocations - locally verified; staging release in progress
+
+Tax-aware orders now use the shared invoice/payment/full-credit lifecycle with
+native frozen net/component portions. Actual active draft/posting reservations
+bound each new allocation; credits restore the original invoice's components.
+Every invoice version and full credit retain immutable native evidence linked
+to the accepted order. Existing gross obligations and commercial PDFs remain
+unchanged; statutory tax invoice/credit PDF issuance remains blocked pending P13C.
+
+All 65 checks are verified across the main and focused reruns (57 other checks
+and eight native tax-invoice checks). Three browser flows, build and lint pass;
+desktop/mobile screenshots were inspected. The migration rehearsal verifies forced
+rollback and all 158 prior tables/policies; five reviewed billing functions are
+extended and other stored functions/triggers retained. The initially detected
+SQL CASE syntax issue was corrected before any successful migration application.
+Staging backup, migration and hosted verification are next. Production unchanged.
+See docs/INVOICE_TAX_ALLOCATIONS_P13B4.md. Accepted INR/charge-free pricing bounds
+remain; statutory eligibility, series and document issuance remain P13C.
+
 ## P13B3 quotation tax pricing and order acceptance - staging verified
 
 Runtime 84d34e3 is READY on all four staging aliases, deployment

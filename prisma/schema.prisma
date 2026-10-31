@@ -3040,6 +3040,7 @@ model CustomerInvoice {
 }
 
 model CustomerCreditNote {
+  taxSnapshot CustomerCreditTaxSnapshot?
   tenantId String
   invoiceId String
   reference String
@@ -3059,6 +3060,7 @@ model CustomerCreditNote {
 }
 
 model CustomerInvoiceEvent {
+  taxSnapshot CustomerInvoiceTaxSnapshot?
   tenantId String
   invoiceId String
   version Int
@@ -3514,6 +3516,7 @@ model QuotationTaxPricingApproval {
  @@unique([tenantId,reviewId])
 }
 model SalesOrderTaxAcceptance {
+ invoiceSnapshots CustomerInvoiceTaxSnapshot[]
  tenantId String
  orderId String
  approvalId String
@@ -3522,4 +3525,27 @@ model SalesOrderTaxAcceptance {
  source SalesOrder @relation(fields:[tenantId,orderId],references:[tenantId,id],onDelete:Restrict)
  approval QuotationTaxPricingApproval @relation(fields:[tenantId,approvalId],references:[tenantId,id],onDelete:Restrict)
  @@id([tenantId,orderId])
+}
+
+model CustomerInvoiceTaxSnapshot {
+ tenantId String
+ invoiceId String
+ version Int
+ orderId String
+ snapshot Json
+ createdAt DateTime @default(now())
+ source CustomerInvoiceEvent @relation(fields:[tenantId,invoiceId,version],references:[tenantId,invoiceId,version],onDelete:Restrict)
+ agreement SalesOrderTaxAcceptance @relation(fields:[tenantId,orderId],references:[tenantId,orderId],onDelete:Restrict)
+ credits CustomerCreditTaxSnapshot[]
+ @@id([tenantId,invoiceId,version])
+}
+model CustomerCreditTaxSnapshot {
+ tenantId String
+ invoiceId String
+ invoiceVersion Int
+ snapshot Json
+ createdAt DateTime @default(now())
+ source CustomerCreditNote @relation(fields:[tenantId,invoiceId],references:[tenantId,invoiceId],onDelete:Restrict)
+ original CustomerInvoiceTaxSnapshot @relation(fields:[tenantId,invoiceId,invoiceVersion],references:[tenantId,invoiceId,version],onDelete:Restrict)
+ @@id([tenantId,invoiceId])
 }
