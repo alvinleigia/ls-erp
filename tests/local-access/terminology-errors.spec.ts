@@ -27,7 +27,7 @@ test("error responses use only the caller's active terminology and retain valida
     await expect(admin.page.getByText("scheduled a Touchpoint", { exact: true })).toBeVisible()
     expect(await json(admin.context, `/api/crm/work/${work.id}/history`)).toEqual(history)
     await json(admin.context, "/api/modules", 200, "PATCH", { key: "realEstate", enabled: false })
-    expect((await json(admin.context, "/api/real-estate/projects/missing", 403)).error).toBe("Real Estate and CRM must be enabled for this business.")
+    expect((await json(admin.context, "/api/real-estate/projects/missing", 403)).error).toBe("Real Estate is not enabled for this business.")
   } finally { await admin.context.close(); await other.context.close(); await fixture.db.end() }
 })
 

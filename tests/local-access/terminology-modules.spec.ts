@@ -39,7 +39,7 @@ test("project details, child creation and property selectors share labels while 
   await expect(editor.getByText("Codes are unique across Developments and Phases in this business.", { exact: true })).toBeVisible()
   await admin.page.goto(`/crm/projects/${project.id}`)
   await admin.page.getByRole("tab", { name: "Team", exact: true }).click()
-  await expect(admin.page.getByText("No staff assigned. Only managers can access this Estate.", { exact: true })).toBeVisible()
+  await expect(admin.page.getByText("No staff assigned. Access follows the configured Estate limits.", { exact: true })).toBeVisible()
   await admin.page.getByRole("tab", { name: "Phases", exact: true }).click()
   await admin.page.getByRole("link", { name: "New Phase", exact: true }).click()
   await expect(admin.page).toHaveURL(new RegExp(`parentId=${project.id}`))

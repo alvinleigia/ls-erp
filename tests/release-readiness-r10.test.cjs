@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
+const reviewedSource = require('./helpers/reviewed-release-source.cjs')
 const { test } = require('node:test')
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
@@ -9,15 +10,16 @@ const { sha } = require('../scripts/industry-release.cjs')
 const manifest = require('../docs/release-source-r10.json')
 const history = () => manifest.migrations.map(m => ({ name: m.name, checksum: m.sha256Lf, finished: true, rolledBack: false }))
 
-test('R10 pins the current source while preserving reviewed historical checksums', () => {
-  verifySource()
+test('R10 pins its reviewed source while preserving historical checksums', t => {
+  const source = reviewedSource(t, '321b171abf1c6167204809e3ef25b44e8bd28c87')
+  verifySource(manifest, source)
   assert.equal(manifest.migrations.length, 132)
   for (const old of require('../docs/industry-release-manifest.json').migrations) {
     const current = manifest.migrations.find(m => m.name === old.name)
     for (const field of ['sha256Lf', 'sha256Crlf', 'sha256LfFinalCrlf']) assert.equal(current[field], old[field])
   }
   for (const mutate of [m => m.migrations.pop(), m => m.migrations.reverse(), m => { m.migrations[0].sha256Lf = 'bad' }, m => { m.schemaSha256Lf = 'bad' }, m => { m.migrations.find(i => i.sha256LfFinalCrlf).sha256LfFinalCrlf = 'bad' }]) {
-    const changed = structuredClone(manifest); mutate(changed); assert.throws(() => verifySource(changed))
+    const changed = structuredClone(manifest); mutate(changed); assert.throws(() => verifySource(changed, source))
   }
 })
 
@@ -60,14 +62,8 @@ test('a baseline must be a contiguous verified prefix; rollback does not apply a
   assert.match(historyProblems([rolled]).join(), /Missing migration/)
 })
 
-test('source receipts never certify hosted history, pilot recovery or release approval', () => {
-  const result = receipt()
-  assert.match(result.commit, /^[a-f0-9]{40}$/)
-  assert.equal(result.sourceVerified, true)
-  assert.equal(result.hostedMigrationHistory, 'unverified')
-  assert.equal(result.pilotRecovery, 'unverified')
-  assert.equal(result.hostedAcceptance, 'unverified')
-  assert.equal(result.releaseApproved, false)
+test('historical source receipts fail closed when the current source has advanced', () => {
+  assert.throws(() => receipt(), /inventory|schema/)
 })
 
 test('history summaries count applied migrations separately from rolled-back attempts', () => {

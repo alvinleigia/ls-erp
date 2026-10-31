@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test"
-import { seed, login, json, assignProfiles } from "./fixtures"
+import { seed, login, json, assignProfiles, assignOffices } from "./fixtures"
 
 test("hidden standard assignments constrain booking and shared-template edits without granting source access", async ({ browser }) => {
   test.setTimeout(150_000)
@@ -7,6 +7,9 @@ test("hidden standard assignments constrain booking and shared-template edits wi
   let scheduler: typeof admin | undefined
   const profile = fixture.slug + "_standard_profile", customer = fixture.slug + "_customer", service = fixture.slug + "_service", template = fixture.slug + "_late", hidden = "standard_browser_hidden_" + fixture.slug
   try {
+    const office = (await fixture.db.query('SELECT id FROM "BusinessOffice" WHERE "tenantId"=$1 AND "isInitial"', [fixture.slug])).rows[0]
+    await assignOffices(admin.context, fixture.users.admin.id, [office.id], office.id)
+    await assignOffices(admin.context, fixture.users.staff.id, [office.id], office.id)
     const access = await json(admin.context, `/api/access/users/${fixture.users.staff.id}`)
     const roles = (await fixture.db.query('SELECT "roleId" FROM "TenantRoleAssignment" WHERE "userId"=$1', [fixture.users.staff.id])).rows.map(row => row.roleId)
     await assignProfiles(admin.context, fixture.users.staff.id, roles, { rules: { ...access.accessPolicy.rules, "appointments.read": "ALL", "appointments.create": "ALL", "services.read": "ALL", "shiftSchedules.read": "NONE", "shiftTemplates.read": "NONE" } })
@@ -17,7 +20,7 @@ test("hidden standard assignments constrain booking and shared-template edits wi
     await fixture.db.query('INSERT INTO "User"(id,"tenantId",email,role,"updatedAt") VALUES($1,$2,$3,\'CUSTOMER\',now())', [customer, fixture.slug, `${customer}@example.test`])
     await fixture.db.query('INSERT INTO "ServiceCategory"(id,"tenantId",name,"updatedAt") VALUES($1,$2,$1,now())', [service, fixture.slug])
     await fixture.db.query('INSERT INTO "Service"(id,"tenantId","categoryId",name,"durationMinutes","priceCents","updatedAt") VALUES($1,$2,$1,\'Working-time consultation\',60,1000,now())', [service, fixture.slug])
-    for (const [id, start, end] of [[template, "12:00", "20:00"], [template + "_default", "09:00", "17:00"]]) await fixture.db.query('INSERT INTO "ShiftTemplate"(id,"tenantId",name,"startTime","endTime","updatedAt") VALUES($1,$2,(SELECT id FROM "BusinessOffice" WHERE "tenantId"=$2 AND "isInitial"),$1,$3,$4,now())', [id, fixture.slug, start, end])
+    for (const [id, start, end] of [[template, "12:00", "20:00"], [template + "_default", "09:00", "17:00"]]) await fixture.db.query('INSERT INTO "ShiftTemplate"(id,"tenantId",name,"startTime","endTime","updatedAt") VALUES($1,$2,$1,$3,$4,now())', [id, fixture.slug, start, end])
     for (const [id, isDefault, source] of [[hidden, false, template], [hidden + "_visible", true, template + "_default"]] as const) {
       await fixture.db.query('INSERT INTO "ShiftSchedule"(id,"tenantId","officeId",name,"isDefault","startDate","weekOffDay1","weekOff2Weeks","updatedAt") VALUES($1,$2,(SELECT id FROM "BusinessOffice" WHERE "tenantId"=$2 AND "isInitial"),$1,$3,\'2035-01-01\',\'SUNDAY\',ARRAY[]::integer[],now())', [id, fixture.slug, isDefault])
       await fixture.db.query('INSERT INTO "ShiftScheduleBlock"(id,"scheduleId","templateId","repeatDays") VALUES($1,$1,$2,1)', [id, source])

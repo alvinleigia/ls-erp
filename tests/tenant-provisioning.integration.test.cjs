@@ -58,7 +58,7 @@ test("platform admin provisions a tenant with admin, settings and audit under en
   assert.equal(response.status, 201, JSON.stringify({ body: await response.clone().json(), errors }))
   const { tenant, admin } = await response.json()
   const flags = (await root.query('SELECT key, allowed, enabled FROM "TenantModule" WHERE "tenantId"=$1', [tenant.id])).rows
-  assert.deepEqual(flags.map(row => row.key).sort(), ["appointments", "catalog", "crm", "inventory", "leaves", "paymentPlans", "realEstate", "receivables", "salesDocuments", "salesOrders", "services", "shifts"])
+  assert.deepEqual(flags.map(row => row.key).sort(), ["appointments", "catalog", "crm", "inventory", "invoicing", "leaves", "paymentPlans", "realEstate", "receivables", "salesDocuments", "salesOrders", "services", "shifts"])
   assert.deepEqual(flags.filter(row => row.allowed), [{ key: "crm", allowed: true, enabled: true }])
   assert.ok(flags.filter(row => row.key !== "crm").every(row => !row.allowed && !row.enabled))
   assert.equal((await root.query('SELECT id FROM "User" WHERE id=$1 AND "tenantId"=$2 AND role=$3', [admin.id, tenant.id, "ADMIN"])).rowCount, 1)

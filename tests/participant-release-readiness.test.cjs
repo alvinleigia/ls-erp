@@ -1,11 +1,12 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
+const reviewedSource=require('./helpers/reviewed-release-source.cjs')
 const {test}=require('node:test'),assert=require('node:assert/strict')
 const {verifySource,summarizeHistory,historyProblems,manifest}=require('../scripts/participant-release-readiness.cjs')
 const released=require('../docs/release-source-r10.json')
 const rows=()=>manifest.migrations.map(m=>({name:m.name,checksum:m.sha256Lf,finished:true,rolledBack:false}))
-test('participant candidate pins four new migrations without changing the released R10 inventory',()=>{
- verifySource();assert.equal(manifest.migrations.length,136);assert.deepEqual(manifest.migrations.slice(0,132),released.migrations)
- for(const change of [m=>m.migrations.reverse(),m=>m.migrations.pop(),m=>{m.schemaSha256Lf='bad'},m=>{m.baseline.manifestSha256Lf='bad'},m=>{m.migrations[132].sha256Lf='bad'}]){const candidate=structuredClone(manifest);change(candidate);assert.throws(()=>verifySource(candidate))}
+test('participant candidate pins four new migrations without changing the released R10 inventory',t=>{
+ const source=reviewedSource(t,'ae3e49115da1ef0cef472684a0a675b26f42a4b7');verifySource(manifest,source);assert.equal(manifest.migrations.length,136);assert.deepEqual(manifest.migrations.slice(0,132),released.migrations)
+ for(const change of [m=>m.migrations.reverse(),m=>m.migrations.pop(),m=>{m.schemaSha256Lf='bad'},m=>{m.baseline.manifestSha256Lf='bad'},m=>{m.migrations[132].sha256Lf='bad'}]){const candidate=structuredClone(manifest);change(candidate);assert.throws(()=>verifySource(candidate,source))}
 })
 test('observed 132-migration baseline preserves rolled-back attempts and requires all four candidate migrations',()=>{
  const source=rows().slice(0,132);source.push({...source[106],finished:false,rolledBack:true})

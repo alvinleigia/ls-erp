@@ -1,12 +1,19 @@
 import { test, expect } from "@playwright/test"
 import { PDFDocument } from "pdf-lib"
-import { seed, login, json, password } from "./fixtures"
+import { seed, login, json, password, assignOffices } from "./fixtures"
 
 test.describe.configure({ mode: "serial" })
 let fixture: Awaited<ReturnType<typeof seed>>
 let admin: Awaited<ReturnType<typeof login>>, staff: typeof admin, manager: typeof admin
 let service: { id: string }, customer: { id: string }, product: { id: string }, order: { id: string }
 const date = "2030-10-08", startAt = "2030-10-08T04:30:00Z" // 10:00 Asia/Kolkata
+
+async function assignWorkplace(userId: string, startsOn: string) {
+  const office = (await json(admin.context, "/api/workspace/office")).creationOffice
+  await assignOffices(admin.context, userId, [office.id], office.id)
+  const workplace = await json(admin.context, `/api/shifts/workplaces?staffId=${userId}`)
+  await json(admin.context, "/api/shifts/workplaces", 200, "POST", { action: "assign", staffId: userId, version: workplace.version, officeId: office.id, startsOn })
+}
 
 test.beforeAll(async ({ browser }) => {
   fixture = await seed()
@@ -23,6 +30,7 @@ test("service, employee and shift setup makes the requested booking slot availab
   const category = (await json(admin.context, "/api/service-categories", 200, "POST", { name: "Consultations" })).item
   service = (await json(admin.context, "/api/services", 200, "POST", { name: "Customer consultation", categoryId: category.id, durationMinutes: 60, priceCents: 12000, status: "ACTIVE" })).item
   await json(admin.context, `/api/users/${fixture.users.staff.id}`, 200, "PATCH", { eligibleServiceIds: [service.id], staffProfile: { managerUserId: fixture.users.manager.id, schedulingMode: "STANDARD" } })
+  await assignWorkplace(fixture.users.staff.id, "2030-10-07")
   customer = (await json(admin.context, "/api/users", 200, "POST", { name: "Local Booking Customer", email: `booking@${fixture.slug}.test`, role: "CUSTOMER", password })).user
   const template = (await json(admin.context, "/api/shifts/templates", 200, "POST", { name: "Office hours", startTime: "09:00", endTime: "17:00", breaks: [], isActive: true })).template
   const schedule = (await json(admin.context, "/api/shifts/schedules", 200, "POST", { name: "Local office schedule", isDefault: false, staffIds: [fixture.users.staff.id], startDate: "2030-10-07", assignmentStartDate: "2030-10-07", weekOffDay1: "SUNDAY", blocks: [{ templateId: template.id, repeatDays: 5 }] })).schedule
@@ -110,7 +118,8 @@ test("staff leave submission and manager approval affect booking availability an
   expect(approved.status).toBe("APPROVED")
   const available = await json(admin.context, "/api/appointments/availability", 200, "POST", { serviceId: service.id, staffId: fixture.users.staff.id, customerId: customer.id, startAt })
   expect(available.available).toBe(false)
-  expect(available.reason).toMatch(/leave/i)
+  // Availability deliberately conceals private leave details.
+  expect(available.reason).toBe("Staff member is unavailable on this date.")
   const audit = await json(admin.context, `/api/reports/audit-logs?entityId=${leave.id}`)
   expect(audit.items.some((r: { actorUserId: string }) => r.actorUserId === fixture.users.manager.id)).toBe(true)
   await staff.page.goto("/leaves/requests")
@@ -159,6 +168,7 @@ test("leave conflict preview and saved appointment use tenant time in a Los Ange
 test("weekly and recurring plans retain readable details and clone audit identity", async () => {
   const employee = (await json(admin.context, "/api/users", 200, "POST", { name: "Local Flexible Staff", email: `flexible@${fixture.slug}.test`, role: "STAFF", password })).user
   await json(admin.context, `/api/users/${employee.id}`, 200, "PATCH", { staffProfile: { schedulingMode: "FLEXIBLE" } })
+  await assignWorkplace(employee.id, "2038-01-04")
   const days = ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY"].map((day, index) => ({
     day, isOff: index >= 5, slots: index >= 5 ? [] : [{ startTime: "09:00", endTime: "17:00", breaks: [{ startTime: "12:00", endTime: "13:00" }] }],
   }))

@@ -11,8 +11,8 @@ const lf = value => value.toString().replace(/\r\n/g, "\n")
 const qi = value => '"' + value.replaceAll('"', '""') + '"'
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b)
 
-function verifySource(manifest) {
-  const directory = path.join(root, "prisma/migrations")
+function verifySource(manifest, sourceRoot = root) {
+  const directory = path.join(sourceRoot, "prisma/migrations")
   const names = fs.readdirSync(directory).filter(name => fs.statSync(path.join(directory, name)).isDirectory()).sort()
   if (!same(names, manifest.migrations.map(item => item.name))) throw Error("Migration inventory differs from the reviewed manifest.")
   for (const item of manifest.migrations) {
@@ -22,7 +22,7 @@ function verifySource(manifest) {
     // Prove this exact encoding from unchanged SQL; never accept an arbitrary hash.
     if (item.sha256LfFinalCrlf && (item.phase !== 'baseline' || !sql.endsWith('\n') || sha(sql.slice(0, -1) + '\r\n') !== item.sha256LfFinalCrlf)) throw Error(`Historical newline checksum mismatch: ${item.name}`)
   }
-  if (sha(lf(fs.readFileSync(path.join(root, "prisma/schema.prisma")))) !== manifest.schemaSha256Lf) throw Error("Schema differs from the reviewed manifest.")
+  if (sha(lf(fs.readFileSync(path.join(sourceRoot, "prisma/schema.prisma")))) !== manifest.schemaSha256Lf) throw Error("Schema differs from the reviewed manifest.")
 }
 
 function localUrl(raw) {

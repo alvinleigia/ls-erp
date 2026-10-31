@@ -3,28 +3,37 @@ const { test, before, after } = require("node:test")
 const assert = require("node:assert/strict")
 const { readFileSync } = require("node:fs")
 const { Client } = require("pg")
+const { randomUUID } = require("node:crypto")
 
 const connectionString = process.env.CRM_TEST_DATABASE_URL
 if (!connectionString) throw new Error("Use the disposable local CRM test database.")
 const url = new URL(connectionString)
 if (!["localhost", "127.0.0.1"].includes(url.hostname) || url.pathname !== "/ls_salon_crm_test") throw new Error("Refusing to modify a non-local or non-test database.")
 const db = new Client({ connectionString })
+// Exercise the immutable retirement SQL against its historical table contract.
+// Current tenant provisioning intentionally creates companies/offices, so a new
+// tenant in today's public schema is no longer an empty historical placeholder.
+const schema = "cleanup_migration_" + randomUUID().replaceAll("-", "")
 const migration = readFileSync("prisma/migrations/20260927090000_retire_legacy_default_tenant/migration.sql", "utf8")
+  .replace("table_schema = 'public'", `table_schema = '${schema}'`)
+  .replace("FROM public.%I", `FROM ${schema}.%I`)
 const fixtureIds = []
 let preservedTenantIds
-async function removeDefaultChoices(ids) {
-  for (const table of ["RealEstateProjectStatus", "RealEstatePropertyCategory", "RealEstateBuyingTimeframe"]) {
-    await db.query(`DELETE FROM "${table}" WHERE "tenantId" = ANY($1)`, [ids])
-  }
-}
 async function createTenant(id, slug) {
   await db.query('INSERT INTO "Tenant" (id, name, slug, "updatedAt") VALUES ($1,$2,$3,NOW())', [id, `Cleanup test ${slug}`, slug])
   fixtureIds.push(id)
-  // Simulate the pre-Real-Estate legacy tenant, before catalog seed triggers existed.
-  if (id === "tenant_default") await removeDefaultChoices([id])
 }
 before(async () => {
   await db.connect()
+  await db.query(`CREATE SCHEMA ${schema}; SET search_path TO ${schema},public;
+    CREATE TABLE "Tenant"(id text PRIMARY KEY,name text,slug text UNIQUE,"updatedAt" timestamp);
+    CREATE TABLE "User"(id text PRIMARY KEY,name text,email text,"tenantId" text REFERENCES "Tenant"(id) ON DELETE CASCADE,"updatedAt" timestamp);
+    ALTER TABLE "Tenant" ENABLE ROW LEVEL SECURITY; ALTER TABLE "Tenant" FORCE ROW LEVEL SECURITY;
+    ALTER TABLE "User" ENABLE ROW LEVEL SECURITY; ALTER TABLE "User" FORCE ROW LEVEL SECURITY;
+    CREATE POLICY tenant_isolation ON "Tenant" USING(app.tenant_match(id)) WITH CHECK(app.tenant_match(id));
+    CREATE POLICY tenant_isolation ON "User" USING(app.tenant_match("tenantId")) WITH CHECK(app.tenant_match("tenantId"));
+    GRANT USAGE ON SCHEMA ${schema} TO crm_test_runtime;
+    GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA ${schema} TO crm_test_runtime;`)
   preservedTenantIds = (await db.query('SELECT id FROM "Tenant" ORDER BY id')).rows.map(row => row.id)
   await createTenant("cleanup_platform", "cleanup-platform")
   await createTenant("cleanup_business", "cleanup-business")
@@ -34,8 +43,8 @@ after(async () => {
   try {
     await db.query("ROLLBACK")
     await db.query("RESET ROLE")
-    await removeDefaultChoices(fixtureIds)
-    await db.query('DELETE FROM "Tenant" WHERE id = ANY($1)', [fixtureIds])
+    assert.match(schema, /^cleanup_migration_[a-f0-9]{32}$/)
+    await db.query(`SET search_path TO public; DROP SCHEMA ${schema} CASCADE`)
   } finally { await db.end() }
 })
 

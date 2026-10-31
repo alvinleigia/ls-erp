@@ -9,9 +9,14 @@ const host = "crm-demo.localhost:3107"
 function session() {
   const cookies = new Map()
   return async function request(path, options = {}) {
+    let officeHeaders = {}
+    if (options.method === "POST" && (/^\/api\/crm\/(enquiries|opportunities|work)$/.test(path) || /^\/api\/crm\/activity-plans\/[^/]+\/apply$/.test(path))) {
+      const office = await (await request("/api/workspace/office")).json()
+      if (office.creationOffice) officeHeaders = { "x-office-id": office.creationOffice.id, "x-office-version": String(office.version) }
+    }
     const response = await fetch(`${origin}${path}`, {
       redirect: "manual", ...options,
-      headers: { host, "x-forwarded-host": host, cookie: [...cookies].map(([key, value]) => `${key}=${value}`).join("; "), ...options.headers },
+      headers: { host, "x-forwarded-host": host, cookie: [...cookies].map(([key, value]) => `${key}=${value}`).join("; "), ...officeHeaders, ...options.headers },
     })
     for (const header of response.headers.getSetCookie()) {
       const cookie = header.split(";")[0]

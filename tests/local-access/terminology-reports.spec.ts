@@ -88,7 +88,7 @@ test("dashboard cards, charts and tables share labels while names, values and li
   const countRead = (request: import("@playwright/test").Request) => { if (request.url().includes("/api/dashboard/summary")) dashboardReads++ }
   admin.page.on("request", countRead)
   await rename({ "salesDocuments.quotation.singular": "Proposal", "salesDocuments.quotation.plural": "Proposals" })
-  await expect(admin.page.getByText("Proposals created", { exact: true })).toBeVisible()
+  await expect(admin.page.getByRole("paragraph").filter({ hasText: /^Proposals created$/ })).toBeVisible()
   await expect(admin.page.getByRole("columnheader", { name: "Proposal", exact: true }).first()).toBeVisible()
   expect(dashboardReads).toBe(0)
   admin.page.off("request", countRead)

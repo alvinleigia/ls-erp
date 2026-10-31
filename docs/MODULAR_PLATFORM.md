@@ -1,3 +1,45 @@
+## P8-P13C release-wide regression gate (2026-10-31)
+
+The release spans shared document editing and quotation layouts, payment receipts,
+commercial invoices/full credits, partial billing, shared tax configuration and
+arithmetic, frozen tax allocation, and manual statutory issuance. Runtime 5ddf4b8
+is READY on all four staging aliases (dpl_AHN6xgLCCj4vPc9tWAuastd7GdkV).
+The final ownership correction registers invoices under their actual Sales Order
+and commercial/statutory document roots as siblings under the invoice. Service
+permission requirements, sharing, office scopes and audit requirements are unchanged.
+
+Release regression passed 1,286 native checks across all 134 native test files and
+144 browser scenarios across all 71 browser specs, with no skips or unresolved
+failures. Reruns use the appropriate isolated fixture modes; independent suites
+use separate disposable databases. Historical release checks validate their pinned
+Git source; the retirement test uses an isolated historical schema. Current HTTP,
+office/workplace, module inventory, terminology and timeout fixtures were refreshed.
+The 1,000-row import passed with 995 imports and five correction rows in 40 validate
+and 40 import requests; replay did not duplicate rows. The 366-day override also
+passed its existing 30-second application transaction bound in isolation.
+
+The optimized build, TypeScript, targeted lint and rebuilt access/invoicing browser
+checks pass. Fresh hosted staging QA verifies manual signing, exact private PDF
+bytes, partial tax allocations, full statutory credits, replay and cross-tenant/
+cross-origin denial; unconnected electronic signing stays blocked. QA invoices
+were credited, the order cancelled and configuration/templates restored. Desktop
+and mobile screenshots were inspected. No client records were used for write tests.
+
+A fresh production backup (backups/p13/2e50728072fd) was fully restored locally,
+including owners/ACLs, password-free role attributes/memberships and two stored
+assets/references. The 11-migration upgrade and forced rollback preserved all
+17,453 baseline rows across 138 tables, previous policies/functions and effective
+native Read for seven business users. The upgrade adds 28 empty forced-RLS tables.
+Production platform login and the existing tenant session passed read-only checks.
+This is application recovery verification, not complete managed Supabase recovery.
+
+The immutable P13 source/history gate is scripts/p13-release-readiness.cjs with
+manifest docs/release-source-p13.json: baseline 136, candidate 147 migrations.
+Production release order is maintenance, a fresh verified backup/restore/upgrade
+rehearsal, all 11 migrations, main deployment/alias verification, then reopen and
+repeat read-only checks. Electronic providers/IRP, unsupported tax cases and filing
+remain outside this release's enabled scope. Private evidence stays in tmp/p13-release.
+
 ## P13C statutory documents - manual signing staging verified
 
 Runtime 63abfa1 is READY on all four staging aliases, deployment
@@ -3481,7 +3523,7 @@ Run the focused migration tests against the prepared disposable database with
 `node --test tests/tenant-cleanup.integration.test.cjs` and the usual guarded
 `CRM_TEST_DATABASE_URL` from the CRM testing instructions above.
 
-## CRM interface standardization — 2026-09-28
+## CRM interface standardization ï¿½ 2026-09-28
 
 All CRM lists, editors, reports, calendar controls, plan/rule screens and embedded
 sections now share CRM-scoped layout components. Fixed choices use Radix dropdowns,

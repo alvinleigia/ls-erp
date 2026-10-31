@@ -138,24 +138,24 @@ test("a failed commit releases its connection and preserves the retryable error 
 
 test("timed-out nested writes cannot continue after rollback or leak their tenant scope", async () => {
   const trigger='pool_timeout_probe'
-  await root.query('INSERT INTO "StaffProfile" (id,"userId","updatedAt") VALUES ($1,$2,now())',[trigger,'pool_a'])
+  await root.query(`INSERT INTO "CrmContact" (id,"tenantId",name,"ownerUserId","updatedAt") VALUES ($1,$2,'Timeout contact',$2,now())`,[trigger,'pool_a'])
   await root.query(`CREATE FUNCTION ${trigger}() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.name='Timeout probe' THEN PERFORM pg_sleep(0.4); END IF; RETURN NEW; END $$;
-    CREATE TRIGGER ${trigger} BEFORE INSERT ON "StaffFlexiblePattern" FOR EACH ROW EXECUTE FUNCTION ${trigger}()`)
+    CREATE TRIGGER ${trigger} BEFORE INSERT ON "CrmAccount" FOR EACH ROW EXECUTE FUNCTION ${trigger}()`)
   try {
-    await assert.rejects(tenant('pool_a', () => prisma.$transaction(tx => tx.staffFlexiblePattern.create({ data: {
-      staffProfileId: trigger, name: 'Timeout probe', cycleLengthWeeks: 1, validFrom: new Date('2039-01-01'),
-      weeks: { create: [{ weekIndex: 1, days: { create: [{ day: 'MONDAY', isOff: true, sortOrder: 0 }] } }] },
+    await assert.rejects(tenant('pool_a', () => prisma.$transaction(tx => tx.crmAccount.create({ data: {
+      tenantId: 'pool_a', ownerUserId: 'pool_a', name: 'Timeout probe',
+      contacts: { create: [{ contactId: trigger }] },
     } }), { timeout: 150 })), error => {
       assert.doesNotMatch(error.message, /row-level security/)
       assert.match(error.message, /transaction has ended|transaction.*closed|expired/i)
       return true
     })
-    assert.equal((await root.query('SELECT count(*)::int n FROM "StaffFlexiblePattern" WHERE "staffProfileId"=$1',[trigger])).rows[0].n,0)
+    assert.equal((await root.query(`SELECT count(*)::int n FROM "CrmAccount" WHERE "tenantId"='pool_a' AND name=$1`,['Timeout probe'])).rows[0].n,0)
     assert.equal(await tenant('pool_b', () => prisma.user.count({where:{id:'pool_a'}})),0)
     const raw=await global.prismaPool.query("SELECT current_setting('app.tenant_id',true) tenant,current_setting('app.rls_bypass',true) bypass")
     assert.ok(!raw.rows[0].tenant);assert.notEqual(raw.rows[0].bypass,'on')
   } finally {
-    await root.query(`DROP TRIGGER ${trigger} ON "StaffFlexiblePattern";DROP FUNCTION ${trigger}()`)
-    await root.query('DELETE FROM "StaffProfile" WHERE id=$1',[trigger])
+    await root.query(`DROP TRIGGER ${trigger} ON "CrmAccount";DROP FUNCTION ${trigger}()`)
+    await root.query('DELETE FROM "CrmContact" WHERE id=$1',[trigger])
   }
 })

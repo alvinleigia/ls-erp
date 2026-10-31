@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
+const reviewedSource = require('./helpers/reviewed-release-source.cjs')
 const { test } = require('node:test')
 const assert = require('node:assert/strict')
 const manifest = require('../docs/industry-release-manifest.json')
@@ -14,11 +15,12 @@ function pair() {
   for (const [name, schema] of Object.entries(manifest.addedTables)) after.tables[name] = { ...structuredClone(schema), partitions: {} }
   return { before, after }
 }
-test('manifest matches source and detects edited migration/schema checksums', () => {
-  verifySource(manifest)
+test('manifest matches source and detects edited migration/schema checksums', t => {
+  const source = reviewedSource(t, '740cfc527a47aae55b397c5572fde080500e42b5')
+  verifySource(manifest, source)
   const altered = structuredClone(manifest); altered.migrations[0].sha256Lf = 'bad'
-  assert.throws(() => verifySource(altered), /checksum/)
-  assert.throws(() => verifySource({ ...manifest, schemaSha256Lf: 'bad' }), /Schema/)
+  assert.throws(() => verifySource(altered, source), /checksum/)
+  assert.throws(() => verifySource({ ...manifest, schemaSha256Lf: 'bad' }, source), /Schema/)
   assert.equal(sha(lf('SQL\r\n')), sha('SQL\n'))
 })
 test('rehearsal database and output paths cannot target hosted services or overwrite source', () => {
@@ -39,16 +41,17 @@ test('migration history rejects unknown, unfinished, missing, modified and repea
   assert.deepEqual(migrationProblems(crlf, manifest, 'before'), [])
 })
 
-test('reviewed mixed-newline history is proven from unchanged SQL, not an arbitrary exception', () => {
+test('reviewed mixed-newline history is proven from unchanged SQL, not an arbitrary exception', t => {
+  const source = reviewedSource(t, '740cfc527a47aae55b397c5572fde080500e42b5')
   const mixed = manifest.migrations.filter(m => m.sha256LfFinalCrlf)
   assert.equal(mixed.length, 12)
   const rows = history('before')
   for (const m of mixed) rows.find(r => r.name === m.name).checksum = m.sha256LfFinalCrlf
   assert.deepEqual(migrationProblems(rows, manifest, 'before'), [])
-  verifySource(manifest)
+  verifySource(manifest, source)
   const changed = structuredClone(manifest)
   changed.migrations.find(m => m.sha256LfFinalCrlf).sha256LfFinalCrlf = sha('different SQL\r\n')
-  assert.throws(() => verifySource(changed), /Historical newline checksum mismatch/)
+  assert.throws(() => verifySource(changed, source), /Historical newline checksum mismatch/)
   rows.find(r => r.name === mixed[0].name).checksum = mixed[1].sha256LfFinalCrlf
   assert.ok(migrationProblems(rows, manifest, 'before').some(e => e === `Applied checksum mismatch: ${mixed[0].name}`))
   const missing = history('before'); delete missing[0].checksum

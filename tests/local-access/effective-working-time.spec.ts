@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test"
-import { seed, login, json, assignProfiles } from "./fixtures"
+import { seed, login, json, assignProfiles, assignOffices } from "./fixtures"
 
 test("hidden Flexible hours and daily overrides still protect bookings and template edits", async ({ browser }) => {
   test.setTimeout(150_000)
@@ -8,6 +8,9 @@ test("hidden Flexible hours and daily overrides still protect bookings and templ
   const profile = fixture.slug + "_effective", hidden = "hidden_effective_browser_" + fixture.slug, template = fixture.slug + "_late", service = fixture.slug + "_service", customer = fixture.slug + "_customer"
   const tables = ["StaffFlexibleWeekPlan", "StaffFlexibleWeekDay", "StaffFlexibleWeekSlot", "StaffFlexibleWeekBreak", "StaffFlexibleAvailability", "StaffShiftOverride", "ShiftTemplateBreak"]
   try {
+    const office = (await fixture.db.query('SELECT id FROM "BusinessOffice" WHERE "tenantId"=$1 AND "isInitial"', [fixture.slug])).rows[0]
+    await assignOffices(admin.context, fixture.users.admin.id, [office.id], office.id)
+    await assignOffices(admin.context, fixture.users.staff.id, [office.id], office.id)
     const access = await json(admin.context, `/api/access/users/${fixture.users.staff.id}`)
     const roles = (await fixture.db.query('SELECT "roleId" FROM "TenantRoleAssignment" WHERE "userId"=$1', [fixture.users.staff.id])).rows.map(row => row.roleId)
     await assignProfiles(admin.context, fixture.users.staff.id, roles, { rules: { ...access.accessPolicy.rules, "appointments.read": "ALL", "appointments.create": "ALL", "services.read": "ALL", "shiftPlans.read": "NONE", "shiftRoster.read": "NONE", "shiftTemplates.read": "NONE", "shiftSchedules.read": "NONE" } })

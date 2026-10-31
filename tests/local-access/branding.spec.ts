@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test'
 import sharp from 'sharp'
-import { seed, login, json } from './fixtures'
+import { seed, login, json, assignProfiles } from './fixtures'
 
 test('tenant branding settings save, persist and respect permissions on desktop and mobile', async ({ browser }) => {
   const f = await seed(), admin = await login(browser, f.origin, f.users.admin.email)
@@ -8,7 +8,8 @@ test('tenant branding settings save, persist and respect permissions on desktop 
     const page = admin.page
     await page.goto('/settings/branding')
     await expect(page.getByRole('heading', { name: 'Branding', exact: true })).toBeVisible()
-    await expect(page.getByLabel('Upload logo', { exact: true })).toBeDisabled()
+    // The shared document regression server now configures its local storage transport.
+    await expect(page.getByLabel('Upload logo', { exact: true })).toBeEnabled()
     await page.getByLabel('Business display name', { exact: true }).fill('QA Shared Industries')
     await page.getByRole('button', { name: 'Save branding', exact: true }).click()
     await expect(page.getByText('Branding saved.', { exact: true })).toBeVisible()
@@ -21,6 +22,7 @@ test('tenant branding settings save, persist and respect permissions on desktop 
     await page.setViewportSize({width:390,height:844})
     await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390)
     await page.screenshot({ path: test.info().outputPath('branding-mobile.png'), fullPage: true })
+    await assignProfiles(admin.context, f.users.staff.id, [])
     const staff = await login(browser, f.origin, f.users.staff.email)
     try {
       await staff.page.goto('/settings/branding')

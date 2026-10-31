@@ -671,12 +671,17 @@ test("disabled CRM, suspended users and customer accounts cannot use the service
 })
 
 test("existing salon appointment and customer relationships survive the additive migration", async () => {
+  await root.tenantModule.upsert({ where: { tenantId_key: { tenantId: a, key: "appointments" } }, create: { tenantId: a, key: "appointments", allowed: true, enabled: true }, update: { allowed: true, enabled: true } })
   const category = await dbA.serviceCategory.create({ data: { tenantId: a, name: "Hair" } })
   const service = await dbA.service.create({ data: { tenantId: a, categoryId: category.id, name: "Haircut", durationMinutes: 30, priceCents: 2500 } })
-  const profile = await dbA.staffProfile.create({ data: { userId: staffA.id } })
-  const appointment = await dbA.appointment.create({ data: { tenantId: a, staffProfileId: profile.id, customerId: customerA.id, serviceId: service.id, startAt: new Date("2026-10-01T10:00:00Z"), endAt: new Date("2026-10-01T10:30:00Z") } })
-  const order = await dbA.appointmentOrder.create({ data: { tenantId: a, customerId: customerA.id, appointmentDate: new Date("2026-10-01"), appointmentStartAt: appointment.startAt, totalCents: 2500 } })
-  assert.equal((await dbA.appointment.findUnique({ where: { id: appointment.id }, include: { customer: true } })).customer.id, customerA.id)
+  // This is a historical relationship fixture; native operational writes have
+  // their own authenticated service/office tests.
+  const profile = await root.staffProfile.create({ data: { userId: staffA.id } })
+  const appointment = await root.appointment.create({ data: { tenantId: a, staffProfileId: profile.id, customerId: customerA.id, serviceId: service.id, startAt: new Date("2026-10-01T10:00:00Z"), endAt: new Date("2026-10-01T10:30:00Z") } })
+  const order = await root.appointmentOrder.create({ data: { tenantId: a, customerId: customerA.id, appointmentDate: new Date("2026-10-01"), appointmentStartAt: appointment.startAt, totalCents: 2500 } })
+  assert.equal(await dbA.appointment.findUnique({ where: { id: appointment.id } }), null)
+  const saved = await runWithDatabaseActor(adminA.id, async () => await dbA.appointment.findUnique({ where: { id: appointment.id }, include: { customer: true } }))
+  assert.equal(saved.customer.id, customerA.id)
   assert.equal(order.totalCents, 2500)
   assert.equal(await dbB.appointment.count({ where: { id: appointment.id } }), 0)
 })
