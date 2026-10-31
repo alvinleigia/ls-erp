@@ -29,6 +29,14 @@ This is the baseline for new modules (API + UI) in this codebase.
 
 ## Shared tax contracts
 
+- India statutory reviews, numbering and PDF particulars use the localization
+  contracts in `platform/tax/localizations/india-statutory*.ts`. The invoice source
+  adapter reserves numbers before external rendering, retains voided numbers and
+  exact signed bytes, and enforces fresh Read/Create/Export bounds. Reuse the
+  structured editor, shared renderer/storage and recovery inventory; do not treat
+  print preparation as signed issuance or bypass unconnected signing/IRP gates.
+  See `docs/STATUTORY_GST_DOCUMENTS_P13C.md`.
+
 - Invoice tax portions use `platform/tax/invoice-allocation.ts` and actual active
   saved reservations against the native accepted agreement. Draft edits preserve
   prior version snapshots; cancellation/full credit releases original components.

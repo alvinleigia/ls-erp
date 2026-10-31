@@ -23,10 +23,10 @@ type ResourceContract = { policy: ResourceRecordPolicy; ownership: ResourceOwner
 // Adding a permission resource requires a contract here; model names are checked
 // against the generated Prisma schema. No data/default/scope migration is implied.
 export const resourceRegistry = {
-  taxProfiles: { policy: "administrative", ownership: { kind: "security", roots: ["CompanyTaxRegistration", "OfficeTaxRegistration", "CompanyTaxProfile"], children: ["CompanyTaxRegistrationRevision", "CompanyTaxProfileVersion", "CompanyTaxProfileRate"] } },
+  taxProfiles: { policy: "administrative", ownership: { kind: "security", roots: ["CompanyTaxRegistration", "OfficeTaxRegistration", "CompanyTaxProfile"], children: ["CompanyTaxRegistrationRevision", "CompanyTaxProfileVersion", "CompanyTaxProfileRate", "TaxStatutorySeries"] } },
   customerInvoices: { policy: "sales", ownership: { kind: "source", roots: ["CustomerInvoice"], children: ["CustomerCreditNote", "CustomerInvoiceEvent", "CustomerInvoiceTaxSnapshot", "CustomerCreditTaxSnapshot"], sources: ["salesOrders", "receivables"] }, sharing: "salesOrders" },
   invoicePayments: { policy: "sales", ownership: { kind: "source", roots: ["InvoicePaymentApplication"], children: ["InvoicePaymentRelease"], sources: ["customerInvoices", "orderPayments"] }, sharing: "salesOrders" },
-  invoiceDocuments: { policy: "sales", ownership: { kind: "source", roots: ["CustomerInvoiceDocument"], sources: ["customerInvoices"] }, sharing: "salesOrders" },
+  invoiceDocuments: { policy: "sales", ownership: { kind: "source", roots: ["CustomerInvoiceDocument"], children: ["TaxStatutoryReview", "TaxStatutoryDocument", "TaxStatutoryDocumentEvent"], sources: ["customerInvoices"] }, sharing: "salesOrders" },
   orderDocuments: { policy: "sales", ownership: { kind: "source", roots: ["SalesOrderDocument"], sources: ["salesOrders"] }, sharing: "salesOrders" },
   paymentDocuments: { policy: "sales", ownership: { kind: "source", roots: ["OrderReceiptDocument"], sources: ["orderPayments"] }, sharing: "salesOrders" },
   documentTemplates: { policy: "shared", ownership: { kind: "shared", roots: ["BusinessDocumentTemplate"] } },
@@ -103,6 +103,7 @@ export const infrastructureModels = {
   SalesOrderSequence: "numbering",
   ReceiptDocumentSequence: "numbering",
   CustomerInvoiceSequence: "numbering",
+  TaxStatutorySequence: "numbering",
   TenantModule: "tenantSecurity", Tenant: "tenantBoundary", TenantDomain: "tenantBoundary",
   Organization: "controlPlane", OrganizationMembership: "controlPlane",
   Account: "authentication", Session: "authentication", VerificationToken: "authentication", PasswordResetToken: "authentication",

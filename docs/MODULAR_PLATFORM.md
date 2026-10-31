@@ -1,3 +1,20 @@
+## P13C statutory documents - local verification complete
+
+India localization now supports registration/year numbering, frozen statutory
+reviews, unissued-number voiding, required PDF sections, immutable print archives
+and attested manual-signature completion. Full credits reference their completed
+original. No current-master enrichment, industry dependency or second debt was
+introduced. Both archives and frozen branding are included in recovery inventory.
+Electronic signing remains gated pending verified tenant-specific provider
+connections; required/unassessed IRP cases and other unsupported GST cases remain
+blocked. Provider choice must not become global across tenants.
+
+All 38 unit/native/recovery checks, four browser flows, optimized build and lint
+pass. Desktop/mobile screens and the four PDF cases were inspected. Additive
+migration 147 preserves all 160 preceding tables/policies/functions/triggers and
+passed forced rollback. Staging backup and release verification are in progress;
+no production changes or Git push. See docs/STATUTORY_GST_DOCUMENTS_P13C.md.
+
 ## P13B4 invoice tax allocations - staging verified
 
 Runtime 29d1a84 is READY on all four staging aliases, deployment

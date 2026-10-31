@@ -23,6 +23,15 @@ async function assetReferences(db){
   const exists=(await db.query(`SELECT to_regclass('public."${table}"') IS NOT NULL AS present`)).rows[0].present
   if(exists)for(const r of(await db.query(`SELECT "tenantId",id,snapshot,archive FROM "${table}"`)).rows){add(r.tenantId,prefix+'-logo:'+r.id,'tenant-branding',r.snapshot?.payload?.branding?.logo);assert.ok(r.archive,'Issued PDF is missing its archive');add(r.tenantId,prefix+'-pdf:'+r.id,'tenant-documents',r.archive)}
  }
+ const statutory=(await db.query('SELECT to_regclass(\'public."TaxStatutoryDocument"\') IS NOT NULL AS present')).rows[0].present
+ if(statutory)for(const r of(await db.query('SELECT "tenantId",id,status,snapshot,"printArchive","signedArchive" FROM "TaxStatutoryDocument"')).rows){
+  assert.ok(['RESERVED','PRINT_READY','ISSUED','VOID'].includes(r.status),'Unknown statutory signing state')
+  if(['PRINT_READY','ISSUED'].includes(r.status))assert.ok(r.printArchive,'Prepared statutory PDF is missing its archive')
+  if(r.status==='ISSUED')assert.ok(r.signedArchive,'Issued statutory document is missing its signed archive')
+  add(r.tenantId,'statutory-logo:'+r.id,'tenant-branding',r.snapshot?.branding?.logo)
+  add(r.tenantId,'statutory-print:'+r.id,'tenant-documents',r.printArchive)
+  add(r.tenantId,'statutory-signed:'+r.id,'tenant-documents',r.signedArchive)
+ }
 
  return refs.sort((a,b)=>Buffer.compare(Buffer.from(a.tenantId+'\0'+a.source+'\0'+a.path),Buffer.from(b.tenantId+'\0'+b.source+'\0'+b.path)))
 }

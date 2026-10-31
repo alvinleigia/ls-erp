@@ -2897,6 +2897,7 @@ model OrderReceiptReversal {
 }
 
 model CompanyTaxRegistration {
+ statutorySeries TaxStatutorySeries[]
   tenantId String
   id String @default(cuid())
   companyId String
@@ -3009,6 +3010,8 @@ model CustomerInvoiceSequence {
 }
 
 model CustomerInvoice {
+ statutoryReviews TaxStatutoryReview[]
+ statutoryDocuments TaxStatutoryDocument[]
   tenantId String
   id String @default(cuid())
   orderId String
@@ -3060,6 +3063,7 @@ model CustomerCreditNote {
 }
 
 model CustomerInvoiceEvent {
+ statutoryReviews TaxStatutoryReview[]
   taxSnapshot CustomerInvoiceTaxSnapshot?
   tenantId String
   invoiceId String
@@ -3548,4 +3552,94 @@ model CustomerCreditTaxSnapshot {
  source CustomerCreditNote @relation(fields:[tenantId,invoiceId],references:[tenantId,invoiceId],onDelete:Restrict)
  original CustomerInvoiceTaxSnapshot @relation(fields:[tenantId,invoiceId,invoiceVersion],references:[tenantId,invoiceId,version],onDelete:Restrict)
  @@id([tenantId,invoiceId])
+}
+
+model TaxStatutorySeries {
+ id String @id @default(cuid())
+ tenantId String
+ registrationId String
+ financialYear Int
+ code String
+ kind String
+ enabled Boolean
+ version Int @default(1)
+ createdAt DateTime @default(now())
+ updatedAt DateTime @updatedAt
+ registration CompanyTaxRegistration @relation(fields:[tenantId,registrationId],references:[tenantId,id],onDelete:Restrict)
+ sequence TaxStatutorySequence?
+ documents TaxStatutoryDocument[]
+ @@unique([tenantId,id])
+ @@unique([tenantId,registrationId,financialYear,code])
+}
+model TaxStatutorySequence {
+ tenantId String
+ seriesId String
+ value Int
+ series TaxStatutorySeries @relation(fields:[tenantId,seriesId],references:[tenantId,id],onDelete:Restrict)
+ @@id([tenantId,seriesId])
+}
+model TaxStatutoryReview {
+ id String @id @default(cuid())
+ tenantId String
+ invoiceId String
+ sourceVersion Int
+ kind String
+ version Int
+ body Json
+ createdBy String
+ createdAt DateTime @default(now())
+ source CustomerInvoice @relation(fields:[tenantId,invoiceId],references:[tenantId,id],onDelete:Restrict)
+ event CustomerInvoiceEvent @relation(fields:[tenantId,invoiceId,sourceVersion],references:[tenantId,invoiceId,version],onDelete:Restrict)
+ documents TaxStatutoryDocument[]
+ @@unique([tenantId,id])
+ @@unique([tenantId,invoiceId,kind,version])
+}
+model TaxStatutoryDocument {
+ tenantId String
+ id String @default(uuid())
+ invoiceId String
+ reviewId String
+ seriesId String
+ registrationId String
+ financialYear Int
+ kind String
+ serial Int @default(0)
+ reference String @default("")
+ issueOn DateTime @db.Date
+ requestKey String
+ requestHash String
+ snapshot Json
+ status String @default("RESERVED")
+ version Int @default(1)
+ printArchive Json?
+ signedArchive Json?
+ signedOn DateTime? @db.Date
+ completionBasis String?
+ originalDocumentId String?
+ voidReason String?
+ createdBy String
+ createdAt DateTime @default(now())
+ updatedAt DateTime @updatedAt
+ source CustomerInvoice @relation(fields:[tenantId,invoiceId],references:[tenantId,id],onDelete:Restrict)
+ review TaxStatutoryReview @relation(fields:[tenantId,reviewId],references:[tenantId,id],onDelete:Restrict)
+ series TaxStatutorySeries @relation(fields:[tenantId,seriesId],references:[tenantId,id],onDelete:Restrict)
+ original TaxStatutoryDocument? @relation("StatutoryOriginal",fields:[tenantId,originalDocumentId],references:[tenantId,id],onDelete:NoAction)
+ credits TaxStatutoryDocument[] @relation("StatutoryOriginal")
+ events TaxStatutoryDocumentEvent[]
+ @@id([tenantId,id])
+ @@unique([tenantId,requestKey])
+ @@unique([tenantId,registrationId,financialYear,reference])
+ @@index([tenantId,invoiceId,createdAt(sort:Desc),id])
+}
+model TaxStatutoryDocumentEvent {
+ tenantId String
+ documentId String
+ version Int
+ status String
+ actorId String
+ reason String
+ snapshot Json
+ createdAt DateTime @default(now())
+ source TaxStatutoryDocument @relation(fields:[tenantId,documentId],references:[tenantId,id],onDelete:Restrict)
+ @@id([tenantId,documentId,version])
 }
