@@ -13,6 +13,7 @@ import { businessDate, startOfBusinessDate } from "./work-time"
 import type { CrmExtensions, CrmExtensionQuery, CrmReportDimension } from "./extensions"
 import { checkExportLimit, CRM_EXPORT_LIMIT, crmCsv } from "./csv"
 import type { SalesReportRecord, SalesLeadGroup, SalesValueGroup, SalesReportView } from "@/types/crm-sales-report"
+import { createTeamPerformanceService } from "./team-performance-service"
 
 type Tx = Prisma.TransactionClient
 type Context = { readTerms: TermReader; run: PermissionRun }
@@ -120,6 +121,7 @@ export function createSalesReportService({ run, readTerms }: Context, extensions
     return pageResult(items.map(r => ({ ...r, createdAt: new Date(r.createdAt).toISOString(), closedAt: r.closedAt ? new Date(r.closedAt).toISOString() : null, dueOn: r.dueOn ? new Date(r.dueOn).toISOString().slice(0, 10) : null })), total, q)
   }
   return {
+    ...createTeamPerformanceService({ run, context, extensions, readTerms }),
     salesAttributionChoices(input: unknown) {
       const { choice, q: search, selectedId, ...filters } = (input && typeof input === "object" && !Array.isArray(input) ? input : {}) as Record<string, unknown>
       const query = attributionChoiceSchema.parse({ choice, q: search, selectedId })

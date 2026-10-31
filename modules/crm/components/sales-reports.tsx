@@ -25,6 +25,7 @@ import { ExportButton } from "@/components/erp/export-button"
 import { CrmExtensionFilter, useCrmExtensionFilterQuery } from "./extension-provider"
 import type { ListResponse } from "@/types/api"
 import type { SalesReportSummary, SalesReportView, SalesReportDimension, SalesReportRecord, SalesLeadGroup, SalesValueGroup } from "@/types/crm-sales-report"
+import { TeamPerformance } from "./team-performance"
 
 type SelectReport = (view: SalesReportView, extra?: Record<string, string>, caption?: string) => void
 type MoneyFormatter = (amount: string, currency: string) => string
@@ -107,6 +108,7 @@ export function SalesReports() {
   const [selection, setSelection] = React.useState<{ base: string; view: SalesReportView; extra: Record<string, string>; caption?: string } | null>(null)
   const [attribution, setAttribution] = React.useState<AttributionFilter>(emptyAttributionFilters)
   const [salesTeamId, setSalesTeamId] = React.useState("")
+  const [reportTab, setReportTab] = React.useState("sales")
   const extensionQuery = useCrmExtensionFilterQuery(primaryId, secondaryId)
   const params = new URLSearchParams({ ...attributionQuery(attribution), ...(salesTeamId ? { salesTeamId } : {}), scope, ...(lostReasonId ? { lostReasonId } : {}), ...(period || {}), ...(owner ? { assignedUserId: owner } : {}), ...(source ? { sourceId: source } : {}), ...extensionQuery }).toString()
   const { data, loading, error } = useReport<SalesReportSummary>("", params, revision)
@@ -120,24 +122,30 @@ export function SalesReports() {
   }
   return <section className={pageClass}>
     <AccessPageHeader title="Sales reports" description={term("crm.enquiry.singular", "Track lead conversion, pipeline value and follow-up coverage.", "Track {label} conversion, pipeline value and follow-up coverage.")} actions={<Button variant="outline" asChild><Link href="/crm/overview">{term("crm.activity.singular", "Activity overview", "{label} overview")}</Link></Button>} />
+    <div role="tablist" aria-label="Sales report views" className="flex gap-2" onKeyDown={event => { if (["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key) && data?.canManage) { event.preventDefault(); const next = event.key === "Home" ? "sales" : event.key === "End" ? "team" : reportTab === "sales" ? "team" : "sales"; setReportTab(next); if (next === "team") { setScope("team"); setOwner("") } document.getElementById(`sales-tab-${next}`)?.focus() } }}>
+      <Button id="sales-tab-sales" role="tab" aria-selected={reportTab === "sales"} aria-controls="sales-report-panel" tabIndex={reportTab === "sales" ? 0 : -1} variant={reportTab === "sales" ? "secondary" : "ghost"} onClick={() => setReportTab("sales")}>Sales summary</Button>
+      {data?.canManage && <Button id="sales-tab-team" role="tab" aria-selected={reportTab === "team"} aria-controls="sales-report-panel" tabIndex={reportTab === "team" ? 0 : -1} variant={reportTab === "team" ? "secondary" : "ghost"} onClick={() => { setReportTab("team"); setScope("team"); setOwner("") }}>Team performance</Button>}
+    </div>
     <Surface><div className="flex flex-wrap items-end gap-3">
-      <FormField id="sales-scope" label="Scope"><Select id="sales-scope" value={scope} onValueChange={v => { setScope(v); setOwner("") }}><option value="mine">My sales</option>{data?.canManage && <option value="team">Team sales</option>}</Select></FormField>
+      {reportTab === "sales" ? <FormField id="sales-scope" label="Scope"><Select id="sales-scope" value={scope} onValueChange={v => { setScope(v); setOwner("") }}><option value="mine">My sales</option>{data?.canManage && <option value="team">Team sales</option>}</Select></FormField> : <p className="self-center text-sm font-medium">Team sales</p>}
       <Popover open={periodOpen} onOpenChange={open => { setPeriodOpen(open); if (open) { setFrom(period?.from || data?.from || ""); setThrough(period?.through || data?.through || "") } }}><PopoverTrigger asChild><Button variant="outline">{period ? `${period.from} – ${period.through}` : "Reporting period"}</Button></PopoverTrigger><PopoverContent align="start" className="w-[min(24rem,calc(100vw-2rem))] space-y-4"><p className="font-semibold">Reporting period</p><FormField id="sales-from" label="From"><Input id="sales-from" type="date" value={from} onChange={e => setFrom(e.target.value)} /></FormField><FormField id="sales-through" label="Through (inclusive)"><Input id="sales-through" type="date" value={through} onChange={e => setThrough(e.target.value)} /></FormField>{periodError && <p role="alert" className="text-sm text-destructive">{periodError}</p>}<div className="flex justify-end gap-2"><Button variant="outline" onClick={() => setPeriodOpen(false)}>Cancel</Button><Button onClick={applyPeriod}>Apply period</Button></div></PopoverContent></Popover>
       <Filters activeCount={[salesTeamId, lostReasonId, owner, source].filter(Boolean).length + Object.keys(attributionQuery(attribution)).length + Object.keys(extensionQuery).length} onReset={() => { setSalesTeamId(""); reset() }}>
-        {scope === "team" && <FormField id="sales-owner" label="Salesperson"><RecordSelect id="sales-owner" endpoint="/api/crm/assignees" value={owner} onChange={setOwner} placeholder="All salespeople" /></FormField>}
-        <AttributionFilters value={attribution} onChange={setAttribution} choicesEndpoint={`/api/crm/reports/sales/attribution-choices?${params}`} responsibleLabel="Salesperson type" />
+        {scope === "team" && reportTab === "sales" && <FormField id="sales-owner" label="Salesperson"><RecordSelect id="sales-owner" endpoint="/api/crm/assignees" value={owner} onChange={setOwner} placeholder="All salespeople" /></FormField>}
+        <AttributionFilters value={attribution} onChange={setAttribution} choicesEndpoint={`/api/crm/reports/sales/${reportTab === "team" ? "team/" : ""}attribution-choices?${params}`} responsibleLabel="Salesperson type" />
         <SalesTeamSelect all value={salesTeamId} onChange={setSalesTeamId} /><LostReasonFilter value={lostReasonId} onChange={setLostReasonId} />
         <FormField id="sales-source" label={term("crm.enquiry.singular", "Lead source", "{label} source")}><RecordSelect id="sales-source" endpoint="/api/crm/lead-sources?includeArchived=true" value={source} onChange={setSource} placeholder="All sources" /></FormField>
         <CrmExtensionFilter primaryId={primaryId} secondaryId={secondaryId} onChange={(p, s) => { setPrimaryId(p); setSecondaryId(s) }} />
       </Filters><Button variant="outline" onClick={() => setRevision(v => v + 1)}>Refresh</Button>
-    </div>{data && <p className="text-sm text-muted-foreground">{formatDate(data.from)} through {formatDate(data.through)}, inclusive · {data.timeZone}.{" "}{term("crm.enquiry.plural", "Leads")} use their creation date; won/lost {term("crm.opportunity.plural", "deals")} use their closing date. Pipeline and follow-up coverage show current work across all dates.</p>}</Surface>
+    </div>{data && <p className="text-sm text-muted-foreground">{formatDate(data.from)} through {formatDate(data.through)}, inclusive · {data.timeZone}.{reportTab === "sales" && <> {term("crm.enquiry.plural", "Leads")} use their creation date; won/lost {term("crm.opportunity.plural", "deals")} use their closing date. Pipeline and follow-up coverage show current work across all dates.</>}</p>}</Surface>
     <ReportError error={error} />
-    {loading ? <p role="status">Loading sales report…</p> : data && <>
+    <div role="tabpanel" id="sales-report-panel" aria-labelledby={`sales-tab-${reportTab}`} className="min-w-0 space-y-5">
+    {reportTab === "team" ? <TeamPerformance key={params} params={params} revision={revision} formatMoney={formatMoney} /> : loading ? <p role="status">Loading sales report…</p> : data && <>
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">{(Object.keys(labels) as SalesReportView[]).map(view => <button key={view} type="button" onClick={() => select(view)} className="rounded-xl border bg-card p-4 text-left sm:p-5 shadow-sm hover:bg-accent focus-visible:outline-2 focus-visible:outline-ring"><p className="text-sm text-muted-foreground">{labels[view]}</p><p className="mt-2 text-3xl font-semibold tabular-nums">{data.totals[view]}</p>{view === "converted" && <p className="mt-1 text-xs text-muted-foreground">{data.conversionPercent}% of {term("crm.enquiry.plural", "leads")} created in period</p>}</button>)}</div>
       <p className="text-sm text-muted-foreground">{`Salesperson filters use current record ownership. Partner and supervisor filters use saved introduction details. No recorded partner does not prove internal origin. Overdue follow-ups belong to the selected ${term("crm.enquiry.plural", "leads")} or ${term("crm.opportunity.plural", "deals")}, including work assigned to other users. ${term("crm.contact.singular", "Contact")}-only work is in ${term("crm.activity.singular", "Activity")} overview. ${term("crm.opportunity.singular", "A deal", "The {label}")} is covered when it has any directly linked open or in-progress ${term("crm.activity.singular", "activity")}.`}</p>
       <LeadBreakdown key={`leads:${params}:${data.dimensions.map(item => item.key).join(",")}`} params={params} revision={revision} dimensions={data.dimensions} onSelect={select} />
       <DealValues key={`values:${params}`} params={params} revision={revision} onSelect={select} formatMoney={formatMoney} />
       <div id="sales-records" className="scroll-mt-5 space-y-3"><div className="flex flex-wrap items-center gap-2"><Select aria-label="Report records" value={selected.view} onValueChange={v => select(v as SalesReportView)}>{Object.entries(labels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</Select>{Object.keys(selected.extra).length > 0 && <Button variant="outline" onClick={() => select(selected.view)}>Clear breakdown selection</Button>}</div><ReportRecords key={details} params={details} view={selected.view} revision={revision} columns={data.extensionColumns} formatMoney={formatMoney} caption={"caption" in selected ? reportBucketLabel(term, data.dimensions.find(item => item.key === selected.extra.dimension), selected.extra.bucket, selected.caption || "") : undefined} /></div>
     </>}
+    </div>
   </section>
 }

@@ -1,0 +1,138 @@
+/* eslint-disable @typescript-eslint/no-require-imports */
+const {test,before,after}=require('node:test'),assert=require('node:assert/strict'),{randomUUID}=require('node:crypto'),{Pool}=require('pg')
+const {PrismaClient}=require('@prisma/client'),{TenantPgAdapter}=require('../lib/tenant-pg-adapter.ts')
+const {fixtureUser}=require('./helpers/access-fixtures.cjs'),{saveOfficeMemberships}=require('../platform/companies/office-membership.ts')
+const {createApplicationCrmService}=require('../application/crm/service.ts'),{teamMetricKeys}=require('../modules/crm/team-performance-contract.ts')
+const {parse}=require('csv-parse/sync'),{defaultRecordRules}=require('../platform/access/rules.ts')
+require('../lib/logger.ts').logger.info=()=>{}
+const raw=process.env.CRM_TEST_DATABASE_URL,u=new URL(raw||'http://invalid')
+assert(['127.0.0.1','localhost'].includes(u.hostname)&&u.pathname==='/ls_salon_crm_test','Disposable localhost database only')
+const suffix=randomUUID().slice(0,8),a='performance_'+suffix,b=a+'_other',pools=[],clients=[]
+function client(tenantId,root=false){const url=new URL(raw);if(!root){url.username='crm_test_runtime';url.password=''}const pool=new Pool({connectionString:url.toString(),max:4});pools.push(pool);const db=new PrismaClient({adapter:new TenantPgAdapter(pool,{tenantId,bypass:root})});clients.push(db);return db}
+const root=client(undefined,true),db=client(a),dbB=client(b),period={scope:'team',from:'2026-09-27',through:'2026-09-27'}
+let admin,manager,staff,second,zero,former,foreign,service,managed,reader,team,otherTeam,contact,pipeline,stages,leads=[],deals=[]
+before(async()=>{
+ for(const id of [a,b])await root.tenant.create({data:{id,slug:id,name:id}})
+ async function user(tenantId,role,name){return fixtureUser(root,{data:{tenantId,role,name,email:randomUUID()+'@example.test'}})}
+ admin=await user(a,'ADMIN','Administrator');manager=await user(a,'MANAGER','Manager');staff=await user(a,'STAFF','Alpha');second=await user(a,'STAFF','Beta');zero=await user(a,'STAFF','Zero work');former=await user(a,'STAFF','=Former');foreign=await user(b,'ADMIN','Foreign')
+ for(const who of [admin,manager,staff,second,zero,former,foreign]){const policy=await root.businessOfficePolicy.findUnique({where:{tenantId_userId:{tenantId:who.tenantId,userId:who.id}}});await (who.tenantId===a?db:dbB).$transaction(tx=>saveOfficeMemberships(tx,{tenantId:who.tenantId,userId:who.tenantId===a?admin.id:foreign.id},who.id,{version:policy?.version??0,officeIds:['office_'+who.tenantId],companies:[],creationOfficeId:'office_'+who.tenantId}))}
+ await root.tenantModule.createMany({data:[a,b].map(tenantId=>({tenantId,key:'crm',allowed:true,enabled:true}))})
+ await root.appSetting.create({data:{tenantId:a,timeZone:'Asia/Kolkata'}})
+ team=await root.businessTeam.create({data:{tenantId:a,name:'Alpha team',nameKey:'alpha team'}});otherTeam=await root.businessTeam.create({data:{tenantId:a,name:'Other team',nameKey:'other team'}})
+ for(const who of [manager,staff,second,zero])await root.businessTeamMember.create({data:{tenantId:a,teamId:team.id,userId:who.id,isManager:who.id===manager.id}})
+ await root.businessTeamMember.create({data:{tenantId:a,teamId:otherTeam.id,userId:staff.id}})
+ contact=await root.crmContact.create({data:{tenantId:a,name:'Performance buyer',ownerUserId:staff.id}})
+ pipeline=await root.crmPipeline.create({data:{tenantId:a,name:'Generic pipeline'}})
+ stages={};for(const [i,kind]of ['OPEN','WON','LOST'].entries())stages[kind]=await root.crmStage.create({data:{tenantId:a,pipelineId:pipeline.id,name:kind,kind,position:i,probability:kind==='WON'?100:0,color:'#123456'}})
+ for(const [i,status]of ['NEW','CONTACTED','QUALIFIED','CLOSED'].entries())leads.push(await root.crmEnquiry.create({data:{tenantId:a,officeId:'office_'+a,contactId:contact.id,assignedUserId:i===3?former.id:i===1?second.id:staff.id,salesTeamId:team.id,title:'Enquiry '+status,status,createdAt:new Date('2026-09-27T00:00:00Z')}}))
+ for(const [i,kind]of ['OPEN','WON','LOST','OPEN'].entries())deals.push(await root.crmOpportunity.create({data:{tenantId:a,officeId:'office_'+a,contactId:contact.id,assignedUserId:i===1?second.id:staff.id,salesTeamId:team.id,title:'Opportunity '+i,pipelineId:pipeline.id,stageId:stages[kind].id,expectedCloseOn:new Date('2030-01-01'),probability:20,amount:i===3?'0.2002':'0.1001',currency:i===3?'USD':'INR',...(kind==='OPEN'?{}:{closedAt:new Date('2026-09-27T18:29:59.999Z')}),...(i===0?{enquiryId:leads[2].id}:{})}}))
+ async function work(title,extra={}){return root.crmTask.create({data:{tenantId:a,officeId:'office_'+a,contactId:contact.id,assignedUserId:second.id,opportunityId:deals[0].id,dueOn:new Date('2020-01-01'),title,...extra}})}
+ await work('Beta work on Alpha deal');await work('Alpha in progress',{assignedUserId:staff.id,status:'IN_PROGRESS'})
+ await work('Connected boundary',{type:'CALL',status:'COMPLETED',outcome:'CONNECTED',completedAt:new Date('2026-09-26T18:30:00Z')})
+ await work('No answer boundary',{type:'CALL',status:'COMPLETED',outcome:'NO_ANSWER',completedAt:new Date('2026-09-27T18:29:59.999Z')})
+ await work('Outside period',{type:'CALL',status:'COMPLETED',outcome:'BUSY',completedAt:new Date('2026-09-27T18:30:00Z')})
+ await work('Cancelled in cohort',{status:'CANCELLED',createdAt:new Date('2026-09-27T00:00:00Z')})
+ await work('Contact-only work',{opportunityId:null,assignedUserId:staff.id})
+ await root.crmOpportunity.create({data:{tenantId:a,officeId:'office_'+a,contactId:contact.id,assignedUserId:staff.id,salesTeamId:otherTeam.id,title:'Other team ownership',pipelineId:pipeline.id,stageId:stages.OPEN.id,expectedCloseOn:new Date('2030-01-01'),probability:20,amount:'100',currency:'INR'}})
+ await root.user.update({where:{id:former.id},data:{status:'SUSPENDED'}})
+ service=createApplicationCrmService(db,{tenantId:a,userId:admin.id});managed=createApplicationCrmService(db,{tenantId:a,userId:manager.id});reader=createApplicationCrmService(db,{tenantId:a,userId:staff.id})
+})
+after(async()=>{await Promise.all(clients.map(c=>c.$disconnect()));await Promise.all(pools.map(p=>p.end()))})
+test('team members including zero work, former owners, weighted totals and exact currencies reconcile with every drill-down',async()=>{
+ const q={...period,salesTeamId:team.id},r=await service.teamPerformance(q)
+ assert.equal(r.team.name,'Alpha team')
+ assert.equal(r.total,5);assert.equal(r.items.find(x=>x.id===zero.id).enquiries,0);assert.equal(r.items.find(x=>x.id===former.id).isMember,false)
+ assert.equal(r.totals.enquiries,4);assert.equal(r.totals.converted,1);assert.equal(r.totals.conversionPercent,25)
+ for(const metric of ['new','contacted','qualified','closed'])assert.equal(r.totals[metric],1)
+ assert.equal(r.totals.activitiesOpen,1);assert.equal(r.totals.activitiesInProgress,1);assert.equal(r.totals.activitiesCompleted,2);assert.equal(r.totals.callsCompleted,2);assert.equal(r.totals.connected,1);assert.equal(r.totals.noAnswer,1);assert.equal(r.totals.busy,0);assert.equal(r.totals.activitiesCancelled,1)
+ assert.deepEqual(r.totals.pipelineValues,[{currency:'INR',amount:'0.1001'},{currency:'USD',amount:'0.2002'}])
+ for(const metric of teamMetricKeys){assert.equal(r.items.reduce((n,row)=>n+row[metric],0),r.totals[metric]);assert.equal((await service.teamPerformanceRecords({...q,metric})).total,r.totals[metric])}
+ const beta=r.items.find(x=>x.id===second.id);assert.equal(beta.activitiesCompleted,2);assert.equal(beta.activitiesOpen,1)
+ assert.equal((await service.teamPerformanceRecords({...q,metric:'activitiesCompleted',assignedUserId:second.id})).total,2)
+})
+test('server-side pages, sorting, search, all-page totals and formula-safe CSV use the same population',async()=>{
+ const q={...period,salesTeamId:team.id,pageSize:1,sort:'enquiries',order:'desc'},first=await service.teamPerformance(q),ids=[]
+ for(let page=1;page<=first.totalPages;page++)ids.push((await service.teamPerformance({...q,page})).items[0].id)
+ assert.equal(new Set(ids).size,5);assert.equal(first.items[0].id,staff.id);assert.equal(first.totals.enquiries,4)
+ const csv=parse(await service.exportTeamPerformance({...q,page:99}),{bom:true,columns:true})
+ assert.equal(csv.at(-1)['Sales team'],'Alpha team')
+ assert.equal(csv.length,6);assert.equal(csv.at(-1).User,'Team total');assert.equal(csv.at(-1)['Enquiries created'],'4');assert(csv.some(row=>row.User==="'=Former"))
+ const searched=await service.teamPerformance({...period,salesTeamId:team.id,q:'Zero work'});assert.equal(searched.total,1);assert.equal(searched.totals.enquiries,0);assert.equal(searched.totals.conversionPercent,null)
+ assert.equal((await service.teamPerformance({...period,page:999})).items.length,0)
+})
+test('selected team follows source team rather than membership; contact work has its own assignee',async()=>{
+ const own=await service.teamPerformance({...period,salesTeamId:team.id,assignedUserId:second.id});assert.equal(own.totals.enquiries,1);assert.equal(own.totals.activitiesCompleted,2)
+ assert.equal((await service.teamPerformance({...period,salesTeamId:otherTeam.id})).totals.pipeline,1)
+ assert.equal((await service.teamPerformance(period)).totals.activitiesOpen,2)
+ const restricted={...defaultRecordRules(),'reports.read':'ALL','enquiries.read':'MANAGED_TEAMS','opportunities.read':'MANAGED_TEAMS','activities.read':'MANAGED_TEAMS','teamMembers.read':'MANAGED_TEAMS'}
+ await root.tenantUserAccess.update({where:{tenantId_userId:{tenantId:a,userId:manager.id}},data:{rules:restricted}})
+ assert.equal((await managed.teamPerformance({...period,salesTeamId:team.id})).totals.enquiries,4)
+ await assert.rejects(managed.teamPerformance({...period,salesTeamId:otherTeam.id}),e=>e.status===403)
+ await root.tenantUserAccess.update({where:{tenantId_userId:{tenantId:a,userId:manager.id}},data:{rules:{...restricted,'teamMembers.read':'NONE'}}})
+ const withoutRoster=await managed.teamPerformance({...period,salesTeamId:team.id});assert.equal(withoutRoster.canReadRoster,false);assert(!withoutRoster.items.some(x=>x.id===zero.id))
+})
+test('own-only, foreign tenant, unknown metrics and export limits cannot widen Read',async()=>{
+ await assert.rejects(reader.teamPerformance(period),e=>e.status===403)
+ assert.throws(()=>service.teamPerformance({...period,sort:'name; DROP TABLE'}))
+ assert.throws(()=>service.teamPerformanceRecords({...period,metric:'unknown'}))
+ const other=createApplicationCrmService(dbB,{tenantId:b,userId:foreign.id});assert.equal((await other.teamPerformance(period)).total,0)
+ await assert.rejects(other.teamPerformance({...period,salesTeamId:team.id}),e=>e.status===404)
+ const rules={...defaultRecordRules(),'reports.read':'ALL','reports.export':'OWN','enquiries.read':'ALL','opportunities.read':'ALL','activities.read':'ALL'}
+ await root.tenantUserAccess.update({where:{tenantId_userId:{tenantId:a,userId:manager.id}},data:{rules}})
+ await assert.rejects(managed.exportTeamPerformance(period),e=>e.status===403)
+ assert.equal(await client(undefined).crmEnquiry.count(),0)
+})
+test('Restricted sharing, export record limits and revoked office access apply to counts, records and CSV',async()=>{
+ const {createRecordSharingService}=require('../platform/access/sharing-service.ts')
+ const {materializeRules}=require('./helpers/resource-policy-data.cjs')
+ const rules={...materializeRules('MANAGER'),'reports.read':'ALL','reports.export':'ALL','enquiries.read':'ALL','enquiries.export':'ALL','opportunities.read':'ALL','opportunities.export':'ALL','activities.read':'ALL','activities.export':'ALL','teamMembers.read':'ALL'}
+ await root.tenantUserAccess.update({where:{tenantId_userId:{tenantId:a,userId:manager.id}},data:{rules}})
+ const sharing=createRecordSharingService(db,{tenantId:a,userId:admin.id})
+ async function share(resource,id,grants=[]){const current=await sharing.get(resource,id);await sharing.save(resource,id,{version:current.version,restricted:true,grants})}
+ await share('enquiries',leads[0].id)
+ await share('opportunities',deals[0].id)
+ const q={...period,salesTeamId:team.id},hidden=await managed.teamPerformance(q)
+ assert.equal(hidden.totals.enquiries,3);assert.equal(hidden.totals.converted,0)
+ assert(!(await managed.teamPerformanceRecords({...q,metric:'pipeline'})).items.some(row=>row.id===deals[0].id))
+ const hiddenCsv=parse(await managed.exportTeamPerformance(q),{bom:true,columns:true});assert.equal(hiddenCsv.at(-1)['Enquiries created'],'3')
+ await share('enquiries',leads[0].id,[{kind:'USER',id:manager.id,level:'READ'}])
+ await share('opportunities',deals[0].id,[{kind:'USER',id:manager.id,level:'READ'}])
+ assert.equal((await managed.teamPerformance(q)).totals.enquiries,4)
+ assert.equal((await managed.teamPerformance(q)).totals.converted,1)
+ await root.tenantUserAccess.update({where:{tenantId_userId:{tenantId:a,userId:manager.id}},data:{rules:{...rules,'enquiries.export':'OWN','opportunities.export':'OWN','activities.export':'OWN'}}})
+ // The explicitly shared enquiry remains readable/exportable; other owners'
+ // unshared records cannot be exported through an Own limit.
+ const bounded=parse(await managed.exportTeamPerformance(q),{bom:true,columns:true});assert.equal(bounded.at(-1)['Enquiries created'],'1')
+ const policy=await root.businessOfficePolicy.findUnique({where:{tenantId_userId:{tenantId:a,userId:manager.id}}})
+ await db.$transaction(tx=>saveOfficeMemberships(tx,{tenantId:a,userId:admin.id},manager.id,{version:policy.version,officeIds:[],companies:[],creationOfficeId:null}))
+ const noOffice=await managed.teamPerformance(q);assert.equal(noOffice.totals.enquiries,0);assert.equal(noOffice.totals.activitiesCompleted,0)
+})
+test('partner choices include old sources with current work and keep origin separate from the activity owner',async()=>{
+ const {createCollaboratorService}=require('../platform/collaborators/service.ts'),directory=createCollaboratorService(db,{tenantId:a,userId:admin.id})
+ const partner=await directory.create({name:'Old source agency',code:'OLD_SOURCE',supervisorUserId:manager.id})
+ const lead=await service.createEnquiry({title:'Old introduced source',contactId:contact.id,assignedUserId:staff.id,salesTeamId:team.id,introducedByCollaboratorId:partner.id})
+ await root.crmEnquiry.update({where:{id:lead.id},data:{createdAt:new Date('2020-01-01')}})
+ await root.crmTask.create({data:{tenantId:a,officeId:'office_'+a,contactId:contact.id,enquiryId:lead.id,assignedUserId:second.id,title:'Old introduced follow-up',dueOn:new Date('2020-01-01')}})
+ const q={...period,salesTeamId:team.id,introducedByCollaboratorId:partner.id}
+ const report=await service.teamPerformance(q);assert.equal(report.totals.enquiries,0);assert.equal(report.items.find(r=>r.id===second.id).activitiesOpen,1)
+ const choice=await service.teamPerformanceAttributionChoices({...period,salesTeamId:team.id,choice:'partner',selectedId:partner.id,q:'OLD_SOURCE',pageSize:1})
+ assert.equal(choice.total,1);assert.equal(choice.items[0].id,partner.id)
+ assert.equal((await service.teamPerformanceAttributionChoices({...period,choice:'partner',selectedId:foreign.id})).total,0)
+ assert.equal((await service.teamPerformanceAttributionChoices({...period,choice:'supervisor',selectedId:manager.id})).items[0].id,manager.id)
+ await directory.update(partner.id,{version:partner.version,archived:true})
+ assert.equal((await service.teamPerformanceAttributionChoices({...period,choice:'partner',selectedId:partner.id})).items[0].name,'Old source agency (OLD_SOURCE)')
+ assert.equal((await service.teamPerformance({...q,responsibleType:'external'})).totals.activitiesOpen,0)
+})
+test('a thousand enquiries stay aggregated and paginated; malformed dates and disabled CRM fail closed',async()=>{
+ await root.crmEnquiry.createMany({data:Array.from({length:1000},(_,i)=>({tenantId:a,officeId:'office_'+a,contactId:contact.id,assignedUserId:staff.id,salesTeamId:team.id,title:'Scale '+i,createdAt:new Date('2026-09-27T00:00:00Z')}))})
+ const result=await service.teamPerformance({...period,salesTeamId:team.id,pageSize:1});assert.equal(result.items.length,1);assert.equal(result.totals.enquiries,1004)
+ assert.equal((await service.teamPerformanceRecords({...period,salesTeamId:team.id,metric:'enquiries',pageSize:1})).total,1004)
+ await root.tenantTerminology.createMany({data:[['crm.enquiry.plural','Prospects'],['crm.opportunity.plural','Deals'],['crm.activity.plural','Interactions']].map(([key,label])=>({tenantId:a,key,label}))})
+ const renamed=parse(await service.exportTeamPerformance({...period,salesTeamId:team.id}),{bom:true,columns:true})
+ assert.equal(renamed.at(-1)['Prospects created'],'1004');assert.equal(renamed.at(-1)['Interactions completed in period'],'2')
+ await root.tenantTerminology.deleteMany({where:{tenantId:a}})
+ assert.throws(()=>service.teamPerformance({...period,through:'2026-09-26'}));assert.throws(()=>service.teamPerformance({...period,from:'2026-02-30'}))
+ await assert.rejects(service.teamPerformance({...period,currency:'INR'}),e=>e.status===400)
+ await root.tenantModule.update({where:{tenantId_key:{tenantId:a,key:'crm'}},data:{enabled:false}})
+ await assert.rejects(service.teamPerformance(period),e=>e.status===403);await assert.rejects(service.exportTeamPerformance(period),e=>e.status===403)
+})

@@ -1,3 +1,17 @@
+## P13D team performance implementation
+
+Sales reports adds a Team performance comparison with visible zero-work members,
+former/source owners, full-selection totals, enquiry/status conversion, opportunity
+outcomes, activity/call outcomes, exact currency-separated pipeline values and
+matching paged record drill-downs/CSV. The generic CRM adapter reuses existing
+industry source hooks, sharing/office RLS and the managed-team report guard.
+No database or access-policy migration is required. All 34 native/unit checks,
+eight browser scenarios, optimized build, TypeScript and lint pass; the final
+comparison flows were repeated with the team-name context. See
+`docs/TEAM_PERFORMANCE_P13D.md` for meaning, date/assignment bases and permissions.
+Local and hosted verification status is recorded with the implementation checks;
+this entry does not claim production deployment.
+
 ## P8-P13C release-wide regression gate (2026-10-31)
 
 The release spans shared document editing and quotation layouts, payment receipts,
