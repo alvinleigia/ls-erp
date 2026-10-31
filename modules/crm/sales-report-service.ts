@@ -122,6 +122,10 @@ export function createSalesReportService({ run, readTerms }: Context, extensions
   }
   return {
     ...createTeamPerformanceService({ run, context, extensions, readTerms }),
+    salesReportOptions(input: unknown) {
+      const split = extensions.splitQuery(input), q = salesReportSchema.parse(split.core)
+      return run(["reports.read", "enquiries.read", "opportunities.read", "activities.read"], async (tx, actor) => (await context(tx, actor, q, split.extension)).metadata)
+    },
     salesAttributionChoices(input: unknown) {
       const { choice, q: search, selectedId, ...filters } = (input && typeof input === "object" && !Array.isArray(input) ? input : {}) as Record<string, unknown>
       const query = attributionChoiceSchema.parse({ choice, q: search, selectedId })

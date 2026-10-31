@@ -7,8 +7,8 @@ const {parse}=require('csv-parse/sync'),{defaultRecordRules}=require('../platfor
 require('../lib/logger.ts').logger.info=()=>{}
 const raw=process.env.CRM_TEST_DATABASE_URL,u=new URL(raw||'http://invalid')
 assert(['127.0.0.1','localhost'].includes(u.hostname)&&u.pathname==='/ls_salon_crm_test','Disposable localhost database only')
-const suffix=randomUUID().slice(0,8),a='performance_'+suffix,b=a+'_other',pools=[],clients=[]
-function client(tenantId,root=false){const url=new URL(raw);if(!root){url.username='crm_test_runtime';url.password=''}const pool=new Pool({connectionString:url.toString(),max:4});pools.push(pool);const db=new PrismaClient({adapter:new TenantPgAdapter(pool,{tenantId,bypass:root})});clients.push(db);return db}
+const suffix=randomUUID().slice(0,8),a='performance_'+suffix,b=a+'_other',pools=[],clients=[];let aggregateQueryCount=0
+function client(tenantId,root=false){const url=new URL(raw);if(!root){url.username='crm_test_runtime';url.password=''}const pool=new Pool({connectionString:url.toString(),max:4});pools.push(pool);const db=new PrismaClient({adapter:new TenantPgAdapter(pool,{tenantId,bypass:root}),log:[{emit:'event',level:'query'}]});db.$on('query',event=>{if(/leads_all\s+AS\s*\(/i.test(event.query))aggregateQueryCount++});clients.push(db);return db}
 const root=client(undefined,true),db=client(a),dbB=client(b),period={scope:'team',from:'2026-09-27',through:'2026-09-27'}
 let admin,manager,staff,second,zero,former,foreign,service,managed,reader,team,otherTeam,contact,pipeline,stages,leads=[],deals=[]
 before(async()=>{
@@ -38,6 +38,15 @@ before(async()=>{
  service=createApplicationCrmService(db,{tenantId:a,userId:admin.id});managed=createApplicationCrmService(db,{tenantId:a,userId:manager.id});reader=createApplicationCrmService(db,{tenantId:a,userId:staff.id})
 })
 after(async()=>{await Promise.all(clients.map(c=>c.$disconnect()));await Promise.all(pools.map(p=>p.end()))})
+test('one aggregate statement supplies each report response and options never aggregate business records',async()=>{
+ const q={...period,salesTeamId:team.id}
+ let before=aggregateQueryCount
+ const options=await service.salesReportOptions(q);assert.equal(aggregateQueryCount-before,0);assert.equal(options.canManage,true);assert(!Object.hasOwn(options,'totals'))
+ for(const [method,input]of [['teamPerformance',q],['exportTeamPerformance',q],['teamPerformanceRecords',{...q,metric:'enquiries'}],['teamPerformanceAttributionChoices',{...q,choice:'partner'}]]){
+  before=aggregateQueryCount;await service[method](input);assert.equal(aggregateQueryCount-before,1,method)
+ }
+ await assert.rejects(reader.salesReportOptions(period),e=>e.status===403)
+})
 test('team members including zero work, former owners, weighted totals and exact currencies reconcile with every drill-down',async()=>{
  const q={...period,salesTeamId:team.id},r=await service.teamPerformance(q)
  assert.equal(r.team.name,'Alpha team')

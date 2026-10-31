@@ -3,6 +3,30 @@ import { seed, login, json, assignOffices } from "./fixtures"
 import { parse } from "csv-parse/sync"
 test.use({ actionTimeout: 15_000 })
 
+test("opening or refreshing the team view never loads the inactive sales report", async ({ browser }) => {
+  const f = await seed(), admin = await login(browser, f.origin, f.users.admin.email)
+  const calls: string[] = []
+  admin.page.on("request", request => {
+    const path = new URL(request.url()).pathname
+    if (path.startsWith("/api/crm/reports/sales")) calls.push(path)
+  })
+  try {
+    await admin.page.goto("/crm/sales?view=team")
+    await expect(admin.page.getByRole("tab", { name: "Team performance", exact: true })).toHaveAttribute("aria-selected", "true")
+    await expect(admin.page.getByText("No members or records match this selection.", { exact: true })).toBeVisible()
+    expect(calls.filter(path => path === "/api/crm/reports/sales/team")).toHaveLength(1)
+    expect(calls.filter(path => path === "/api/crm/reports/sales/options")).toHaveLength(1)
+    expect(calls.filter(path => ["/api/crm/reports/sales", "/api/crm/reports/sales/breakdown", "/api/crm/reports/sales/values", "/api/crm/reports/sales/records"].includes(path))).toEqual([])
+    calls.length = 0
+    await admin.page.getByRole("button", { name: "Refresh", exact: true }).click()
+    await expect(admin.page.getByText("No members or records match this selection.", { exact: true })).toBeVisible()
+    expect(calls.filter(path => path === "/api/crm/reports/sales/team")).toHaveLength(1)
+    expect(calls).not.toContain("/api/crm/reports/sales")
+    await admin.page.reload()
+    await expect(admin.page.getByRole("tab", { name: "Team performance", exact: true })).toHaveAttribute("aria-selected", "true")
+  } finally { await admin.context.close(); await f.db.end() }
+})
+
 async function pick(page: Page, label: string, name: string) {
   await page.getByRole("combobox", { name: label, exact: true }).click()
   await page.getByPlaceholder("Type to search...").fill(name)

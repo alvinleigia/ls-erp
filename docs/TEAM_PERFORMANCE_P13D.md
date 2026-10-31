@@ -92,3 +92,33 @@ scenarios pass. The final comparison flows were repeated after adding team-name
 context. Optimized build, TypeScript, targeted lint and whitespace checks pass.
 Desktop and mobile screenshots were inspected. Hosting verification targets
 staging only; production promotion is a separate release.
+
+## P13E loading-time correction
+
+The original summary repeated its source/RLS aggregation in five statements for
+the member count, totals, page, user currency values and overall currency values.
+The page also fetched the sales summary while Team performance was active.
+
+The report now uses one aggregate statement with bounded JSON member paging,
+full-selection totals and currency groups from the same source population.
+Drill-downs and attribution choices each use one statement as well. CSV still
+checks its 2,000-user limit before returning any rows. Source predicates, current
+authorization, activation, sharing, office RLS and numeric precision are unchanged.
+There is no report-result cache, background job or database migration.
+
+The lightweight `/api/crm/reports/sales/options` endpoint supplies only the current
+permitted filters and tenant date basis. The inactive summary panels do not load.
+The page URL `/crm/sales?view=team` opens the comparison directly; changing tabs
+updates this view selection so reloads do not calculate an unrelated report first.
+This navigation parameter is not forwarded as a business report filter.
+
+A controlled 1,530-enquiry comparison against the released implementation produced
+identical rows, totals, currency values, metric drill-downs, choices and CSV bytes.
+Three local samples averaged about 887 ms before and 192 ms after (about 4.6× faster).
+This is a controlled local benchmark, not a hosted latency guarantee. The live
+pre-change API baseline was about 8.4 seconds. Private timings and parity evidence
+are retained under `tmp/team-performance-fast`.
+
+All 35 native/unit checks and nine browser scenarios pass, including a regression
+guard for one aggregation per report response, no aggregation for options, no
+inactive-summary requests, direct navigation/reload, permission loss and mobile use.

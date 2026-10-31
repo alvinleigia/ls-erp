@@ -1,3 +1,15 @@
+## P13E team performance loading-time correction
+
+Team comparison, totals and currency values now share one aggregate statement
+instead of five repeated source/RLS passes. Drill-downs and attribution choices
+also share their count/page population in one statement. Lightweight report options
+replace the inactive sales-summary request; `/crm/sales?view=team` opens the correct
+view directly. No result cache, data/access change or migration is introduced.
+All 35 native/unit checks, nine browser scenarios, build, TypeScript and lint pass.
+A 1,530-enquiry reference comparison has identical output and CSV bytes, with
+about 4.6× lower local latency. See `docs/TEAM_PERFORMANCE_P13D.md` for the contract
+and benchmark limits; hosted timings are retained in `tmp/team-performance-fast`.
+
 ## P13D team performance implementation
 
 Sales reports adds a Team performance comparison with visible zero-work members,

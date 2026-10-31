@@ -30,10 +30,11 @@ import { TeamPerformance } from "./team-performance"
 type SelectReport = (view: SalesReportView, extra?: Record<string, string>, caption?: string) => void
 type MoneyFormatter = (amount: string, currency: string) => string
 
-function useReport<T>(path: string, params: string, revision: number) {
+function useReport<T>(path: string, params: string, revision: number, enabled = true) {
   const [state, setState] = React.useState<{ data: T | null; error: string; key: string }>({ data: null, error: "", key: "" })
   const key = `${path}?${params}&revision=${revision}`
   React.useEffect(() => {
+    if (!enabled) return
     const controller = new AbortController()
     async function load() {
       try {
@@ -45,8 +46,8 @@ function useReport<T>(path: string, params: string, revision: number) {
     }
     void load()
     return () => controller.abort()
-  }, [path, params, key])
-  return { data: state.key === key ? state.data : null, error: state.key === key ? state.error : "", loading: state.key !== key }
+  }, [path, params, key, enabled])
+  return { data: enabled && state.key === key ? state.data : null, error: enabled && state.key === key ? state.error : "", loading: enabled && state.key !== key }
 }
 function ReportError({ error }: { error: string }) { return error ? <p role="alert" className="text-sm text-destructive">{error} Use Refresh to retry.</p> : null }
 function Pager({ data, page, size, loading, setPage, setSize }: { data: { total: number; totalPages: number } | null; page: number; size: number; loading: boolean; setPage: (p: number) => void; setSize: (n: number) => void }) {
@@ -89,7 +90,7 @@ function ReportRecords({ params, view, revision, columns, formatMoney, caption }
     </TableBody></Table><Pager data={data} page={page} size={size} loading={loading} setPage={setPage} setSize={setSize} />
   </Section>
 }
-export function SalesReports() {
+export function SalesReports({ initialView = "sales" }: { initialView?: "sales" | "team" }) {
   const term = useTerminology()
   const labels = salesReportLabels(term)
   const { formatDate } = useDateFormatter()
@@ -100,7 +101,7 @@ export function SalesReports() {
     return () => controller.abort()
   }, [])
   const formatMoney = (amount: string, currency: string) => formatDecimalCurrency(amount, currency, moneySettings)
-  const [scope, setScope] = React.useState("mine"), [owner, setOwner] = React.useState(""), [source, setSource] = React.useState("")
+  const [scope, setScope] = React.useState(initialView === "team" ? "team" : "mine"), [owner, setOwner] = React.useState(""), [source, setSource] = React.useState("")
   const [lostReasonId, setLostReasonId] = React.useState("")
   const [primaryId, setPrimaryId] = React.useState(""), [secondaryId, setSecondaryId] = React.useState("")
   const [period, setPeriod] = React.useState<{ from: string; through: string } | null>(null), [from, setFrom] = React.useState(""), [through, setThrough] = React.useState("")
@@ -108,27 +109,38 @@ export function SalesReports() {
   const [selection, setSelection] = React.useState<{ base: string; view: SalesReportView; extra: Record<string, string>; caption?: string } | null>(null)
   const [attribution, setAttribution] = React.useState<AttributionFilter>(emptyAttributionFilters)
   const [salesTeamId, setSalesTeamId] = React.useState("")
-  const [reportTab, setReportTab] = React.useState("sales")
+  const [reportTab, setReportTab] = React.useState<"sales" | "team">(initialView)
   const extensionQuery = useCrmExtensionFilterQuery(primaryId, secondaryId)
   const params = new URLSearchParams({ ...attributionQuery(attribution), ...(salesTeamId ? { salesTeamId } : {}), scope, ...(lostReasonId ? { lostReasonId } : {}), ...(period || {}), ...(owner ? { assignedUserId: owner } : {}), ...(source ? { sourceId: source } : {}), ...extensionQuery }).toString()
-  const { data, loading, error } = useReport<SalesReportSummary>("", params, revision)
+  const { data, loading, error: summaryError } = useReport<SalesReportSummary>("", params, revision, reportTab === "sales")
+  const options = useReport<Omit<SalesReportSummary, "totals" | "conversionPercent">>("/options", params, revision)
+  const error = options.error || summaryError
+  const metadata = options.error ? null : options.data || data
   const selected = selection?.base === params ? selection : { view: "leads" as const, extra: {} }
   const details = `${params}&${new URLSearchParams({ view: selected.view, ...selected.extra })}`
   const select: SelectReport = (view, extra = {}, caption) => { setSelection({ base: params, view, extra, caption }); document.getElementById("sales-records")?.scrollIntoView({ behavior: "smooth", block: "start" }) }
   const reset = () => { setAttribution(emptyAttributionFilters); setLostReasonId(""); setOwner(""); setSource(""); setPrimaryId(""); setSecondaryId(""); setPeriod(null) }
+  function changeTab(next: "sales" | "team") {
+    setReportTab(next); setOwner(""); setRevision(value => value + 1)
+    if (next === "team") setScope("team")
+    else if (!metadata?.canManage) { setScope("mine"); setSalesTeamId("") }
+    const url = new URL(window.location.href)
+    if (next === "team") url.searchParams.set("view", "team"); else url.searchParams.delete("view")
+    window.history.replaceState(window.history.state, "", url)
+  }
   function applyPeriod() {
     if (!from || !through || through < from || Date.parse(through) - Date.parse(from) > 365 * 86400000) { setPeriodError("Choose both dates, covering at most 366 days."); return }
     setPeriod({ from, through }); setPeriodError(""); setPeriodOpen(false)
   }
   return <section className={pageClass}>
     <AccessPageHeader title="Sales reports" description={term("crm.enquiry.singular", "Track lead conversion, pipeline value and follow-up coverage.", "Track {label} conversion, pipeline value and follow-up coverage.")} actions={<Button variant="outline" asChild><Link href="/crm/overview">{term("crm.activity.singular", "Activity overview", "{label} overview")}</Link></Button>} />
-    <div role="tablist" aria-label="Sales report views" className="flex gap-2" onKeyDown={event => { if (["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key) && data?.canManage) { event.preventDefault(); const next = event.key === "Home" ? "sales" : event.key === "End" ? "team" : reportTab === "sales" ? "team" : "sales"; setReportTab(next); if (next === "team") { setScope("team"); setOwner("") } document.getElementById(`sales-tab-${next}`)?.focus() } }}>
-      <Button id="sales-tab-sales" role="tab" aria-selected={reportTab === "sales"} aria-controls="sales-report-panel" tabIndex={reportTab === "sales" ? 0 : -1} variant={reportTab === "sales" ? "secondary" : "ghost"} onClick={() => setReportTab("sales")}>Sales summary</Button>
-      {data?.canManage && <Button id="sales-tab-team" role="tab" aria-selected={reportTab === "team"} aria-controls="sales-report-panel" tabIndex={reportTab === "team" ? 0 : -1} variant={reportTab === "team" ? "secondary" : "ghost"} onClick={() => { setReportTab("team"); setScope("team"); setOwner("") }}>Team performance</Button>}
+    <div role="tablist" aria-label="Sales report views" className="flex gap-2" onKeyDown={event => { if (["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key) && metadata?.canManage) { event.preventDefault(); const next = event.key === "Home" ? "sales" : event.key === "End" ? "team" : reportTab === "sales" ? "team" : "sales"; changeTab(next); document.getElementById(`sales-tab-${next}`)?.focus() } }}>
+      <Button id="sales-tab-sales" role="tab" aria-selected={reportTab === "sales"} aria-controls="sales-report-panel" tabIndex={reportTab === "sales" ? 0 : -1} variant={reportTab === "sales" ? "secondary" : "ghost"} onClick={() => changeTab("sales")}>Sales summary</Button>
+      {metadata?.canManage && <Button id="sales-tab-team" role="tab" aria-selected={reportTab === "team"} aria-controls="sales-report-panel" tabIndex={reportTab === "team" ? 0 : -1} variant={reportTab === "team" ? "secondary" : "ghost"} onClick={() => changeTab("team")}>Team performance</Button>}
     </div>
     <Surface><div className="flex flex-wrap items-end gap-3">
-      {reportTab === "sales" ? <FormField id="sales-scope" label="Scope"><Select id="sales-scope" value={scope} onValueChange={v => { setScope(v); setOwner("") }}><option value="mine">My sales</option>{data?.canManage && <option value="team">Team sales</option>}</Select></FormField> : <p className="self-center text-sm font-medium">Team sales</p>}
-      <Popover open={periodOpen} onOpenChange={open => { setPeriodOpen(open); if (open) { setFrom(period?.from || data?.from || ""); setThrough(period?.through || data?.through || "") } }}><PopoverTrigger asChild><Button variant="outline">{period ? `${period.from} – ${period.through}` : "Reporting period"}</Button></PopoverTrigger><PopoverContent align="start" className="w-[min(24rem,calc(100vw-2rem))] space-y-4"><p className="font-semibold">Reporting period</p><FormField id="sales-from" label="From"><Input id="sales-from" type="date" value={from} onChange={e => setFrom(e.target.value)} /></FormField><FormField id="sales-through" label="Through (inclusive)"><Input id="sales-through" type="date" value={through} onChange={e => setThrough(e.target.value)} /></FormField>{periodError && <p role="alert" className="text-sm text-destructive">{periodError}</p>}<div className="flex justify-end gap-2"><Button variant="outline" onClick={() => setPeriodOpen(false)}>Cancel</Button><Button onClick={applyPeriod}>Apply period</Button></div></PopoverContent></Popover>
+      {reportTab === "sales" ? <FormField id="sales-scope" label="Scope"><Select id="sales-scope" value={scope} onValueChange={v => { setScope(v); setOwner("") }}><option value="mine">My sales</option>{metadata?.canManage && <option value="team">Team sales</option>}</Select></FormField> : <p className="self-center text-sm font-medium">Team sales</p>}
+      <Popover open={periodOpen} onOpenChange={open => { setPeriodOpen(open); if (open) { setFrom(period?.from || metadata?.from || ""); setThrough(period?.through || metadata?.through || "") } }}><PopoverTrigger asChild><Button variant="outline">{period ? `${period.from} – ${period.through}` : "Reporting period"}</Button></PopoverTrigger><PopoverContent align="start" className="w-[min(24rem,calc(100vw-2rem))] space-y-4"><p className="font-semibold">Reporting period</p><FormField id="sales-from" label="From"><Input id="sales-from" type="date" value={from} onChange={e => setFrom(e.target.value)} /></FormField><FormField id="sales-through" label="Through (inclusive)"><Input id="sales-through" type="date" value={through} onChange={e => setThrough(e.target.value)} /></FormField>{periodError && <p role="alert" className="text-sm text-destructive">{periodError}</p>}<div className="flex justify-end gap-2"><Button variant="outline" onClick={() => setPeriodOpen(false)}>Cancel</Button><Button onClick={applyPeriod}>Apply period</Button></div></PopoverContent></Popover>
       <Filters activeCount={[salesTeamId, lostReasonId, owner, source].filter(Boolean).length + Object.keys(attributionQuery(attribution)).length + Object.keys(extensionQuery).length} onReset={() => { setSalesTeamId(""); reset() }}>
         {scope === "team" && reportTab === "sales" && <FormField id="sales-owner" label="Salesperson"><RecordSelect id="sales-owner" endpoint="/api/crm/assignees" value={owner} onChange={setOwner} placeholder="All salespeople" /></FormField>}
         <AttributionFilters value={attribution} onChange={setAttribution} choicesEndpoint={`/api/crm/reports/sales/${reportTab === "team" ? "team/" : ""}attribution-choices?${params}`} responsibleLabel="Salesperson type" />
@@ -136,10 +148,10 @@ export function SalesReports() {
         <FormField id="sales-source" label={term("crm.enquiry.singular", "Lead source", "{label} source")}><RecordSelect id="sales-source" endpoint="/api/crm/lead-sources?includeArchived=true" value={source} onChange={setSource} placeholder="All sources" /></FormField>
         <CrmExtensionFilter primaryId={primaryId} secondaryId={secondaryId} onChange={(p, s) => { setPrimaryId(p); setSecondaryId(s) }} />
       </Filters><Button variant="outline" onClick={() => setRevision(v => v + 1)}>Refresh</Button>
-    </div>{data && <p className="text-sm text-muted-foreground">{formatDate(data.from)} through {formatDate(data.through)}, inclusive · {data.timeZone}.{reportTab === "sales" && <> {term("crm.enquiry.plural", "Leads")} use their creation date; won/lost {term("crm.opportunity.plural", "deals")} use their closing date. Pipeline and follow-up coverage show current work across all dates.</>}</p>}</Surface>
+    </div>{metadata && <p className="text-sm text-muted-foreground">{formatDate(metadata.from)} through {formatDate(metadata.through)}, inclusive · {metadata.timeZone}.{reportTab === "sales" && <> {term("crm.enquiry.plural", "Leads")} use their creation date; won/lost {term("crm.opportunity.plural", "deals")} use their closing date. Pipeline and follow-up coverage show current work across all dates.</>}</p>}</Surface>
     <ReportError error={error} />
     <div role="tabpanel" id="sales-report-panel" aria-labelledby={`sales-tab-${reportTab}`} className="min-w-0 space-y-5">
-    {reportTab === "team" ? <TeamPerformance key={params} params={params} revision={revision} formatMoney={formatMoney} /> : loading ? <p role="status">Loading sales report…</p> : data && <>
+    {error ? null : reportTab === "team" ? <TeamPerformance key={params} params={params} revision={revision} formatMoney={formatMoney} /> : loading ? <p role="status">Loading sales report…</p> : data && <>
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">{(Object.keys(labels) as SalesReportView[]).map(view => <button key={view} type="button" onClick={() => select(view)} className="rounded-xl border bg-card p-4 text-left sm:p-5 shadow-sm hover:bg-accent focus-visible:outline-2 focus-visible:outline-ring"><p className="text-sm text-muted-foreground">{labels[view]}</p><p className="mt-2 text-3xl font-semibold tabular-nums">{data.totals[view]}</p>{view === "converted" && <p className="mt-1 text-xs text-muted-foreground">{data.conversionPercent}% of {term("crm.enquiry.plural", "leads")} created in period</p>}</button>)}</div>
       <p className="text-sm text-muted-foreground">{`Salesperson filters use current record ownership. Partner and supervisor filters use saved introduction details. No recorded partner does not prove internal origin. Overdue follow-ups belong to the selected ${term("crm.enquiry.plural", "leads")} or ${term("crm.opportunity.plural", "deals")}, including work assigned to other users. ${term("crm.contact.singular", "Contact")}-only work is in ${term("crm.activity.singular", "Activity")} overview. ${term("crm.opportunity.singular", "A deal", "The {label}")} is covered when it has any directly linked open or in-progress ${term("crm.activity.singular", "activity")}.`}</p>
       <LeadBreakdown key={`leads:${params}:${data.dimensions.map(item => item.key).join(",")}`} params={params} revision={revision} dimensions={data.dimensions} onSelect={select} />

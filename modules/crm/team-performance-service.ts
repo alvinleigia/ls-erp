@@ -10,7 +10,7 @@ import { CrmError } from "./policy"
 import type { CrmExtensions, CrmExtensionQuery } from "./extensions"
 import type { SalesReportQuery } from "./sales-report-validation"
 import { teamPerformanceSchema, type TeamPerformanceQuery } from "./team-performance-validation"
-import { teamMetricKeys, teamMetricLabel, type TeamMetric, type TeamPerformanceRow, type TeamPerformanceRecord } from "./team-performance-contract"
+import { teamMetricKeys, teamMetricLabel, type TeamMetric, type TeamPerformanceCounts, type TeamPerformanceRow, type TeamPerformanceRecord } from "./team-performance-contract"
 import { createTermResolver } from "@/platform/terminology/resolver"
 import type { TermReader } from "@/platform/terminology/read"
 import { workScopeSql } from "./work-scope"
@@ -93,16 +93,31 @@ export function createTeamPerformanceService({ run, context, extensions, readTer
     ), ranked AS (SELECT *,CASE WHEN enquiries=0 THEN NULL ELSE round(converted::numeric/enquiries*100,2)::float8 END AS "conversionPercent" FROM stats)`
     return { cte, metadata: { ...c.metadata, canReadRoster, team } }
   }
-  const order = (q: TeamPerformanceQuery) => Prisma.sql`${Prisma.raw('"' + q.sort + '"')} ${Prisma.raw(q.order.toUpperCase())} NULLS LAST,name,id`
+  const order = (q: TeamPerformanceQuery, alias = "") => {
+    const prefix = alias ? alias + "." : ""
+    return Prisma.sql`${Prisma.raw(prefix + '"' + q.sort + '"')} ${Prisma.raw(q.order.toUpperCase())} NULLS LAST,${Prisma.raw(prefix + 'name')},${Prisma.raw(prefix + 'id')}`
+  }
   async function results(tx: Tx, c: Awaited<ReturnType<typeof prepare>>, q: TeamPerformanceQuery, exporting = false) {
-    const [{ total }] = await tx.$queryRaw<{ total: number }[]>(Prisma.sql`${c.cte} SELECT count(*)::int AS total FROM members`)
-    if (exporting) checkExportLimit(total)
     const sums = Prisma.join(teamMetricKeys.map(key => Prisma.sql`COALESCE(SUM(${Prisma.raw('"' + key + '"')}),0)::int AS ${Prisma.raw('"' + key + '"')}`))
-    const [totals] = await tx.$queryRaw<TeamPerformanceRow[]>(Prisma.sql`${c.cte} SELECT ${sums} FROM stats`)
-    const items = await tx.$queryRaw<TeamPerformanceRow[]>(Prisma.sql`${c.cte} SELECT * FROM ranked ORDER BY ${order(q)} LIMIT ${exporting ? CRM_EXPORT_LIMIT : q.pageSize} OFFSET ${exporting ? 0 : (q.page - 1) * q.pageSize}`)
-    const values = items.length ? await tx.$queryRaw<{ assignedUserId: string; currency: string; amount: string }[]>(Prisma.sql`${c.cte} SELECT f."assignedUserId",f.currency,SUM(f.amount)::text AS amount FROM facts f WHERE metric='pipeline' AND f."assignedUserId" IN (${Prisma.join(items.map(r => r.id))}) GROUP BY f."assignedUserId",f.currency ORDER BY f.currency`) : []
-    const totalValues = await tx.$queryRaw<{ currency: string; amount: string }[]>(Prisma.sql`${c.cte} SELECT currency,SUM(amount)::text AS amount FROM facts f JOIN members m ON m.id=f."assignedUserId" WHERE metric='pipeline' GROUP BY currency ORDER BY currency`)
-    return { ...c.metadata, ...page(items.map(row => ({ ...row, pipelineValues: values.filter(v => v.assignedUserId === row.id).map(({ currency, amount }) => ({ currency, amount })) })), total, q), totals: { ...totals, conversionPercent: conversion(totals), pipelineValues: totalValues } }
+    // Reuse one materialized source population for the page, full-selection
+    // totals and currency values. The previous five statements repeated RLS
+    // and source aggregation for every part of the same response.
+    const [result] = await tx.$queryRaw<{
+      items: TeamPerformanceRow[]; totals: TeamPerformanceCounts & { total: number };
+      pipelineValues: { currency: string; amount: string }[];
+    }[]>(Prisma.sql`${c.cte}, report_totals AS (SELECT count(*)::int AS total,${sums} FROM stats),
+      pipeline_currency AS (SELECT f."assignedUserId",f.currency,SUM(f.amount) AS amount FROM facts f JOIN members m ON m.id=f."assignedUserId" WHERE metric='pipeline' GROUP BY f."assignedUserId",f.currency),
+      pipeline_users AS (SELECT "assignedUserId",jsonb_agg(jsonb_build_object('currency',currency,'amount',amount::text) ORDER BY currency) AS values FROM pipeline_currency GROUP BY "assignedUserId"),
+      pipeline_totals AS (SELECT currency,SUM(amount)::text AS amount FROM pipeline_currency GROUP BY currency),
+      page_rows AS (SELECT r.*,COALESCE(v.values,'[]'::jsonb) AS "pipelineValues" FROM ranked r LEFT JOIN pipeline_users v ON v."assignedUserId"=r.id
+        ${exporting ? Prisma.sql`WHERE (SELECT total FROM report_totals)<=${CRM_EXPORT_LIMIT}` : Prisma.empty}
+        ORDER BY ${order(q, "r")} LIMIT ${exporting ? CRM_EXPORT_LIMIT : q.pageSize} OFFSET ${exporting ? 0 : (q.page - 1) * q.pageSize})
+      SELECT (SELECT to_jsonb(t) FROM report_totals t) AS totals,
+        (SELECT COALESCE(jsonb_agg(to_jsonb(r) ORDER BY ${order(q, "r")}),'[]'::jsonb) FROM page_rows r) AS items,
+        (SELECT COALESCE(jsonb_agg(to_jsonb(v) ORDER BY currency),'[]'::jsonb) FROM pipeline_totals v) AS "pipelineValues"`)
+    const { total, ...totals } = result.totals
+    if (exporting) checkExportLimit(total)
+    return { ...c.metadata, ...page(result.items, total, q), totals: { ...totals, conversionPercent: conversion(totals), pipelineValues: result.pipelineValues } }
   }
   const parse = (input: unknown) => { const split = extensions.splitQuery(input); return { q: teamPerformanceSchema.parse(split.core), extension: split.extension } }
   return {
@@ -114,9 +129,9 @@ export function createTeamPerformanceService({ run, context, extensions, readTer
         const key = query.choice === "partner" ? Prisma.sql`"introducedByCollaboratorId"` : Prisma.sql`"introductionSupervisorId"`
         const label = query.choice === "partner" ? Prisma.sql`"partnerName"||' ('||"partnerCode"||')'` : Prisma.sql`COALESCE("introductionSupervisorName",'Former supervisor')`
         const choices = Prisma.sql`${c.cte}, labels AS (SELECT DISTINCT ON (${key}) ${key} AS id,${label} AS name FROM facts f JOIN members m ON m.id=f."assignedUserId" WHERE ${key} IS NOT NULL ORDER BY ${key},f.id), choices AS (SELECT * FROM labels WHERE name ILIKE ${"%"+query.q+"%"} ${query.selectedId ? Prisma.sql`AND id=${query.selectedId}` : Prisma.empty})`
-        const [{ total }] = await tx.$queryRaw<{ total: number }[]>(Prisma.sql`${choices} SELECT count(*)::int AS total FROM choices`)
-        const items = await tx.$queryRaw<{ id: string; name: string }[]>(Prisma.sql`${choices} SELECT * FROM choices ORDER BY name,id LIMIT ${q.pageSize} OFFSET ${(q.page-1)*q.pageSize}`)
-        return page(items, total, q)
+        const [result] = await tx.$queryRaw<{ total: number; items: { id: string; name: string }[] }[]>(Prisma.sql`${choices}, choice_page AS (SELECT * FROM choices ORDER BY name,id LIMIT ${q.pageSize} OFFSET ${(q.page-1)*q.pageSize})
+          SELECT (SELECT count(*)::int FROM choices) AS total,(SELECT COALESCE(jsonb_agg(to_jsonb(p) ORDER BY name,id),'[]'::jsonb) FROM choice_page p) AS items`)
+        return page(result.items, result.total, q)
       })
     },
     teamPerformance(input: unknown) {
@@ -127,9 +142,10 @@ export function createTeamPerformanceService({ run, context, extensions, readTer
       const { q, extension } = parse(input)
       return run(requirements, async (tx, actor) => {
         const c = await prepare(tx, actor, q, extension)
-        const [{ total }] = await tx.$queryRaw<{ total: number }[]>(Prisma.sql`${c.cte} SELECT count(*)::int AS total FROM facts f JOIN members m ON m.id=f."assignedUserId" WHERE metric=${q.metric}`)
-        const items = await tx.$queryRaw<TeamPerformanceRecord[]>(Prisma.sql`${c.cte} SELECT f.id,f.title,f.kind,f."assignedUserId",m.name AS owner,f.status,f.currency,f.amount::text FROM facts f JOIN members m ON m.id=f."assignedUserId" WHERE metric=${q.metric} ORDER BY m.name,f.title,f.id LIMIT ${q.pageSize} OFFSET ${(q.page-1)*q.pageSize}`)
-        return page(items, total, q)
+        const [result] = await tx.$queryRaw<{ total: number; items: TeamPerformanceRecord[] }[]>(Prisma.sql`${c.cte}, selected_records AS (SELECT f.id,f.title,f.kind,f."assignedUserId",m.name AS owner,f.status,f.currency,f.amount::text FROM facts f JOIN members m ON m.id=f."assignedUserId" WHERE metric=${q.metric}),
+          record_page AS (SELECT * FROM selected_records ORDER BY owner,title,id LIMIT ${q.pageSize} OFFSET ${(q.page-1)*q.pageSize})
+          SELECT (SELECT count(*)::int FROM selected_records) AS total,(SELECT COALESCE(jsonb_agg(to_jsonb(p) ORDER BY owner,title,id),'[]'::jsonb) FROM record_page p) AS items`)
+        return page(result.items, result.total, q)
       })
     },
     exportTeamPerformance(input: unknown) {
