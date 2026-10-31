@@ -1,21 +1,35 @@
-## P13B4 invoice tax allocations - locally verified; staging release in progress
+## P13B4 invoice tax allocations - staging verified
 
-Tax-aware orders now use the shared invoice/payment/full-credit lifecycle with
-native frozen net/component portions. Actual active draft/posting reservations
-bound each new allocation; credits restore the original invoice's components.
-Every invoice version and full credit retain immutable native evidence linked
-to the accepted order. Existing gross obligations and commercial PDFs remain
-unchanged; statutory tax invoice/credit PDF issuance remains blocked pending P13C.
+Runtime 29d1a84 is READY on all four staging aliases, deployment
+dpl_Bs4gWPezw3JqX5RTuvmhTjq4tPiB. Migration history is 146. Tax-aware orders
+use the shared invoice/payment/full-credit lifecycle with native frozen net and
+component portions. Actual active draft/posting reservations bound new billing;
+credits restore the original invoice components. Each invoice event/version and
+full credit retains immutable evidence linked to the accepted order. Source
+amounts, existing gross obligations and commercial PDF archives remain unchanged.
 
-All 65 checks are verified across the main and focused reruns (57 other checks
-and eight native tax-invoice checks). Three browser flows, build and lint pass;
-desktop/mobile screenshots were inspected. The migration rehearsal verifies forced
-rollback and all 158 prior tables/policies; five reviewed billing functions are
-extended and other stored functions/triggers retained. The initially detected
-SQL CASE syntax issue was corrected before any successful migration application.
-Staging backup, migration and hosted verification are next. Production unchanged.
-See docs/INVOICE_TAX_ALLOCATIONS_P13B4.md. Accepted INR/charge-free pricing bounds
-remain; statutory eligibility, series and document issuance remain P13C.
+All 65 unique checks are verified across the main/focused reruns: 57 other
+regression/unit checks and eight native tax-invoice checks. Three browser flows,
+build and lint pass. Local and hosted desktop/mobile summaries were inspected.
+Hosted QA verifies partial/final totals, exact credit reversal, component-identical
+rebilling, foreign/cross-origin denial, frozen evidence after master archival,
+unchanged source snapshots and the statutory PDF gate. QA invoices are credited
+or cancelled and the order cancelled; temporary mapping/configuration is restored
+or archived. Immutable QA financial evidence remains; no money was collected.
+
+Migration rehearsal proves forced rollback and preservation of all 158 prior
+tables/policies. Five reviewed billing functions are extended; other functions
+and prior triggers are retained. The local SQL CASE syntax issue was corrected
+before successful application; no migration history was rewritten. A fresh
+encrypted archive passed decryption/hash and restore-list checks, not a full
+restore rehearsal. The owned localhost fixture was removed.
+
+Production aliases, GitHub main and the root production link remain unchanged.
+No Git push or production deployment occurred. See
+docs/INVOICE_TAX_ALLOCATIONS_P13B4.md. Approved INR/charge-free source bounds remain.
+Next: P13C statutory document types, registration/year series, required particulars
+and applicable electronic-invoicing controls. Tax-aware invoice/credit PDF issuance
+remains blocked; internal INV/CN references are not statutory identities.
 
 ## P13B3 quotation tax pricing and order acceptance - staging verified
 

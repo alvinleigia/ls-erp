@@ -85,3 +85,33 @@ flows. Verify exact final component remainders, edits/cancellation, full credit,
 payment reuse, negative access, forged evidence, concurrency, audit rollback and
 the statutory-document gate. Hosted tests use isolated staging QA through the
 ordinary authenticated APIs/UI; no fixture/seed is run against hosted databases.
+
+## Verified staging release - 2026-10-31
+
+Runtime `29d1a84` is READY on all four staging aliases, deployment
+`dpl_Bs4gWPezw3JqX5RTuvmhTjq4tPiB`. Migration history is 146. All 65 unique
+checks are verified across the main and focused reruns: 57 other regression/unit
+checks and eight native tax-invoice checks. Three browser flows, build and
+targeted lint passed. Local and hosted desktop/mobile summaries were inspected.
+
+Hosted isolated QA verified exact partial/final net and tax totals, full credit
+of the original allocation, identical component restoration on rebilling,
+statutory PDF denial, foreign-tenant denial and frozen evidence after master
+archival. Preparation/pricing UI and source snapshot preservation were retained.
+QA posted invoices were credited, the replacement draft and order cancelled,
+and temporary mapping/configuration restored or archived. No money was collected;
+immutable QA financial history remains.
+
+The staging cutover preserved all 158 preceding tables and existing policies.
+Five reviewed billing functions were extended; other functions and prior triggers
+were retained. The initial SQL CASE syntax error was caught in local rehearsal
+and corrected before successful application. No migration history was rewritten.
+A fresh 2,593,860-byte custom backup passed encryption/decryption hash and archive
+restore-list verification, not a full restore rehearsal. The owned localhost
+fixture was removed after testing.
+
+The implementation and verification notes are committed locally. No Git push or
+production deployment occurred. Production aliases, GitHub main and the root
+Vercel production link remain unchanged. Next is P13C statutory document types,
+registration/financial-year numbering, mandatory particulars and applicable
+electronic-invoicing controls; this release does not enable statutory issuance.
