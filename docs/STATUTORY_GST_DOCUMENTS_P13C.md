@@ -139,8 +139,28 @@ Desktop/mobile signing screens and all four PDF cases were visually inspected.
 The browser test's initial Unicode label mismatch and off-screen dropdown action
 were corrected in its locators/scroll handling. The local migration archive-path
 syntax and inherited-office lookup errors were corrected before the successful
-fresh rehearsal. No hosted migration history was rewritten. Staging backup,
-migration and hosted verification are in progress; production remains unchanged.
+fresh rehearsal. No hosted migration history was rewritten.
+
+Runtime `63abfa165b94eeac4ecab2e908910c24707c6c5d` is READY on all four staging
+aliases, deployment `dpl_4tGHTPosMN7jVUbf9efxeWRw4CDW`. Staging migration history
+is 147; all 160 preceding tables/policies and prior functions were preserved.
+The fresh 2,628,367-byte custom backup passed encryption/decryption hash and
+archive restore-list checks, not a full restore rehearsal.
+
+Hosted isolated QA verified private prepared/signed storage, exact signed-file
+downloads, preview without numbering, reservation replay, linked full credit,
+historical acknowledgement, unconnected electronic-signing denial, foreign-tenant
+and cross-origin denial, and unchanged quotation snapshots. Desktop/mobile screens
+were inspected. Signed downloads remain readable after configuration archival.
+Both QA invoices were credited, the order cancelled, series disabled, office mapping
+and templates restored, and temporary tax/contact configuration archived. No money
+was collected; immutable QA document/financial history remains. The owned local
+fixture was removed.
+
+GitHub main remains `4546cb296407147964334a4d07d4020444a5c63d`; all three production
+aliases and the root Vercel production link are unchanged. No Git push or production
+deployment occurred. Electronic provider integrations remain pending and must use
+tenant-specific connections, not a global provider configuration.
 
 ## Primary references
 

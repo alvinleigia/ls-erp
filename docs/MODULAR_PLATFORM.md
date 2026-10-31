@@ -1,19 +1,35 @@
-## P13C statutory documents - local verification complete
+## P13C statutory documents - manual signing staging verified
 
-India localization now supports registration/year numbering, frozen statutory
-reviews, unissued-number voiding, required PDF sections, immutable print archives
-and attested manual-signature completion. Full credits reference their completed
-original. No current-master enrichment, industry dependency or second debt was
-introduced. Both archives and frozen branding are included in recovery inventory.
-Electronic signing remains gated pending verified tenant-specific provider
-connections; required/unassessed IRP cases and other unsupported GST cases remain
-blocked. Provider choice must not become global across tenants.
+Runtime 63abfa1 is READY on all four staging aliases, deployment
+dpl_4tGHTPosMN7jVUbf9efxeWRw4CDW. Migration history is 147. India localization
+supports registration/year numbering, immutable source reviews, reserved-number
+voiding, required template sections, print archives and attested manual-signature
+completion. Full statutory credits retain the completed original reference/date
+and exact frozen values. Both archives and branding are in recovery inventory.
+There is no industry dependency, current-master enrichment or second debt.
 
-All 38 unit/native/recovery checks, four browser flows, optimized build and lint
-pass. Desktop/mobile screens and the four PDF cases were inspected. Additive
-migration 147 preserves all 160 preceding tables/policies/functions/triggers and
-passed forced rollback. Staging backup and release verification are in progress;
-no production changes or Git push. See docs/STATUTORY_GST_DOCUMENTS_P13C.md.
+All 38 unit/native/recovery checks, four browser flows, optimized build, TypeScript
+and lint pass. Desktop/mobile screens and four PDF cases were visually inspected.
+Hosted QA verified exact signed private downloads, no preview allocation, request
+replay, linked full credit, historical acknowledgement, foreign/cross-origin denial
+and unconnected electronic-signing denial. Both QA invoices were credited, the
+order cancelled, series disabled, mapping/templates restored and temporary tax/
+contact configuration archived. No money was collected; immutable QA evidence stays.
+
+Migration rehearsal proves rollback and preservation of all 160 preceding tables,
+policies, functions and triggers. The staging cutover preserved prior rows/policies
+and functions. A fresh 2,628,367-byte encrypted custom backup passed decryption/hash
+and restore-list checks, not a full restore rehearsal. Local archive-path syntax
+and inherited-office lookup issues were fixed before the successful fresh rehearsal;
+browser label/scroll handling was corrected. No hosted migration history rewrite.
+The owned local fixture was removed.
+
+Electronic signing and IRP integrations remain pending. Different tenants may use
+different providers; connections/credentials must be tenant-specific, with company
+binding where required. Unsupported cases remain blocked. See
+docs/STATUTORY_GST_DOCUMENTS_P13C.md for supported scope and the user workflow.
+Production aliases, GitHub main and the root production link remain unchanged.
+No Git push or production deployment occurred.
 
 ## P13B4 invoice tax allocations - staging verified
 
