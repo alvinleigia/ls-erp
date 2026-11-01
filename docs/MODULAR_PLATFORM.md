@@ -13,7 +13,7 @@ pending migrations, retaining the existing controlled release process. Project,
 branch, target, database-reference, connection-mode and immutable-history checks
 fail closed. No new business migration or hosted seeding is introduced.
 
-Local acceptance passes ten migration/environment guard checks, real logins for
+Local acceptance passes eleven migration/environment guard checks, real logins for
 administrator/managers/staff/isolation tenant, report counts, managed-team and
 cross-tenant boundaries, non-bypass runtime RLS, chart rendering and mobile
 containment. Restarting Docker and repeating setup preserve all rows in thirteen

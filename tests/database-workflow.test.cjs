@@ -2,7 +2,7 @@
 const { test } = require('node:test')
 const assert = require('node:assert/strict')
 const { createHash } = require('node:crypto')
-const { localUrl, hostedTarget, hostedUrl, targets, migrations, checkHistory } = require('../scripts/database-workflow.cjs')
+const { localUrl, hostedTarget, hostedUrl, targets, migrations, migrationChecksums, checkHistory } = require('../scripts/database-workflow.cjs')
 const { cleanEnv } = require('../scripts/local-demo.cjs')
 const env = { VERCEL_PROJECT_ID: targets.staging.project, VERCEL_ENV: 'production', VERCEL_GIT_COMMIT_REF: 'staging' }
 const pool = (ref = targets.staging.ref) => `postgresql://postgres.${ref}:private@aws-1-ap-south-1.pooler.supabase.com:5432/postgres`
@@ -47,6 +47,15 @@ test('the complete repository history has an immutable file and line-ending vari
   assert(history.length >= 147)
   assert.equal(new Set(history.map(file => file.name)).size, history.length)
   assert(history.every(file => file.checksums.size >= 1 && [...file.checksums].every(sum => /^[a-f0-9]{64}$/.test(sum))))
+})
+test('Linux checkout verifies the same twelve approved historical newline encodings without accepting SQL edits', () => {
+  const historical = require('../docs/release-source-p13.json').migrations.filter(file => file.sha256LfFinalCrlf)
+  assert.equal(historical.length, 12)
+  for (const file of historical) {
+    const sql = require('node:fs').readFileSync(`prisma/migrations/${file.name}/migration.sql`, 'utf8').replace(/\r\n/g, '\n')
+    assert(migrationChecksums(file.name, sql).has(file.sha256LfFinalCrlf))
+    assert(!migrationChecksums(file.name, sql + '-- changed SQL\n').has(file.sha256LfFinalCrlf))
+  }
 })
 test('local app subprocesses remove inherited hosted credentials and delivery settings', () => {
   const prior = { SUPABASE_SECRET_KEY: process.env.SUPABASE_SECRET_KEY, VERCEL_PROJECT_ID: process.env.VERCEL_PROJECT_ID }

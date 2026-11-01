@@ -80,7 +80,8 @@ have migration/DDL privileges; it must never be a public environment variable.
 
 History checks reject unfinished migrations, edited SQL, missing migration files,
 duplicate successes and gaps before already-applied migrations. Windows/Linux line
-ending variants are accepted without accepting SQL changes. Prisma's migration
+ending variants use the existing release manifest, including its twelve verified
+historical final-newline encodings, without accepting SQL changes. Prisma's migration
 advisory lock coordinates concurrent deployment attempts; failures stop the build.
 There is no automatic baselining, resolve-as-applied or destructive reset.
 

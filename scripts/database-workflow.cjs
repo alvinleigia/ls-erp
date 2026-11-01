@@ -28,13 +28,22 @@ function hostedUrl(value, target, migration = false) {
   return url
 }
 const hash = value => createHash('sha256').update(value).digest('hex')
+const historicalNewlines = new Map(require('../docs/release-source-p13.json').migrations.filter(file => file.sha256LfFinalCrlf).map(file => [file.name, file]))
+function migrationChecksums(name, sql) {
+  const lf = sql.replace(/\r\n/g, '\n')
+  const sums = new Set([hash(sql), hash(lf), hash(lf.replace(/\n/g, '\r\n'))])
+  // Reuse the existing release manifest's twelve verified historical final-
+  // newline encodings. Prove the unchanged canonical SQL before accepting one.
+  const historical = historicalNewlines.get(name)
+  if (historical && lf.endsWith('\n') && hash(lf) === historical.sha256Lf && hash(lf.slice(0, -1) + '\r\n') === historical.sha256LfFinalCrlf) sums.add(historical.sha256LfFinalCrlf)
+  return sums
+}
 function migrations(directory = path.join(root, 'prisma/migrations')) {
   return fs.readdirSync(directory, { withFileTypes: true }).filter(entry => entry.isDirectory()).sort((a, b) => a.name.localeCompare(b.name, 'en')).map(entry => {
     const sql = fs.readFileSync(path.join(directory, entry.name, 'migration.sql'), 'utf8')
     // Windows checkouts and Linux CI differ only in line endings. Accept both
     // byte forms; any SQL/content change still fails the immutable-history check.
-    const lf = sql.replace(/\r\n/g, '\n')
-    return { name: entry.name, checksums: new Set([hash(sql), hash(lf), hash(lf.replace(/\n/g, '\r\n'))]) }
+    return { name: entry.name, checksums: migrationChecksums(entry.name, sql) }
   })
 }
 function checkHistory(files, history) {
@@ -79,4 +88,4 @@ async function migrate(url, { apply = false, env = process.env } = {}) {
   console.log(`Database migration history verified: ${files.length} applied; ${pending.length} newly applied.`)
   return { total: files.length, applied: pending.length }
 }
-module.exports = { root, targets, localUrl, hostedTarget, hostedUrl, migrations, checkHistory, migrate, run }
+module.exports = { root, targets, localUrl, hostedTarget, hostedUrl, migrationChecksums, migrations, checkHistory, migrate, run }
