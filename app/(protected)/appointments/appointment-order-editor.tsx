@@ -1,5 +1,4 @@
 "use client"
-import { InfoHelp } from "@/components/erp/info-help"
 import { useCreationOfficeSnapshot } from "@/platform/companies/creation-snapshot"
 import { useBusinessModules } from "@/platform/module-provider"
 
@@ -616,10 +615,9 @@ export function AppointmentOrderEditor({ mode, appointmentId }: AppointmentOrder
         />
       </div>
 
-      <Section title="Schedule preview">
-        <InfoHelp title="Service scheduling" className="mb-3">
-          Services are scheduled sequentially from the selected start time; wait gaps appear when a later slot is needed.
-        </InfoHelp>
+      <Section title="Schedule preview" help={<div><p className="font-medium">Service scheduling</p>Services are scheduled sequentially from the selected start time; wait gaps appear when a later slot is needed.
+        </div>}>
+
         {schedulePreview.length ? (
           <div className="space-y-2">
             {schedulePreview.map((slot) => (

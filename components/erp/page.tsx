@@ -17,13 +17,15 @@ export function Surface({ children, className }: { children: ReactNode; classNam
   return <div className={cn("min-w-0 space-y-4 rounded-xl border bg-card p-4 shadow-sm sm:p-5", className)}>{children}</div>
 }
 
-export function PageHeader({ title, description, descriptionDisplay = "help", backHref, backLabel = "Back", actions, badge, backLink }: {
-  title: ReactNode; description?: ReactNode; descriptionDisplay?: "help" | "inline"; backHref?: string; backLabel?: string; actions?: ReactNode; badge?: ReactNode; backLink?: ReactNode;
+export function PageHeader({ title, description, descriptionDisplay = "help", help, backHref, backLabel = "Back", actions, badge, backLink }: {
+  title: ReactNode; description?: ReactNode; descriptionDisplay?: "help" | "inline"; help?: ReactNode; backHref?: string; backLabel?: string; actions?: ReactNode; badge?: ReactNode; backLink?: ReactNode;
 }) {
+  const hasHelp = Boolean(help || description && descriptionDisplay === "help")
+  const information = <>{descriptionDisplay === "help" && description && <div>{description}</div>}{help && <div className="space-y-3">{help}</div>}</>
   return <header className="space-y-4">
     {backLink || (backHref && <Link href={backHref} className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" aria-hidden="true" />{backLabel}</Link>)}
     <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-      <div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><div className="flex min-w-0 max-w-full items-center gap-2"><h1 className="min-w-0 break-words text-2xl font-semibold tracking-tight">{title}</h1>{description && descriptionDisplay === "help" && <InfoHelp title={title}>{description}</InfoHelp>}</div>{badge}</div>{description && descriptionDisplay === "inline" && <div className="mt-2 max-w-3xl text-sm text-muted-foreground">{description}</div>}</div>
+      <div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><div className="flex min-w-0 max-w-full items-center gap-2"><h1 className="min-w-0 break-words text-2xl font-semibold tracking-tight">{title}</h1>{hasHelp && <InfoHelp title={title}>{information}</InfoHelp>}</div>{badge}</div>{description && descriptionDisplay === "inline" && <div className="mt-2 max-w-3xl text-sm text-muted-foreground">{description}</div>}</div>
       {actions && <div className="flex flex-wrap items-center justify-end gap-2">{actions}</div>}
     </div>
   </header>

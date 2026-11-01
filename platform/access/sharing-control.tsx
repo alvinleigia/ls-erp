@@ -1,5 +1,4 @@
 "use client"
-import { InfoHelp } from "@/components/erp/info-help"
 import * as React from "react"
 import { useSession } from "next-auth/react"
 import { toast } from "sonner"
@@ -39,14 +38,14 @@ function SharingDialog({ resource, id, onClose }: { resource: string; id: string
       toast.success("Record sharing saved."); onClose()
     } catch (error) { setError((error as Error).message) } finally { setSaving(false) }
   }
-  return <EditPanel open title="Record sharing" description={settings?.title || "Manage visibility and shared access."} onClose={onClose} onSubmit={() => void save()} saving={saving} disabled={!settings} error={error} saveLabel="Save sharing" dirty={!!settings && JSON.stringify(settings) !== baseline.current}>
+  return <EditPanel open title="Record sharing" description={settings?.title || "Manage visibility and shared access."} onClose={onClose} onSubmit={() => void save()} saving={saving} disabled={!settings} error={error} saveLabel="Save sharing" dirty={!!settings && JSON.stringify(settings) !== baseline.current} help={(settings) && <div><p className="font-medium">Sharing and linked records</p>Profiles still control which actions are permitted. Access from user and team shares is combined. Restrictions on linked source records still apply. Sales order sharing also governs its receivables, payments and reservations.</div>}>
     {error && <Button type="button" variant="link" size="sm" onClick={() => void load().catch(error => setError(error.message))}>Reload sharing settings</Button>}
     {!settings && !error && <p>Loading sharing...</p>}
     {settings && <fieldset disabled={saving} className="min-w-0 space-y-5">
       {settings.inherited && <p className="text-sm">Sharing is inherited from the parent project. Changes apply to that project and its subprojects.</p>}
       <FormField id="record-visibility" label="Visibility"><Select id="record-visibility" value={settings.restricted ? "RESTRICTED" : "NORMAL"} onValueChange={value => setSettings({ ...settings, restricted: value === "RESTRICTED" })}><option value="NORMAL">Normal access</option><option value="RESTRICTED">Restricted access</option></Select></FormField>
       <p className="text-sm text-muted-foreground">Normal keeps existing access and adds the recipients below. Restricted allows responsible staff, selected users or teams, and tenant administrators. Tenant-wide manager access does not bypass Restricted visibility.</p>
-      <InfoHelp title="Sharing and linked records">Profiles still control which actions are permitted. Access from user and team shares is combined. Restrictions on linked source records still apply. Sales order sharing also governs its receivables, payments and reservations.</InfoHelp>
+
       <div className="grid min-w-0 gap-3 sm:grid-cols-2"><FormField id="sharing-kind" label="Share with"><Select id="sharing-kind" value={kind} onValueChange={value => { setKind(value as Grant["kind"]); setTarget(""); setName("") }}><option value="USER">User</option><option value="TEAM">Team</option></Select></FormField>
       <FormField id="sharing-recipient" label={kind === "USER" ? "User" : "Team"}><RecordSelect key={kind} id="sharing-recipient" endpoint={kind === "USER" ? "/api/users" : "/api/teams"} value={target} selected={target ? { value: target, label: name } : undefined} onChange={(value, option) => { setTarget(value); setName(option?.label || value) }} /></FormField>
       <FormField id="sharing-level" label="Access"><Select id="sharing-level" value={level} onValueChange={value => setLevel(value as Grant["level"])}><option value="READ">Read only</option><option value="EDIT">Read and edit</option></Select></FormField>

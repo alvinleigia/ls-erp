@@ -1,5 +1,4 @@
 "use client"
-import { InfoHelp } from "@/components/erp/info-help"
 import * as React from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
@@ -47,8 +46,8 @@ export function CollaboratorList() {
   // eslint-disable-next-line react-hooks/incompatible-library
   const table = useReactTable({ data: data.items, columns, getCoreRowModel: getCoreRowModel(), manualPagination: true, rowCount: data.total, state: { pagination: { pageIndex: query.page - 1, pageSize: query.pageSize } }, onPaginationChange: updater => setQuery(previous => { const next = typeof updater === "function" ? updater({ pageIndex: previous.page - 1, pageSize: previous.pageSize }) : updater; return { ...previous, page: next.pageSize !== previous.pageSize ? 1 : next.pageIndex + 1, pageSize: next.pageSize } }) })
   return <div className={pageClass}>
-    <PageHeader title="External collaborators" description="Keep partners and their internal supervisors separate from employee profiles." actions={<Button asChild><Link href={`${base}/new`}>New collaborator</Link></Button>} />
-    <InfoHelp title="External collaborator directory">Directory entries do not create a login or grant record access. Supervisor assignment does not share the supervisor&apos;s permissions.</InfoHelp>
+    <PageHeader title="External collaborators" description="Keep partners and their internal supervisors separate from employee profiles." actions={<Button asChild><Link href={`${base}/new`}>New collaborator</Link></Button>}  help={<div><p className="font-medium">External collaborator directory</p>Directory entries do not create a login or grant record access. Supervisor assignment does not share the supervisor&apos;s permissions.</div>}/>
+
     <Surface><div className="flex flex-wrap gap-3"><Input aria-label="Search collaborators" placeholder="Search collaborators..." value={query.q} onChange={event => setQuery({ ...query, q: event.target.value, page: 1 })} className="min-w-0 flex-1 basis-48" /><Select aria-label="Collaborator status" value={query.status} onValueChange={status => setQuery({ ...query, status, page: 1 })}><option value="active">Active</option><option value="archived">Archived</option><option value="all">All statuses</option></Select></div>
       {error && <p role="alert" className="text-destructive">{error}</p>}<DataTable table={table} loading={loading} emptyMessage="No collaborators in this selection." /><TablePagination table={table} totalRows={data.total} loading={loading} />
     </Surface>

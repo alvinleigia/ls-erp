@@ -1,5 +1,4 @@
 "use client"
-import { InfoHelp } from "@/components/erp/info-help"
 
 import * as React from "react"
 import { PageHeader, pageClass, Surface, Filters } from "@/components/erp/page"
@@ -310,7 +309,7 @@ export default function DashboardPage() {
 
   return (
     <div className={`${pageClass} [contain:inline-size]`}>
-      <PageHeader title="Dashboard" description="Business activity, bookings and operational summaries." />
+      <PageHeader title="Dashboard" description="Business activity, bookings and operational summaries."  help={(!(loading || modulesLoading)) && (!(error)) && (summary) && (Object.keys(attributionQuery(attribution)).length > 0) && <div><p className="font-medium">Dashboard filters</p>Sales filters apply to CRM and document widgets and project sales counts. Operational and project-directory totals keep their own scope. User type follows the current sales owner or activity assignee; partner origin follows saved source evidence.</div>}/>
       <Surface>
         <div className="flex flex-wrap items-center gap-3">
           {!modulesLoading && hasPeriod && <>
@@ -336,7 +335,7 @@ export default function DashboardPage() {
           <p className="font-medium">No dashboard summaries available for your current modules.</p>
           <p className="text-sm text-muted-foreground">Open a module from the sidebar to get started.</p>
         </Surface>}
-        {Object.keys(attributionQuery(attribution)).length > 0 && <InfoHelp title="Dashboard filters">Sales filters apply to CRM and document widgets and project sales counts. Operational and project-directory totals keep their own scope. User type follows the current sales owner or activity assignee; partner origin follows saved source evidence.</InfoHelp>}
+
         {summary.salesFilters.omitted.map(message => <p key={message} role="status" className="text-sm text-muted-foreground">{message}</p>)}
         {hasSales && <SalesWidgets data={summary.sales} settings={settings} context={summary.salesFilters} />}
         {headerCards.length > 0 && <div className="grid gap-3 sm:grid-cols-[repeat(auto-fit,minmax(14rem,1fr))]">

@@ -1,5 +1,4 @@
 "use client"
-import { InfoHelp } from "@/components/erp/info-help"
 
 import * as React from "react"
 import { ReloadDraft } from "@/components/erp/reload-draft"
@@ -54,7 +53,7 @@ export function ParticipantEditor({ endpoint, sourceVersion, onSaved, labels = d
   }
   function close() { setEditing(false); setConflict(false); setChoice(null); setError("") }
   return <Section title="Participants" description="Customer roles for this transaction. These roles do not grant system access or ownership shares."
-    actions={data?.canEdit && <Button type="button" variant="outline" onClick={() => { setDraft(draftRows(data)); setConflict(false); setError(""); setEditing(true) }}>Edit participants</Button>}>
+    actions={data?.canEdit && <Button type="button" variant="outline" onClick={() => { setDraft(draftRows(data)); setConflict(false); setError(""); setEditing(true) }}>Edit participants</Button>} help={(data) && <div><p className="font-medium">Transaction participants</p>The main customer follows the source contact/business. Additional details stay as saved until explicitly refreshed. New quotation revisions copy these participants; saved orders keep their selected revision.</div>}>
     {!editing && error && <p role="alert" className="text-sm text-destructive">{error} <Button variant="link" onClick={() => setReload(value => value + 1)}>Retry</Button></p>}
     {!data && !error && <p>Loading participants...</p>}
     {data && <div className="space-y-3">{[...data.primary, ...data.participants].map(row => <div key={participantKey(row)} className="min-w-0 rounded-md border p-4 text-sm">
@@ -62,7 +61,7 @@ export function ParticipantEditor({ endpoint, sourceVersion, onSaved, labels = d
       {(row.party.email || row.party.phone) && <p className="mt-1 break-words">{[row.party.email, row.party.phone].filter(Boolean).join(" · ")}</p>}
       {"available" in row && !row.available && <p className="mt-1 text-muted-foreground">Saved selection. Unavailable for a new selection or refresh.</p>}
     </div>)}{!data.participants.length && <p className="text-sm text-muted-foreground">No additional participants.</p>}
-    <InfoHelp title="Transaction participants">The main customer follows the source contact/business. Additional details stay as saved until explicitly refreshed. New quotation revisions copy these participants; saved orders keep their selected revision.</InfoHelp></div>}
+    </div>}
     {data && editing && <EditPanel open title="Edit participants" description="Add customers or representatives. Removing a row does not delete the contact or business." onClose={close} onSubmit={save} saving={saving} dirty={dirty} error={error} disabled={!dirty || conflict} saveLabel="Save participants"
       footerActions={conflict && <ReloadDraft label="Reload saved participants" disabled={saving} onReload={() => { close(); setReload(value => value + 1) }} />}>
       {draft.map((row, index) => <div key={`${index}:${row.party.kind}:${row.party.id}`} className="space-y-3 rounded-md border p-4">

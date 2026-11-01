@@ -9,6 +9,10 @@ import { businessModules, moduleKeys, moduleChangeProblem, moduleAllowanceProble
 
 type Module = { key: BusinessModuleKey; parent?: string; name: string; description: string; allowed: boolean; enabled: boolean; href: string }
 
+export function ModuleActivationHelp({ platform = false }: { platform?: boolean }) {
+  return <InfoHelp title="Module activation">{platform ? "Allow modules for this tenant. Newly allowed modules start enabled when their dependencies are enabled. The tenant administrator can switch them off." : "Enable or disable the modules allowed by your platform administrator. Your data is kept when a module is disabled."}</InfoHelp>
+}
+
 export function ModuleControls({ tenantId }: { tenantId?: string }) {
   const platform = !!tenantId
   const endpoint = tenantId ? `/api/tenants/${encodeURIComponent(tenantId)}/modules` : "/api/modules"
@@ -44,7 +48,6 @@ export function ModuleControls({ tenantId }: { tenantId?: string }) {
     finally { setSaving(false) }
   }
   return <div className="space-y-4">
-    <InfoHelp title="Module activation">{platform ? "Allow modules for this tenant. Newly allowed modules start enabled when their dependencies are enabled. The tenant administrator can switch them off." : "Enable or disable the modules allowed by your platform administrator. Your data is kept when a module is disabled."}</InfoHelp>
     {loading && <p>Loading modules...</p>}
     {error && <p role="alert" className="text-destructive">{error}</p>}
     {modules.map(module => {

@@ -1,5 +1,4 @@
 "use client"
-import { InfoHelp } from "@/components/erp/info-help"
 import { useCallback, useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -43,7 +42,7 @@ export function OrderReceivables({ orderId, renderFollowUps }: { orderId: string
       setAction(null); await load()
     } catch (e) { setError((e as Error).message) } finally { setBusy(false) }
   }
-  return <Section title="Receivables"><div className="space-y-4">
+  return <Section title="Receivables" help={(data) && (data.account) && <div><p className="font-medium">Payment allocation</p>Payments cover the earliest due balance first; unscheduled amounts follow. Blank due dates are excluded from overdue totals.</div>}><div className="space-y-4">
     <p className="text-sm text-muted-foreground">Track amounts owed against the saved order. Record payments received elsewhere; this does not collect money or issue a tax invoice.</p>
     <div className="flex flex-wrap gap-2"><Button variant="outline" disabled={busy} onClick={() => { setError(""); load().catch(e => { setData(undefined); setError(e.message) }) }}>Refresh receivables</Button>{data?.canOpen && <Button onClick={() => open("open")}>Open receivables</Button>}{data?.canRecord && <Button onClick={() => open("record")}>Record payment</Button>}</div>
     {error && !action && <p role="alert" className="text-destructive">{error}</p>}
@@ -54,7 +53,7 @@ export function OrderReceivables({ orderId, renderFollowUps }: { orderId: string
         {data.status === "CANCELLED" && <p>Order cancelled. The schedule and payment history are retained; no balance is due.</p>}
         {renderFollowUps?.(data.account.version)}
         <div className="overflow-x-auto"><table className="w-full text-left text-sm"><caption className="pb-3 text-left font-medium">Payment schedule</caption><thead><tr>{["Description", "Due date", "Amount", "Received", "Balance"].map(h => <th key={h} className="p-2">{h}</th>)}</tr></thead><tbody>{data.lines.map(l => <tr key={l.id} className="border-t"><td className="min-w-32 p-2">{l.label}</td><td className="whitespace-nowrap p-2">{l.dueOn ? formatDateOnly(l.dueOn.slice(0, 10)) : "Unscheduled"}</td><td className="whitespace-nowrap p-2">{money(l.amount)}</td><td className="whitespace-nowrap p-2">{money(l.paid)}</td><td className="whitespace-nowrap p-2">{data.status === "CANCELLED" ? "Cancelled" : money(l.outstanding)}</td></tr>)}</tbody></table></div>
-        <InfoHelp title="Payment allocation">Payments cover the earliest due balance first; unscheduled amounts follow. Blank due dates are excluded from overdue totals.</InfoHelp>
+
         {data.canReadPayments && <div className="space-y-3"><h3 className="font-medium">Payment history</h3>{!data.items.length && <p>No payments recorded.</p>}{data.items.map(p => <article key={p.id} className="space-y-2 rounded-lg border p-4" aria-label={`Payment ${p.reference || p.id}`}><div className="flex flex-wrap items-start justify-between gap-3"><div className="min-w-0 break-words"><p className="font-medium">{money(p.amount)} · {methods[p.method as keyof typeof methods]}</p><p>{formatDateOnly(p.receivedOn.slice(0, 10))} · {p.reference || "No reference"}</p><p className="text-sm text-muted-foreground">Recorded by {p.actorName} · {formatDateTime(p.createdAt)}</p></div>{p.status === "POSTED" && data.canReverse && <Button variant="outline" onClick={() => open("reverse", p)}>Correct or refund</Button>}</div>{p.note && <p className="whitespace-pre-wrap break-words text-sm">{p.note}</p>}{p.reversal && <p className="break-words text-sm">{p.reversal.kind === "REFUND" ? "Full refund recorded" : "Entry corrected"} · {formatDateOnly(p.reversal.effectiveOn.slice(0, 10))} · {p.reversal.actorName}<br />{p.reversal.reason}{p.reversal.reference && ` · ${p.reversal.reference}`}</p>}{modules.can("paymentDocuments.read")&&<><Button variant="outline" onClick={()=>setReceiptPayment(current=>current===p.id?undefined:p.id)}>{receiptPayment===p.id?"Hide receipt documents":"Receipt documents"}</Button>{receiptPayment===p.id&&<SourceDocuments key={`${p.id}-${p.status}`} endpoint={`/api/payment-receipts/${p.id}/documents`} permissionResource="paymentDocuments" title="Payment receipt documents" description="Issue a receipt for this recorded payment. A receipt does not collect money or change the balance."/>}</>}</article>)}<Pagination {...data} onPageChange={setPage} label="Payments pagination" /></div>}
       </>}
     </>}

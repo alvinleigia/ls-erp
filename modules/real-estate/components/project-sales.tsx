@@ -1,5 +1,4 @@
 "use client"
-import { InfoHelp } from "@/components/erp/info-help"
 import { useTerminology, useTerminologyReader } from "@/platform/terminology/provider"
 import { useBusinessModules } from "@/platform/module-provider"
 import * as React from "react"
@@ -36,7 +35,7 @@ export function ProjectActivities({ project }: { project: Project }) {
   const { enabled, can } = useBusinessModules()
   const query = new URLSearchParams({ projectId: project.parentId || project.id, ...(project.parentId ? { subprojectId: project.id } : {}) }).toString()
   if (!enabled("realEstate") || !can("activities.read")) return null
-  return <WorkList key={query} extensionQuery={query} allowCreate={false} initialScope="visible" initialState="all" guidance={<InfoHelp title="Project activities">{term("crm.enquiry.singular", "Schedule site visits as meetings and follow-ups as calls from a linked enquiry", "Schedule site visits as meetings and follow-ups as calls from a linked {label}") + " " + term("crm.opportunity.singular", "or opportunity.", "or {label}.")}</InfoHelp>} />
+  return <WorkList key={query} extensionQuery={query} allowCreate={false} initialScope="visible" initialState="all" guidance={<>{term("crm.enquiry.singular", "Schedule site visits as meetings and follow-ups as calls from a linked enquiry", "Schedule site visits as meetings and follow-ups as calls from a linked {label}") + " " + term("crm.opportunity.singular", "or opportunity.", "or {label}.")}</>} />
 }
 function RelatedOpportunities({ query }: { query: string }) {
   const readTerm = useTerminologyReader()

@@ -1,5 +1,4 @@
 "use client"
-import { InfoHelp } from "@/components/erp/info-help"
 import { useCallback, useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -43,8 +42,8 @@ export function OrderReservations({ orderId }: { orderId: string }) {
       setAction(null); await load()
     } catch (e) { setError((e as Error).message) } finally { setBusy(false) }
   }
-  return <Section title="Unit reservations"><div className="space-y-4">
-    <InfoHelp title="Unit reservations">Reserve unique units from this order’s saved quotation. Holds expire automatically. Allocation requires a confirmed order and keeps the unit unavailable until explicitly released or the order is cancelled. No payment or stock movement is recorded.</InfoHelp>
+  return <Section title="Unit reservations" help={<div><p className="font-medium">Unit reservations</p>Reserve unique units from this order’s saved quotation. Holds expire automatically. Allocation requires a confirmed order and keeps the unit unavailable until explicitly released or the order is cancelled. No payment or stock movement is recorded.</div>}><div className="space-y-4">
+
     <Button variant="outline" disabled={busy} onClick={() => { setError(""); load().catch(e => { setData(undefined); setError(e.message) }) }}>Refresh reservations</Button>
     {error && !action && <p role="alert" className="text-destructive">{error}</p>}
     {data && <>

@@ -1,5 +1,4 @@
 "use client"
-import { InfoHelp } from "@/components/erp/info-help"
 import * as React from "react"
 import { ReloadDraft } from "@/components/erp/reload-draft"
 import { Button } from "@/components/ui/button"
@@ -51,10 +50,10 @@ export function ParticipantInformationEditor({ endpoint, sourceVersion, onSaved 
     } catch (e) { setError((e as Error).message) } finally { setSaving(false) }
   }
   return <Section title={data?.configuration.definition.title || "Customer details"} description="Correspondence for this transaction. Saving here does not change the contact or business directory."
-    actions={data?.canEdit && <Button variant="outline" onClick={() => { setDraft(records(data)); setEditing(true); setConflict(false); setError(""); setErrors({}) }}>Edit customer details</Button>}>
+    actions={data?.canEdit && <Button variant="outline" onClick={() => { setDraft(records(data)); setEditing(true); setConflict(false); setError(""); setErrors({}) }}>Edit customer details</Button>} help={(data) && <div><p className="font-medium">Participant details</p>Drafts may be incomplete. Required fields are checked against the saved quotation when an order is confirmed.</div>}>
     {!editing && error && <p role="alert" className="text-sm text-destructive">{error}<Button variant="link" onClick={() => setReload(v => v + 1)}>Retry</Button></p>}
     {!data && !error && <p>Loading customer details...</p>}
-    {data && <><InfoHelp title="Participant details">Drafts may be incomplete. Required fields are checked against the saved quotation when an order is confirmed.</InfoHelp>
+    {data && <>
       {records(data).map(row => { const participant = data.participants.find(item => informationPartyKey(item.party) === informationPartyKey(row.party))!; return <div key={informationPartyKey(row.party)} className="space-y-3 rounded-md border p-4"><p className="break-words font-medium">{participant.party.name}</p><p className="text-sm text-muted-foreground">{data.participants.filter(item => informationPartyKey(item.party) === informationPartyKey(row.party)).map(item => data.configuration.preset.roleLabels[item.role]).join(", ")}</p><ReadOnlyFields fields={informationFields.map(field => ({ label: data.configuration.definition.labels[field], value: row.values[field] }))} /></div> })}
       {data.missing.length > 0 && <div className="rounded-md border p-4 text-sm"><p className="font-medium">Needed before confirmation</p><ul className="mt-2 list-disc space-y-1 pl-5">{data.missing.map((item,i) => <li key={i}>{item.participant}: {item.label}</li>)}</ul></div>}
     </>}

@@ -1,5 +1,4 @@
 "use client"
-import { InfoHelp } from "@/components/erp/info-help"
 import * as React from "react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
@@ -72,9 +71,9 @@ export function CollaboratorLogins({ id }: { id: string }) {
   }
   const unavailable = loading || !parent || busy
   return <div className={pageClass}>
-    <PageHeader title="Collaborator logins" description={parent ? `Manage named accounts for ${parent.name}.` : "Manage external login accounts."} backHref={`/users/collaborators/${id}`} actions={<><Button variant="outline" disabled={unavailable || parent?.archived} onClick={() => setForm("invite")}>Invite login</Button><Button disabled={unavailable || parent?.archived} onClick={() => setForm("create")}>Create login</Button></>} descriptionDisplay="inline" />
+    <PageHeader title="Collaborator logins" description={parent ? `Manage named accounts for ${parent.name}.` : "Manage external login accounts."} backHref={`/users/collaborators/${id}`} actions={<><Button variant="outline" disabled={unavailable || parent?.archived} onClick={() => setForm("invite")}>Invite login</Button><Button disabled={unavailable || parent?.archived} onClick={() => setForm("create")}>Create login</Button></>} descriptionDisplay="inline"  help={<div><p className="font-medium">External login access</p>Each login needs its own profiles and office access. Supervisor responsibility grants neither. Employee workflows remain unavailable.</div>}/>
     {parent?.archived && <p role="status" className="text-sm text-muted-foreground">This collaborator is archived. Restore the collaborator before creating, inviting or activating a login. Existing logins stay suspended until you activate them explicitly.</p>}
-    <InfoHelp title="External login access">Each login needs its own profiles and office access. Supervisor responsibility grants neither. Employee workflows remain unavailable.</InfoHelp>
+
     <Button variant="outline" disabled={loading || busy} onClick={() => { setMessage("");reload() }}>Refresh logins</Button>
     {loadError && <p role="alert" className="text-destructive">{loadError}</p>}{message && <p role="status" className="text-sm">{message}</p>}
     <Surface><h2 className="text-lg font-semibold">Login accounts</h2><Input aria-label="Search logins" placeholder="Search name or email..." value={query.q} onChange={event => setQuery({ ...query, q: event.target.value, page: 1 })} />
@@ -111,13 +110,13 @@ function ExternalLoginDraft({ parent, mode, onClose, onSaved }: { parent: Collab
       onSaved(result)
     } catch (error) { setError(error instanceof TypeError ? "Unable to confirm the request. Check logins or pending invitations before trying again." : (error as Error).message);setValidation(null);setRefresh(value => value + 1) }
     finally { setSaving(false) }
-  }}>
+  }} help={<div><p className="font-medium">External access profiles</p>Only business actions in a shared profile apply. Employee permissions and internal team management remain unavailable.</div>}>
     {parent.archived && <p role="alert">This collaborator is archived. Close this draft and restore the collaborator first.</p>}
     {mode === "create" && <FormField id="partner-login-name" label="Full name"><Input id="partner-login-name" required maxLength={100} value={values.name} onChange={event => setValues({ ...values, name: event.target.value })} /></FormField>}
     <FormField id="partner-login-email" label="Login email"><Input id="partner-login-email" type="email" required maxLength={254} value={values.email} onChange={event => setValues({ ...values, email: event.target.value })} /></FormField>
     {mode === "create" ? <FormField id="partner-login-password" label="Temporary password"><Input id="partner-login-password" type="password" required minLength={6} maxLength={100} autoComplete="new-password" value={values.password} onChange={event => setValues({ ...values, password: event.target.value })} /></FormField> : <FormField id="partner-login-delivery" label="Delivery"><Select id="partner-login-delivery" value={values.delivery} onValueChange={delivery => setValues({ ...values, delivery })}><option value="LINK">Copy invitation link</option><option value="EMAIL">Send by email</option></Select></FormField>}
     <ProfilePicker id="partner-login-profiles" external value={values.roleIds} onChange={roleIds => setValues({ ...values, roleIds })} disabled={saving} />
-    <InfoHelp title="External access profiles">Only business actions in a shared profile apply. Employee permissions and internal team management remain unavailable.</InfoHelp>
+
     <details><summary className="cursor-pointer text-sm font-medium">Record access limits</summary><RecordPolicyFields external value={{ rules: values.rules }} onChange={patch => setValues({ ...values, rules: patch.rules ?? values.rules })} disabled={saving} /></details>
     <InitialOfficeAccess role="STAFF" status="ACTIVE" draft={officeAccess} onChange={setOfficeAccess} validation={validation} onValidation={setValidation} onDenied={denied} denied={officeDenied} saving={saving} refresh={refresh} />
   </DraftPanel>

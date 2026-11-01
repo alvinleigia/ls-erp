@@ -23,6 +23,12 @@ This is the baseline for new modules (API + UI) in this codebase.
   info slot retain its larger pointer target. Do not add negative margins or vertical
   icon offsets. Keep inline descriptions below the heading row and title/help pairs
   together when wrapping. Form label rows keep the same height with or without help.
+- Put section-wide notes in the owning `Section`, `PageHeader`, summary section or
+  draft panel's `help` prop. This combines them with the heading's existing info
+  panel while keeping an essential inline description visible. Field-specific help
+  belongs beside its label or control. Never leave an info-only row in a spaced
+  body container; remove empty wrappers when moving guidance. Preserve its original
+  visibility conditions and never nest help triggers in labels or action buttons.
 - Run `npx.cmd playwright test --config playwright.info-help.config.ts` for the
   isolated interaction/mobile and report-regression checks. It uses synthetic UI
   fixtures with no database or saved hosted login.

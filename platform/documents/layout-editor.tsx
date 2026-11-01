@@ -53,8 +53,9 @@ export function DocumentLayoutEditor({ value, catalog, disabled, onChange }: { v
   useEffect(() => { if (editor && JSON.stringify(editor.getJSON()) !== JSON.stringify(value)) editor.commands.setContent(value, { emitUpdate: false }) }, [editor, value])
   const busy = disabled || !editor
   return <div className="space-y-3">
-    <InfoHelp title="Document layout">Edit the wording and insert fields where you need them. Select a section to cut/paste it elsewhere. Required sections must appear once; empty optional data adds no rows. Company branding, document reference and page numbers are included automatically.</InfoHelp>
-    <div className="flex flex-wrap items-end gap-2">
+
+    <div className="flex flex-wrap items-center gap-2">
+      <div className="flex items-center gap-2"><span className="text-sm font-medium">Layout tools</span><InfoHelp title="Document layout">Edit the wording and insert fields where you need them. Select a section to cut/paste it elsewhere. Required sections must appear once; empty optional data adds no rows. Company branding, document reference and page numbers are included automatically.</InfoHelp></div>
       <Button type="button" size="sm" variant="outline" aria-label="Bold" aria-pressed={active?.bold} disabled={busy} onClick={() => editor?.chain().focus().toggleBold().run()}>Bold</Button>
       <Button type="button" size="sm" variant="outline" aria-label="Italic" aria-pressed={active?.italic} disabled={busy} onClick={() => editor?.chain().focus().toggleItalic().run()}>Italic</Button>
       <Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => editor?.chain().focus().insertContentAt(editor.state.doc.content.size, { type: "paragraph" }).run()}>Add paragraph</Button>
@@ -66,11 +67,11 @@ export function DocumentLayoutEditor({ value, catalog, disabled, onChange }: { v
     <div className="grid items-end gap-3 sm:grid-cols-[minmax(0,1fr)_auto]">
       <FormField id="template-insert-field" label="Dynamic field" className="min-w-0"><Select id="template-insert-field" className="w-full" value={field} onValueChange={setField} disabled={busy}>{catalog.fields.map(row => <option key={row.key} value={row.key}>{row.label}</option>)}</Select></FormField>
       <Button type="button" variant="outline" disabled={busy || !field} onClick={() => editor?.chain().focus().insertContent({ type: "documentField", attrs: { key: field } }).run()}>Insert field</Button>
-      <FormField id="template-insert-section" label="Dynamic section" className="min-w-0"><Select id="template-insert-section" className="w-full" value={section} onValueChange={setSection} disabled={busy}>{catalog.sections.map(row => <option key={row.key} value={row.key}>{row.label}{row.required ? " (required)" : ""}</option>)}</Select></FormField>
+      <FormField id="template-insert-section" label="Dynamic section" className="min-w-0" help={<>The payment schedule displays saved instalments. Editing this layout does not change prices, payments or balances. Use the PDF preview to check printed page breaks.</>}><Select id="template-insert-section" className="w-full" value={section} onValueChange={setSection} disabled={busy}>{catalog.sections.map(row => <option key={row.key} value={row.key}>{row.label}{row.required ? " (required)" : ""}</option>)}</Select></FormField>
       <Button type="button" variant="outline" disabled={busy || !section} onClick={() => editor?.chain().focus().insertContent({ type: "documentSection", attrs: { key: section } }).run()}>Insert section</Button>
     </div>
     <div className="rounded-lg border bg-background"><EditorContent editor={editor} /></div>
-    <InfoHelp title="Payment schedule layout">The payment schedule displays saved instalments. Editing this layout does not change prices, payments or balances. Use the PDF preview to check printed page breaks.</InfoHelp>
+
     <Dialog open={reset} onOpenChange={setReset}><DialogContent><DialogHeader><DialogTitle>Use the starter layout?</DialogTitle><DialogDescription>This replaces the unsaved layout. Company details and approved wording are retained. Published versions and issued PDFs stay unchanged.</DialogDescription></DialogHeader><DialogFooter><Button type="button" variant="outline" onClick={() => setReset(false)}>Cancel</Button><Button type="button" onClick={() => { onChange(starterDocumentLayout(catalog)); setReset(false) }}>Replace layout</Button></DialogFooter></DialogContent></Dialog>
   </div>
 }

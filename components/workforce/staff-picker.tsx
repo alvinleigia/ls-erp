@@ -53,15 +53,16 @@ export function WorkforceStaffPicker({ family, action, sourceId, startDate, endD
     setRemembered([...choices, ...retained].filter(staff => ids.includes(staff.id)))
     onChange(ids)
   }
+  const assignmentHelp = action !== "browse" && <InfoHelp title="Staff assignment choices">Choices require workplace coverage for the entire window in this office. Saved assignments remain selected; saving rechecks current access and dates.</InfoHelp>
   return <div className="space-y-2">
     {!multiple && <label htmlFor={id} className="sr-only">{id.includes("filter") ? "Staff filter" : id.includes("target") ? "Target staff" : "Staff"}</label>}
     {multiple ? <>
-      <Input id={id} aria-label="Search eligible staff" value={q} maxLength={160} onChange={event => search(event.target.value)} placeholder="Search eligible staff" />
+      <div className="flex min-w-0 items-center gap-2"><div className="min-w-0 flex-1"><Input id={id} aria-label="Search eligible staff" value={q} maxLength={160} onChange={event => search(event.target.value)} placeholder="Search eligible staff" /></div>{assignmentHelp}</div>
       {value.length > 0 && <div className="flex flex-wrap gap-2">{value.map(staffId => <Button key={staffId} type="button" variant="outline" size="sm" onClick={() => choose(value.filter(id => id !== staffId))}>{retained.find(staff => staff.id === staffId) ? label(retained.find(staff => staff.id === staffId)!) : "Selected staff"} - Remove</Button>)}</div>}
       {ready ? <div className="grid gap-2 sm:grid-cols-2">{choices.map(staff => <label key={staff.id} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={value.includes(staff.id)} disabled={!value.includes(staff.id) && (!staff.eligible || value.length >= 100)} onChange={event => choose(event.target.checked ? [...value, staff.id] : value.filter(id => id !== staff.id))} />{label(staff)}{!staff.eligible && <span className="text-xs text-muted-foreground">Saved assignment</span>}</label>)}</div> : !error ? <p className="text-sm text-muted-foreground">{message}</p> : null}
-    </> : <SearchableSelect id={id} value={value[0] ?? ""} selectedOption={value[0] === "all" ? { value: "all", label: "All staff" } : retained[0] ? { value: retained[0].id, label: label(retained[0]) } : undefined} options={[...(all ? [{ value: "all", label: "All staff" }] : []), ...choices.map(staff => ({ value: staff.id, label: label(staff) }))]} onChange={id => choose([id])} onSearchChange={search} placeholder="Select staff" emptyLabel={message} disabled={!valid} />}
+    </> : <div className="flex min-w-0 items-center gap-2"><div className="min-w-0 flex-1"><SearchableSelect id={id} value={value[0] ?? ""} selectedOption={value[0] === "all" ? { value: "all", label: "All staff" } : retained[0] ? { value: retained[0].id, label: label(retained[0]) } : undefined} options={[...(all ? [{ value: "all", label: "All staff" }] : []), ...choices.map(staff => ({ value: staff.id, label: label(staff) }))]} onChange={id => choose([id])} onSearchChange={search} placeholder="Select staff" emptyLabel={message} disabled={!valid} /></div>{assignmentHelp}</div>}
     {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
     {ready && <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground"><span>{view.total} matching staff</span><Button type="button" variant="ghost" size="sm" aria-label="Previous staff choices" disabled={page <= 1} onClick={() => setPage(page - 1)}>Previous</Button><span>{page} / {view.totalPages}</span><Button type="button" variant="ghost" size="sm" aria-label="Next staff choices" disabled={page >= view.totalPages} onClick={() => setPage(page + 1)}>Next</Button></div>}
-    {action !== "browse" && <InfoHelp title="Staff assignment choices">Choices require workplace coverage for the entire window in this office. Saved assignments remain selected; saving rechecks current access and dates.</InfoHelp>}
+
   </div>
 }

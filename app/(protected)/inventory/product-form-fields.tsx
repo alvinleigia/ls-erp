@@ -1,5 +1,4 @@
 "use client"
-import { InfoHelp } from "@/components/erp/info-help"
 
 import { Select, Textarea, Checkbox } from "@/components/erp/controls"
 
@@ -127,8 +126,8 @@ export function ProductFormFields({
         </FormField>
       </div>
 
-      </Section><Section title="Pricing and stock">
-      <InfoHelp title="Shared product and stock fields">MRP is shared across offices. Cost, count and reorder settings apply to the stock office shown above.</InfoHelp>
+      </Section><Section title="Pricing and stock" help={<div><p className="font-medium">Shared product and stock fields</p>MRP is shared across offices. Cost, count and reorder settings apply to the stock office shown above.</div>}>
+
       <div className="grid gap-4 sm:grid-cols-2">
         <FormField id="product-cp" label="Cost price (CP)" error={errors.costPriceCents}>
           <Input

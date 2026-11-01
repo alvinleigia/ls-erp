@@ -1,5 +1,4 @@
 "use client"
-import { InfoHelp } from "@/components/erp/info-help"
 import { defaultRecordRules } from "./rules"
 
 import * as React from "react"
@@ -36,9 +35,9 @@ export function ProfileAssignmentEditor({ onClose, onSaved, user }: { onClose: (
       const data = await response.json(); if (response.status === 409) setConflict(true); if ([401, 403].includes(response.status)) setDenied(true); if (!response.ok) throw new Error(data.error || "Unable to save access settings.")
       toast.success("Access profiles saved."); window.dispatchEvent(new Event("business-modules-changed")); onSaved()
     } catch (error) { setError((error as Error).message) } finally { setSaving(false) }
-  }}>
+  }} help={(eligible) && (current.collaboratorId) && <div><p className="font-medium">External profile access</p>Only business actions apply. Employee permissions and internal team management remain unavailable.</div>}>
     <div className="space-y-2"><Label htmlFor="access-user">User</Label>{user ? <Input id="access-user" readOnly value={`${user.name || user.email} (${user.email})`} /> : <RecordSelect id="access-user" endpoint="/api/users" value={userId} onChange={setUserId} disabled={saving} />}</div>
     {current && !eligible && <p role="alert">Choose a Staff or Manager account. Tenant administrators retain full access.</p>}
-    {eligible && <><ProfilePicker id="assigned-profiles" value={roleIds} onChange={setRoleIds} selected={current.accessAssignments.map(item => ({ id: item.roleId, name: `${item.role.name}${item.role.archived ? " (archived)" : ""}` }))} disabled={saving || denied} external={Boolean(current.collaboratorId)} />{current.collaboratorId && <InfoHelp title="External profile access">Only business actions apply. Employee permissions and internal team management remain unavailable.</InfoHelp>}<RecordPolicyFields value={scopes} onChange={patch => setScopes(previous => ({ ...previous, ...patch }))} disabled={saving || denied} external={Boolean(current.collaboratorId)} /></>}
+    {eligible && <><ProfilePicker id="assigned-profiles" value={roleIds} onChange={setRoleIds} selected={current.accessAssignments.map(item => ({ id: item.roleId, name: `${item.role.name}${item.role.archived ? " (archived)" : ""}` }))} disabled={saving || denied} external={Boolean(current.collaboratorId)} /><RecordPolicyFields value={scopes} onChange={patch => setScopes(previous => ({ ...previous, ...patch }))} disabled={saving || denied} external={Boolean(current.collaboratorId)} /></>}
   </DraftPanel>
 }

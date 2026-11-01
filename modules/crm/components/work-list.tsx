@@ -1,5 +1,4 @@
 "use client"
-import { InfoHelp } from "@/components/erp/info-help"
 import { AttributionFilters, emptyAttributionFilters } from "@/platform/collaborators/report-controls"
 import { attributionQuery, type AttributionFilter } from "@/platform/collaborators/report-validation"
 import { ExportButton } from "@/components/erp/export-button"
@@ -85,7 +84,7 @@ export function WorkList({ initialAttribution, extensionQuery = "", guidance, al
     <div className="flex justify-end"><ExportButton requirement="activities.export" href={`/api/crm/work/export?${queryString}`} filename="activities.csv" disabled={loading || !!error || !data?.total} /></div>
 
     {planLaunchId && <p className="text-sm">{term("crm.activity.plural", "Showing accessible activities from this plan application.", "Showing accessible {label} from this plan application.")} <Link className="underline" href="/crm/activities">Show all my work</Link></p>}
-    {!embedded && <InfoHelp title="My Work">Work through reminders and follow-ups, review customer history, then record an outcome and the next step. Times use {data?.timeZone || "the business time zone"}.</InfoHelp>}
+
     <div className="flex flex-wrap items-center gap-2">
       <div className="relative min-w-0 basis-full sm:basis-56 sm:flex-1"><Search className="pointer-events-none absolute top-2.5 left-3 size-4 text-muted-foreground" aria-hidden="true" /><Input aria-label={term("crm.activity.singular", "Search activity titles", "Search {label} titles")} placeholder={term("crm.activity.plural", "Search activities…", "Search {label}…")} className="pl-9" value={q} onChange={event => table.setGlobalFilter(event.target.value)} /></div>
       <DropdownSelect label={term("crm.activity.singular", "Activity status", "{label} status")} value={state} options={[{ value: "open", label: "Open" }, { value: "completed", label: "Completed" }, { value: "cancelled", label: "Cancelled" }, { value: "all", label: "All statuses" }]} onValueChange={value => { setState(value); setDue(""); setCompletionPeriod(null); reset() }} className="min-w-32" />
@@ -113,5 +112,5 @@ export function WorkList({ initialAttribution, extensionQuery = "", guidance, al
     </>}
     <TablePagination table={table} totalRows={data?.total ?? 0} loading={loading} />
   </>
-  return embedded ? <Section title={term("crm.activity.plural", "Activities and follow-ups", "{label} and follow-ups")} description={`${term("crm.activity.plural", "Upcoming work and completed activities.", "Upcoming work and completed {label}.")} Times use ${data?.timeZone || "the business time zone"}.`} icon={CalendarClock} actions={allowCreate ? actions : undefined}>{guidance}{content}</Section> : <section className={pageClass}><AccessPageHeader title="My Work" actions={<><Button variant="outline" asChild><Link href="/crm/calendar">Calendar</Link></Button>{allowCreate && actions}</>} /><Surface>{content}</Surface></section>
+  return embedded ? <Section title={term("crm.activity.plural", "Activities and follow-ups", "{label} and follow-ups")} description={`${term("crm.activity.plural", "Upcoming work and completed activities.", "Upcoming work and completed {label}.")} Times use ${data?.timeZone || "the business time zone"}.`} icon={CalendarClock} actions={allowCreate ? actions : undefined} help={guidance}>{content}</Section> : <section className={pageClass}><AccessPageHeader title="My Work" actions={<><Button variant="outline" asChild><Link href="/crm/calendar">Calendar</Link></Button>{allowCreate && actions}</>}  help={<>Work through reminders and follow-ups, review customer history, then record an outcome and the next step. Times use {data?.timeZone || "the business time zone"}.</>}/><Surface>{content}</Surface></section>
 }

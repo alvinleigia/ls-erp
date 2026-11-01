@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
 import { useFormErrors } from "@/hooks/use-form-errors"
-import { ModuleControls, TenantModuleSelection } from "@/platform/module-controls"
+import { ModuleControls, ModuleActivationHelp, TenantModuleSelection } from "@/platform/module-controls"
 import type { BusinessModuleKey } from "@/platform/modules"
 import type { ListResponse } from "@/types/api"
 
@@ -688,7 +688,7 @@ export default function TenantsPageClient({
 
       <Dialog open={!!moduleTenant} onOpenChange={open => { if (!open) setModuleTenant(null) }}>
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
-          <DialogHeader><DialogTitle>Modules - {moduleTenant?.name}</DialogTitle></DialogHeader>
+          <DialogHeader><div className="flex items-center gap-2"><DialogTitle className="min-w-0 break-words">Modules - {moduleTenant?.name}</DialogTitle><ModuleActivationHelp platform /></div></DialogHeader>
           {moduleTenant && <ModuleControls key={moduleTenant.id} tenantId={moduleTenant.id}/>}
         </DialogContent>
       </Dialog>

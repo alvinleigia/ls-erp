@@ -28,8 +28,8 @@ import type { CrmViewReferences } from "../view-context"
 type Row = Partial<CrmContactRow & CrmEnquiryRow & CrmTaskRow> & { id: string }
 export const selectClass = "h-9 rounded-md border bg-background px-3 text-sm"
 
-export function RecordList({ kind, enquiryId, accountId, extensionReferences, refresh = 0, onChanged }: {
-  kind: "contacts" | "accounts" | "enquiries" | "tasks"; extensionReferences?: CrmViewReferences; enquiryId?: string; accountId?: string; refresh?: number; onChanged?: () => void;
+export function RecordList({ kind, enquiryId, accountId, extensionReferences, help, refresh = 0, onChanged }: {
+  kind: "contacts" | "accounts" | "enquiries" | "tasks"; extensionReferences?: CrmViewReferences; enquiryId?: string; accountId?: string; help?: React.ReactNode; refresh?: number; onChanged?: () => void;
 }) {
   const term = useTerminology()
   const recordKey = { contacts: "crm.contact", accounts: "crm.account", enquiries: "crm.enquiry", tasks: "crm.activity" }[kind]
@@ -141,5 +141,5 @@ export function RecordList({ kind, enquiryId, accountId, extensionReferences, re
     <DataTable table={table} loading={loading} emptyMessage={`No ${title.toLowerCase()} found.`} />
     <TablePagination table={table} totalRows={total} loading={loading} />
   </>
-  return enquiryId || accountId || extensionReferences?.primaryId ? <Section title={title}>{content}</Section> : <section className={pageClass}><AccessPageHeader title={title} actions={kind !== "tasks" && !accountId && <>{kind === "enquiries" && <Button variant="outline" asChild><Link href="/crm/enquiries/import">{term("crm.enquiry.plural", "Import enquiries", "Import {label}")}</Link></Button>}<Button asChild><Link href={"/crm/" + kind + "/new"}>{term(`${recordKey}.singular`, `New ${kind === "accounts" ? "account" : kind === "contacts" ? "contact" : "enquiry"}`, "New {label}")}</Link></Button></>} /><Surface>{content}</Surface></section>
+  return enquiryId || accountId || extensionReferences?.primaryId ? <Section title={title} help={help}>{content}</Section> : <section className={pageClass}><AccessPageHeader title={title} help={help} actions={kind !== "tasks" && !accountId && <>{kind === "enquiries" && <Button variant="outline" asChild><Link href="/crm/enquiries/import">{term("crm.enquiry.plural", "Import enquiries", "Import {label}")}</Link></Button>}<Button asChild><Link href={"/crm/" + kind + "/new"}>{term(`${recordKey}.singular`, `New ${kind === "accounts" ? "account" : kind === "contacts" ? "contact" : "enquiry"}`, "New {label}")}</Link></Button></>} /><Surface>{content}</Surface></section>
 }

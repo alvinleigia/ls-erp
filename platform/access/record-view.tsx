@@ -36,8 +36,8 @@ export function AccessSectionEdit({ section, label = section, allowed = true }: 
   const canEdit = useCurrentResourceAction("edit")
   return allowed && canEdit && view?.existing ? <Button type="button" variant="outline" size="sm" aria-label={`Edit ${label.toLowerCase()}`} onClick={() => view.begin(section)}>Edit</Button> : null
 }
-export function AccessSummarySection({ title, sectionKey, fields, canEdit = true, children }: { title: string; sectionKey?: string; fields: React.ComponentProps<typeof ReadOnlyFields>["fields"]; canEdit?: boolean; children?: React.ReactNode }) {
-  return <Section title={title} sectionKey={sectionKey} actions={<AccessSectionEdit section={sectionKey ?? title} label={title} allowed={canEdit} />}><ReadOnlyFields fields={fields} />{children}</Section>
+export function AccessSummarySection({ title, sectionKey, fields, canEdit = true, help, children }: { title: string; sectionKey?: string; fields: React.ComponentProps<typeof ReadOnlyFields>["fields"]; canEdit?: boolean; help?: React.ReactNode; children?: React.ReactNode }) {
+  return <Section title={title} sectionKey={sectionKey} help={help} actions={<AccessSectionEdit section={sectionKey ?? title} label={title} allowed={canEdit} />}><ReadOnlyFields fields={fields} />{children}</Section>
 }
 
 type RecordFormProps = {

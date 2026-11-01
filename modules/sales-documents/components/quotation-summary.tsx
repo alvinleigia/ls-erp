@@ -1,5 +1,4 @@
 "use client"
-import { InfoHelp } from "@/components/erp/info-help"
 import { ParticipantInformationSummary } from "@/platform/participants/summary"
 import { quotationDocumentLabels } from "../quotation-labels"
 import { useTerminology } from "@/platform/terminology/provider"
@@ -51,8 +50,8 @@ export function QuotationSummary({ value, snapshot, section, canEdit, name, arch
       <DetailTable headings={["Charge", "Group", "Basis", "Value", "Treatment", "Payment condition", ...(calculation ? ["Amount"] : [])]} rows={value.charges.map((charge, index) => [charge.label, charge.group, charge.kind === "PERCENT" ? charge.basis === "BASE" ? "Base price" : "Consideration" : charge.kind === "FIXED" ? "Fixed" : "Pending", charge.kind === "TBD" ? "Pending" : charge.kind === "PERCENT" ? `${charge.value}%` : money(charge.value), charge.included ? "Included" : "Extra", charge.due, ...(calculation ? [calculation.charges[index].amount === null ? "Pending" : money(calculation.charges[index].amount!)] : [])])} />
     </AccessSummarySection>
   </>
-  if (section === "payments") return <AccessSummarySection sectionKey="Instalment schedule" title={snapshot ? documentLabels.paymentSchedule : term("paymentPlans.paymentPlan.singular", "Instalment schedule")} canEdit={canEdit} fields={[]}>
-    <InfoHelp title="Payment schedule">Percentages apply to total consideration. Extra charges follow their own payment conditions.</InfoHelp>
+  if (section === "payments") return <AccessSummarySection sectionKey="Instalment schedule" title={snapshot ? documentLabels.paymentSchedule : term("paymentPlans.paymentPlan.singular", "Instalment schedule")} canEdit={canEdit} fields={[]} help={<div><p className="font-medium">Payment schedule</p>Percentages apply to total consideration. Extra charges follow their own payment conditions.</div>}>
+
     <DetailTable headings={["Instalment", "Percentage", "Days from booking", "Note", ...(calculation ? ["Due date", "Amount"] : [])]} rows={value.instalments.map((item, index) => [item.label, `${item.percent}%`, String(item.days), item.note, ...(calculation ? [formatDateForDisplay(calculation.instalments[index].dueDate, snapshot?.dateFormat), money(calculation.instalments[index].amount)] : [])])} />
   </AccessSummarySection>
   return <>

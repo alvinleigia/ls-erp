@@ -41,7 +41,7 @@ import Coupons from '@/app/(protected)/appointments/coupons/page';
 import { AppointmentOrderEditor } from '@/app/(protected)/appointments/appointment-order-editor';
 import { AccessRoles } from '@/platform/access/role-controls';
 import { BusinessViewGuard } from '@/platform/access/view-guard';
-import { ModuleControls } from '@/platform/module-controls';
+import { ModuleControls, ModuleActivationHelp } from '@/platform/module-controls';
 import TenantsPageClient from '@/app/(protected)/settings/tenants/tenants-page-client';
 import {ProjectEditor} from '@/modules/real-estate/components/project-editor';
 import { SessionProvider } from 'next-auth/react';
@@ -79,7 +79,7 @@ function Preview(){
  if(path[1]==='appointments')return <BusinessModuleProvider><BusinessViewGuard module='appointments'><div className='min-w-0 [contain:inline-size]'>{path[2]==='coupons'?<Coupons/>:path[2]==='new'?<AppointmentOrderEditor mode='create'/>:path[2]?<AppointmentOrderEditor key={path[2]} mode='edit' appointmentId={path[2]}/>:<Appointments/>}</div></BusinessViewGuard></BusinessModuleProvider>;
  if(path[1]==='inventory'){ const InventoryView=path[2]==='categories'?InventoryCategories:path[2]==='suppliers'?InventorySuppliers:path[2]==='purchases'?InventoryPurchases:InventoryProducts; return <BusinessModuleProvider><BusinessViewGuard module='inventory'><InventoryView/></BusinessViewGuard></BusinessModuleProvider>; }
  if(key==='roles')return <AccessRoles/>;
- if(key==='modules')return <ModuleControls tenantId={query.get('tenant') || undefined}/>;
+ if(key==='modules')return <><div className='flex items-center gap-2'><h1>Business modules</h1><ModuleActivationHelp platform={Boolean(query.get('tenant'))}/></div><ModuleControls tenantId={query.get('tenant') || undefined}/></>;
  if(key==='tenants')return <TenantsPageClient rootDomain='example.test' platformAccessMode='SUPER_ADMIN'/>;
  if(key==='projects')return <BusinessModuleProvider><ProjectEditor key={id || query.get('parentId') || 'new'} id={id} parentId={query.get('parentId') || undefined}/></BusinessModuleProvider>;
  const editors:any={enquiries:EnquiryEditor,opportunities:OpportunityEditor,contacts:ContactEditor,accounts:AccountEditor,activities:WorkEditor,'activity-plans':ActivityPlanEditor,'follow-up-rules':FollowUpRuleEditor,pipelines:PipelineEditor,'sales-teams':TeamEditor,'custom-fields':CustomFieldEditor,quotations:QuotationEditor,'quotation-templates':QuotationEditor,'lead-sources':LeadSourceList,'lost-reasons':LostReasonList,'activity-types':ActivityTypeList};
