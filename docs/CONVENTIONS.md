@@ -19,6 +19,10 @@ This is the baseline for new modules (API + UI) in this codebase.
 - Give standalone help a contextual title. Preserve structured content and existing
   permission gates. Help must not submit forms, toggle enclosing editors, navigate
   configuration cards or discard drafts. No API requests are needed to open it.
+- Centre heading/label and icon rows with `items-center`; let the shared compact
+  info slot retain its larger pointer target. Do not add negative margins or vertical
+  icon offsets. Keep inline descriptions below the heading row and title/help pairs
+  together when wrapping. Form label rows keep the same height with or without help.
 - Run `npx.cmd playwright test --config playwright.info-help.config.ts` for the
   isolated interaction/mobile and report-regression checks. It uses synthetic UI
   fixtures with no database or saved hosted login.

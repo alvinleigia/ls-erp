@@ -23,7 +23,7 @@ export function PageHeader({ title, description, descriptionDisplay = "help", ba
   return <header className="space-y-4">
     {backLink || (backHref && <Link href={backHref} className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" aria-hidden="true" />{backLabel}</Link>)}
     <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-      <div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><h1 className="min-w-0 break-words text-2xl font-semibold tracking-tight">{title}</h1>{description && descriptionDisplay === "help" && <InfoHelp title={title}>{description}</InfoHelp>}{badge}</div>{description && descriptionDisplay === "inline" && <div className="mt-2 max-w-3xl text-sm text-muted-foreground">{description}</div>}</div>
+      <div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><div className="flex min-w-0 max-w-full items-center gap-2"><h1 className="min-w-0 break-words text-2xl font-semibold tracking-tight">{title}</h1>{description && descriptionDisplay === "help" && <InfoHelp title={title}>{description}</InfoHelp>}</div>{badge}</div>{description && descriptionDisplay === "inline" && <div className="mt-2 max-w-3xl text-sm text-muted-foreground">{description}</div>}</div>
       {actions && <div className="flex flex-wrap items-center justify-end gap-2">{actions}</div>}
     </div>
   </header>

@@ -25,7 +25,7 @@ export function FormField({
 }: FormFieldProps) {
   return (
     <div className={cn("space-y-2", className)}>
-      <div className="flex items-center gap-1"><Label htmlFor={id}>{label}</Label>{help && <InfoHelp title={label} className="-my-1.5">{help}</InfoHelp>}</div>
+      <div className="flex min-h-5 items-center gap-2"><Label htmlFor={id}>{label}</Label>{help && <InfoHelp title={label}>{help}</InfoHelp>}</div>
       {children}
       {error ? <p className="text-xs text-destructive">{error}</p> : null}
     </div>

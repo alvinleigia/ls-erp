@@ -433,7 +433,7 @@ export default function SettingsPage() {
       </div>
 
       <div className="rounded-xl border bg-card p-6">
-        <div className="space-y-1">
+        <div className="flex items-center gap-2">
           <h2 className="text-lg font-semibold">Email delivery</h2>
           <InfoHelp title="Email delivery">
             SMTP is configured from backend environment variables. Secrets are never shown in UI.

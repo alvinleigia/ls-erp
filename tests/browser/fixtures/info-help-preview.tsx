@@ -25,6 +25,15 @@ export function InfoHelpPreview() {
     <Dialog><DialogTrigger asChild><Button type="button">Review action</Button></DialogTrigger><ActionDialogContent title="Review action" description="Confirming changes the selected record. This warning stays visible." actions={<Button type="button">Confirm action</Button>}><InfoHelp title="Dialog guidance">Supplementary guidance opens within the action dialog.</InfoHelp></ActionDialogContent></Dialog>
     <Popover><PopoverTrigger asChild><Button type="button">Open filters</Button></PopoverTrigger><PopoverContent aria-label="Test filters" className="p-4"><Input aria-label="Filter text" /><InfoHelp title="Filter guidance">Help can open inside a filter popover without clearing its values.</InfoHelp></PopoverContent></Popover>
     <InfoHelp title="No content">{null}</InfoHelp>
+    <Section title="Alignment samples" description="Header guidance" actions={<Button type="button">Header action</Button>}>
+      <div className="grid grid-cols-2 gap-4">
+        <FormField id="alignment-help" label="Field with help" help="Aligned field guidance"><Input id="alignment-help" /></FormField>
+        <FormField id="alignment-plain" label="Field without help"><Input id="alignment-plain" /></FormField>
+      </div>
+      <Section title="A longer section heading that wraps onto multiple lines on a narrow screen" description="Wrapped heading guidance"><p>Section content</p></Section>
+      <Section title="Inline description" descriptionDisplay="inline" description="Essential context stays below the heading without shifting its leading icon."><p>Visible content</p></Section>
+      <PageHeader title="A longer page heading that wraps onto multiple lines on a narrow screen" description="Wrapped page guidance" badge={<span>Badge</span>} />
+    </Section>
     <p aria-live="polite">Submissions: {submits}</p>{guide && <p>Guide opened</p>}
     <Button type="submit">Save preview</Button>
   </form>

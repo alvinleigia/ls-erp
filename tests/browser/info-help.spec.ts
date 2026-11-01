@@ -116,3 +116,34 @@ test("module guidance opens without changing activation or hiding dependency res
   await expect(page.getByRole("dialog", { name: "Module activation", exact: true })).toContainText("Your data is kept")
   expect(writes).toEqual([])
 })
+
+test("heading, leading icon and help alignment stays centered with wrapped titles and field labels", async ({ page }, info) => {
+  const samples = page.getByRole("region", { name: "Alignment samples", exact: true })
+  for (const width of [1440, 390]) {
+    await page.setViewportSize({ width, height: 900 })
+    for (const title of ["Report overview", "Alignment samples", "A longer section heading that wraps onto multiple lines on a narrow screen", "Inline description"]) {
+      const section = page.getByRole("region", { name: title, exact: true })
+      const heading = await section.getByRole("heading", { name: title, exact: true }).boundingBox()
+      const icon = await section.locator(":scope > div").first().locator("svg").first().boundingBox()
+      expect(Math.abs(icon!.y + icon!.height / 2 - heading!.y - heading!.height / 2), title).toBeLessThanOrEqual(1)
+      if (title !== "Inline description") {
+        const help = await section.getByRole("button", { name: "About " + title, exact: true }).locator("svg").boundingBox()
+        expect(Math.abs(help!.y + help!.height / 2 - heading!.y - heading!.height / 2), title).toBeLessThanOrEqual(1)
+      }
+    }
+    const pageTitle = "A longer page heading that wraps onto multiple lines on a narrow screen"
+    const heading = await samples.getByRole("heading", { name: pageTitle, exact: true }).boundingBox()
+    const help = await samples.getByRole("button", { name: "About " + pageTitle, exact: true }).locator("svg").boundingBox()
+    expect(Math.abs(help!.y + help!.height / 2 - heading!.y - heading!.height / 2)).toBeLessThanOrEqual(1)
+    const field = await page.getByLabel("Field with help", { exact: true }).boundingBox()
+    const plain = await page.getByLabel("Field without help", { exact: true }).boundingBox()
+    expect(Math.abs(field!.y - plain!.y)).toBeLessThanOrEqual(1)
+    expect((await page.getByRole("button", { name: "About Field with help", exact: true }).boundingBox())!.height).toBeGreaterThanOrEqual(32)
+    await samples.screenshot({ path: info.outputPath(`alignment-${width}.png`), animations: "disabled" })
+  }
+  await samples.getByRole("button", { name: "About Alignment samples", exact: true }).click()
+  const dialog = page.getByRole("dialog", { name: "Alignment samples", exact: true })
+  const title = await dialog.getByRole("heading", { name: "Alignment samples", exact: true }).boundingBox()
+  const close = await dialog.getByRole("button", { name: "Close information" }).locator("svg").boundingBox()
+  expect(Math.abs(close!.y + close!.height / 2 - title!.y - title!.height / 2)).toBeLessThanOrEqual(1)
+})
