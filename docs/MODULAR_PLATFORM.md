@@ -1,3 +1,27 @@
+## P13G persistent local demo and migration automation
+
+`local:demo` starts a dedicated persistent PostgreSQL Docker database and the real
+app at `demo.localhost:3109`, applies committed migrations, and provisions generic
+sample CRM data once through native APIs. Local credentials remain ignored;
+hosted service credentials are cleared. Native non-bypass runtime RLS, profiles,
+office grants and team scopes remain in force. The ordinary disposable regression
+databases are separate. See `docs/LOCAL_DEVELOPMENT.md` for logins and commands.
+
+The build hook applies pending migrations only in the registered staging project
+and matching branch. Production builds only verify migration history and stop on
+pending migrations, retaining the existing controlled release process. Project,
+branch, target, database-reference, connection-mode and immutable-history checks
+fail closed. No new business migration or hosted seeding is introduced.
+
+Local acceptance passes ten migration/environment guard checks, real logins for
+administrator/managers/staff/isolation tenant, report counts, managed-team and
+cross-tenant boundaries, non-bypass runtime RLS, chart rendering and mobile
+containment. Restarting Docker and repeating setup preserve all rows in thirteen
+identity/access/business tables. All 147 migrations apply on the fresh local DB;
+repeat setup applies none. Optimized build, TypeScript and targeted lint pass.
+Both hosted histories were checked read-only with no pending migration; staging
+deployment verification is recorded separately from these local results.
+
 ## P13F sales report visualization
 
 Sales summary and Team performance now include twelve count visualizations across

@@ -1,6 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  ...(process.env.ERP_LOCAL_DEMO === "1" && process.env.VERCEL !== "1" ? { distDir: "tmp/local-demo/next", allowedDevOrigins: ["*.localhost", "localhost", "127.0.0.1"], typescript: { tsconfigPath: "tmp/local-demo/tsconfig.json" } } : {}),
   outputFileTracingExcludes: {
     // This application uses Prisma's JS client and PostgreSQL compiler. Keep
     // their generated runtime; omit engines for databases we do not support.
