@@ -156,7 +156,7 @@ export default function LeaveGroupDetailPage() {
           <Button disabled={!canArchive} variant="destructive" onClick={() => setDeleteOpen(true)}>
             Delete
           </Button>
-        </div> </>} />
+        </div> </>} descriptionDisplay="inline" />
 
       <LeaveGroupSummary row={row} />
       {canEdit && editOpen && <DraftPanel title="Edit leave group" description="Update the configuration below." fingerprint={values} saving={saving} error={formError} onClose={() => { setValues(toFormValues(row)); setEditOpen(false) }} onSubmit={() => void save()}><LeaveGroupFormFields

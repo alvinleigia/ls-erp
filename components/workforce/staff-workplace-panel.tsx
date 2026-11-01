@@ -1,4 +1,5 @@
 "use client"
+import { InfoHelp } from "@/components/erp/info-help"
 
 import * as React from "react"
 import { Button } from "@/components/ui/button"
@@ -61,7 +62,7 @@ export function StaffWorkplacePanel({ staffId }: { staffId: string }) {
     finally { setSaving(false) }
   }
   return <section className="space-y-4 rounded-xl border p-5" aria-label="Staff workplace">
-    <div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="text-lg font-semibold">Workplace</h2><p className="text-sm text-muted-foreground">Dated working office assignments. Office and record access are managed separately.</p></div><Button type="button" variant="outline" disabled={saving || loading} onClick={() => setRevision(value => value + 1)}>Refresh workplace</Button></div>
+    <div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="text-lg font-semibold">Workplace</h2><InfoHelp title="Staff workplaces">Dated working office assignments. Office and record access are managed separately.</InfoHelp></div><Button type="button" variant="outline" disabled={saving || loading} onClick={() => setRevision(value => value + 1)}>Refresh workplace</Button></div>
     {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
     {loading ? <p role="status">Loading workplace...</p> : view && <>
       <p className="text-sm">Current workplace: <strong>{view.current ? `${view.current.companyName} / ${view.current.officeName}` : "No current workplace visible"}</strong></p>

@@ -1,4 +1,5 @@
 "use client"
+import { InfoHelp } from "@/components/erp/info-help"
 import * as React from "react"
 import Link from "next/link"
 import { toast } from "sonner"
@@ -43,7 +44,7 @@ export function ModuleControls({ tenantId }: { tenantId?: string }) {
     finally { setSaving(false) }
   }
   return <div className="space-y-4">
-    <p className="text-sm text-muted-foreground">{platform ? "Allow modules for this tenant. Newly allowed modules start enabled when their dependencies are enabled. The tenant administrator can switch them off." : "Enable or disable the modules allowed by your platform administrator. Your data is kept when a module is disabled."}</p>
+    <InfoHelp title="Module activation">{platform ? "Allow modules for this tenant. Newly allowed modules start enabled when their dependencies are enabled. The tenant administrator can switch them off." : "Enable or disable the modules allowed by your platform administrator. Your data is kept when a module is disabled."}</InfoHelp>
     {loading && <p>Loading modules...</p>}
     {error && <p role="alert" className="text-destructive">{error}</p>}
     {modules.map(module => {
@@ -51,7 +52,7 @@ export function ModuleControls({ tenantId }: { tenantId?: string }) {
       const problem = platform ? moduleAllowanceProblem(modules, module.key, !active) : module.allowed ? moduleChangeProblem(modules, module.key, !active) : null
       const label = platform ? active ? "Remove allowance" : "Allow" : active ? "Disable" : "Enable"
       return <section aria-label={module.name} key={module.key} className={`flex flex-col items-stretch justify-between gap-4 rounded-xl border p-5 sm:flex-row sm:items-center ${module.parent ? "sm:ml-8" : ""}`}>
-        <div className="min-w-0 flex-1"><h2 className="font-semibold">{module.name}</h2><p className="text-sm text-muted-foreground">{module.description}</p>
+        <div className="min-w-0 flex-1"><div className="flex items-center gap-2"><h2 className="font-semibold">{module.name}</h2><InfoHelp title={module.name}>{module.description}</InfoHelp></div>
           <p className="mt-2 text-sm font-medium">{!module.allowed ? "Not allowed by platform" : module.enabled ? "Allowed · Enabled" : "Allowed · Disabled by tenant"}</p>
           {problem && <p className="mt-2 text-sm text-muted-foreground">{problem}</p>}
         </div>

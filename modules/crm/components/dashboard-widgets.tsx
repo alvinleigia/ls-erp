@@ -1,4 +1,5 @@
 "use client"
+import { InfoHelp } from "@/components/erp/info-help"
 import type { DashboardKind } from "@/types/dashboard"
 import { useTerminology } from "@/platform/terminology/provider"
 
@@ -13,7 +14,7 @@ export function CrmDashboardWidgets({ data, settings, links = {} }: { data: CrmD
   const { enquiries, opportunities, activities } = data
   return <>
     {(enquiries || opportunities || activities) && <div className="space-y-5">
-      <div><h2 className="text-xl font-semibold">CRM and sales</h2><p className="text-sm text-muted-foreground">Your accessible records. Period figures follow the selected dates; open work shows the current position.</p></div>
+      <div><h2 className="text-xl font-semibold">CRM and sales</h2><InfoHelp title="CRM and sales figures">Your accessible records. Period figures follow the selected dates; open work shows the current position.</InfoHelp></div>
       <Metrics items={[
         ...(enquiries ? [{ label: term("crm.enquiry.plural", "New enquiries", "New {label}"), value: enquiries.total, href: links.enquiries, hint: "Created in selected period" }, ...(enquiries.converted !== null ? [{ label: term("crm.enquiry.singular", "Enquiry conversion", "{label} conversion"), value: percent(enquiries.conversionPercent), href: links.converted, hint: `${enquiries.converted} of ${enquiries.total} period ${term("crm.enquiry.plural", "enquiries")} now have ${term("crm.opportunity.singular", "an opportunity", "a linked {label}")}` }] : [])] : []),
         ...(opportunities ? [{ label: term("crm.opportunity.plural", "Open opportunities", "Open {label}"), value: opportunities.open, href: links.pipeline, hint: "Active pipeline now" }, { label: term("crm.opportunity.plural", "Won opportunities", "Won {label}"), value: opportunities.won, href: links.won, hint: `${opportunities.lost} lost · closed in selected period` }, { label: "Win rate", value: percent(opportunities.winPercent), hint: "Won ÷ (won + lost) in period" }] : []),

@@ -1,4 +1,5 @@
 "use client"
+import { InfoHelp } from "@/components/erp/info-help"
 import { defaultRecordRules } from "./rules"
 
 import * as React from "react"
@@ -38,6 +39,6 @@ export function ProfileAssignmentEditor({ onClose, onSaved, user }: { onClose: (
   }}>
     <div className="space-y-2"><Label htmlFor="access-user">User</Label>{user ? <Input id="access-user" readOnly value={`${user.name || user.email} (${user.email})`} /> : <RecordSelect id="access-user" endpoint="/api/users" value={userId} onChange={setUserId} disabled={saving} />}</div>
     {current && !eligible && <p role="alert">Choose a Staff or Manager account. Tenant administrators retain full access.</p>}
-    {eligible && <><ProfilePicker id="assigned-profiles" value={roleIds} onChange={setRoleIds} selected={current.accessAssignments.map(item => ({ id: item.roleId, name: `${item.role.name}${item.role.archived ? " (archived)" : ""}` }))} disabled={saving || denied} external={Boolean(current.collaboratorId)} />{current.collaboratorId && <p className="text-sm text-muted-foreground">Only business actions apply. Employee permissions and internal team management remain unavailable.</p>}<RecordPolicyFields value={scopes} onChange={patch => setScopes(previous => ({ ...previous, ...patch }))} disabled={saving || denied} external={Boolean(current.collaboratorId)} /></>}
+    {eligible && <><ProfilePicker id="assigned-profiles" value={roleIds} onChange={setRoleIds} selected={current.accessAssignments.map(item => ({ id: item.roleId, name: `${item.role.name}${item.role.archived ? " (archived)" : ""}` }))} disabled={saving || denied} external={Boolean(current.collaboratorId)} />{current.collaboratorId && <InfoHelp title="External profile access">Only business actions apply. Employee permissions and internal team management remain unavailable.</InfoHelp>}<RecordPolicyFields value={scopes} onChange={patch => setScopes(previous => ({ ...previous, ...patch }))} disabled={saving || denied} external={Boolean(current.collaboratorId)} /></>}
   </DraftPanel>
 }

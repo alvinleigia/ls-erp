@@ -71,14 +71,13 @@ function PipelineEditorBody({ id, template }: { id?: string; template?: Pipeline
 
 
       {!canManage && <p>Your access profile does not include pipeline configuration.</p>}
-      <Section title="Pipeline configuration" description="Stages define your board. Keep at least one open, won and lost stage."><fieldset disabled={!canManage || saving} className="space-y-5">
+      <Section title="Pipeline configuration" description="Stages define your board. Keep at least one open, won and lost stage." descriptionDisplay="inline"><fieldset disabled={!canManage || saving} className="space-y-5">
         <FormField id="pipeline-name" label="Pipeline name" error={errors.name}><Input id="pipeline-name" required maxLength={100} value={values.name} onChange={event => setValues({ ...values, name: event.target.value })} /></FormField>
-        <FormField id="conversion-stage" label="Default conversion stage" error={errors.stages}>
+        <FormField id="conversion-stage" label="Default conversion stage" error={errors.stages} help={<>{term("crm.enquiry.plural", "Used when converting enquiries into this pipeline. The salesperson can choose another stage. Archiving this stage or changing its outcome resets the default to Automatic.", "Used when converting {label} into this pipeline. The salesperson can choose another stage. Archiving this stage or changing its outcome resets the default to Automatic.")}</>}>
           <Select id="conversion-stage" className="w-full" value={String(values.stages.findIndex(stage => stage.isConversionDefault))} onValueChange={selected => setValues(previous => ({ ...previous, stages: previous.stages.map((stage, index) => ({ ...stage, isConversionDefault: index === Number(selected) })) }))}>
             <option value="-1">Automatic (first active open stage)</option>
             {values.stages.map((stage, index) => !stage.archived && stage.kind === "OPEN" ? <option key={stage.id || index} value={String(index)}>{stage.name || "New stage"}</option> : null)}
           </Select>
-          <p className="text-xs text-muted-foreground">{term("crm.enquiry.plural", "Used when converting enquiries into this pipeline. The salesperson can choose another stage. Archiving this stage or changing its outcome resets the default to Automatic.", "Used when converting {label} into this pipeline. The salesperson can choose another stage. Archiving this stage or changing its outcome resets the default to Automatic.")}</p>
         </FormField>
         <label className="flex items-center gap-2 text-sm"><Checkbox  checked={values.archived} onChange={event => setValues({ ...values, archived: event.target.checked })} />Archive pipeline</label>
         <p className="text-sm text-muted-foreground">Stages define the board columns. Keep at least one open, won and lost stage. Existing deals keep their probability until edited or moved; archiving preserves deals and history.</p>

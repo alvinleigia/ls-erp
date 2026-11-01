@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { cn } from "@/lib/utils"
+import { InfoHelp } from "./info-help"
 
 export const pageClass = "mx-auto w-full min-w-0 max-w-6xl space-y-6"
 
@@ -16,13 +17,13 @@ export function Surface({ children, className }: { children: ReactNode; classNam
   return <div className={cn("min-w-0 space-y-4 rounded-xl border bg-card p-4 shadow-sm sm:p-5", className)}>{children}</div>
 }
 
-export function PageHeader({ title, description, backHref, backLabel = "Back", actions, badge, backLink }: {
-  title: ReactNode; description?: ReactNode; backHref?: string; backLabel?: string; actions?: ReactNode; badge?: ReactNode; backLink?: ReactNode;
+export function PageHeader({ title, description, descriptionDisplay = "help", backHref, backLabel = "Back", actions, badge, backLink }: {
+  title: ReactNode; description?: ReactNode; descriptionDisplay?: "help" | "inline"; backHref?: string; backLabel?: string; actions?: ReactNode; badge?: ReactNode; backLink?: ReactNode;
 }) {
   return <header className="space-y-4">
     {backLink || (backHref && <Link href={backHref} className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" aria-hidden="true" />{backLabel}</Link>)}
     <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-      <div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-3"><h1 className="min-w-0 break-words text-2xl font-semibold tracking-tight">{title}</h1>{badge}</div>{description && <p className="mt-2 max-w-3xl text-sm text-muted-foreground">{description}</p>}</div>
+      <div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><h1 className="min-w-0 break-words text-2xl font-semibold tracking-tight">{title}</h1>{description && descriptionDisplay === "help" && <InfoHelp title={title}>{description}</InfoHelp>}{badge}</div>{description && descriptionDisplay === "inline" && <div className="mt-2 max-w-3xl text-sm text-muted-foreground">{description}</div>}</div>
       {actions && <div className="flex flex-wrap items-center justify-end gap-2">{actions}</div>}
     </div>
   </header>

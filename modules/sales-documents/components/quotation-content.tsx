@@ -32,7 +32,7 @@ export function QuotationContentFields({ value: v, onChange, disabled, template 
       {!template && <>{field("booking-date", "Booking date (optional)", v.bookingDate, s => set("bookingDate", s), "date")}{field("valid-until", "Valid until (optional)", v.validUntil, s => set("validUntil", s), "date")}</>}
       {field("registration", "Registration reference (optional)", v.registration, s => set("registration", s))}
       {field("registration-url", "Registration link for QR code (optional)", v.registrationUrl, s => set("registrationUrl", s), "url", 1000)}
-      <FormField id="quote-logo" label="Logo override (PNG, optional)" error={errors["quote-logo"]}><p className="text-sm text-muted-foreground">Without an override, new quotations use the business logo from Settings → Branding. Saved quotations retain their original branding.</p><Input id="quote-logo" type="file" accept="image/png" onChange={async event => {
+      <FormField id="quote-logo" label="Logo override (PNG, optional)" error={errors["quote-logo"]} help={<>Without an override, new quotations use the business logo from Settings → Branding. Saved quotations retain their original branding.</>}><Input id="quote-logo" type="file" accept="image/png" onChange={async event => {
         const file = event.target.files?.[0]; if (!file) return
         if (file.size > 290000) { onError("Use a PNG logo up to 290 KB."); return }
         const reader = new FileReader(); reader.onload = () => { const data = String(reader.result), result = quotationContentSchema.shape.logoDataUrl.safeParse(data); if (!result.success) onError(result.error.issues[0].message); else set("logoDataUrl", data) }; reader.readAsDataURL(file)
@@ -74,7 +74,7 @@ export function QuotationContentFields({ value: v, onChange, disabled, template 
       })}
       <Button type="button" variant="outline" disabled={v.charges.length >= 30} onClick={() => set("charges", [...v.charges, { label: "", group: "", kind: "FIXED", value: "0", basis: "BASE", included: false, due: "" }])}>Add charge</Button>
     </Section>
-    {(paymentPlansEnabled || v.instalments.length > 0) && <Section sectionKey="Instalment schedule" title={term("paymentPlans.paymentPlan.singular", "Instalment schedule")} description="Percentages apply to total consideration and must add up to 100%. Extra charges follow their separate conditions.">
+    {(paymentPlansEnabled || v.instalments.length > 0) && <Section sectionKey="Instalment schedule" title={term("paymentPlans.paymentPlan.singular", "Instalment schedule")} description="Percentages apply to total consideration and must add up to 100%. Extra charges follow their separate conditions." descriptionDisplay="inline">
       {v.instalments.map((item, i) => {
         const edit = (patch: Partial<typeof item>) => set("instalments", v.instalments.map((r, n) => n === i ? { ...r, ...patch } : r))
         return <div key={i} className="grid gap-3 rounded-lg border p-4 sm:grid-cols-2 lg:grid-cols-4">

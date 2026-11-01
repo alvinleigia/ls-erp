@@ -1,4 +1,5 @@
 "use client"
+import { InfoHelp } from "@/components/erp/info-help"
 import { useCallback,useEffect,useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -49,13 +50,13 @@ export function DocumentTemplateControls(){
   return <div className={pageClass}><AccessPageHeader title="Company document templates" description="Publish reviewed wording for the company that issues the order. Earlier versions and issued files remain fixed."/>
     <Section title="Issuing company and document"><div className="grid gap-4 md:grid-cols-2"><FormField id="document-company" label="Issuing company"><RecordSelect id="document-company" endpoint="/api/document-templates/catalog" value={companyId} selected={row?{value:row.company.id,label:row.company.name+(row.company.archived?' (archived)':'')}:undefined} onChange={value=>setCompanyId(value)} disabled={busy||dirty} /></FormField><FormField id="document-type" label="Document type"><Select id="document-type" value={providerKey} onValueChange={setProviderKey} disabled={busy||dirty}>{catalog?.providers.map(provider=><option key={provider.key} value={provider.key}>{provider.name}</option>)}</Select></FormField></div></Section>
     {error&&<p role="alert" className="text-destructive">{error}</p>}
-    {row&&content&&<Section title={`${row.company.name} - version ${row.version}`} description={row.version?'Publishing creates the next version. Corrections to issued files use their replacement flow.':'No template has been published. These starter values do not enable issuance.'}>
+    {row&&content&&<Section title={`${row.company.name} - version ${row.version}`} description={row.version?'Publishing creates the next version. Corrections to issued files use their replacement flow.':'No template has been published. These starter values do not enable issuance.'} descriptionDisplay="inline">
       <fieldset disabled={busy||readOnly} className="grid gap-5 md:grid-cols-2">{textFields.map(([key,label])=><FormField key={key} id={`document-${key}`} label={label} error={errors[key]} className={['opening','terms'].includes(key)?'md:col-span-2':undefined}>{['opening','terms','address','contact'].includes(key)?<Textarea id={`document-${key}`} value={content[key]} rows={key==='terms'?8:3} onChange={e=>change(key,e.target.value)} />:<Input id={`document-${key}`} value={content[key]} onChange={e=>change(key,e.target.value)} />}</FormField>)}
         <label className="flex items-center gap-2"><Checkbox checked={content.useTenantLogo} onChange={e=>change('useTenantLogo',e.target.checked)}/>Use the tenant document logo for this company</label><label className="flex items-center gap-2"><Checkbox checked={content.enabled} onChange={e=>change('enabled',e.target.checked)}/>Enable new issuance with this version</label>
       </fieldset>
       {content.layout&&<div className="mt-6 space-y-3"><h3 className="font-medium">Document layout</h3><DocumentLayoutEditor key={`${companyId}:${providerKey}`} value={content.layout} catalog={row.templateCatalog} disabled={busy||readOnly} onChange={value=>change("layout",value)}/></div>}
       {!readOnly&&<div className="mt-6 space-y-4"><label className="flex items-start gap-2"><Checkbox checked={reviewed} disabled={busy} onChange={e=>setReviewed(e.target.checked)}/>I have reviewed the wording, company details and enablement for this version.</label><div className="flex flex-wrap gap-3"><Button variant="outline" disabled={busy} onClick={preview}>Download sample preview</Button><Button loading={busy} disabled={!reviewed} onClick={publish}>Publish template version</Button><ReloadDraft disabled={busy} onReload={()=>void load().catch(e=>setError(e.message))}/></div></div>}
-      {readOnly&&<p className="mt-4 text-sm text-muted-foreground">Published wording is read-only here. A tenant administrator publishes new versions for active issuing companies.</p>}
+      {readOnly&&<InfoHelp title="Published templates" className="mt-4">Published wording is read-only here. A tenant administrator publishes new versions for active issuing companies.</InfoHelp>}
     </Section>}
   </div>
 }

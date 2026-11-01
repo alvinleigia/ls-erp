@@ -1,4 +1,5 @@
 "use client"
+import { InfoHelp } from "@/components/erp/info-help"
 import * as React from "react"
 import { Building2 } from "lucide-react"
 import { toast } from "sonner"
@@ -93,7 +94,7 @@ function OfficePreferenceDraft({ context, onClose, onSaved, onReload, onForbidde
     } catch (error) { setError(error instanceof Error ? error.message : "Unable to confirm the change. Reload before trying again."); setView(null); reload() }
     finally { setSaving(false) }
   }}>
-    <p className="text-sm text-muted-foreground">This preference does not grant access, move saved records or change report filters. Open forms keep their captured office and may need reopening after a change.</p>
+    <InfoHelp title="Creation office">This preference does not grant access, move saved records or change report filters. Open forms keep their captured office and may need reopening after a change.</InfoHelp>
     <FormField id="workspace-office" label="Office for new records"><SearchableSelect id="workspace-office" value={officeId ?? "none"} selectedOption={{ value: officeId ?? "none", label: officeId ? selected ? label(selected) : "Unavailable office selection" : "No creation office" }} placeholder="Choose an office" disabled={saving} options={[{ value: "none", label: "No creation office" },...(ready ? view.items.map(office => ({ value: office.id, label: label(office) })) : [])]} onChange={value => setOfficeId(value === "none" ? null : value)} onSearchChange={next => { setQ(next); if (next !== q) setPage(1) }} /></FormField>
     {choiceError && <p role="alert" className="text-sm text-destructive">{choiceError}</p>}
     {ready && <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground"><span>{view.total} eligible {view.total === 1 ? "office" : "offices"}</span>{view.totalPages > 1 && <><Button type="button" size="sm" variant="ghost" disabled={saving || page <= 1} onClick={() => setPage(page-1)} aria-label="Previous workspace choices">Previous</Button><span>{page} / {view.totalPages}</span><Button type="button" size="sm" variant="ghost" disabled={saving || page >= view.totalPages} onClick={() => setPage(page+1)} aria-label="Next workspace choices">Next</Button></>}</div>}

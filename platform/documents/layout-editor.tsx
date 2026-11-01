@@ -1,4 +1,5 @@
 "use client"
+import { InfoHelp } from "@/components/erp/info-help"
 import { useEffect, useState } from "react"
 import { Node, mergeAttributes } from "@tiptap/core"
 import { EditorContent, NodeViewWrapper, ReactNodeViewRenderer, useEditor, useEditorState, type NodeViewProps } from "@tiptap/react"
@@ -52,7 +53,7 @@ export function DocumentLayoutEditor({ value, catalog, disabled, onChange }: { v
   useEffect(() => { if (editor && JSON.stringify(editor.getJSON()) !== JSON.stringify(value)) editor.commands.setContent(value, { emitUpdate: false }) }, [editor, value])
   const busy = disabled || !editor
   return <div className="space-y-3">
-    <p className="text-sm text-muted-foreground">Edit the wording and insert fields where you need them. Select a section to cut/paste it elsewhere. Required sections must appear once; empty optional data adds no rows. Company branding, document reference and page numbers are included automatically.</p>
+    <InfoHelp title="Document layout">Edit the wording and insert fields where you need them. Select a section to cut/paste it elsewhere. Required sections must appear once; empty optional data adds no rows. Company branding, document reference and page numbers are included automatically.</InfoHelp>
     <div className="flex flex-wrap items-end gap-2">
       <Button type="button" size="sm" variant="outline" aria-label="Bold" aria-pressed={active?.bold} disabled={busy} onClick={() => editor?.chain().focus().toggleBold().run()}>Bold</Button>
       <Button type="button" size="sm" variant="outline" aria-label="Italic" aria-pressed={active?.italic} disabled={busy} onClick={() => editor?.chain().focus().toggleItalic().run()}>Italic</Button>
@@ -69,7 +70,7 @@ export function DocumentLayoutEditor({ value, catalog, disabled, onChange }: { v
       <Button type="button" variant="outline" disabled={busy || !section} onClick={() => editor?.chain().focus().insertContent({ type: "documentSection", attrs: { key: section } }).run()}>Insert section</Button>
     </div>
     <div className="rounded-lg border bg-background"><EditorContent editor={editor} /></div>
-    <p className="text-xs text-muted-foreground">The payment schedule displays saved instalments. Editing this layout does not change prices, payments or balances. Use the PDF preview to check printed page breaks.</p>
+    <InfoHelp title="Payment schedule layout">The payment schedule displays saved instalments. Editing this layout does not change prices, payments or balances. Use the PDF preview to check printed page breaks.</InfoHelp>
     <Dialog open={reset} onOpenChange={setReset}><DialogContent><DialogHeader><DialogTitle>Use the starter layout?</DialogTitle><DialogDescription>This replaces the unsaved layout. Company details and approved wording are retained. Published versions and issued PDFs stay unchanged.</DialogDescription></DialogHeader><DialogFooter><Button type="button" variant="outline" onClick={() => setReset(false)}>Cancel</Button><Button type="button" onClick={() => { onChange(starterDocumentLayout(catalog)); setReset(false) }}>Replace layout</Button></DialogFooter></DialogContent></Dialog>
   </div>
 }

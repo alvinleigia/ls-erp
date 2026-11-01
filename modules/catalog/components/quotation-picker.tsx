@@ -1,4 +1,5 @@
 "use client"
+import { InfoHelp } from "@/components/erp/info-help"
 import * as React from "react"
 import type { QuotationLineAddonProps } from "@/modules/sales-documents/components/line-addon"
 import { useBusinessModules } from "@/platform/module-provider"
@@ -30,6 +31,6 @@ export function CatalogQuotationPicker({ line, onChange, currency, disabled, id 
     {line.catalogItemId && <Button type="button" variant="ghost" disabled={disabled || loading || (!enabled&&!line.refreshCatalogItem)} onClick={()=>onChange({...line,refreshCatalogItem:!line.refreshCatalogItem})}>{line.refreshCatalogItem?"Keep saved item details":"Refresh saved item details"}</Button>}
     {line.refreshCatalogItem && <p className="text-xs text-muted-foreground">Current item details will be checked and saved in the new revision.</p>}
     {line.catalogItemId && <Button type="button" variant="ghost" disabled={disabled || loading} onClick={() => { const { catalogItemId, catalogItemVersion, refreshCatalogItem, ...manual } = line; void catalogItemId; void catalogItemVersion; void refreshCatalogItem; onChange(manual) }}>Remove catalog link</Button>}
-    {line.catalogItemId && <p className="text-xs text-muted-foreground">The saved item reference is retained. This quotation does not reserve or sell the item.</p>}
+    {line.catalogItemId && <InfoHelp title="Catalogue reference">The saved item reference is retained. This quotation does not reserve or sell the item.</InfoHelp>}
   </div>
 }

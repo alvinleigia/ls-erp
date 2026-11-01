@@ -1,4 +1,5 @@
 "use client"
+import { InfoHelp } from "@/components/erp/info-help"
 import { useEffect,useRef,useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -25,7 +26,7 @@ export function SourceTaxInputs({endpoint,revision}:{endpoint:string;revision:nu
  }
  async function save(){if(!data?.issuer||!recipient)return;setBusy(true);setError('');try{await api(endpoint,{revision,mappingVersion:data.issuer.mappingVersion,issuerId:data.issuer.id,issuerVersion:data.issuer.version,recipientId:recipient.id,recipientVersion:recipient.version,proposedSupplyOn:date,reviewed,lines:lines.map(({lineIndex,profileId,profileVersion,variant,placeRegionCode,placeBasis})=>({lineIndex,profileId,profileVersion,variant,placeCountryCode:'IN',placeRegionCode,placeBasis}))});setRefresh(v=>v+1)}catch(e){setError((e as Error).message)}finally{setBusy(false)}}
  const change=(index:number,patch:Partial<Line>)=>setLines(rows=>rows.map(l=>l.lineIndex===index?{...l,...patch}:l))
- return <section aria-label="Quotation tax preparation" className="space-y-4"><h2 className="text-lg font-semibold">Tax preparation · revision {revision}</h2><p className="text-sm text-muted-foreground">Record reviewed tax inputs against this saved commercial revision. Preparing inputs does not approve tax eligibility, amend prices or enable GST invoices. This revision will require tax-aware pricing approval before an order can be created.</p>
+ return <section aria-label="Quotation tax preparation" className="space-y-4"><h2 className="text-lg font-semibold">Tax preparation · revision {revision}</h2><InfoHelp title="Reviewed tax inputs">Record reviewed tax inputs against this saved commercial revision. Preparing inputs does not approve tax eligibility, amend prices or enable GST invoices. This revision will require tax-aware pricing approval before an order can be created.</InfoHelp>
   {error&&<p role="alert" className="text-destructive">{error}</p>}{!data&&!error&&<p>Loading tax preparation…</p>}
   {data&&<><p className="text-sm">Saved commercial amount: {data.source.currency} {data.source.consideration}</p>
    {data.review?<div className="space-y-3 rounded-md border p-4"><h3 className="font-semibold">Prepared tax inputs — immutable</h3><p>Proposed supply date: {data.review.proposedSupplyOn.slice(0,10)}</p><p>Issuer: {data.review.issuerSnapshot.legalName} · {data.review.issuerSnapshot.registrationNumber}</p><p>Recipient: {data.review.recipientSnapshot.legalName} · {data.review.recipientSnapshot.registrationNumber||'Unregistered (reviewed)'}</p>{data.review.lines.map(l=><div className="border-t pt-2" key={l.lineIndex}><p>{data.source.lines[l.lineIndex].description} · {l.profileSnapshot.name} · {l.variant}</p><p>India region {l.placeRegionCode}: {l.placeBasis}</p></div>)}<p role="status">{data.reason}</p>

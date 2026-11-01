@@ -1,4 +1,5 @@
 "use client"
+import { InfoHelp } from "@/components/erp/info-help"
 import { ParticipantInformationSummary } from "@/platform/participants/summary"
 import { quotationDocumentLabels } from "../quotation-labels"
 import { useTerminology } from "@/platform/terminology/provider"
@@ -51,7 +52,7 @@ export function QuotationSummary({ value, snapshot, section, canEdit, name, arch
     </AccessSummarySection>
   </>
   if (section === "payments") return <AccessSummarySection sectionKey="Instalment schedule" title={snapshot ? documentLabels.paymentSchedule : term("paymentPlans.paymentPlan.singular", "Instalment schedule")} canEdit={canEdit} fields={[]}>
-    <p className="text-sm text-muted-foreground">Percentages apply to total consideration. Extra charges follow their own payment conditions.</p>
+    <InfoHelp title="Payment schedule">Percentages apply to total consideration. Extra charges follow their own payment conditions.</InfoHelp>
     <DetailTable headings={["Instalment", "Percentage", "Days from booking", "Note", ...(calculation ? ["Due date", "Amount"] : [])]} rows={value.instalments.map((item, index) => [item.label, `${item.percent}%`, String(item.days), item.note, ...(calculation ? [formatDateForDisplay(calculation.instalments[index].dueDate, snapshot?.dateFormat), money(calculation.instalments[index].amount)] : [])])} />
   </AccessSummarySection>
   return <>

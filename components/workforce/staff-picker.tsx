@@ -1,4 +1,5 @@
 "use client"
+import { InfoHelp } from "@/components/erp/info-help"
 import * as React from "react"
 import { SearchableSelect } from "@/components/searchable-select"
 import { Button } from "@/components/ui/button"
@@ -61,6 +62,6 @@ export function WorkforceStaffPicker({ family, action, sourceId, startDate, endD
     </> : <SearchableSelect id={id} value={value[0] ?? ""} selectedOption={value[0] === "all" ? { value: "all", label: "All staff" } : retained[0] ? { value: retained[0].id, label: label(retained[0]) } : undefined} options={[...(all ? [{ value: "all", label: "All staff" }] : []), ...choices.map(staff => ({ value: staff.id, label: label(staff) }))]} onChange={id => choose([id])} onSearchChange={search} placeholder="Select staff" emptyLabel={message} disabled={!valid} />}
     {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
     {ready && <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground"><span>{view.total} matching staff</span><Button type="button" variant="ghost" size="sm" aria-label="Previous staff choices" disabled={page <= 1} onClick={() => setPage(page - 1)}>Previous</Button><span>{page} / {view.totalPages}</span><Button type="button" variant="ghost" size="sm" aria-label="Next staff choices" disabled={page >= view.totalPages} onClick={() => setPage(page + 1)}>Next</Button></div>}
-    {action !== "browse" && <p className="text-xs text-muted-foreground">Choices require workplace coverage for the entire window in this office. Saved assignments remain selected; saving rechecks current access and dates.</p>}
+    {action !== "browse" && <InfoHelp title="Staff assignment choices">Choices require workplace coverage for the entire window in this office. Saved assignments remain selected; saving rechecks current access and dates.</InfoHelp>}
   </div>
 }

@@ -62,10 +62,14 @@ import { LeadSourceList } from '@/modules/crm/components/lead-source-list';
 import { LostReasonList } from '@/modules/crm/components/lost-reason-list';
 import { SalesReports } from '@/modules/crm/components/sales-reports';
 import { ApplicationAccessProvider } from '@/application/access-provider';
+import { InfoHelpPreview } from '@/tests/browser/fixtures/info-help-preview';
+import { RouteAccessProvider } from '@/platform/access/route-provider';
+import { applicationRouteAccess } from '@/application/access-routes';
 import { PropertyChoiceEditor } from '@/modules/real-estate/components/choice-editor';
 import { ActivityTypeList } from '@/modules/crm/components/activity-type-list';
 function Preview(){
  const path=usePathname().split('/'), query=useSearchParams(), key=path[2]==='configuration'?path[3]:path[2], raw=path[2]==='configuration'?path[4]:path[3], id=raw==='new'?undefined:raw;
+ if(path[1]==='help-fixture')return <InfoHelpPreview/>;
  if(path[1]==='crm' && key==='sales')return <BusinessModuleProvider><ApplicationAccessProvider><SalesReports initialView={query.get('view')==='team'?'team':'sales'}/></ApplicationAccessProvider></BusinessModuleProvider>;
  if(path[1]==='dashboard' || path[1]==='settings' && (!path[2] || path[2]==='taxes'))return <BusinessModuleProvider><CoreViewGuard role={query.get('role')||'MANAGER'} userId='manager'>{path[1]==='dashboard'?<Dashboard/>:path[2]==='taxes'?<Taxes/>:<Settings/>}</CoreViewGuard></BusinessModuleProvider>;
  if(path[1]==='reports')return <BusinessModuleProvider><CoreViewGuard role={query.get('role')||'MANAGER'} userId='manager'>{path[2]==='coupon-usage'?<CouponUsageReport/>:<AuditLogsReport/>}</CoreViewGuard></BusinessModuleProvider>;
@@ -82,7 +86,7 @@ function Preview(){
  const Editor=key==='real-estate'?PropertyChoiceEditor:editors[key];
  return <SessionProvider session={{user:{id:'admin',name:'Test Admin',role:'ADMIN'},expires:'2099-01-01'}}><BusinessModuleProvider><ApplicationCrmProvider><BusinessViewGuard>{Editor && <Editor key={key+raw} id={key==='real-estate'?path[5]:id} kind={path[4]} enquiryId={query.get('enquiryId') || undefined} template={key==='quotation-templates'} revision={Number(query.get('revision'))||undefined}/>}</BusinessViewGuard></ApplicationCrmProvider></BusinessModuleProvider></SessionProvider>
 }
-export default function Page(){return <Suspense><Preview/></Suspense>}`)
+export default function Page(){return <RouteAccessProvider access={applicationRouteAccess}><Suspense><Preview/></Suspense></RouteAccessProvider>}`)
 for (const route of ['leaves/[id]', 'leaves/groups/[id]']) {
  fs.mkdirSync(path.join(base, 'app', route), { recursive: true });
  write('app/'+route+'/page.tsx', '"use client"; import View from "@/app/(protected)/'+route+'/page"; import { BusinessModuleProvider } from "@/platform/module-provider"; import { BusinessViewGuard } from "@/platform/access/view-guard"; export default function Page(){return <BusinessModuleProvider><BusinessViewGuard module="leaves"><View/></BusinessViewGuard></BusinessModuleProvider>}');

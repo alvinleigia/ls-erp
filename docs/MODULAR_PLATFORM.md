@@ -1,3 +1,19 @@
+## P13H shared contextual information controls
+
+Page/section descriptions and optional field help share a click-to-open information
+panel throughout business modules. Standalone guidance across CRM, access/team
+configuration, companies, collaborators, documents, branding, tax, inventory,
+workforce and real estate uses the same component. Long rich text scrolls within
+the viewport; heading/close stay available on mobile. Optional explanations are
+removed from the normal screen flow without deleting their content.
+
+Errors, required constraints, warnings, permission notices, financial classifications,
+record values, selected dates/timezones and full-versus-paged chart context remain
+visible. Help in collapsed editors, disabled fields, dialogs and filter popovers
+preserves editing state. No schema, query, access or calculation changes are needed.
+Implementation conventions and the repeatable focused test command are in
+`docs/CONVENTIONS.md`. Hosted verification and release status are recorded separately.
+
 ## P13G persistent local demo and migration automation
 
 `local:demo` starts a dedicated persistent PostgreSQL Docker database and the real

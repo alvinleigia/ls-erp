@@ -169,7 +169,7 @@ export default function LeaveDefinitionDetailPage() {
           >
             Delete
           </Button>
-        </div> </>} />
+        </div> </>} descriptionDisplay="inline" />
 
       <LeaveDefinitionSummary row={row} />
       {canEdit && editOpen && <DraftPanel title="Edit leave definition" description="Update the configuration below." fingerprint={values} saving={saving} error={formError} onClose={() => { setValues(mapToFormValues(row)); setEditOpen(false) }} onSubmit={() => void save()}><LeaveDefinitionFormFields

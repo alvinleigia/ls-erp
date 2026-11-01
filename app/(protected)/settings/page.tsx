@@ -1,4 +1,5 @@
 "use client"
+import { InfoHelp } from "@/components/erp/info-help"
 import { useCurrentResourceAction } from "@/platform/access/view-guard"
 
 import * as React from "react"
@@ -434,9 +435,9 @@ export default function SettingsPage() {
       <div className="rounded-xl border bg-card p-6">
         <div className="space-y-1">
           <h2 className="text-lg font-semibold">Email delivery</h2>
-          <p className="text-sm text-muted-foreground">
+          <InfoHelp title="Email delivery">
             SMTP is configured from backend environment variables. Secrets are never shown in UI.
-          </p>
+          </InfoHelp>
         </div>
         <div className="mt-4 grid gap-4 sm:grid-cols-2">
           <div className="rounded-md border p-3 text-sm">

@@ -1,4 +1,5 @@
 "use client"
+import { InfoHelp } from "@/components/erp/info-help"
 import * as React from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
@@ -47,7 +48,7 @@ export function CompanyStructureList({ kind }: { kind: Kind }) {
   return <div className={pageClass}>
     <PageHeader title="Companies and offices" description="Define your operating companies, subsidiaries and their offices." backHref="/settings" actions={<Button asChild><Link href={`${path.page}/new`}>New {kind}</Link></Button>} />
     <nav aria-label="Company structure" className="flex gap-2"><Button asChild variant={kind === "company" ? "default" : "outline"}><Link href="/settings/companies">Companies</Link></Button><Button asChild variant={kind === "office" ? "default" : "outline"}><Link href="/settings/offices">Offices</Link></Button></nav>
-    <p className="text-sm text-muted-foreground">This directory defines your business structure. Office membership, record permissions and employee workplace assignments are configured separately.</p>
+    <InfoHelp title="Business structure">This directory defines your business structure. Office membership, record permissions and employee workplace assignments are configured separately.</InfoHelp>
     <Surface><div className="flex flex-wrap gap-3"><Input aria-label={`Search ${path.plural.toLowerCase()}`} placeholder={`Search ${path.plural.toLowerCase()}...`} value={query.q} onChange={event => setQuery({ ...query, q: event.target.value, page: 1 })} className="min-w-0 flex-1 basis-48" /><Select aria-label="Structure status" value={query.status} onValueChange={status => setQuery({ ...query, status, page: 1 })}><option value="active">Active</option><option value="archived">Archived</option><option value="all">All statuses</option></Select></div>
       {error && <p role="alert" className="text-destructive">{error}</p>}<DataTable table={table} loading={loading} emptyMessage={`No ${path.plural.toLowerCase()} in this selection.`} /><TablePagination table={table} totalRows={data.total} loading={loading} />
     </Surface>

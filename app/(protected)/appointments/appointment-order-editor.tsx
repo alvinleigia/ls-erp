@@ -1,4 +1,5 @@
 "use client"
+import { InfoHelp } from "@/components/erp/info-help"
 import { useCreationOfficeSnapshot } from "@/platform/companies/creation-snapshot"
 import { useBusinessModules } from "@/platform/module-provider"
 
@@ -616,9 +617,9 @@ export function AppointmentOrderEditor({ mode, appointmentId }: AppointmentOrder
       </div>
 
       <Section title="Schedule preview">
-        <p className="mb-3 text-xs text-muted-foreground">
+        <InfoHelp title="Service scheduling" className="mb-3">
           Services are scheduled sequentially from the selected start time; wait gaps appear when a later slot is needed.
-        </p>
+        </InfoHelp>
         {schedulePreview.length ? (
           <div className="space-y-2">
             {schedulePreview.map((slot) => (
@@ -675,7 +676,7 @@ export function AppointmentOrderEditor({ mode, appointmentId }: AppointmentOrder
       <Button variant="outline" onClick={handlePrintInvoice} disabled={!savedOrder || !canExport}>Print invoice</Button>
       <Button variant="outline" onClick={() => void handleEmailInvoice()} loading={emailing} disabled={!savedOrder || !canEmail || savedOrder.office?.active === false}>Email invoice</Button>
       {canWrite && !isReadOnlyBooking && savedOrder && <Button onClick={() => { applyOrderToForm(savedOrder); setFormError(""); setEditOpen(true) }}>Edit booking</Button>}
-    </>} />
+    </>} descriptionDisplay="inline" />
     {savedOrder?.office && <p className="text-sm text-muted-foreground">Office: {savedOrder.office.companyName} / {savedOrder.office.name}{!savedOrder.office.active && " (closed; read-only)"}</p>}
     {isReadOnlyBooking && <p className="text-sm text-muted-foreground">This booking is in the past or in a closed status and is read-only.</p>}
     {mode === "create" ? <>{formError && <p role="alert" className="text-destructive">{formError}</p>}<fieldset disabled={saving || !canWrite} className="min-w-0 space-y-6">{formContent}</fieldset></> : savedOrder && <AppointmentOrderSummary order={savedOrder} settings={settings} />}

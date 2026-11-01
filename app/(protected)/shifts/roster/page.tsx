@@ -1,4 +1,5 @@
 "use client"
+import { InfoHelp } from "@/components/erp/info-help"
 import { useCreationOfficeSnapshot } from "@/platform/companies/creation-snapshot"
 import { useBusinessModules } from "@/platform/module-provider"
 
@@ -1656,7 +1657,7 @@ export default function RosterPage() {
 
   return (
     <div className={pageClass}>
-      <p className="text-sm text-muted-foreground">Hours cover permitted dates on this page. Plan details and leave reasons require separate access.</p>
+      <InfoHelp title="Roster hours">Hours cover permitted dates on this page. Plan details and leave reasons require separate access.</InfoHelp>
       <PageHeader title={<> Roster </>} description={<> View permitted staff hours and saved roster history. </>} />
       {rosterView?.key === rosterKey && staffFilter !== "all" && <StaffWorkplacePanel key={staffFilter} staffId={staffFilter} />}
 

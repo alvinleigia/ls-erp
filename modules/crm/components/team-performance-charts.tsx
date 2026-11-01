@@ -4,6 +4,7 @@ import { Select } from "@/components/erp/controls"
 import { useTerminology } from "@/platform/terminology/provider"
 import { teamMetricLabel, type TeamMetric, type TeamPerformanceResponse } from "../team-performance-contract"
 import { ReportBars, ReportDonut } from "./report-charts"
+import { InfoHelp } from "@/components/erp/info-help"
 
 export type MemberChartComparison = "enquiries" | "outcomes" | "workload" | "followup" | "calls"
 
@@ -21,7 +22,7 @@ export function TeamPerformanceCharts({ data, comparison, onComparisonChange }: 
   }
   const selected = choices[comparison]
   return <div className="space-y-5">
-    <div><h2 className="text-lg font-semibold">Team insights</h2><p className="text-sm text-muted-foreground">Totals cover every matching member and page, including the member search. Charts follow the report filters and your record access.</p></div>
+    <div className="flex items-center gap-2"><h2 className="text-lg font-semibold">Team insights</h2><InfoHelp title="Team insights">Totals cover every matching member and page, including the member search. Charts follow the report filters and your record access.</InfoHelp></div>
     <div className="grid min-w-0 gap-5 xl:grid-cols-2">
       <ReportDonut title={term("crm.enquiry.singular", "Enquiry status mix", "{label} status mix")} description="Created in the selected period, grouped by their current status. Conversion is shown separately because it overlaps statuses." rows={rows(["new", "contacted", "qualified", "closed"])} />
       <ReportDonut title={term("crm.enquiry.singular", "Enquiry conversion", "{label} conversion")} description="Created in the selected period. Converted means a linked opportunity you can read; the remainder has no readable linked opportunity." rows={[{ label: label("converted"), value: totals.converted }, { label: "Without a readable linked opportunity", value: totals.enquiries - totals.converted }]} />
@@ -31,6 +32,6 @@ export function TeamPerformanceCharts({ data, comparison, onComparisonChange }: 
       <ReportDonut title="Open pipeline follow-up coverage" description="Current readable open opportunities across all dates. Coverage means at least one directly linked readable open or in-progress activity; it does not mean the follow-up is on time." rows={[{ label: "With open follow-up", value: totals.pipeline - totals.gaps }, { label: "Without open follow-up", value: totals.gaps }]} />
     </div>
     <label className="flex max-w-sm flex-col gap-1 text-sm">Member chart comparison<Select aria-label="Member chart comparison" value={comparison} onValueChange={value => onComparisonChange(value as MemberChartComparison)}><option value="enquiries">Enquiries and conversions</option><option value="outcomes">Won and lost opportunities</option><option value="workload">Open and in-progress activities</option><option value="followup">Overdue and due-today activities</option><option value="calls">Completed and connected calls</option></Select></label>
-    <ReportBars title="Member comparison" description={`Showing the ${data.items.length} members on table page ${data.page} of ${data.totalPages}, in the same sort order. Change the table page, size or search to compare other members. Measures use the date bases described above and can overlap.`} primary={label(selected.primary)} secondary={label(selected.secondary)} rows={data.items.map(row => ({ label: row.name, value: row[selected.primary], secondary: row[selected.secondary] }))} />
+    <ReportBars title="Member comparison" context={`Table page ${data.page} of ${data.totalPages} · ${data.items.length} members`} description="This chart follows the table page and sort order. Change the table page, size or search to compare other members. Measures use the date bases described above and can overlap." primary={label(selected.primary)} secondary={label(selected.secondary)} rows={data.items.map(row => ({ label: row.name, value: row[selected.primary], secondary: row[selected.secondary] }))} />
   </div>
 }

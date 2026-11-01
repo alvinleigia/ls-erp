@@ -58,9 +58,8 @@ export function useCustomFields(resource: string, id?: string, sourceEnquiryId?:
       <div className="grid gap-4 sm:grid-cols-2">{fields.map(field => {
         const value = Object.hasOwn(patch, field.id) ? patch[field.id] : field.value
         const locked = disabled || !field.editable
-        return <FormField key={field.id} id={`custom-${field.id}`} label={`${field.savedName || field.name}${field.required ? " *" : ""}${field.archived ? " (archived)" : ""}`}>
+        return <FormField key={field.id} id={`custom-${field.id}`} label={`${field.savedName || field.name}${field.required ? " *" : ""}${field.archived ? " (archived)" : ""}`} help={field.helpText}>
           <FieldControl field={{ ...field, optionName: Object.hasOwn(patch, field.id) ? undefined : field.optionName }} id={`custom-${field.id}`} value={value} disabled={locked} onChange={value => setPatch(previous => ({ ...previous, [field.id]: value }))} />
-          {field.helpText && <p className="text-xs text-muted-foreground">{field.helpText}</p>}
           {!locked && !field.required && value !== null && <Button type="button" variant="link" size="sm" onClick={() => setPatch(previous => ({ ...previous, [field.id]: null }))}>Clear {field.name}</Button>}
         </FormField>
       })}</div>

@@ -4,11 +4,13 @@ import * as React from "react"
 
 import { cn } from "@/lib/utils"
 import { Label } from "@/components/ui/label"
+import { InfoHelp } from "@/components/erp/info-help"
 
 type FormFieldProps = {
   id: string
   label: string
   error?: string
+  help?: React.ReactNode
   className?: string
   children: React.ReactNode
 }
@@ -17,12 +19,13 @@ export function FormField({
   id,
   label,
   error,
+  help,
   className,
   children,
 }: FormFieldProps) {
   return (
     <div className={cn("space-y-2", className)}>
-      <Label htmlFor={id}>{label}</Label>
+      <div className="flex items-center gap-1"><Label htmlFor={id}>{label}</Label>{help && <InfoHelp title={label} className="-my-1.5">{help}</InfoHelp>}</div>
       {children}
       {error ? <p className="text-xs text-destructive">{error}</p> : null}
     </div>

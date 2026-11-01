@@ -2,6 +2,27 @@
 
 This is the baseline for new modules (API + UI) in this codebase.
 
+## Optional UI guidance (P13H)
+
+- Use `InfoHelp` from `components/erp/info-help` for explanatory content. It opens
+  on click, touch, Enter or Space; Escape, outside click and the close action dismiss
+  it and return focus. Rich paragraphs, lists and links fit a bounded scrolling body
+  with a persistent heading/close action. Avoid native `title` as the only help.
+- Shared `PageHeader`, `AccessPageHeader` and `Section` descriptions use this control
+  by default. Set `descriptionDisplay="inline"` for essential record context or
+  action warnings. Pass optional field guidance through `FormField.help`; keep the
+  help control outside the actual label and outside accordion summaries.
+- Keep validation errors, required input constraints, destructive confirmations,
+  read-only/access notices and financial document classifications visible. Keep
+  selected dates/timezones, office/status context, totals and chart page boundaries
+  visible. Move only optional explanations; never hide data based on text length.
+- Give standalone help a contextual title. Preserve structured content and existing
+  permission gates. Help must not submit forms, toggle enclosing editors, navigate
+  configuration cards or discard drafts. No API requests are needed to open it.
+- Run `npx.cmd playwright test --config playwright.info-help.config.ts` for the
+  isolated interaction/mobile and report-regression checks. It uses synthetic UI
+  fixtures with no database or saved hosted login.
+
 ## List API contract
 - Params: `page` (1-based), `pageSize`, `sort`, `order`, `q`
 - Response: `{ items, page, pageSize, total, totalPages }`

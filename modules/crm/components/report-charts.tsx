@@ -2,6 +2,7 @@
 
 import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts"
 import { Section } from "@/components/erp/section"
+import type { ReactNode } from "react"
 
 const colors = ["#2563eb", "#0d9488", "#d97706", "#dc2626", "#7c3aed", "#db2777", "#64748b"]
 const tooltipStyle = { backgroundColor: "var(--popover)", color: "var(--popover-foreground)", borderColor: "var(--border)", borderRadius: 8 }
@@ -24,9 +25,10 @@ export function ReportDonut({ title, description, rows }: { title: string; descr
   </Section>
 }
 
-export function ReportBars({ title, description, rows, primary = "Records", secondary }: { title: string; description: string; rows: ReportChartRow[]; primary?: string; secondary?: string }) {
+export function ReportBars({ title, description, context, rows, primary = "Records", secondary }: { title: string; description: string; context?: ReactNode; rows: ReportChartRow[]; primary?: string; secondary?: string }) {
   const hasValues = rows.some(row => row.value > 0 || (row.secondary || 0) > 0)
   return <Section title={title} description={description}>
+    {context && <p className="text-sm text-muted-foreground">{context}</p>}
     {hasValues ? <div aria-hidden="true" className="min-w-0" style={{ height: Math.max(220, rows.length * (secondary ? 54 : 36) + 40) }}>
       <ResponsiveContainer width="100%" height="100%"><BarChart accessibilityLayer={false} data={rows} layout="vertical" margin={{ left: 0, right: 24 }}>
         <CartesianGrid horizontal={false} strokeDasharray="3 3" stroke="var(--border)" />
