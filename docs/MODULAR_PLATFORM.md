@@ -1,3 +1,15 @@
+## P13F sales report visualization
+
+Sales summary and Team performance now include twelve count visualizations across
+conversion, statuses, won/lost outcomes, follow-up coverage, activities, call
+outcomes, grouped sources/stages and member comparisons. Existing authorized
+responses supply all chart data; no new requests, queries, migration or access
+changes are needed. Full-selection totals and paged comparisons are labelled
+separately; overlapping metrics and mixed date bases are explained. Exact
+currency-separated values remain in tables. Sort headers no longer inherit the
+shared New/add plus icon. See `docs/TEAM_PERFORMANCE_P13D.md` for the chart contract
+and isolated browser verification command. Hosted release status is separate.
+
 ## P13E team performance loading-time correction
 
 Team comparison, totals and currency values now share one aggregate statement

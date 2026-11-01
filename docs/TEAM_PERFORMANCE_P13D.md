@@ -122,3 +122,45 @@ are retained under `tmp/team-performance-fast`.
 All 35 native/unit checks and nine browser scenarios pass, including a regression
 guard for one aggregation per report response, no aggregation for options, no
 inactive-summary requests, direct navigation/reload, permission loss and mobile use.
+
+## P13F sales report charts
+
+Sales summary adds conversion, closed won/lost outcomes and current follow-up
+coverage doughnuts. The existing conversion breakdown and stage/currency tables
+also include horizontal count charts for the current group page. Monetary values
+remain exact strings in the original currency-separated table; they are never
+combined or converted to floating-point chart amounts.
+
+Team performance adds current enquiry status mix, enquiry conversion, closed
+opportunity outcomes, completed-call outcomes, activity workload/delivery and
+pipeline follow-up coverage. These six charts use full-selection totals, including
+the member search, across all pages. Conversion overlaps enquiry statuses;
+pending/overdue/today activity measures overlap and are not a stacked total.
+Descriptions distinguish creation, closing, completion and current-work dates.
+Coverage means readable linked pending work, not necessarily an on-time follow-up.
+
+The member bar comparison follows the table's current page and sort, explicitly
+labels that boundary, and offers five paired comparisons: enquiries/conversions,
+won/lost, open/in-progress activities, overdue/due-today and completed/connected
+calls. All charts reuse existing authorized responses without new requests or
+queries. Existing paged tables, drill-downs, CSV and filters remain authoritative.
+No timeline is inferred from snapshot totals. No data, migration or permission
+changes are introduced.
+
+Charts include numerical legends or keyboard-accessible figure tables, explicit
+all-zero states, responsive sizing and dark/light styling. New filters clear old
+charts immediately; failed or revoked access removes them. Sort headers disable
+the shared automatic action icon, removing the unintended plus before New while
+retaining sorting indicators and aria-sort (including Conversion %).
+
+Run `npx.cmd playwright test --config playwright.sales-report-ui.config.ts` for
+four intercepted component-browser scenarios. This fixture has no database or
+hosted login and rejects all business writes. It checks reconciliation, paging,
+sorting/no plus, currency precision, inactive-report request suppression, empty
+and denied states, dark/light rendering and mobile overflow. Hosted deployment
+checks remain separate from this local verification.
+
+Local verification (2026-11-01): all four component-browser scenarios, the
+optimized production build, TypeScript, targeted lint and whitespace checks pass.
+Desktop dark/light and mobile screenshots were inspected. The selected member
+comparison persists across table paging/sorting while stale figures clear.

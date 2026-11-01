@@ -60,10 +60,13 @@ import { CustomFieldEditor } from '@/modules/crm/components/custom-field-configu
 import { QuotationEditor } from '@/modules/sales-documents/components/quotations';
 import { LeadSourceList } from '@/modules/crm/components/lead-source-list';
 import { LostReasonList } from '@/modules/crm/components/lost-reason-list';
+import { SalesReports } from '@/modules/crm/components/sales-reports';
+import { ApplicationAccessProvider } from '@/application/access-provider';
 import { PropertyChoiceEditor } from '@/modules/real-estate/components/choice-editor';
 import { ActivityTypeList } from '@/modules/crm/components/activity-type-list';
 function Preview(){
  const path=usePathname().split('/'), query=useSearchParams(), key=path[2]==='configuration'?path[3]:path[2], raw=path[2]==='configuration'?path[4]:path[3], id=raw==='new'?undefined:raw;
+ if(path[1]==='crm' && key==='sales')return <BusinessModuleProvider><ApplicationAccessProvider><SalesReports initialView={query.get('view')==='team'?'team':'sales'}/></ApplicationAccessProvider></BusinessModuleProvider>;
  if(path[1]==='dashboard' || path[1]==='settings' && (!path[2] || path[2]==='taxes'))return <BusinessModuleProvider><CoreViewGuard role={query.get('role')||'MANAGER'} userId='manager'>{path[1]==='dashboard'?<Dashboard/>:path[2]==='taxes'?<Taxes/>:<Settings/>}</CoreViewGuard></BusinessModuleProvider>;
  if(path[1]==='reports')return <BusinessModuleProvider><CoreViewGuard role={query.get('role')||'MANAGER'} userId='manager'>{path[2]==='coupon-usage'?<CouponUsageReport/>:<AuditLogsReport/>}</CoreViewGuard></BusinessModuleProvider>;
  if(path[1]==='leaves')return <BusinessModuleProvider><BusinessViewGuard module='leaves'><SessionProvider session={{user:{id:'manager',name:'Test Manager',role:query.get('role')==='STAFF'?'STAFF':query.get('role')==='ADMIN'?'ADMIN':'MANAGER'},expires:'2099-01-01'}}><div className='min-w-0 [contain:inline-size]'>{path[2]==='requests'?<LeaveRequests/>:path[2]==='approvals'?<LeaveApprovals/>:path[2]==='new'?<NewLeave/>:path[2]==='groups'?(path[3]==='new'?<NewLeaveGroup/>:<LeaveGroups/>):<Leaves/>}</div></SessionProvider></BusinessViewGuard></BusinessModuleProvider>;

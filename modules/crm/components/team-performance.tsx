@@ -11,6 +11,7 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@
 import type { ListResponse } from "@/types/api"
 import { teamMetrics, teamMetricKeys, teamMetricLabel, type TeamMetric, type TeamPerformanceResponse, type TeamPerformanceRecord } from "../team-performance-contract"
 import { useTerminology } from "@/platform/terminology/provider"
+import { TeamPerformanceCharts, type MemberChartComparison } from "./team-performance-charts"
 
 function useTeamReport<T>(path: string, params: string, revision: number) {
   const key = `${path}?${params}&${revision}`
@@ -47,6 +48,7 @@ export function TeamPerformance({ params, revision, formatMoney }: { params: str
   const term = useTerminology()
   const [page, setPage] = React.useState(1), [size, setSize] = React.useState(20), [search, setSearch] = React.useState("")
   const [group, setGroup] = React.useState("summary"), [sort, setSort] = React.useState<string>("name"), [order, setOrder] = React.useState("asc")
+  const [chartComparison, setChartComparison] = React.useState<MemberChartComparison>("enquiries")
   const [selection, setSelection] = React.useState<{ metric: TeamMetric; userId?: string; caption: string } | null>(null)
   const base = `${params}&q=${encodeURIComponent(search)}&sort=${sort}&order=${order}`
   const { data, error, loading } = useTeamReport<TeamPerformanceResponse>("", `${base}&page=${page}&pageSize=${size}`, revision)
@@ -68,9 +70,9 @@ export function TeamPerformance({ params, revision, formatMoney }: { params: str
       {data && !data.canReadRoster && <p role="status" className="text-sm text-muted-foreground">Team membership is not readable. Showing owners of matching records; zero-work members are unavailable.</p>}
       {error && <p role="alert" className="text-destructive">{error} Use Refresh to retry.</p>}
       <div className="max-w-full overflow-x-auto [&>div]:overflow-visible" role="region" aria-label="Team member performance comparison" tabIndex={0}><Table><TableHeader><TableRow>
-        <TableHead className="sticky left-0 z-10 bg-card" aria-sort={sort === "name" ? order === "asc" ? "ascending" : "descending" : "none"}><Button variant="ghost" className="px-0" onClick={() => changeSort("name")}>Team member {sort === "name" ? order === "asc" ? "↑" : "↓" : ""}</Button></TableHead>
-        {metrics.map(metric => <TableHead key={metric} className="min-w-28 whitespace-normal" aria-sort={sort === metric ? order === "asc" ? "ascending" : "descending" : "none"}><Button variant="ghost" className="h-auto whitespace-normal px-0 text-left" onClick={() => changeSort(metric)}>{teamMetricLabel(term, metric)} {sort === metric ? order === "asc" ? "↑" : "↓" : ""}</Button></TableHead>)}
-        {showConversion && <TableHead><Button variant="ghost" className="px-0" onClick={() => changeSort("conversionPercent")}>Conversion %</Button></TableHead>}{showValues && <TableHead>Open pipeline value</TableHead>}
+        <TableHead className="sticky left-0 z-10 bg-card" aria-sort={sort === "name" ? order === "asc" ? "ascending" : "descending" : "none"}><Button autoIcon={false} variant="ghost" className="px-0" onClick={() => changeSort("name")}>Team member {sort === "name" ? order === "asc" ? "↑" : "↓" : ""}</Button></TableHead>
+        {metrics.map(metric => <TableHead key={metric} className="min-w-28 whitespace-normal" aria-sort={sort === metric ? order === "asc" ? "ascending" : "descending" : "none"}><Button autoIcon={false} variant="ghost" className="h-auto whitespace-normal px-0 text-left" onClick={() => changeSort(metric)}>{teamMetricLabel(term, metric)} {sort === metric ? order === "asc" ? "↑" : "↓" : ""}</Button></TableHead>)}
+        {showConversion && <TableHead aria-sort={sort === "conversionPercent" ? order === "asc" ? "ascending" : "descending" : "none"}><Button autoIcon={false} variant="ghost" className="px-0" onClick={() => changeSort("conversionPercent")}>Conversion % {sort === "conversionPercent" ? order === "asc" ? "↑" : "↓" : ""}</Button></TableHead>}{showValues && <TableHead>Open pipeline value</TableHead>}
       </TableRow></TableHeader><TableBody>
         {!loading && data?.items.map(row => <TableRow key={row.id}><TableCell className="sticky left-0 z-10 min-w-44 bg-card"><p className="font-medium">{row.name}</p><p className="text-xs text-muted-foreground">{row.userType === "external" ? "External collaborator" : "Internal user"}{row.isMember ? " · Member" : " · Record owner"}{row.status !== "ACTIVE" ? ` · ${row.status.toLowerCase()}` : ""}</p></TableCell>{metrics.map(metric => <TableCell key={metric}>{number(metric, row[metric], row.name, row.id)}</TableCell>)}{showConversion && <TableCell className="tabular-nums">{row.conversionPercent === null ? "—" : `${row.conversionPercent}%`}</TableCell>}{showValues && <TableCell>{pipeline(row.pipelineValues)}</TableCell>}</TableRow>)}
         {!data?.items.length && <TableRow><TableCell colSpan={1 + metrics.length + Number(showConversion) + Number(showValues)}>{loading ? "Loading team performance…" : error ? "Team performance unavailable." : "No members or records match this selection."}</TableCell></TableRow>}
@@ -78,6 +80,7 @@ export function TeamPerformance({ params, revision, formatMoney }: { params: str
       </TableBody></Table></div>
       <Pagination page={page} pageSize={size} total={data?.total ?? 0} totalPages={data?.totalPages} loading={loading} onPageChange={setPage} onPageSizeChange={value => { setSize(value); setPage(1) }} />
     </Section>
+    {data && !error && <TeamPerformanceCharts data={data} comparison={chartComparison} onComparisonChange={setChartComparison} />}
     {selection && !loading && !error && <PerformanceRecords key={`${base}:${selection.metric}:${selection.userId || "all"}`} params={`${base}${selection.userId ? `&assignedUserId=${encodeURIComponent(selection.userId)}` : ""}`} metric={selection.metric} caption={selection.caption} revision={revision} onClose={() => setSelection(null)} />}
   </div>
 }
