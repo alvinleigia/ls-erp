@@ -1,4 +1,5 @@
 "use client"
+import { useListState } from "@/components/erp/list-navigation"
 import { InfoHelp } from "@/components/erp/info-help"
 import { AttributionFilters, emptyAttributionFilters } from "@/platform/collaborators/report-controls"
 import { attributionQuery, type AttributionFilter } from "@/platform/collaborators/report-validation"
@@ -23,24 +24,24 @@ import { ActivityTypeSelect, activityTypeFilter } from "./activity-type-select"
 import type { ActivityOverview as Overview, StaffActivityRow, FollowUpGapRow } from "@/types/crm-reports"
 import type { ListResponse } from "@/types/api"
 
-function Pager({ page, data, loading, setPage }: { page: number; data: { total: number; totalPages: number } | null; loading: boolean; setPage: (page: number) => void }) { return <Pagination page={page} pageSize={10} total={data?.total ?? 0} totalPages={data?.totalPages} loading={loading} onPageChange={setPage} /> }
+function Pager({ page, data, loading, setPage }: { page: number; data: { total: number; totalPages: number } | null; loading: boolean; setPage: (page: number) => void }) { return <Pagination resolved={!!data} page={page} pageSize={10} total={data?.total ?? 0} totalPages={data?.totalPages} loading={loading} onPageChange={setPage} /> }
 export function ActivityOverview() {
   const readTerm = useTerminologyReader()
   const term = useTerminology()
   const [data, setData] = React.useState<Overview | null>(null)
   const [staff, setStaff] = React.useState<ListResponse<StaffActivityRow> | null>(null)
   const [gaps, setGaps] = React.useState<ListResponse<FollowUpGapRow> | null>(null)
-  const [attribution, setAttribution] = React.useState<AttributionFilter>(emptyAttributionFilters)
-  const [scope, setScope] = React.useState("mine")
-  const [owner, setOwner] = React.useState("")
-  const [team, setTeam] = React.useState("")
-  const [type, setType] = React.useState("")
+  const [attribution, setAttribution] = useListState<AttributionFilter>("activity-overview", "attribution", emptyAttributionFilters, { resetPages: true })
+  const [scope, setScope] = useListState("activity-overview", "scope", "mine", { resetPages: true })
+  const [owner, setOwner] = useListState("activity-overview", "owner", "", { resetPages: true })
+  const [team, setTeam] = useListState("activity-overview", "team", "", { resetPages: true })
+  const [type, setType] = useListState("activity-overview", "type", "", { resetPages: true })
   const [from, setFrom] = React.useState("")
   const [through, setThrough] = React.useState("")
-  const [period, setPeriod] = React.useState<{ from: string; through: string } | null>(null)
+  const [period, setPeriod] = useListState<{ from: string; through: string } | null>("activity-overview", "period", null, { kind: "period", resetPages: true })
   const [periodOpen, setPeriodOpen] = React.useState(false)
-  const [staffPage, setStaffPage] = React.useState(1)
-  const [gapPage, setGapPage] = React.useState(1)
+  const [staffPage, setStaffPage] = useListState("activity-overview", "staffPage", 1)
+  const [gapPage, setGapPage] = useListState("activity-overview", "gapPage", 1)
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState("")
   const [revision, setRevision] = React.useState(0)

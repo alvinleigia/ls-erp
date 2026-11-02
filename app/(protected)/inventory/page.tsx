@@ -1,4 +1,5 @@
 "use client"
+import { useListState } from "@/components/erp/list-navigation"
 
 import { InventoryCreationOffice } from "@/components/inventory/office-notice"
 import { useCreationOfficeSnapshot } from "@/platform/companies/creation-snapshot"
@@ -57,17 +58,17 @@ export default function InventoryProductsPage() {
   const canEdit = useCurrentResourceAction("edit")
   const canArchive = useCurrentResourceAction("archive")
 
-  const [officeId,setOfficeId] = React.useState("")
+  const [officeId,setOfficeId] = useListState("inventory-products", "officeId", "", { resetPages: true })
   const [stockContext,setStockContext] = React.useState<RecordOffice|null>(null)
   const [items, setItems] = React.useState<InventoryProductRow[]>([])
   const [taxes, setTaxes] = React.useState<TaxRow[]>([])
   const [loading, setLoading] = React.useState(true)
   const [totalRows, setTotalRows] = React.useState(0)
-  const [statusFilter, setStatusFilter] = React.useState("all")
+  const [statusFilter, setStatusFilter] = useListState("inventory-products", "statusFilter", "all", { resetPages: true })
   const listRequest = React.useRef<AbortController | null>(null)
-  const [search, setSearch] = React.useState("")
-  const [sorting, setSorting] = React.useState<SortingState>([])
-  const [pagination, setPagination] = React.useState<PaginationState>({ pageIndex: 0, pageSize: 10 })
+  const [search, setSearch] = useListState("inventory-products", "search", "", { resetPages: true })
+  const [sorting, setSorting] = useListState<SortingState>("inventory-products", "sorting", [], { kind: "sorting", resetPages: true })
+  const [pagination, setPagination] = useListState<PaginationState>("inventory-products", "pagination", { pageIndex: 0, pageSize: 10 })
   const [settings, setSettings] = React.useState<
     Required<
       Pick<

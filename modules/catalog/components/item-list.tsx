@@ -1,4 +1,5 @@
 "use client"
+import { useListState } from "@/components/erp/list-navigation"
 import * as React from "react"
 import Link from "@/platform/access/link"
 import { getCoreRowModel, useReactTable, type ColumnDef } from "@tanstack/react-table"
@@ -14,7 +15,7 @@ import type { AppSettingsPayload } from "@/types/scheduling"
 import { catalogKindLabels, catalogAvailabilityLabels } from "../labels"
 export type CatalogRow = { id: string; code: string; name: string; kind: string; price: string; currency: string; availability: string; reservationState?: string | null; archived: boolean; version: number }
 export function CatalogList({ extensionKey, contextId, newHref = "/catalog/new", embedded = false }: { extensionKey?: string; contextId?: string; newHref?: string; embedded?: boolean }) {
-  const [query, setQuery] = React.useState({ q: "", archived: "false", availability: "", page: 1, pageSize: 20 })
+  const [query, setQuery] = useListState("catalog-list", "query", { q: "", archived: "false", availability: "", page: 1, pageSize: 20 })
   const [data, setData] = React.useState<{ items: CatalogRow[]; total: number; canCreate: boolean }>({ items: [], total: 0, canCreate: false })
   const [loading, setLoading] = React.useState(true), [error, setError] = React.useState(""), [revision, setRevision] = React.useState(0)
   const [display, setDisplay] = React.useState<AppSettingsPayload>()

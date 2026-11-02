@@ -1,4 +1,5 @@
 "use client"
+import { useListState } from "@/components/erp/list-navigation"
 import { InfoHelp } from "@/components/erp/info-help"
 import { AttributionFilters, emptyAttributionFilters } from "@/platform/collaborators/report-controls"
 import { attributionQuery, type AttributionFilter } from "@/platform/collaborators/report-validation"
@@ -18,9 +19,9 @@ import { formatDecimalCurrency } from "@/lib/formatting"
 import type { ReceivableOverview, ReceivableOverviewRow } from "@/types/receivables"
 const empty: ReceivableOverview = { items: [], summaries: [], currencies: [], today: "", total: 0, page: 1, pageSize: 20, totalPages: 1 }
 export function ReceivableOverviewPage() {
-  const [attribution, setAttribution] = useState<AttributionFilter>(emptyAttributionFilters)
+  const [attribution, setAttribution] = useListState<AttributionFilter>("receivable-overview", "attribution", emptyAttributionFilters, { resetPages: true })
   const { formatDateOnly } = useDateFormatter()
-  const [pagination, setPagination] = useState({ pageIndex: 0, pageSize: 20 }), [q, setQ] = useState(""), [status, setStatus] = useState("OPEN"), [currency, setCurrency] = useState(""), [sort, setSort] = useState("overdue:desc")
+  const [pagination, setPagination] = useListState("receivable-overview", "pagination", { pageIndex: 0, pageSize: 20 }), [q, setQ] = useListState("receivable-overview", "q", "", { resetPages: true }), [status, setStatus] = useListState("receivable-overview", "status", "OPEN", { resetPages: true }), [currency, setCurrency] = useListState("receivable-overview", "currency", "", { resetPages: true }), [sort, setSort] = useListState("receivable-overview", "sort", "overdue:desc", { resetPages: true })
   const [data, setData] = useState(empty), [error, setError] = useState(""), [loading, setLoading] = useState(true), [refresh, setRefresh] = useState(0)
   const attributionParams = new URLSearchParams(attributionQuery(attribution)).toString()
   const choiceParams = new URLSearchParams({ ...attributionQuery(attribution), recordQuery: q, status, ...(currency ? { currency } : {}) }).toString()

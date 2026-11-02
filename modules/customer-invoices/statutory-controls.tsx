@@ -1,4 +1,5 @@
 'use client'
+import { useListState } from "@/components/erp/list-navigation"
 import { useCallback,useEffect,useState,type FormEvent } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -19,7 +20,7 @@ const titles:Record<StatutoryKind,string>={TAX_INVOICE:'Tax invoice',BILL_OF_SUP
 const post=(body:unknown):RequestInit=>({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
 export function StatutoryInvoiceControls({id}:{id:string}){
  const {formatDateOnly}=useDateFormatter()
- const endpoint=`/api/customer-invoices/${id}/statutory`,[data,setData]=useState<Data>(),[page,setPage]=useState(1),[error,setError]=useState(''),[busy,setBusy]=useState(false),[facts,setFacts]=useState<StatutoryFacts>(),[reviewed,setReviewed]=useState(false),[reviewId,setReviewId]=useState(''),[fingerprint,setFingerprint]=useState(''),[requestKey,setRequestKey]=useState(()=>crypto.randomUUID()),[seriesCode,setSeriesCode]=useState(''),[seriesReviewed,setSeriesReviewed]=useState(false),[action,setAction]=useState<{kind:'void'|'complete';doc:Doc}>(),[basis,setBasis]=useState(''),[file,setFile]=useState<File>(),[confirmed,setConfirmed]=useState(false),[historical,setHistorical]=useState(false)
+ const endpoint=`/api/customer-invoices/${id}/statutory`,[data,setData]=useState<Data>(),[page,setPage]=useListState("statutory-invoice-controls", "page", 1),[error,setError]=useState(''),[busy,setBusy]=useState(false),[facts,setFacts]=useState<StatutoryFacts>(),[reviewed,setReviewed]=useState(false),[reviewId,setReviewId]=useState(''),[fingerprint,setFingerprint]=useState(''),[requestKey,setRequestKey]=useState(()=>crypto.randomUUID()),[seriesCode,setSeriesCode]=useState(''),[seriesReviewed,setSeriesReviewed]=useState(false),[action,setAction]=useState<{kind:'void'|'complete';doc:Doc}>(),[basis,setBasis]=useState(''),[file,setFile]=useState<File>(),[confirmed,setConfirmed]=useState(false),[historical,setHistorical]=useState(false)
  const load=useCallback(async(signal?:AbortSignal)=>{const r=await request<Data>(endpoint+`?page=${page}`,{signal});if(!signal?.aborted){setData(r)}},[endpoint,page])
  const selectedKind=facts?.kind,selectedSeriesId=facts?.seriesId
  const [seriesChoices,setSeriesChoices]=useState<SeriesChoices>(),[seriesSearch,setSeriesSearch]=useState(''),[seriesPage,setSeriesPage]=useState(1)

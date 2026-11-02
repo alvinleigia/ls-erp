@@ -1,4 +1,5 @@
 "use client"
+import { useListState } from "@/components/erp/list-navigation"
 
 import * as React from "react"
 import {
@@ -126,9 +127,9 @@ export default function TenantsPageClient({
   const [totalRows, setTotalRows] = React.useState(0)
   const [loading, setLoading] = React.useState(true)
   const [creating, setCreating] = React.useState(false)
-  const [search, setSearch] = React.useState("")
-  const [statusFilter, setStatusFilter] = React.useState<"all" | TenantStatus>("all")
-  const [pagination, setPagination] = React.useState<PaginationState>({ pageIndex: 0, pageSize: 10 })
+  const [search, setSearch] = useListState("tenants-page-client", "search", "", { resetPages: true })
+  const [statusFilter, setStatusFilter] = useListState<"all" | TenantStatus>("tenants-page-client", "statusFilter", "all", { resetPages: true })
+  const [pagination, setPagination] = useListState<PaginationState>("tenants-page-client", "pagination", { pageIndex: 0, pageSize: 10 })
   const [moduleTenant, setModuleTenant] = React.useState<TenantRow | null>(null)
   const [createOpen, setCreateOpen] = React.useState(false)
   const [editAdminOpen, setEditAdminOpen] = React.useState(false)
@@ -220,11 +221,7 @@ export default function TenantsPageClient({
     void loadOrganizations()
   }, [])
 
-  React.useEffect(() => {
-    setPagination((prev) =>
-      prev.pageIndex === 0 ? prev : { ...prev, pageIndex: 0 }
-    )
-  }, [search, statusFilter])
+
 
   const createTenant = async () => {
     setCreating(true)

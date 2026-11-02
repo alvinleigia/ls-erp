@@ -1,4 +1,5 @@
 "use client"
+import { useListState } from "@/components/erp/list-navigation"
 
 import { SupplierView } from "@/modules/inventory/record-view"
 
@@ -84,11 +85,11 @@ export default function InventorySuppliersPage() {
   const [items, setItems] = React.useState<SupplierRow[]>([])
   const [totalRows, setTotalRows] = React.useState(0)
   const [loading, setLoading] = React.useState(true)
-  const [statusFilter, setStatusFilter] = React.useState("all")
+  const [statusFilter, setStatusFilter] = useListState("inventory-suppliers", "statusFilter", "all", { resetPages: true })
   const listRequest = React.useRef<AbortController | null>(null)
-  const [search, setSearch] = React.useState("")
-  const [sorting, setSorting] = React.useState<SortingState>([])
-  const [pagination, setPagination] = React.useState<PaginationState>({ pageIndex: 0, pageSize: 10 })
+  const [search, setSearch] = useListState("inventory-suppliers", "search", "", { resetPages: true })
+  const [sorting, setSorting] = useListState<SortingState>("inventory-suppliers", "sorting", [], { kind: "sorting", resetPages: true })
+  const [pagination, setPagination] = useListState<PaginationState>("inventory-suppliers", "pagination", { pageIndex: 0, pageSize: 10 })
   const [deleteTarget, setDeleteTarget] = React.useState<SupplierRow | null>(null)
   const [deleting, setDeleting] = React.useState(false)
   const [viewing, setViewing] = React.useState<SupplierRow | null>(null)

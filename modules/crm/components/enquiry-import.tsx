@@ -1,4 +1,5 @@
 "use client"
+import { useListState } from "@/components/erp/list-navigation"
 import * as React from "react"
 import { useCreationOfficeSnapshot } from "@/platform/companies/creation-snapshot"
 import { useTerminology } from "@/platform/terminology/provider"
@@ -37,6 +38,8 @@ export function EnquiryImport() {
   const [batch, setBatch] = React.useState<Batch | null>(null)
   const [config, setConfig] = React.useState<ImportConfig>({ mapping: {}, defaults: {} })
   const [history, setHistory] = React.useState<History>({ items: [], total: 0, page: 1 })
+  const [historyPage, setHistoryPage] = useListState("enquiry-import", "historyPage", 1)
+  const [historyLoading, setHistoryLoading] = React.useState(true)
   const [file, setFile] = React.useState<File | null>(null)
   const [busy, setBusy] = React.useState(false)
   const [error, setError] = React.useState("")
@@ -44,17 +47,23 @@ export function EnquiryImport() {
   const stopped = React.useRef(false)
   const fileInput = React.useRef<HTMLInputElement>(null)
   const handleError = (e: unknown) => setError(e instanceof Error ? e.message : "Unable to complete this request.")
-  async function refreshHistory(page = 1) { setHistory(await request<History>(`${endpoint}?page=${page}&pageSize=10`)) }
+  const refreshHistory = React.useCallback(async (page = historyPage) => { setHistory(await request<History>(`${endpoint}?page=${page}&pageSize=10`)) }, [historyPage])
+  React.useEffect(() => {
+    const controller = new AbortController()
+    setHistoryLoading(true)
+    request<History>(`${endpoint}?page=${historyPage}&pageSize=10`, { signal: controller.signal }).then(data => { if (!controller.signal.aborted) setHistory(data) }).catch(error => { if (!controller.signal.aborted) setError(error.message) }).finally(() => { if (!controller.signal.aborted) setHistoryLoading(false) })
+    return () => controller.abort()
+  }, [historyPage])
   async function open(id: string, page = 1, filter = "all", size = 20) {
     const data = await request<Batch>(`${endpoint}/${id}?page=${page}&pageSize=${size}&result=${filter}`)
     setBatch(data); setConfig(data.config); setResult(filter)
-    window.history.replaceState(null, "", `?batch=${encodeURIComponent(id)}`)
+    const url = new URL(window.location.href); url.searchParams.set("batch", id)
+    window.history.replaceState(null, "", url)
     return data
   }
   React.useEffect(() => {
     stopped.current = false
     const id = new URLSearchParams(window.location.search).get("batch")
-    refreshHistory().catch(handleError)
     if (id) open(id).catch(handleError)
     return () => { stopped.current = true }
   }, [])
@@ -70,7 +79,8 @@ export function EnquiryImport() {
       const form = new FormData(); form.set("file", file)
       const data = await request<Batch>(endpoint, { method: "POST", headers: await creationHeaders(), body: form })
       setBatch(data); setConfig(data.config); setResult("all")
-      window.history.replaceState(null, "", `?batch=${data.id}`)
+      const url = new URL(window.location.href); url.searchParams.set("batch", data.id)
+      window.history.replaceState(null, "", url)
       await refreshHistory()
     })
   }
@@ -108,7 +118,7 @@ export function EnquiryImport() {
   const ready = batch?.counts.READY || 0, failed = (batch?.counts.INVALID || 0) + (batch?.counts.DUPLICATE || 0)
   const totalRows = Object.values(batch?.counts || {}).reduce((sum, n) => sum + n, 0)
   const defaults = (batch?.fields || []).filter(f => f.allowDefault)
-  function newUpload() { setBatch(null); setFile(null); setError(""); window.history.replaceState(null, "", window.location.pathname) }
+  function newUpload() { setBatch(null); setFile(null); setError(""); const url = new URL(window.location.href); url.searchParams.delete("batch"); window.history.replaceState(null, "", url) }
   function defaultChanged(key: string, value: string) {
     setConfig(old => ({ ...old, defaults: changeImportDefault(batch?.fields || [], old.defaults, key, value) }))
   }
@@ -125,7 +135,7 @@ export function EnquiryImport() {
       </Section>
       <Section title="Your imports" description="Open an import to resume processing or download its correction sheet.">
         {!history.items.length ? <p className="text-sm text-muted-foreground">No imports yet.</p> : <ul className="divide-y">{history.items.map(item => <li key={item.id} className="flex flex-wrap items-center justify-between gap-3 py-3"><div><p className="font-medium">{item.fileName}</p><p className="text-sm text-muted-foreground">{item._count.rows} rows · {labels[item.status]}</p></div><Button variant="outline" disabled={busy} onClick={() => act(async () => { await open(item.id) })}>Open import</Button></li>)}</ul>}
-        <Pagination page={history.page} pageSize={10} total={history.total} loading={busy} onPageChange={p => act(() => refreshHistory(p))} />
+        <Pagination page={history.page} pageSize={10} total={history.total} loading={busy || historyLoading} onPageChange={setHistoryPage} />
       </Section>
     </> : <>
       <div className="flex flex-wrap justify-between gap-2 text-sm"><span className="font-medium">{batch.fileName} · {totalRows} rows</span><ImportStatus value={batch.status} /></div>

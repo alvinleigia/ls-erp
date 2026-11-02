@@ -1,10 +1,11 @@
 "use client"
+import { useListState } from "@/components/erp/list-navigation"
 import { useTerminology } from "@/platform/terminology/provider"
 import type { TermResolver } from "@/platform/terminology/resolver"
 import { withRecordView, useRecordView, AccessRecordForm, AccessSummarySection } from "@/platform/access/record-view"
 import * as React from "react"
 import Link from "@/platform/access/link"
-import { useRouter } from "next/navigation"
+import { useListRouter as useRouter } from "@/components/erp/list-navigation"
 import { getCoreRowModel, useReactTable, type ColumnDef } from "@tanstack/react-table"
 import { DataTable } from "@/components/data-table"
 import { Input } from "@/components/ui/input"
@@ -44,7 +45,7 @@ export function TeamList({ sales = true }: { sales?: boolean }) {
   const base = sales ? "/crm/configuration/sales-teams" : "/users/teams"
   const endpoint = sales ? "/api/crm/sales-teams" : "/api/teams"
   const term = useTerminology()
-  const [q, setQ] = React.useState({ q: "", archived: "false", page: 1, pageSize: 20 })
+  const [q, setQ] = useListState("team-list", "q", { q: "", archived: "false", page: 1, pageSize: 20 })
   const [data, setData] = React.useState<{ items: Team[]; total: number; canManage: boolean }>({ items: [], total: 0, canManage: false })
   const [loading, setLoading] = React.useState(true), [error, setError] = React.useState("")
   React.useEffect(() => {
@@ -108,7 +109,7 @@ function TeamEditorBody({ id, sales = true }: { id?: string; sales?: boolean }) 
 
 type Member = { isManager?: boolean; id: string; name: string | null; role: string; status: string }
 function TeamMembers({ endpoint, id, team, disabled, onChange }: { endpoint: string; id: string; team: Team; disabled: boolean; onChange: (row: Team) => void }) {
-  const [data, setData] = React.useState<{ items: Member[]; total: number }>({ items: [], total: 0 }), [q, setQ] = React.useState({ page: 1, pageSize: 10 })
+  const [data, setData] = React.useState<{ items: Member[]; total: number }>({ items: [], total: 0 }), [q, setQ] = useListState("team-members", "q", { page: 1, pageSize: 10 })
   const [userId, setUserId] = React.useState(""), [remove, setRemove] = React.useState<Member | null>(null), [error, setError] = React.useState(""), [saving, setSaving] = React.useState(false), [loading, setLoading] = React.useState(true)
   React.useEffect(() => {
     const controller = new AbortController(); setLoading(true)
@@ -120,7 +121,7 @@ function TeamMembers({ endpoint, id, team, disabled, onChange }: { endpoint: str
     try {
       onChange(await request<Team>(`${endpoint}/${id}/members`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId: memberId, version: team.version, remove: removing, ...(isManager === undefined ? {} : { isManager }) }) })); setUserId(""); setRemove(null); setQ(previous => ({ ...previous, page: 1 }))
     } catch (error) { setError((error as Error).message) } finally { setSaving(false) }
-  }, [id, team.version, onChange, endpoint])
+  }, [onChange, endpoint, id, team.version, setQ])
   const columns = React.useMemo<ColumnDef<Member>[]>(() => [
     { accessorKey: "name", header: "Member" }, { accessorKey: "role", header: "Role" }, { accessorKey: "status", header: "Status" },
     { id: "teamAccess", header: "Team access", cell: ({ row }) => team.canManageTeamAccess ? <Select aria-label={`${row.original.name || "Member"} team access`} value={row.original.isManager ? "manager" : "member"} disabled={disabled || saving} onValueChange={value => void change(row.original.id, false, value === "manager")}><option value="member">Member</option><option value="manager">Team manager</option></Select> : row.original.isManager ? "Team manager" : "Member" },

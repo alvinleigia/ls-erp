@@ -1,4 +1,5 @@
 "use client"
+import { useListState } from "@/components/erp/list-navigation"
 import { useDateFormatter } from "@/hooks/use-date-formatter"
 import { useCurrentResourceAction } from "@/platform/access/view-guard"
 
@@ -64,12 +65,12 @@ export default function LeaveGroupsPage() {
   const [deleteOpen, setDeleteOpen] = React.useState(false)
   const [deleting, setDeleting] = React.useState(false)
   const [deleteTarget, setDeleteTarget] = React.useState<LeaveGroupRow | null>(null)
-  const [search, setSearch] = React.useState("")
+  const [search, setSearch] = useListState("leave-groups", "search", "", { resetPages: true })
   const [assignmentModeFilter, setAssignmentModeFilter] =
-    React.useState<LeaveGroupAssignmentMode | "all">("all")
-  const [statusFilter, setStatusFilter] = React.useState<LeaveGroupStatus | "all">("all")
-  const [sorting, setSorting] = React.useState<SortingState>([{ id: "sortOrder", desc: false }])
-  const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({
+    useListState<LeaveGroupAssignmentMode | "all">("leave-groups", "assignmentModeFilter", "all", { resetPages: true })
+  const [statusFilter, setStatusFilter] = useListState<LeaveGroupStatus | "all">("leave-groups", "statusFilter", "all", { resetPages: true })
+  const [sorting, setSorting] = useListState<SortingState>("leave-groups", "sorting", [{ id: "sortOrder", desc: false }], { kind: "sorting", resetPages: true })
+  const [columnVisibility, setColumnVisibility] = useListState<VisibilityState>("leave-groups", "columnVisibility", {
     code: true,
     name: true,
     assignmentMode: true,
@@ -77,8 +78,8 @@ export default function LeaveGroupsPage() {
     leaves: true,
     staff: true,
     updatedAt: true,
-  })
-  const [pagination, setPagination] = React.useState<PaginationState>({ pageIndex: 0, pageSize: 10 })
+  }, { kind: "visibility" })
+  const [pagination, setPagination] = useListState<PaginationState>("leave-groups", "pagination", { pageIndex: 0, pageSize: 10 })
 
   const loadRows = React.useCallback(async () => {
     setLoading(true)
@@ -114,9 +115,7 @@ export default function LeaveGroupsPage() {
     void loadRows()
   }, [loadRows])
 
-  React.useEffect(() => {
-    setPagination((prev) => (prev.pageIndex === 0 ? prev : { ...prev, pageIndex: 0 }))
-  }, [assignmentModeFilter, search, sorting, statusFilter])
+
 
   const handlePaginationChange = React.useCallback(
     (updater: PaginationState | ((prev: PaginationState) => PaginationState)) => {
@@ -126,7 +125,7 @@ export default function LeaveGroupsPage() {
         return next
       })
     },
-    []
+    [setPagination]
   )
 
   const requestDelete = React.useCallback((row: LeaveGroupRow) => {

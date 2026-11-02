@@ -1,4 +1,5 @@
 "use client"
+import { useListState } from "@/components/erp/list-navigation"
 
 import * as React from "react"
 import { ColumnDef, getCoreRowModel, useReactTable } from "@tanstack/react-table"
@@ -109,8 +110,8 @@ export default function OrganizationsPageClient({
   const [totalRows, setTotalRows] = React.useState(0)
   const [loading, setLoading] = React.useState(true)
   const [creating, setCreating] = React.useState(false)
-  const [search, setSearch] = React.useState("")
-  const [pagination, setPagination] = React.useState<PaginationState>({ pageIndex: 0, pageSize: 10 })
+  const [search, setSearch] = useListState("organizations-page-client", "search", "", { resetPages: true })
+  const [pagination, setPagination] = useListState<PaginationState>("organizations-page-client", "pagination", { pageIndex: 0, pageSize: 10 })
   const [createOpen, setCreateOpen] = React.useState(false)
   const [membersOpen, setMembersOpen] = React.useState(false)
   const [memberEditorOpen, setMemberEditorOpen] = React.useState(false)
@@ -176,11 +177,7 @@ export default function OrganizationsPageClient({
     void loadOrganizations()
   }, [loadOrganizations])
 
-  React.useEffect(() => {
-    setPagination((prev) =>
-      prev.pageIndex === 0 ? prev : { ...prev, pageIndex: 0 }
-    )
-  }, [search])
+
 
   const loadOrganizationMembers = React.useCallback(async (organizationId: string) => {
     setMembersLoading(true)

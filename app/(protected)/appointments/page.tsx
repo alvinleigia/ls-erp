@@ -1,4 +1,5 @@
 "use client"
+import { useListState } from "@/components/erp/list-navigation"
 import { useCreationOfficeSnapshot } from "@/platform/companies/creation-snapshot"
 import { useBusinessModules } from "@/platform/module-provider"
 
@@ -7,7 +8,7 @@ import { wallTimeToInstant } from "@/lib/business-time"
 import { Select } from "@/components/erp/controls"
 
 import * as React from "react"
-import { useRouter } from "next/navigation"
+import { useListRouter as useRouter } from "@/components/erp/list-navigation"
 import {
   ColumnDef,
   SortingState,
@@ -199,30 +200,28 @@ export default function AppointmentsPage() {
   const [timeFormat, setTimeFormat] = React.useState<AppSettingsPayload["timeFormat"]>("H24")
   const [timeZone, setTimeZone] = React.useState("America/New_York")
   const [currency, setCurrency] = React.useState("USD")
-  const [calendarHourMode, setCalendarHourMode] = React.useState<"working" | "full">("working")
-  const [calendarStatusFilter, setCalendarStatusFilter] = React.useState<
-    "non_canceled" | "all" | AppointmentStatus
-  >("non_canceled")
+  const [calendarHourMode, setCalendarHourMode] = useListState<"working" | "full">("appointments", "calendarHourMode", "working")
+  const [calendarStatusFilter, setCalendarStatusFilter] = useListState<"non_canceled" | "all" | AppointmentStatus>("appointments", "calendarStatusFilter", "non_canceled")
   const [workingHourBounds, setWorkingHourBounds] = React.useState({
     startHour: "09:00",
     endHour: "18:00",
   })
   const [totalRows, setTotalRows] = React.useState(0)
 
-  const [search, setSearch] = React.useState("")
-  const [statusFilter, setStatusFilter] = React.useState<AppointmentStatus | "all">("all")
-  const [officeFilter, setOfficeFilter] = React.useState("all")
-  const [staffFilter, setStaffFilter] = React.useState<string>("all")
-  const [dateRangeFilter, setDateRangeFilter] = React.useState<DateRange | undefined>(undefined)
-  const [sorting, setSorting] = React.useState<SortingState>([])
-  const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({
+  const [search, setSearch] = useListState("appointments", "search", "", { resetPages: true })
+  const [statusFilter, setStatusFilter] = useListState<AppointmentStatus | "all">("appointments", "statusFilter", "all", { resetPages: true })
+  const [officeFilter, setOfficeFilter] = useListState("appointments", "officeFilter", "all", { resetPages: true })
+  const [staffFilter, setStaffFilter] = useListState<string>("appointments", "staffFilter", "all", { resetPages: true })
+  const [dateRangeFilter, setDateRangeFilter] = useListState<DateRange | undefined>("appointments", "dateRangeFilter", undefined, { kind: "date-range", resetPages: true })
+  const [sorting, setSorting] = useListState<SortingState>("appointments", "sorting", [], { kind: "sorting", resetPages: true })
+  const [columnVisibility, setColumnVisibility] = useListState<VisibilityState>("appointments", "columnVisibility", {
     customer: true,
     service: true,
     staff: true,
     startAt: true,
     status: true,
-  })
-  const [pagination, setPagination] = React.useState<PaginationState>({
+  }, { kind: "visibility" })
+  const [pagination, setPagination] = useListState<PaginationState>("appointments", "pagination", {
     pageIndex: 0,
     pageSize: 10,
   })
@@ -455,9 +454,7 @@ export default function AppointmentsPage() {
     return () => calendarRequest.current?.abort()
   }, [loadCalendarAppointments])
 
-  React.useEffect(() => {
-    setPagination((prev) => (prev.pageIndex === 0 ? prev : { ...prev, pageIndex: 0 }))
-  }, [endDateFilter, search, sorting, staffFilter, officeFilter, startDateFilter, statusFilter])
+
 
   const handlePaginationChange = React.useCallback(
     (updater: PaginationState | ((prev: PaginationState) => PaginationState)) => {
@@ -469,7 +466,7 @@ export default function AppointmentsPage() {
         return next
       })
     },
-    []
+    [setPagination]
   )
 
   const openCreateDialog = React.useCallback(

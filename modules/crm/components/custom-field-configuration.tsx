@@ -1,4 +1,5 @@
 "use client"
+import { useListState } from "@/components/erp/list-navigation"
 import { useTerminology } from "@/platform/terminology/provider"
 import { resolveTermText } from "@/platform/terminology/message"
 import type { FieldScopeOption } from "@/platform/custom-fields/resources"
@@ -6,7 +7,7 @@ import { withRecordView, useRecordView, AccessRecordForm, AccessSummarySection }
 import { SalesTeamSelect } from "@/platform/teams/controls"
 import * as React from "react"
 import Link from "@/platform/access/link"
-import { useRouter } from "next/navigation"
+import { useListRouter as useRouter } from "@/components/erp/list-navigation"
 import { toast } from "sonner"
 import { getCoreRowModel, useReactTable, type ColumnDef } from "@tanstack/react-table"
 import { DataTable } from "@/components/data-table"
@@ -30,7 +31,7 @@ const empty: Config = { salesTeamId: null, scope: "SALES", code: "", name: "", t
 
 export function CustomFieldList() {
   const term = useTerminology()
-  const [query, setQuery] = React.useState({ q: "", archived: "false", scope: "", page: 1, pageSize: 20 })
+  const [query, setQuery] = useListState("custom-field-list", "query", { q: "", archived: "false", scope: "", page: 1, pageSize: 20 })
   const [data, setData] = React.useState<{ items: Config[]; total: number; canManage: boolean; scopeOptions: FieldScopeOption[] }>({ items: [], total: 0, canManage: false, scopeOptions: [] })
   const scopeNames = React.useMemo(() => Object.fromEntries(data.scopeOptions.map(option => [option.scope, resolveTermText(option.label, term)])), [data.scopeOptions, term])
   const [error, setError] = React.useState(""), [loading, setLoading] = React.useState(true)
@@ -60,7 +61,7 @@ export function CustomFieldList() {
     <Surface><div className="flex flex-wrap gap-2"><Input className="min-w-0 flex-1 basis-48" aria-label="Search custom fields" placeholder="Search custom fields..." value={query.q} onChange={event => setQuery({ ...query, q: event.target.value, page: 1 })} />
       <Select aria-label="Record type" value={query.scope} onValueChange={scope => setQuery({ ...query, scope, page: 1 })}><option value="">All record types</option>{data.scopeOptions.map(({ scope }) => <option key={scope} value={scope}>{scopeNames[scope]}</option>)}</Select>
       <Select aria-label="Field status" value={query.archived} onValueChange={archived => setQuery({ ...query, archived, page: 1 })}><option value="false">Active</option><option value="true">Archived</option></Select></div>
-      {error && <p role="alert" className="text-destructive">{error}</p>}<DataTable table={table} loading={loading} emptyMessage="No custom fields in this selection." /><TablePagination table={table} totalRows={data.total} loading={loading} />
+      {error && <p role="alert" className="text-destructive">{error}</p>}<DataTable table={table} loading={loading} emptyMessage="No custom fields in this selection." /><TablePagination resolved={!error} table={table} totalRows={data.total} loading={loading} />
     </Surface></div>
 }
 

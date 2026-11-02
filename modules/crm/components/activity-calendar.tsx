@@ -1,4 +1,5 @@
 "use client"
+import { useListState } from "@/components/erp/list-navigation"
 import { InfoHelp } from "@/components/erp/info-help"
 import { useTerminology, useTerminologyReader } from "@/platform/terminology/provider"
 import { AccessPageHeader } from "@/platform/access/record-page"
@@ -6,7 +7,7 @@ import { Surface, Filters, pageClass } from "@/components/erp/page"
 import { Select } from "@/components/erp/controls"
 import * as React from "react"
 import Link from "@/platform/access/link"
-import { useRouter } from "next/navigation"
+import { useListRouter as useRouter } from "@/components/erp/list-navigation"
 import { toast } from "sonner"
 import { BusinessCalendar, type BusinessCalendarMove } from "@/components/business-calendar"
 import { Button } from "@/components/ui/button"
@@ -30,11 +31,11 @@ export function ActivityCalendar() {
   const [range, setRange] = React.useState<{ from: string; to: string } | null>(null)
   const [items, setItems] = React.useState<CrmWorkRow[]>([])
   const [total, setTotal] = React.useState(0)
-  const [scope, setScope] = React.useState("mine")
-  const [owner, setOwner] = React.useState("")
-  const [type, setType] = React.useState("")
-  const [state, setState] = React.useState("open")
-  const [q, setQ] = React.useState("")
+  const [scope, setScope] = useListState("activity-calendar", "scope", "mine", { resetPages: true })
+  const [owner, setOwner] = useListState("activity-calendar", "owner", "", { resetPages: true })
+  const [type, setType] = useListState("activity-calendar", "type", "", { resetPages: true })
+  const [state, setState] = useListState("activity-calendar", "state", "open", { resetPages: true })
+  const [q, setQ] = useListState("activity-calendar", "q", "", { resetPages: true })
   const [canManage, setCanManage] = React.useState(false)
   const [loading, setLoading] = React.useState(false)
   const [saving, setSaving] = React.useState(false)

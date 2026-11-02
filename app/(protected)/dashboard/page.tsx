@@ -1,4 +1,5 @@
 "use client"
+import { useListState } from "@/components/erp/list-navigation"
 
 import * as React from "react"
 import { PageHeader, pageClass, Surface, Filters } from "@/components/erp/page"
@@ -149,11 +150,11 @@ const toDateOnlyLocal = (value: Date) => {
 
 export default function DashboardPage() {
   const { flags, permissions, loading: modulesLoading } = useBusinessModules()
-  const [attribution, setAttribution] = React.useState<AttributionFilter>(emptyAttributionFilters)
+  const [attribution, setAttribution] = useListState<AttributionFilter>("dashboard", "attribution", emptyAttributionFilters, { resetPages: true })
   const attributionParams = new URLSearchParams(attributionQuery(attribution)).toString()
-  const [range, setRange] = React.useState<"today" | "week" | "month" | "custom">("week")
+  const [range, setRange] = useListState<"today" | "week" | "month" | "custom">("dashboard", "range", "week", { resetPages: true })
   const [refresh, setRefresh] = React.useState(0)
-  const [appliedCustom, setAppliedCustom] = React.useState<DateRange | undefined>()
+  const [appliedCustom, setAppliedCustom] = useListState<DateRange | undefined>("dashboard", "appliedCustom", undefined, { kind: "date-range", resetPages: true })
   const [dateRange, setDateRange] = React.useState<DateRange | undefined>()
   const [settings, setSettings] = React.useState<
     Pick<

@@ -1,7 +1,7 @@
 "use client"
 import * as React from "react"
 import Image from "next/image"
-import { useRouter } from "next/navigation"
+import { useListRouter as useRouter } from "@/components/erp/list-navigation"
 import { toast } from "sonner"
 import { PageHeader, FormActions, pageClass } from "@/components/erp/page"
 import { Section } from "@/components/erp/section"

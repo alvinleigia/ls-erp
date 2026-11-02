@@ -1,4 +1,5 @@
 "use client"
+import { useListState } from "@/components/erp/list-navigation"
 import { useTerminology, useTerminologyReader } from "@/platform/terminology/provider"
 import { useBusinessModules } from "@/platform/module-provider"
 import { History, MessageSquare } from "lucide-react"
@@ -25,12 +26,12 @@ export function EnquiryTimeline({ enquiryId, contactId, revision, includeWork = 
   const [note, setNote] = React.useState("")
   const [saving, setSaving] = React.useState(false)
   const [refresh, setRefresh] = React.useState(0)
-  const [page, setPage] = React.useState(1)
+  const [page, setPage] = useListState("enquiry-timeline", "page", 1)
   const [activity, setActivity] = React.useState<ListResponse<CrmActivityRow> | null>(null)
   const [activityError, setActivityError] = React.useState("")
   const [activityLoading, setActivityLoading] = React.useState(true)
   const noteErrors = useFormErrors()
-  const changed = React.useCallback(() => { setRefresh(value => value + 1); setPage(1) }, [])
+  const changed = React.useCallback(() => { setRefresh(value => value + 1); setPage(1) }, [setPage])
   React.useEffect(() => {
     const controller = new AbortController()
     void (async () => {

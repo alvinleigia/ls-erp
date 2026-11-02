@@ -1,4 +1,5 @@
 "use client"
+import { useListState } from "@/components/erp/list-navigation"
 import { AttributionFilters, emptyAttributionFilters } from "@/platform/collaborators/report-controls"
 import { attributionQuery, type AttributionFilter } from "@/platform/collaborators/report-validation"
 import { ExportButton } from "@/components/erp/export-button"
@@ -24,20 +25,20 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { EmptyState, Section } from "@/components/erp/section"
 
 export function WorkList({ initialAttribution, extensionQuery = "", guidance, allowCreate = true, contactId, enquiryId, opportunityId, planLaunchId, initialDue = "", initialScope, initialState, assignedUserId, salesTeamId, initialType, activityTypeId, completedFrom, completedThrough }: { initialAttribution?: AttributionFilter; extensionQuery?: string; guidance?: React.ReactNode; allowCreate?: boolean; contactId?: string; enquiryId?: string; opportunityId?: string; planLaunchId?: string; initialDue?: string; initialScope?: string; initialState?: string; assignedUserId?: string; salesTeamId?: string; initialType?: string; activityTypeId?: string; completedFrom?: string; completedThrough?: string }) {
-  const [attribution, setAttribution] = React.useState<AttributionFilter>(initialAttribution || emptyAttributionFilters)
+  const [attribution, setAttribution] = useListState<AttributionFilter>("work-list", "attribution", initialAttribution || emptyAttributionFilters, { resetPages: true })
   const readTerm = useTerminologyReader()
   const term = useTerminology()
   const embedded = !!(extensionQuery || contactId || enquiryId || opportunityId)
   const [data, setData] = React.useState<WorkListResponse | null>(null)
-  const [q, setQ] = React.useState("")
-  const [scope, setScope] = React.useState(initialScope === "visible" || embedded ? "visible" : "mine")
-  const [due, setDue] = React.useState(["overdue", "today", "upcoming", "reminders"].includes(initialDue) ? initialDue : "")
-  const [state, setState] = React.useState(initialState && ["open", "completed", "cancelled", "all"].includes(initialState) ? initialState : "open")
-  const [type, setType] = React.useState(activityTypeId || initialType || "")
-  const [owner, setOwner] = React.useState(assignedUserId || "")
-  const [completionPeriod, setCompletionPeriod] = React.useState(completedFrom && completedThrough ? { completedFrom, completedThrough } : null)
-  const [sort, setSort] = React.useState("dueOn")
-  const [pagination, setPagination] = React.useState({ pageIndex: 0, pageSize: 20 })
+  const [q, setQ] = useListState("work-list", "q", "", { resetPages: true })
+  const [scope, setScope] = useListState("work-list", "scope", initialScope === "visible" || embedded ? "visible" : "mine", { resetPages: true })
+  const [due, setDue] = useListState("work-list", "due", ["overdue", "today", "upcoming", "reminders"].includes(initialDue) ? initialDue : "", { resetPages: true })
+  const [state, setState] = useListState("work-list", "state", initialState && ["open", "completed", "cancelled", "all"].includes(initialState) ? initialState : "open", { resetPages: true })
+  const [type, setType] = useListState("work-list", "type", activityTypeId || initialType || "", { resetPages: true })
+  const [owner, setOwner] = useListState("work-list", "owner", assignedUserId || "", { resetPages: true })
+  const [completionPeriod, setCompletionPeriod] = useListState("work-list", "completionPeriod", completedFrom && completedThrough ? { completedFrom, completedThrough } : null, { kind: "period", resetPages: true })
+  const [sort, setSort] = useListState("work-list", "sort", "dueOn", { resetPages: true })
+  const [pagination, setPagination] = useListState("work-list", "pagination", { pageIndex: 0, pageSize: 20 })
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState("")
   const [revision, setRevision] = React.useState(0)
@@ -110,7 +111,7 @@ export function WorkList({ initialAttribution, extensionQuery = "", guidance, al
         <p className="break-words text-xs text-muted-foreground">{item.activityTypeName || item.type} · {item.assignee.name || "Staff member"} · {["", "Low", "Normal", "High"][item.priority]} priority</p>
       </article>)}</div>
     </>}
-    <TablePagination table={table} totalRows={data?.total ?? 0} loading={loading} />
+    <TablePagination resolved={!error} table={table} totalRows={data?.total ?? 0} loading={loading} />
   </>
   return embedded ? <Section title={term("crm.activity.plural", "Activities and follow-ups", "{label} and follow-ups")} description={`${term("crm.activity.plural", "Upcoming work and completed activities.", "Upcoming work and completed {label}.")} Times use ${data?.timeZone || "the business time zone"}.`} icon={CalendarClock} actions={allowCreate ? actions : undefined} help={guidance}>{content}</Section> : <section className={pageClass}><AccessPageHeader title="My Work" actions={<><Button variant="outline" asChild><Link href="/crm/calendar">Calendar</Link></Button>{allowCreate && actions}</>}  help={<>Work through reminders and follow-ups, review customer history, then record an outcome and the next step. Times use {data?.timeZone || "the business time zone"}.</>}/><Surface>{content}</Surface></section>
 }

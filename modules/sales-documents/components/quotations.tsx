@@ -1,4 +1,5 @@
 "use client"
+import { useListState } from "@/components/erp/list-navigation"
 import { SourceTaxInputs } from "@/platform/tax/source-inputs-controls"
 import { useTerminology, useTerminologyReader } from "@/platform/terminology/provider"
 import { withRecordView, useRecordView, AccessRecordForm, AccessSummarySection } from "@/platform/access/record-view"
@@ -10,7 +11,7 @@ import { quotationLayoutCatalog } from "../quotation-layout-catalog"
 import * as React from "react"
 import { useBusinessModules } from "@/platform/module-provider"
 import Link from "@/platform/access/link"
-import { useRouter } from "next/navigation"
+import { useListRouter as useRouter } from "@/components/erp/list-navigation"
 import { getCoreRowModel, useReactTable, type ColumnDef } from "@tanstack/react-table"
 import { DataTable } from "@/components/data-table"
 import { Button } from "@/components/ui/button"
@@ -45,7 +46,7 @@ export function OpportunityDocuments({ opportunityId }: { opportunityId: string 
 export function QuotationList({ opportunityId, all = false }: { opportunityId?: string; all?: boolean }) {
   const term = useTerminology()
   const template = !opportunityId && !all, settings = useQuotationSettings()
-  const [query, setQuery] = React.useState({ pageIndex: 0, pageSize: 10 }), [search, setSearch] = React.useState(""), [archived, setArchived] = React.useState("false")
+  const [query, setQuery] = useListState(`quotation-${template ? "templates" : "documents"}`, "query", { pageIndex: 0, pageSize: 10 }), [search, setSearch] = useListState(`quotation-${template ? "templates" : "documents"}`, "search", "", { resetPages: true }), [archived, setArchived] = useListState(`quotation-${template ? "templates" : "documents"}`, "archived", "false", { resetPages: true })
   const [data, setData] = React.useState<{ items: Item[]; total: number; canManage?: boolean }>({ items: [], total: 0 }), [error, setError] = React.useState(""), [loading, setLoading] = React.useState(true)
   React.useEffect(() => {
     const controller = new AbortController()

@@ -1,7 +1,8 @@
 "use client"
 
 import * as React from "react"
-import { useParams, useRouter } from "next/navigation"
+import { useParams } from "next/navigation"
+import { useListRouter as useRouter } from "@/components/erp/list-navigation"
 import { useSession } from "next-auth/react"
 import { toast } from "sonner"
 

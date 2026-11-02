@@ -3,7 +3,7 @@ import { useCreationOfficeSnapshot } from "@/platform/companies/creation-snapsho
 import { useBusinessModules } from "@/platform/module-provider"
 
 import * as React from "react"
-import { useRouter } from "next/navigation"
+import { useListRouter as useRouter } from "@/components/erp/list-navigation"
 import { toast } from "sonner"
 
 import { PageHeader, pageClass } from "@/components/erp/page"

@@ -1,3 +1,33 @@
+## P13I ERP list navigation
+
+Shared URL-backed presentation state covers CRM, reports, projects, quotations,
+orders, receivables, invoice/document histories, catalog, teams, collaborators,
+company/tax/access configuration, inventory, services, appointments and workforce
+lists. Applied filters, search, page/size, sorting, selected tabs and report
+drill-downs survive record navigation. Calendar date/view controls use the same
+mechanism. User and tenant return addresses are isolated in tab-local storage;
+ordinary list entry still starts at its explicit URL.
+
+Shared page/access headers and programmatic Cancel/Back destinations restore the
+matching list address. Mount-only pagination resets were removed; actual filter
+changes reset the relevant pages. Opportunity pipeline initialization no longer
+overwrites a restored pipeline. Successful resolved fetches can correct invalid
+page bounds without treating a failed request as an empty result.
+
+No data migration or authorization change is required. Unsaved forms, uploaded
+files, bulk selections, records and permission metadata are not cached. Existing
+server validation, activation, office constraints and native RLS remain authoritative.
+Implementation and repeatable test guidance are in `docs/CONVENTIONS.md`.
+Hosted verification and release status are recorded separately.
+
+Local acceptance passed 19 focused navigation/report/help cases, nine existing
+CRM edit/discard cases and four inventory/service/workforce regressions. The
+navigation case also passed with sequential search typing; the roster's selected
+week survived reload and its mobile pagination controls wrapped within the viewport.
+The optimized build and TypeScript checks passed. Changed-file lint has no errors
+and retains one pre-existing tenant-page dependency warning. These are synthetic
+component/API tests, not a claim that every business workflow was retested.
+
 ## P13H shared contextual information controls
 
 Page/section descriptions and optional field help share a click-to-open information

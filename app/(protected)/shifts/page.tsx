@@ -1,5 +1,6 @@
 ﻿
 "use client"
+import { useListState } from "@/components/erp/list-navigation"
 import { useCurrentResourceAction } from "@/platform/access/view-guard"
 
 import { DraftPanel, RecordPanel, ReadOnlyFields } from "@/components/erp/record-detail"
@@ -79,21 +80,19 @@ export default function ShiftsPage() {
   const [loading, setLoading] = React.useState(true)
   const [totalRows, setTotalRows] = React.useState(0)
 
-  const [search, setSearch] = React.useState("")
-  const [statusFilter, setStatusFilter] = React.useState<"all" | TemplateStatus>(
-    "all"
-  )
+  const [search, setSearch] = useListState("shifts", "search", "", { resetPages: true })
+  const [statusFilter, setStatusFilter] = useListState<"all" | TemplateStatus>("shifts", "statusFilter", "all", { resetPages: true })
 
-  const [sorting, setSorting] = React.useState<SortingState>([])
+  const [sorting, setSorting] = useListState<SortingState>("shifts", "sorting", [], { kind: "sorting", resetPages: true })
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([])
-  const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({
+  const [columnVisibility, setColumnVisibility] = useListState<VisibilityState>("shifts", "columnVisibility", {
     name: true,
     status: true,
     shift: true,
     breaks: true,
     updatedAt: true,
-  })
-  const [pagination, setPagination] = React.useState({ pageIndex: 0, pageSize: 10 })
+  }, { kind: "visibility" })
+  const [pagination, setPagination] = useListState("shifts", "pagination", { pageIndex: 0, pageSize: 10 })
 
   const [viewing, setViewing] = React.useState<ShiftTemplateRow | null>(null)
   const [createOpen, setCreateOpen] = React.useState(false)
@@ -182,11 +181,7 @@ export default function ShiftsPage() {
     void loadSettings()
   }, [loadSettings])
 
-  React.useEffect(() => {
-    setPagination((prev) =>
-      prev.pageIndex === 0 ? prev : { ...prev, pageIndex: 0 }
-    )
-  }, [search, sorting, statusFilter])
+
 
   const handlePaginationChange = React.useCallback(
     (updater: PaginationState | ((prev: PaginationState) => PaginationState)) => {
@@ -198,7 +193,7 @@ export default function ShiftsPage() {
         return next
       })
     },
-    []
+    [setPagination]
   )
   const getWorkingHoursBounds = React.useCallback(() => {
     let minStart = "23:59"

@@ -9,11 +9,13 @@ import { PageHeader, FormActions } from "@/components/erp/page"
 import { RecordSharingControl } from "./sharing-control"
 import { RecordAccessContext } from "./record-context"
 import { sharingResource } from "./sharing-registry"
+import { useListReturnHref } from "@/components/erp/list-navigation"
 
 export function AccessPageHeader(props: ComponentProps<typeof PageHeader>) {
   const record = useContext(RecordAccessContext)
+  const returnHref = useListReturnHref(props.backHref)
   const actions = record?.id && sharingResource(record.resource) ? <>{props.actions}<RecordSharingControl /></> : props.actions
-  return <PageHeader {...props} actions={actions} backLink={props.backHref && <Link href={props.backHref} className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" aria-hidden="true" />{props.backLabel || "Back"}</Link>} />
+  return <PageHeader {...props} actions={actions} backLink={returnHref && <Link href={returnHref} className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" aria-hidden="true" />{props.backLabel || "Back"}</Link>} />
 }
 
 export function AccessFormActions({ form, cancelHref, saving, disabled, canSave = true, saveLabel, loadingText = "Saving…", children }: {

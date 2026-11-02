@@ -1,4 +1,5 @@
 "use client"
+import { useListState } from "@/components/erp/list-navigation"
 import { InfoHelp } from "@/components/erp/info-help"
 import * as React from "react"
 import { toast } from "sonner"
@@ -26,7 +27,7 @@ async function request<T>(url: string, body?: unknown, method = "PATCH"): Promis
 
 export function AccessRoles() {
   const [rows, setRows] = React.useState<RoleRow[]>([]), [total, setTotal] = React.useState(0)
-  const [page, setPage] = React.useState(1), [pageSize, setPageSize] = React.useState(20), [q, setQ] = React.useState(""), [archived, setArchived] = React.useState("false")
+  const [page, setPage] = useListState("access-roles", "page", 1), [pageSize, setPageSize] = useListState("access-roles", "pageSize", 20), [q, setQ] = useListState("access-roles", "q", "", { resetPages: true }), [archived, setArchived] = useListState("access-roles", "archived", "false", { resetPages: true })
   const [revision, refresh] = React.useReducer(n => n + 1, 0)
   const [loading, setLoading] = React.useState(true), [error, setError] = React.useState("")
   const [draft, setDraft] = React.useState<AccessRole | null>(null), [assign, setAssign] = React.useState(false)

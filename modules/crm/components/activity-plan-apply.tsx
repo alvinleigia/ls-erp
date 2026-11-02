@@ -6,7 +6,7 @@ import { AccessPageHeader, AccessFormActions } from "@/platform/access/record-pa
 import { ActionBar, pageClass } from "@/components/erp/page"
 import { Select } from "@/components/erp/controls"
 import * as React from "react"
-import { useRouter } from "next/navigation"
+import { useListRouter as useRouter } from "@/components/erp/list-navigation"
 import { useSession } from "next-auth/react"
 import { useBusinessModules } from "@/platform/module-provider"
 import { optionalReference, type AssignmentContext } from "@/platform/access/reference"

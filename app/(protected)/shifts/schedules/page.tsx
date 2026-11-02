@@ -1,4 +1,5 @@
 "use client"
+import { useListState } from "@/components/erp/list-navigation"
 import { useCreationOfficeSnapshot } from "@/platform/companies/creation-snapshot"
 import { useCurrentResourceAction } from "@/platform/access/view-guard"
 
@@ -123,18 +124,18 @@ export default function ShiftSchedulesPage() {
 
   const [templates, setTemplates] = React.useState<ShiftTemplateOption[]>([])
 
-  const [staffFilter, setStaffFilter] = React.useState("all")
-  const [startDateFilter, setStartDateFilter] = React.useState("")
-  const [sorting, setSorting] = React.useState<SortingState>([])
-  const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({
+  const [staffFilter, setStaffFilter] = useListState("shift-schedules", "staffFilter", "all", { resetPages: true })
+  const [startDateFilter, setStartDateFilter] = useListState("shift-schedules", "startDateFilter", "", { resetPages: true })
+  const [sorting, setSorting] = useListState<SortingState>("shift-schedules", "sorting", [], { kind: "sorting", resetPages: true })
+  const [columnVisibility, setColumnVisibility] = useListState<VisibilityState>("shift-schedules", "columnVisibility", {
     name: true,
     staff: true,
     startDate: true,
     weekOff: true,
     blocks: true,
     updatedAt: true,
-  })
-  const [pagination, setPagination] = React.useState<PaginationState>({
+  }, { kind: "visibility" })
+  const [pagination, setPagination] = useListState<PaginationState>("shift-schedules", "pagination", {
     pageIndex: 0,
     pageSize: 10,
   })
@@ -223,11 +224,7 @@ export default function ShiftSchedulesPage() {
     void loadTemplates()
   }, [loadTemplates])
 
-  React.useEffect(() => {
-    setPagination((prev) =>
-      prev.pageIndex === 0 ? prev : { ...prev, pageIndex: 0 }
-    )
-  }, [sorting, staffFilter, startDateFilter])
+
 
   const handlePaginationChange = React.useCallback(
     (updater: PaginationState | ((prev: PaginationState) => PaginationState)) => {
@@ -239,7 +236,7 @@ export default function ShiftSchedulesPage() {
         return next
       })
     },
-    []
+    [setPagination]
   )
 
   const createSchedule = async () => {

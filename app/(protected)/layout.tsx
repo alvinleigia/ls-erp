@@ -1,4 +1,5 @@
 import { WorkspaceOfficeSelector } from "@/platform/companies/workspace-office-selector"
+import { ListNavigationProvider } from "@/components/erp/list-navigation"
 import { ApplicationAccessProvider } from "@/application/access-provider";
 import { redirect } from "next/navigation";
 
@@ -38,7 +39,7 @@ export default async function ProtectedLayout({
   const sidebarLogo = branding.logo && storageReady() ? logoUrl(branding.logo.sidebar.path) : undefined
 
   return (
-    <BusinessModuleProvider key={`${tenant.id}:${session.user.id}:${currentUser.role}`} active={businessWorkspace}><TerminologyProvider active={businessWorkspace}><ApplicationAccessProvider><SidebarProvider>
+    <ListNavigationProvider key={`${tenant.id}:${session.user.id}`} identity={`${tenant.id}:${session.user.id}`}><BusinessModuleProvider key={`${tenant.id}:${session.user.id}:${currentUser.role}`} active={businessWorkspace}><TerminologyProvider active={businessWorkspace}><ApplicationAccessProvider><SidebarProvider>
       <div className="flex min-h-screen w-full min-w-0">
         <AppSidebar key={sidebarLogo || "default"} brandingLogo={sidebarLogo} brandingName={branding.name || tenant.name} />
 
@@ -47,6 +48,6 @@ export default async function ProtectedLayout({
           <div className="mt-6">{children}</div>
         </main>
       </div>
-    </SidebarProvider></ApplicationAccessProvider></TerminologyProvider></BusinessModuleProvider>
+    </SidebarProvider></ApplicationAccessProvider></TerminologyProvider></BusinessModuleProvider></ListNavigationProvider>
   );
 }

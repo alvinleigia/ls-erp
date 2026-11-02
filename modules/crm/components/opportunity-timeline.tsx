@@ -1,4 +1,5 @@
 "use client"
+import { useListState } from "@/components/erp/list-navigation"
 import { useBusinessModules } from "@/platform/module-provider"
 import { History, MessageSquare } from "lucide-react"
 import { Section, EmptyState } from "@/components/erp/section"
@@ -17,7 +18,7 @@ import type { ListResponse } from "@/types/api"
 export function OpportunityTimeline({ id, revision }: { id: string; revision: number }) {
   const { can } = useBusinessModules()
   const [data, setData] = React.useState<ListResponse<CrmActivityRow> | null>(null)
-  const [page, setPage] = React.useState(1)
+  const [page, setPage] = useListState("opportunity-timeline", "page", 1)
   const [refresh, setRefresh] = React.useState(0)
   const [message, setMessage] = React.useState("")
   const [error, setError] = React.useState("")
@@ -44,6 +45,6 @@ export function OpportunityTimeline({ id, revision }: { id: string; revision: nu
     {error && <p role="alert" className="text-destructive">{error}</p>}
     {loading ? <p className="text-sm text-muted-foreground">Loading history…</p> : !error && data && <Timeline entries={data.items.map(item => ({ id: item.id, icon: item.event.includes("note") ? MessageSquare : History, actor: item.actor.name || "Staff member", action: item.event.includes("note") ? "added an internal note" : "recorded an update", dateTime: item.createdAt, timeLabel: formatDate(item.createdAt), detail: <p className="whitespace-pre-wrap break-words">{item.message}</p> }))} />}
     {!loading && !error && data?.total === 0 && <EmptyState title="No activity history yet" description="Updates and internal notes will appear here." />}
-    {data && <Pagination label="Activity history pages" page={page} pageSize={data.pageSize} total={data.total} totalPages={data.totalPages} loading={loading} onPageChange={setPage} />}
+    {data && <Pagination resolved={!error} label="Activity history pages" page={page} pageSize={data.pageSize} total={data.total} totalPages={data.totalPages} loading={loading} onPageChange={setPage} />}
   </Section>
 }

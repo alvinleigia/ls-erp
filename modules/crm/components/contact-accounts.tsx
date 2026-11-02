@@ -1,4 +1,5 @@
 "use client"
+import { useListState } from "@/components/erp/list-navigation"
 import { useTerminology, useTerminologyReader } from "@/platform/terminology/provider"
 import { TablePagination } from "@/components/erp/pagination"
 import * as React from "react"
@@ -19,7 +20,7 @@ export function ContactAccounts({ contactId, canEdit, archived }: { contactId: s
   const readTerm = useTerminologyReader()
   const term = useTerminology()
   const [data, setData] = React.useState<ListResponse<CrmAccountRow> | null>(null)
-  const [pagination, setPagination] = React.useState({ pageIndex: 0, pageSize: 10 })
+  const [pagination, setPagination] = useListState("contact-accounts", "pagination", { pageIndex: 0, pageSize: 10 })
   const [revision, setRevision] = React.useState(0)
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState("")
@@ -72,7 +73,7 @@ export function ContactAccounts({ contactId, canEdit, archived }: { contactId: s
     </form>}
     {error && <p role="alert" className="text-destructive">{error}</p>}
     {!loading && data?.total === 0 ? <EmptyState title={term("crm.account.plural", "No linked business accounts", "No linked {label}")} description={canEdit && !archived ? `Select ${term("crm.account.singular", "an account")} above to connect this ${term("crm.contact.singular", "contact")} to ${term("crm.account.singular", "a company")}.` : `This ${term("crm.contact.singular", "contact")} is not linked to ${term("crm.account.singular", "a company")}.`} /> : <DataTable table={table} loading={loading} emptyMessage={term("crm.account.plural", "No linked business accounts.", "No linked {label}.")} />}
-    <TablePagination table={table} totalRows={data?.total ?? 0} loading={loading} />
+    <TablePagination resolved={!error} table={table} totalRows={data?.total ?? 0} loading={loading} />
     <Dialog open={!!removing} onOpenChange={open => { if (!open && !saving) setRemoving(null) }}><DialogContent><DialogHeader><DialogTitle>Unlink {removing?.name}?</DialogTitle><DialogDescription>{`The ${term("crm.contact.singular", "contact")} and ${term("crm.account.singular", "account")} will be kept. This relationship will be removed and the change recorded in audit history.`}</DialogDescription></DialogHeader><DialogFooter><Button variant="outline" disabled={saving} onClick={() => setRemoving(null)}>Cancel</Button><Button loading={saving} onClick={() => removing && void change(removing)}>{term("crm.account.singular", "Unlink account", "Unlink {label}")}</Button></DialogFooter></DialogContent></Dialog>
   </Section>
 }

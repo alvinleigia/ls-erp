@@ -1,4 +1,5 @@
 "use client"
+import { useListState } from "@/components/erp/list-navigation"
 
 import * as React from "react"
 import { useCurrentResourceAction } from "@/platform/access/view-guard"
@@ -54,19 +55,17 @@ export default function ServiceCategoriesPage() {
   const [loading, setLoading] = React.useState(true)
   const [totalRows, setTotalRows] = React.useState(0)
 
-  const [search, setSearch] = React.useState("")
-  const [statusFilter, setStatusFilter] = React.useState<"all" | CategoryStatus>(
-    "all"
-  )
+  const [search, setSearch] = useListState("service-categories", "search", "", { resetPages: true })
+  const [statusFilter, setStatusFilter] = useListState<"all" | CategoryStatus>("service-categories", "statusFilter", "all", { resetPages: true })
 
-  const [sorting, setSorting] = React.useState<SortingState>([])
+  const [sorting, setSorting] = useListState<SortingState>("service-categories", "sorting", [], { kind: "sorting", resetPages: true })
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([])
-  const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({
+  const [columnVisibility, setColumnVisibility] = useListState<VisibilityState>("service-categories", "columnVisibility", {
     name: true,
     status: true,
     sortOrder: true,
-  })
-  const [pagination, setPagination] = React.useState({ pageIndex: 0, pageSize: 10 })
+  }, { kind: "visibility" })
+  const [pagination, setPagination] = useListState("service-categories", "pagination", { pageIndex: 0, pageSize: 10 })
 
   const [createOpen, setCreateOpen] = React.useState(false)
   const [editOpen, setEditOpen] = React.useState(false)
@@ -156,7 +155,7 @@ export default function ServiceCategoriesPage() {
         return next
       })
     },
-    []
+    [setPagination]
   )
 
   const createCategory = async () => {

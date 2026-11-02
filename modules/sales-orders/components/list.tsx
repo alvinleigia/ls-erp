@@ -1,4 +1,5 @@
 "use client"
+import { useListState } from "@/components/erp/list-navigation"
 import { useEffect, useMemo, useState } from "react"
 import { getCoreRowModel, useReactTable, type ColumnDef } from "@tanstack/react-table"
 import { DataTable } from "@/components/data-table"
@@ -17,7 +18,7 @@ export type OrderRow = { id: string; reference: string | null; orderedOn: string
 export const orderStatus = (status: string) => ({ DRAFT: "Draft", CONFIRMED: "Confirmed", CANCELLED: "Cancelled" })[status] || status
 export function SalesOrderList() {
   const term = useTerminology(), { formatDateTime, formatDateOnly } = useDateFormatter()
-  const [pagination, setPagination] = useState({ pageIndex: 0, pageSize: 20 }), [q, setQ] = useState(""), [status, setStatus] = useState("")
+  const [pagination, setPagination] = useListState("sales-order-list", "pagination", { pageIndex: 0, pageSize: 20 }), [q, setQ] = useListState("sales-order-list", "q", "", { resetPages: true }), [status, setStatus] = useListState("sales-order-list", "status", "", { resetPages: true })
   const [data, setData] = useState<{ items: OrderRow[]; total: number }>({ items: [], total: 0 }), [error, setError] = useState(""), [loading, setLoading] = useState(true), [refresh, setRefresh] = useState(0)
   useEffect(() => {
     const controller = new AbortController()

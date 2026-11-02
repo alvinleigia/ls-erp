@@ -9,8 +9,9 @@ import { ActionDialogContent } from "@/components/erp/action-dialog"
 import { PageHeader, pageClass } from "@/components/erp/page"
 
 import * as React from "react"
-import Link from "next/link"
-import { useParams, useRouter } from "next/navigation"
+import { ListBackLink as Link } from "@/components/erp/list-navigation"
+import { useParams } from "next/navigation"
+import { useListRouter as useRouter } from "@/components/erp/list-navigation"
 import { toast } from "sonner"
 
 import { LeaveGroupFormFields } from "@/app/(protected)/leaves/group-form-fields"

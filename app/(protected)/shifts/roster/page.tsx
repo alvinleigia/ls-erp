@@ -1,4 +1,5 @@
 "use client"
+import { useListState } from "@/components/erp/list-navigation"
 import { useCreationOfficeSnapshot } from "@/platform/companies/creation-snapshot"
 import { useBusinessModules } from "@/platform/module-provider"
 
@@ -136,16 +137,16 @@ export default function RosterPage() {
   const searchParams = useSearchParams()
   const debugEnabled = searchParams.get("debug") === "1"
   const scheduleRef = React.useRef<ScheduleComponent | null>(null)
-  const [date, setDate] = React.useState(() => new Date())
+  const [date, setDate] = useListState("roster", "date", () => new Date(), { resetPages: true })
   const [viewDates, setViewDates] = React.useState<Date[]>([])
   const [staff, setStaff] = React.useState<StaffOption[]>([])
-  const [staffFilter, setStaffFilter] = React.useState<string>("all")
-  const [rosterSearch, setRosterSearch] = React.useState("")
-  const [rosterPage, setRosterPage] = React.useState(1)
+  const [staffFilter, setStaffFilter] = useListState<string>("roster", "staffFilter", "all", { resetPages: true })
+  const [rosterSearch, setRosterSearch] = useListState("roster", "rosterSearch", "", { resetPages: true })
+  const [rosterPage, setRosterPage] = useListState("roster", "rosterPage", 1)
   const [rosterRevision, setRosterRevision] = React.useState(0)
   const [rosterView, setRosterView] = React.useState<{ key: string; days: RosterDay[]; total: number; totalPages: number } | null>(null)
   const [rosterError, setRosterError] = React.useState("")
-  const [rosterMode, setRosterMode] = React.useState<"grid" | "calendar">("grid")
+  const [rosterMode, setRosterMode] = useListState<"grid" | "calendar">("roster", "rosterMode", "grid", { resetPages: true })
   const [settings, setSettings] = React.useState<AppSettingsPayload>({
     workingHours: [],
     overrides: [],
@@ -294,7 +295,7 @@ export default function RosterPage() {
       }
     })()
     return () => controller.abort()
-  }, [rosterAllowed, rosterStart, rosterEnd, rosterPage, rosterSearch, rosterRevision, rosterKey])
+  }, [rosterAllowed, rosterStart, rosterEnd, rosterPage, rosterSearch, rosterRevision, rosterKey, setStaffFilter, setRosterPage])
 
   const filteredStaff = React.useMemo(() => {
     if (staffFilter === "all") {
@@ -953,13 +954,13 @@ export default function RosterPage() {
     if (selected instanceof Date && !Number.isNaN(selected.getTime())) {
       setDate(new Date(selected))
     }
-  }, [])
+  }, [setDate])
 
   const handleNavigate = React.useCallback((args: { currentDate?: Date | null }) => {
     if (args?.currentDate instanceof Date && !Number.isNaN(args.currentDate.getTime())) {
       setDate(new Date(args.currentDate))
     }
-  }, [])
+  }, [setDate])
 
   const handleEventRendered = React.useCallback(
     (args: { data?: Record<string, unknown>; element?: HTMLElement }) => {
@@ -1911,6 +1912,8 @@ export default function RosterPage() {
           <div className="min-h-[540px]">
             <Calendar
             scheduleRef={scheduleRef}
+            selectedDate={date}
+            persistSelectedDate={false}
             currentView="Week"
             firstDayOfWeek={firstDayOfWeek}
             showQuickInfo
@@ -1949,9 +1952,9 @@ export default function RosterPage() {
         </div>
       </div>
       )}
-      <div className="flex items-center justify-between gap-3 text-sm text-muted-foreground">
+      <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-muted-foreground">
         <span>{rosterView?.key === rosterKey ? `${rosterView.total} permitted staff - Page ${rosterPage} of ${rosterView.totalPages}` : ""}</span>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Button variant="outline" disabled={!rosterAllowed} onClick={() => setRosterRevision(value => value + 1)}>Refresh roster</Button>
           <Button variant="outline" disabled={rosterPage <= 1 || rosterView?.key !== rosterKey} onClick={() => { setRosterPage(value => value - 1); setStaffFilter("all") }}>Previous staff page</Button>
           <Button variant="outline" disabled={!rosterView || rosterView.key !== rosterKey || rosterPage >= rosterView.totalPages} onClick={() => { setRosterPage(value => value + 1); setStaffFilter("all") }}>Next staff page</Button>

@@ -1,4 +1,5 @@
 "use client"
+import { useListState } from "@/components/erp/list-navigation"
 import { useTerminology, useTerminologyReader } from "@/platform/terminology/provider"
 import { useBusinessModules } from "@/platform/module-provider"
 import * as React from "react"
@@ -41,7 +42,7 @@ function RelatedOpportunities({ query }: { query: string }) {
   const readTerm = useTerminologyReader()
   const term = useTerminology()
   const [items, setItems] = React.useState<CrmOpportunityRow[]>([]), [total, setTotal] = React.useState(0)
-  const [pagination, setPagination] = React.useState({ pageIndex: 0, pageSize: 20 }), [kind, setKind] = React.useState("")
+  const [pagination, setPagination] = useListState("related-opportunities", "pagination", { pageIndex: 0, pageSize: 20 }), [kind, setKind] = useListState("related-opportunities", "kind", "", { resetPages: true })
   const [loading, setLoading] = React.useState(true), [error, setError] = React.useState(""), [revision, setRevision] = React.useState(0)
   React.useEffect(() => {
     const controller = new AbortController(); setLoading(true); setError("")

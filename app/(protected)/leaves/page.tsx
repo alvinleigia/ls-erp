@@ -1,4 +1,5 @@
 "use client"
+import { useListState } from "@/components/erp/list-navigation"
 import { useDateFormatter } from "@/hooks/use-date-formatter"
 import { useCurrentResourceAction } from "@/platform/access/view-guard"
 
@@ -79,12 +80,12 @@ export default function LeavesPage() {
   const [deleteOpen, setDeleteOpen] = React.useState(false)
   const [deleting, setDeleting] = React.useState(false)
   const [deleteTarget, setDeleteTarget] = React.useState<LeaveDefinitionRow | null>(null)
-  const [search, setSearch] = React.useState("")
-  const [leaveTypeFilter, setLeaveTypeFilter] = React.useState<LeaveDefinitionType | "all">("all")
-  const [allowedUsersFilter, setAllowedUsersFilter] = React.useState<LeaveDefinitionAllowedUsers | "all">("all")
-  const [statusFilter, setStatusFilter] = React.useState<LeaveDefinitionStatus | "all">("all")
-  const [sorting, setSorting] = React.useState<SortingState>([{ id: "sortOrder", desc: false }])
-  const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({
+  const [search, setSearch] = useListState("leaves", "search", "", { resetPages: true })
+  const [leaveTypeFilter, setLeaveTypeFilter] = useListState<LeaveDefinitionType | "all">("leaves", "leaveTypeFilter", "all", { resetPages: true })
+  const [allowedUsersFilter, setAllowedUsersFilter] = useListState<LeaveDefinitionAllowedUsers | "all">("leaves", "allowedUsersFilter", "all", { resetPages: true })
+  const [statusFilter, setStatusFilter] = useListState<LeaveDefinitionStatus | "all">("leaves", "statusFilter", "all", { resetPages: true })
+  const [sorting, setSorting] = useListState<SortingState>("leaves", "sorting", [{ id: "sortOrder", desc: false }], { kind: "sorting", resetPages: true })
+  const [columnVisibility, setColumnVisibility] = useListState<VisibilityState>("leaves", "columnVisibility", {
     code: true,
     name: true,
     leaveType: true,
@@ -92,8 +93,8 @@ export default function LeavesPage() {
     status: true,
     sortOrder: true,
     updatedAt: true,
-  })
-  const [pagination, setPagination] = React.useState<PaginationState>({
+  }, { kind: "visibility" })
+  const [pagination, setPagination] = useListState<PaginationState>("leaves", "pagination", {
     pageIndex: 0,
     pageSize: 10,
   })
@@ -143,9 +144,7 @@ export default function LeavesPage() {
     void loadRows()
   }, [loadRows])
 
-  React.useEffect(() => {
-    setPagination((prev) => (prev.pageIndex === 0 ? prev : { ...prev, pageIndex: 0 }))
-  }, [allowedUsersFilter, leaveTypeFilter, search, sorting, statusFilter])
+
 
   const handlePaginationChange = React.useCallback(
     (updater: PaginationState | ((prev: PaginationState) => PaginationState)) => {
@@ -157,7 +156,7 @@ export default function LeavesPage() {
         return next
       })
     },
-    []
+    [setPagination]
   )
 
   const requestDelete = React.useCallback((row: LeaveDefinitionRow) => {

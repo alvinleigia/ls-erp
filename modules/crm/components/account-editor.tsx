@@ -7,7 +7,7 @@ import { AccessPageHeader, AccessFormActions } from "@/platform/access/record-pa
 import { pageClass } from "@/components/erp/page"
 import { Textarea, Checkbox } from "@/components/erp/controls"
 import * as React from "react"
-import { useRouter } from "next/navigation"
+import { useListRouter as useRouter } from "@/components/erp/list-navigation"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"

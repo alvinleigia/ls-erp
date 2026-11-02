@@ -1,4 +1,5 @@
 "use client"
+import { useListState } from "@/components/erp/list-navigation"
 
 import * as React from "react"
 import { useSession } from "next-auth/react"
@@ -67,9 +68,9 @@ export default function UsersPage() {
   const canManage = canInvite(currentRole)
   const sessionUserId = session?.user?.id
 
-  const [search, setSearch] = React.useState("")
-  const [roleFilter, setRoleFilter] = React.useState<"all" | Role>("all")
-  const [statusFilter, setStatusFilter] = React.useState<"all" | UserStatus>("all")
+  const [search, setSearch] = useListState("users", "search", "", { resetPages: true })
+  const [roleFilter, setRoleFilter] = useListState<"all" | Role>("users", "roleFilter", "all", { resetPages: true })
+  const [statusFilter, setStatusFilter] = useListState<"all" | UserStatus>("users", "statusFilter", "all", { resetPages: true })
 
   const [users, setUsers] = React.useState<UserRow[]>([])
   const [loading, setLoading] = React.useState(true)
@@ -95,16 +96,16 @@ export default function UsersPage() {
   } = useFormErrors()
   const [totalRows, setTotalRows] = React.useState(0)
 
-  const [sorting, setSorting] = React.useState<SortingState>([])
+  const [sorting, setSorting] = useListState<SortingState>("users", "sorting", [], { kind: "sorting", resetPages: true })
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([])
-  const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({
+  const [columnVisibility, setColumnVisibility] = useListState<VisibilityState>("users", "columnVisibility", {
     name: true,
     email: true,
     phone: true,
     role: true,
     status: true,
-  })
-  const [pagination, setPagination] = React.useState({ pageIndex: 0, pageSize: 10 })
+  }, { kind: "visibility" })
+  const [pagination, setPagination] = useListState("users", "pagination", { pageIndex: 0, pageSize: 10 })
 
   const [newUser, setNewUser] = React.useState<UserFormValues>(defaultUserFormValues)
   const [editValues, setEditValues] = React.useState<UserFormValues>(defaultUserFormValues)
@@ -155,11 +156,7 @@ export default function UsersPage() {
   }, [loadUsers])
 
 
-  React.useEffect(() => {
-    setPagination((prev) =>
-      prev.pageIndex === 0 ? prev : { ...prev, pageIndex: 0 }
-    )
-  }, [roleFilter, search, sorting, statusFilter])
+
 
   const handlePaginationChange = React.useCallback(
     (updater: PaginationState | ((prev: PaginationState) => PaginationState)) => {
@@ -171,7 +168,7 @@ export default function UsersPage() {
         return next
       })
     },
-    []
+    [setPagination]
   )
 
   const startEdit = React.useCallback((user: UserRow) => {

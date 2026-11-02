@@ -1,4 +1,5 @@
 "use client"
+import { useListState } from "@/components/erp/list-navigation"
 import { InfoHelp } from "@/components/erp/info-help"
 import { useTerminology, useTerminologyReader } from "@/platform/terminology/provider"
 import { SalesTeamSelect } from "@/platform/teams/controls"
@@ -58,7 +59,7 @@ function StageSelect({ record, stages, busy, move }: Moves & { record: CrmOpport
 }
 function BoardColumn({ stage, params, revision, onDrag, onDrop, formatMoney, ...moves }: Moves & Money & { stage: CrmStageRow; params: string; revision: number; onDrag: (record: CrmOpportunityRow | null) => void; onDrop: (stage: CrmStageRow) => void }) {
   const term = useTerminology()
-  const [page, setPage] = React.useState(1)
+  const [page, setPage] = useListState("opportunity-stage", `page-${stage.id}`, 1)
   const { data, loading, error } = useOpportunityPage(`${params}&stageId=${encodeURIComponent(stage.id)}&page=${page}&pageSize=20`, revision)
   const { formatDate } = useDateFormatter()
   return <section aria-label={`${stage.name} ${term("crm.opportunity.plural", "opportunities")}`} className="w-72 shrink-0 rounded-xl border bg-muted/30" onDragOver={event => { if (!stage.archived && !moves.busy) event.preventDefault() }} onDrop={event => { event.preventDefault(); if (!stage.archived) onDrop(stage) }}>
@@ -75,13 +76,13 @@ function BoardColumn({ stage, params, revision, onDrag, onDrop, formatMoney, ...
         <StageSelect record={record} {...moves} />
         {!!record.overdueActivityCount && <Link className="block text-sm text-destructive underline" href={`/crm/opportunities/${record.id}`}>{record.overdueActivityCount} overdue {record.overdueActivityCount === 1 ? "activity" : "activities"}</Link>}
       </article>)}
-      <Pagination label={`${stage.name} pages`} page={page} pageSize={20} total={data?.total ?? 0} totalPages={data?.totalPages} loading={loading} onPageChange={setPage} />
+      <Pagination resolved={!error} label={`${stage.name} pages`} page={page} pageSize={20} total={data?.total ?? 0} totalPages={data?.totalPages} loading={loading} onPageChange={setPage} />
     </div>
   </section>
 }
 function OpportunityTable({ params, revision, formatMoney, ...moves }: Moves & Money & { params: string; revision: number }) {
   const term = useTerminology()
-  const [pagination, setPagination] = React.useState({ pageIndex: 0, pageSize: 20 })
+  const [pagination, setPagination] = useListState("opportunity-table", "pagination", { pageIndex: 0, pageSize: 20 })
   const { data, loading, error } = useOpportunityPage(`${params}&page=${pagination.pageIndex + 1}&pageSize=${pagination.pageSize}`, revision)
   const { formatDate } = useDateFormatter()
   const { stages, busy, move } = moves
@@ -100,7 +101,7 @@ function OpportunityTable({ params, revision, formatMoney, ...moves }: Moves & M
   const table = useReactTable({ data: data?.items ?? [], columns, getCoreRowModel: getCoreRowModel(), manualPagination: true, rowCount: data?.total ?? 0, state: { pagination },
     onPaginationChange: updater => setPagination(previous => { const next = typeof updater === "function" ? updater(previous) : updater; return next.pageSize !== previous.pageSize ? { ...next, pageIndex: 0 } : next }),
   })
-  return <div className="space-y-4">{error && <p role="alert" className="text-destructive">{error}</p>}<DataTable table={table} loading={loading} emptyMessage={term("crm.opportunity.plural", "No opportunities match these filters.", "No {label} match these filters.")} /><TablePagination table={table} totalRows={data?.total ?? 0} loading={loading} /></div>
+  return <div className="space-y-4">{error && <p role="alert" className="text-destructive">{error}</p>}<DataTable table={table} loading={loading} emptyMessage={term("crm.opportunity.plural", "No opportunities match these filters.", "No {label} match these filters.")} /><TablePagination resolved={!error} table={table} totalRows={data?.total ?? 0} loading={loading} /></div>
 }
 
 export function OpportunityViews() {
@@ -115,18 +116,18 @@ export function OpportunityViews() {
   }, [])
   const formatMoney = React.useCallback((amount: string, currency: string) => formatDecimalCurrency(amount, currency, moneySettings), [moneySettings])
   const [pipeline, setPipeline] = React.useState<CrmPipelineRow | null>(null)
-  const [pipelineId, setPipelineId] = React.useState("")
-  const [archive, setArchive] = React.useState(false)
-  const [q, setQ] = React.useState("")
-  const [customFilter, setCustomFilter] = React.useState(emptyCustomFilter)
-  const [owner, setOwner] = React.useState("")
-  const [kind, setKind] = React.useState("")
-  const [primaryId, setPrimaryId] = React.useState("")
-  const [secondaryId, setSecondaryId] = React.useState("")
+  const [pipelineId, setPipelineId] = useListState("opportunity-views", "pipelineId", "", { resetPages: true, resetScopes: ["opportunity-table","opportunity-stage"] })
+  const [archive, setArchive] = useListState("opportunity-views", "archive", false, { resetPages: true, resetScopes: ["opportunity-table","opportunity-stage"] })
+  const [q, setQ] = useListState("opportunity-views", "q", "", { resetPages: true, resetScopes: ["opportunity-table","opportunity-stage"] })
+  const [customFilter, setCustomFilter] = useListState("opportunity-views", "customFilter", emptyCustomFilter, { resetPages: true, resetScopes: ["opportunity-table","opportunity-stage"] })
+  const [owner, setOwner] = useListState("opportunity-views", "owner", "", { resetPages: true, resetScopes: ["opportunity-table","opportunity-stage"] })
+  const [kind, setKind] = useListState("opportunity-views", "kind", "", { resetPages: true, resetScopes: ["opportunity-table","opportunity-stage"] })
+  const [primaryId, setPrimaryId] = useListState("opportunity-views", "primaryId", "", { resetPages: true, resetScopes: ["opportunity-table","opportunity-stage"] })
+  const [secondaryId, setSecondaryId] = useListState("opportunity-views", "secondaryId", "", { resetPages: true, resetScopes: ["opportunity-table","opportunity-stage"] })
   const extensionQuery = useCrmExtensionFilterQuery(primaryId, secondaryId)
-  const [sort, setSort] = React.useState("updatedAt")
-  const [order, setOrder] = React.useState("desc")
-  const [view, setView] = React.useState<"board" | "list">("board")
+  const [sort, setSort] = useListState("opportunity-views", "sort", "updatedAt", { resetPages: true, resetScopes: ["opportunity-table","opportunity-stage"] })
+  const [order, setOrder] = useListState("opportunity-views", "order", "desc", { resetPages: true, resetScopes: ["opportunity-table","opportunity-stage"] })
+  const [view, setView] = useListState<"board" | "list">("opportunity-views", "view", "board")
   const [revision, setRevision] = React.useState(0)
   const [error, setError] = React.useState("")
   const [busy, setBusy] = React.useState(false)
@@ -134,15 +135,16 @@ export function OpportunityViews() {
   const [pending, setPending] = React.useState<{ record: CrmOpportunityRow; stage: CrmStageRow } | null>(null)
   const [lossReason, setLossReason] = React.useState("")
   const [lostReasonId, setLostReasonId] = React.useState("")
-  const [reasonFilter, setReasonFilter] = React.useState("")
+  const [reasonFilter, setReasonFilter] = useListState("opportunity-views", "reasonFilter", "", { resetPages: true, resetScopes: ["opportunity-table","opportunity-stage"] })
   React.useEffect(() => {
+    if (pipelineId) return
     const controller = new AbortController()
     void fetch("/api/crm/pipelines?pageSize=1", { signal: controller.signal, cache: "no-store" }).then(async response => {
       const data = await response.json(); if (!response.ok) throw new Error(data.error || "Unable to load pipelines.")
-      setPipelineId(data.items[0]?.id || "")
+      setPipelineId(previous => previous || data.items[0]?.id || "")
     }).catch(error => { if (!controller.signal.aborted) setError(error.message) })
     return () => controller.abort()
-  }, [])
+  }, [pipelineId, setPipelineId])
   React.useEffect(() => {
     if (!pipelineId) return
     const controller = new AbortController()
@@ -167,7 +169,7 @@ export function OpportunityViews() {
     if (stage.kind === "LOST") { setPending({ record, stage }); setLossReason(record.stage.kind === "LOST" ? record.lossReason || "" : ""); setLostReasonId(record.stage.kind === "LOST" ? record.lostReasonId || "" : "") }
     else void persistMove(record, stage)
   }, [busy, persistMove, mayEdit])
-  const [salesTeamId, setSalesTeamId] = React.useState("")
+  const [salesTeamId, setSalesTeamId] = useListState("opportunity-views", "salesTeamId", "", { resetPages: true, resetScopes: ["opportunity-table","opportunity-stage"] })
   const params = new URLSearchParams({ ...(salesTeamId ? { salesTeamId } : {}), ...(customFilter.customFieldId && customFilter.customFieldValue !== "" ? customFilter : {}), pipelineId, q, sort, order, ...(reasonFilter ? { lostReasonId: reasonFilter } : {}), ...extensionQuery, ...(owner ? { assignedUserId: owner } : {}), ...(kind ? { kind } : {}) }).toString()
   const ready = pipeline?.id === pipelineId
   return <section className={pageClass}>

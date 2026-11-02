@@ -5,7 +5,7 @@ import { withRecordView, useRecordView, AccessRecordForm, AccessSummarySection }
 import { AccessPageHeader, AccessFormActions } from "@/platform/access/record-page"
 import * as React from "react"
 import Link from "@/platform/access/link"
-import { useRouter } from "next/navigation"
+import { useListRouter as useRouter } from "@/components/erp/list-navigation"
 import { toast } from "sonner"
 import { Plus, UserRound } from "lucide-react"
 import { Button } from "@/components/ui/button"

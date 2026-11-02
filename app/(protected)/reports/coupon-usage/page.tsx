@@ -1,4 +1,5 @@
 "use client"
+import { useListState } from "@/components/erp/list-navigation"
 import { BusinessViewGuard } from "@/platform/access/view-guard"
 
 import * as React from "react"
@@ -37,16 +38,16 @@ function CouponUsageContent() {
   const [error, setError] = React.useState("")
   const [refresh, setRefresh] = React.useState(0)
   const [loading, setLoading] = React.useState(true)
-  const [search, setSearch] = React.useState("")
-  const [status, setStatus] = React.useState<CouponUsageReportStatus>("used")
-  const [couponCode, setCouponCode] = React.useState("")
-  const [dateFrom, setDateFrom] = React.useState("")
-  const [dateTo, setDateTo] = React.useState("")
-  const [officeId, setOfficeId] = React.useState("all")
+  const [search, setSearch] = useListState("coupon-usage-content", "search", "", { resetPages: true })
+  const [status, setStatus] = useListState<CouponUsageReportStatus>("coupon-usage-content", "status", "used", { resetPages: true })
+  const [couponCode, setCouponCode] = useListState("coupon-usage-content", "couponCode", "", { resetPages: true })
+  const [dateFrom, setDateFrom] = useListState("coupon-usage-content", "dateFrom", "", { resetPages: true })
+  const [dateTo, setDateTo] = useListState("coupon-usage-content", "dateTo", "", { resetPages: true })
+  const [officeId, setOfficeId] = useListState("coupon-usage-content", "officeId", "all", { resetPages: true })
   const [context, setContext] = React.useState<CouponUsageReportContext | null>(null)
   const [summary, setSummary] = React.useState<CouponUsageReportSummary>(defaultSummary)
   const [totalRows, setTotalRows] = React.useState(0)
-  const [pagination, setPagination] = React.useState<PaginationState>({
+  const [pagination, setPagination] = useListState<PaginationState>("coupon-usage-content", "pagination", {
     pageIndex: 0,
     pageSize: 10,
   })
@@ -231,7 +232,7 @@ function CouponUsageContent() {
         loading={loading}
         emptyMessage={status === "used" ? "No matching coupon use found." : "No customers without matching coupon use in this report."}
       />}
-      <TablePagination table={table} totalRows={totalRows} loading={loading} />
+      <TablePagination resolved={!error} table={table} totalRows={totalRows} loading={loading} />
       </Surface>
     </div>
   )

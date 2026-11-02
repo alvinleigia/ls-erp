@@ -1,6 +1,6 @@
 "use client"
 import * as React from "react"
-import { useRouter } from "next/navigation"
+import { useListRouter as useRouter } from "@/components/erp/list-navigation"
 import { useBusinessModules } from "@/platform/module-provider"
 import { AccessPageHeader, AccessFormActions } from "@/platform/access/record-page"
 import { AccessRecordForm, AccessSummarySection, withRecordView, useRecordView } from "@/platform/access/record-view"

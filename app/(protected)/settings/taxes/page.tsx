@@ -1,4 +1,5 @@
 "use client"
+import { useListState } from "@/components/erp/list-navigation"
 import { useCurrentResourceAction } from "@/platform/access/view-guard"
 
 import * as React from "react"
@@ -54,9 +55,9 @@ export default function SettingsTaxesPage() {
   const [totalRows, setTotalRows] = React.useState(0)
   const [loading, setLoading] = React.useState(true)
   const [saving, setSaving] = React.useState(false)
-  const [search, setSearch] = React.useState("")
-  const [sorting, setSorting] = React.useState<SortingState>([])
-  const [pagination, setPagination] = React.useState<PaginationState>({ pageIndex: 0, pageSize: 10 })
+  const [search, setSearch] = useListState("settings-taxes", "search", "", { resetPages: true })
+  const [sorting, setSorting] = useListState<SortingState>("settings-taxes", "sorting", [], { kind: "sorting", resetPages: true })
+  const [pagination, setPagination] = useListState<PaginationState>("settings-taxes", "pagination", { pageIndex: 0, pageSize: 10 })
   const [formOpen, setFormOpen] = React.useState(false)
   const [editing, setEditing] = React.useState<TaxRow | null>(null)
   const [formValues, setFormValues] = React.useState<TaxFormValues>(defaultTaxFormValues)

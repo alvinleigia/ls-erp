@@ -1,4 +1,5 @@
 "use client"
+import { useListState } from "@/components/erp/list-navigation"
 import { useTerminology } from "@/platform/terminology/provider"
 import { AccessPageHeader } from "@/platform/access/record-page"
 import { Surface, pageClass } from "@/components/erp/page"
@@ -15,9 +16,9 @@ import type { ActivityPlanRow } from "@/types/crm-plans"
 export function ActivityPlanList() {
   const term = useTerminology()
   const [items, setItems] = React.useState<ActivityPlanRow[]>([]), [total, setTotal] = React.useState(0)
-  const [q, setQ] = React.useState(""), [archived, setArchived] = React.useState("false")
+  const [q, setQ] = useListState("activity-plan-list", "q", "", { resetPages: true }), [archived, setArchived] = useListState("activity-plan-list", "archived", "false", { resetPages: true })
   const [canManage, setCanManage] = React.useState(false), [loading, setLoading] = React.useState(true), [error, setError] = React.useState("")
-  const [pagination, setPagination] = React.useState({ pageIndex: 0, pageSize: 20 })
+  const [pagination, setPagination] = useListState("activity-plan-list", "pagination", { pageIndex: 0, pageSize: 20 })
   React.useEffect(() => {
     const controller = new AbortController()
     const timer = setTimeout(async () => {

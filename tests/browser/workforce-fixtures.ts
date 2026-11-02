@@ -25,6 +25,7 @@ export async function fixture(page: Page) {
     queries.push(url)
     if (path === "/api/leaves/request-options") return route.fulfill({ json: { items: [{ value: "leave", label: "AL - Annual leave" }] } })
     if (path.startsWith("/api/settings")) return route.fulfill({ json: { settings: { timeFormat: "H24", dateFormat: "dd/MM/yyyy", firstDayOfWeek: "MONDAY", workingHours: [] } } })
+    if (path === "/api/shifts/roster") return route.fulfill({ json: { items: [staff, flexStaff], days: [], total: 2, page: Number(url.searchParams.get("page") || 1), pageSize: 100, totalPages: 1 } })
     if (path === "/api/leaves/definitions/leave") return route.fulfill({ json: { item: definition } })
     if (path === "/api/leaves/groups/group") return route.fulfill({ json: { item: group } })
     if (path === "/api/shifts/flexible-patterns/pattern") return route.fulfill({ json: { item: pattern } })

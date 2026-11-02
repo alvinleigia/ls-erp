@@ -1,4 +1,5 @@
 "use client"
+import { useListState } from "@/components/erp/list-navigation"
 import * as React from "react"
 import Link from "@/platform/access/link"
 import { Button } from "@/components/ui/button"
@@ -12,6 +13,8 @@ import type { ListResponse } from "@/types/api"
 import { teamMetrics, teamMetricKeys, teamMetricLabel, type TeamMetric, type TeamPerformanceResponse, type TeamPerformanceRecord } from "../team-performance-contract"
 import { useTerminology } from "@/platform/terminology/provider"
 import { TeamPerformanceCharts, type MemberChartComparison } from "./team-performance-charts"
+
+const validSelection = (value: unknown) => value === null || typeof value === "object" && value !== null && "metric" in value && teamMetricKeys.includes(value.metric as TeamMetric) && "caption" in value && typeof value.caption === "string" && (!("userId" in value) || typeof value.userId === "string")
 
 function useTeamReport<T>(path: string, params: string, revision: number) {
   const key = `${path}?${params}&${revision}`
@@ -33,23 +36,23 @@ function useTeamReport<T>(path: string, params: string, revision: number) {
 
 function PerformanceRecords({ params, metric, caption, revision, onClose }: { params: string; metric: TeamMetric; caption: string; revision: number; onClose: () => void }) {
   const term = useTerminology()
-  const [page, setPage] = React.useState(1)
+  const [page, setPage] = useListState("performance-records", "page", 1)
   const { data, error, loading } = useTeamReport<ListResponse<TeamPerformanceRecord>>("/records", `${params}&metric=${metric}&page=${page}&pageSize=20`, revision)
   return <Section id="team-performance-records" title={`${caption}: ${teamMetricLabel(term, metric)}`} description="These records use the same filters and date basis as the selected count." actions={<Button variant="outline" onClick={onClose}>Close records</Button>}>
     {error && <p role="alert" className="text-destructive">{error}</p>}
     <Table><TableHeader><TableRow><TableHead>Record</TableHead><TableHead>Assigned user</TableHead><TableHead>Status</TableHead></TableRow></TableHeader><TableBody>
       {data?.items.map(row => <TableRow key={row.id}><TableCell><Link className="underline" href={`/crm/${row.kind}/${row.id}`}>{row.title}</Link></TableCell><TableCell>{row.owner}</TableCell><TableCell>{row.status === "CLOSED" ? "Lost" : row.status.replaceAll("_", " ")}</TableCell></TableRow>)}
       {!data?.items.length && <TableRow><TableCell colSpan={3}>{loading ? "Loading records…" : error ? "Records unavailable." : "No matching records."}</TableCell></TableRow>}
-    </TableBody></Table><Pagination page={page} pageSize={20} total={data?.total ?? 0} totalPages={data?.totalPages} loading={loading} onPageChange={setPage} />
+    </TableBody></Table><Pagination resolved={!error} page={page} pageSize={20} total={data?.total ?? 0} totalPages={data?.totalPages} loading={loading} onPageChange={setPage} />
   </Section>
 }
 
 export function TeamPerformance({ params, revision, formatMoney }: { params: string; revision: number; formatMoney: (amount: string, currency: string) => string }) {
   const term = useTerminology()
-  const [page, setPage] = React.useState(1), [size, setSize] = React.useState(20), [search, setSearch] = React.useState("")
-  const [group, setGroup] = React.useState("summary"), [sort, setSort] = React.useState<string>("name"), [order, setOrder] = React.useState("asc")
-  const [chartComparison, setChartComparison] = React.useState<MemberChartComparison>("enquiries")
-  const [selection, setSelection] = React.useState<{ metric: TeamMetric; userId?: string; caption: string } | null>(null)
+  const [page, setPage] = useListState("team-performance", "page", 1), [size, setSize] = useListState("team-performance", "size", 20), [search, setSearch] = useListState("team-performance", "search", "", { resetPages: true })
+  const [group, setGroup] = useListState("team-performance", "group", "summary"), [sort, setSort] = useListState<string>("team-performance", "sort", "name", { resetPages: true }), [order, setOrder] = useListState("team-performance", "order", "asc", { resetPages: true })
+  const [chartComparison, setChartComparison] = useListState<MemberChartComparison>("team-performance", "chartComparison", "enquiries")
+  const [selection, setSelection] = useListState<{ metric: TeamMetric; userId?: string; caption: string } | null>("team-performance", "selection", null, { validate: validSelection, resetScopes: ["performance-records"] })
   const base = `${params}&q=${encodeURIComponent(search)}&sort=${sort}&order=${order}`
   const { data, error, loading } = useTeamReport<TeamPerformanceResponse>("", `${base}&page=${page}&pageSize=${size}`, revision)
   const metrics = group === "summary" ? ["enquiries", "converted", "pipeline", "won", "lost", "activitiesOverdue", "activitiesCompleted", "callsCompleted"] as TeamMetric[] : teamMetricKeys.filter(key => teamMetrics[key].group === group)
@@ -78,7 +81,7 @@ export function TeamPerformance({ params, revision, formatMoney }: { params: str
         {!data?.items.length && <TableRow><TableCell colSpan={1 + metrics.length + Number(showConversion) + Number(showValues)}>{loading ? "Loading team performance…" : error ? "Team performance unavailable." : "No members or records match this selection."}</TableCell></TableRow>}
         {data && <TableRow className="bg-muted/40 font-semibold"><TableCell className="sticky left-0 z-10 bg-card">Team total · {data.total} {data.total === 1 ? "user" : "users"}</TableCell>{metrics.map(metric => <TableCell key={metric}>{number(metric, data.totals[metric], "Team total")}</TableCell>)}{showConversion && <TableCell>{data.totals.conversionPercent === null ? "—" : `${data.totals.conversionPercent}%`}</TableCell>}{showValues && <TableCell>{pipeline(data.totals.pipelineValues)}</TableCell>}</TableRow>}
       </TableBody></Table></div>
-      <Pagination page={page} pageSize={size} total={data?.total ?? 0} totalPages={data?.totalPages} loading={loading} onPageChange={setPage} onPageSizeChange={value => { setSize(value); setPage(1) }} />
+      <Pagination resolved={!error} page={page} pageSize={size} total={data?.total ?? 0} totalPages={data?.totalPages} loading={loading} onPageChange={setPage} onPageSizeChange={value => { setSize(value); setPage(1) }} />
     </Section>
     {data && !error && <TeamPerformanceCharts data={data} comparison={chartComparison} onComparisonChange={setChartComparison} />}
     {selection && !loading && !error && <PerformanceRecords key={`${base}:${selection.metric}:${selection.userId || "all"}`} params={`${base}${selection.userId ? `&assignedUserId=${encodeURIComponent(selection.userId)}` : ""}`} metric={selection.metric} caption={selection.caption} revision={revision} onClose={() => setSelection(null)} />}

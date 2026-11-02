@@ -1,4 +1,5 @@
 "use client"
+import { useListState } from "@/components/erp/list-navigation"
 
 import * as React from "react"
 import {
@@ -71,11 +72,11 @@ export default function InvitesPage() {
   const [loading, setLoading] = React.useState(true)
   const [totalRows, setTotalRows] = React.useState(0)
 
-  const [sorting, setSorting] = React.useState<SortingState>([])
-  const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({})
-  const [pagination, setPagination] = React.useState({ pageIndex: 0, pageSize: 10 })
-  const [search, setSearch] = React.useState("")
-  const [statusFilter, setStatusFilter] = React.useState<InviteStatusFilter>("pending")
+  const [sorting, setSorting] = useListState<SortingState>("invites", "sorting", [], { kind: "sorting", resetPages: true })
+  const [columnVisibility, setColumnVisibility] = useListState<VisibilityState>("invites", "columnVisibility", {}, { kind: "visibility" })
+  const [pagination, setPagination] = useListState("invites", "pagination", { pageIndex: 0, pageSize: 10 })
+  const [search, setSearch] = useListState("invites", "search", "", { resetPages: true })
+  const [statusFilter, setStatusFilter] = useListState<InviteStatusFilter>("invites", "statusFilter", "pending", { resetPages: true })
 
   const [inviteValues, setInviteValues] = React.useState<InviteFormValues>(
     defaultInviteFormValues
@@ -114,11 +115,7 @@ export default function InvitesPage() {
     void loadInvites()
   }, [loadInvites])
 
-  React.useEffect(() => {
-    setPagination((prev) =>
-      prev.pageIndex === 0 ? prev : { ...prev, pageIndex: 0 }
-    )
-  }, [search, sorting, statusFilter])
+
 
   const handlePaginationChange = React.useCallback(
     (updater: PaginationState | ((prev: PaginationState) => PaginationState)) => {
@@ -130,7 +127,7 @@ export default function InvitesPage() {
         return next
       })
     },
-    []
+    [setPagination]
   )
 
   const officeReady = !officeDenied && initialOfficeReady(inviteValues.role, "ACTIVE", inviteValues.officeAccess, officeValidation)

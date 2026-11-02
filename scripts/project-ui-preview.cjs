@@ -11,7 +11,8 @@ write("package.json", JSON.stringify({ private: true }))
 write("next.config.mjs", "export default { devIndicators: false, experimental: { externalDir: true } }")
 write("postcss.config.mjs", "export { default } from '../../postcss.config.mjs'")
 write("tsconfig.json", JSON.stringify({ compilerOptions: { target: "ES2017", lib: ["dom", "esnext"], strict: true, skipLibCheck: true, esModuleInterop: true, module: "esnext", moduleResolution: "bundler", jsx: "react-jsx", noEmit: true, resolveJsonModule: true, isolatedModules: true, plugins: [{ name: "next" }], paths: { "@/*": ["../../*"] } }, include: ["**/*.ts", "**/*.tsx", ".next/types/**/*.ts"] }))
-write("app/layout.tsx", `import '../../../app/globals.css'; export default function Layout({children}:{children:React.ReactNode}) { return <html lang="en" className="dark"><body style={{fontFamily:'Arial,sans-serif'}}><div className="flex min-h-screen"><aside className="hidden w-64 shrink-0 border-r p-6 lg:block">Real Estate</aside><main className="min-w-0 flex-1 p-4 sm:p-8" style={{containerType:'inline-size'}}>{children}</main></div></body></html> }`)
+write("app/navigation.tsx", `"use client"; import {useSearchParams} from 'next/navigation'; import {ListNavigationProvider} from '@/components/erp/list-navigation'; export default function Navigation({children}:{children:React.ReactNode}){const query=useSearchParams(),identity=query.get('identity')||'test-tenant:test-user';return <ListNavigationProvider key={identity} identity={identity}>{children}</ListNavigationProvider>}`)
+write("app/layout.tsx", `import '../../../app/globals.css'; import {Suspense} from 'react'; import Navigation from './navigation'; export default function Layout({children}:{children:React.ReactNode}) { return <html lang="en" className="dark"><body style={{fontFamily:'Arial,sans-serif'}}><div className="flex min-h-screen"><aside className="hidden w-64 shrink-0 border-r p-6 lg:block">Real Estate</aside><main className="min-w-0 flex-1 p-4 sm:p-8" style={{containerType:'inline-size'}}><Suspense><Navigation>{children}</Navigation></Suspense></main></div></body></html> }`)
 write("app/[[...route]]/page.tsx", `"use client";
 import {Suspense} from 'react'; import {usePathname,useSearchParams} from 'next/navigation';
 import InventoryCategories from '@/app/(protected)/inventory/categories/page';
@@ -63,6 +64,9 @@ import { LostReasonList } from '@/modules/crm/components/lost-reason-list';
 import { SalesReports } from '@/modules/crm/components/sales-reports';
 import { ApplicationAccessProvider } from '@/application/access-provider';
 import { InfoHelpPreview } from '@/tests/browser/fixtures/info-help-preview';
+import { ListNavigationPreview } from '@/tests/browser/fixtures/list-navigation-preview';
+import { RecordList } from '@/modules/crm/components/record-list';
+import { ProjectList } from '@/modules/real-estate/components/project-list';
 import { RouteAccessProvider } from '@/platform/access/route-provider';
 import { applicationRouteAccess } from '@/application/access-routes';
 import { PropertyChoiceEditor } from '@/modules/real-estate/components/choice-editor';
@@ -70,6 +74,7 @@ import { ActivityTypeList } from '@/modules/crm/components/activity-type-list';
 function Preview(){
  const path=usePathname().split('/'), query=useSearchParams(), key=path[2]==='configuration'?path[3]:path[2], raw=path[2]==='configuration'?path[4]:path[3], id=raw==='new'?undefined:raw;
  if(path[1]==='help-fixture')return <InfoHelpPreview/>;
+ if(path[1]==='navigation-fixture')return <ListNavigationPreview/>;
  if(path[1]==='crm' && key==='sales')return <BusinessModuleProvider><ApplicationAccessProvider><SalesReports initialView={query.get('view')==='team'?'team':'sales'}/></ApplicationAccessProvider></BusinessModuleProvider>;
  if(path[1]==='dashboard' || path[1]==='settings' && (!path[2] || path[2]==='taxes'))return <BusinessModuleProvider><CoreViewGuard role={query.get('role')||'MANAGER'} userId='manager'>{path[1]==='dashboard'?<Dashboard/>:path[2]==='taxes'?<Taxes/>:<Settings/>}</CoreViewGuard></BusinessModuleProvider>;
  if(path[1]==='reports')return <BusinessModuleProvider><CoreViewGuard role={query.get('role')||'MANAGER'} userId='manager'>{path[2]==='coupon-usage'?<CouponUsageReport/>:<AuditLogsReport/>}</CoreViewGuard></BusinessModuleProvider>;
@@ -81,7 +86,8 @@ function Preview(){
  if(key==='roles')return <AccessRoles/>;
  if(key==='modules')return <><div className='flex items-center gap-2'><h1>Business modules</h1><ModuleActivationHelp platform={Boolean(query.get('tenant'))}/></div><ModuleControls tenantId={query.get('tenant') || undefined}/></>;
  if(key==='tenants')return <TenantsPageClient rootDomain='example.test' platformAccessMode='SUPER_ADMIN'/>;
- if(key==='projects')return <BusinessModuleProvider><ProjectEditor key={id || query.get('parentId') || 'new'} id={id} parentId={query.get('parentId') || undefined}/></BusinessModuleProvider>;
+ if(key==='projects')return <BusinessModuleProvider><ApplicationCrmProvider>{raw?<ProjectEditor key={id || query.get('parentId') || 'new'} id={id} parentId={query.get('parentId') || undefined}/>:<ProjectList/>}</ApplicationCrmProvider></BusinessModuleProvider>;
+ if(['enquiries','contacts','accounts'].includes(key)&&!raw)return <BusinessModuleProvider><ApplicationCrmProvider><RecordList kind={key}/></ApplicationCrmProvider></BusinessModuleProvider>;
  const editors:any={enquiries:EnquiryEditor,opportunities:OpportunityEditor,contacts:ContactEditor,accounts:AccountEditor,activities:WorkEditor,'activity-plans':ActivityPlanEditor,'follow-up-rules':FollowUpRuleEditor,pipelines:PipelineEditor,'sales-teams':TeamEditor,'custom-fields':CustomFieldEditor,quotations:QuotationEditor,'quotation-templates':QuotationEditor,'lead-sources':LeadSourceList,'lost-reasons':LostReasonList,'activity-types':ActivityTypeList};
  const Editor=key==='real-estate'?PropertyChoiceEditor:editors[key];
  return <SessionProvider session={{user:{id:'admin',name:'Test Admin',role:'ADMIN'},expires:'2099-01-01'}}><BusinessModuleProvider><ApplicationCrmProvider><BusinessViewGuard>{Editor && <Editor key={key+raw} id={key==='real-estate'?path[5]:id} kind={path[4]} enquiryId={query.get('enquiryId') || undefined} template={key==='quotation-templates'} revision={Number(query.get('revision'))||undefined}/>}</BusinessViewGuard></ApplicationCrmProvider></BusinessModuleProvider></SessionProvider>

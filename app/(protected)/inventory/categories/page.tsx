@@ -1,4 +1,5 @@
 "use client"
+import { useListState } from "@/components/erp/list-navigation"
 
 import { CategoryView } from "@/modules/inventory/record-view"
 
@@ -65,11 +66,11 @@ export default function InventoryCategoriesPage() {
   const [items, setItems] = React.useState<InventoryCategoryRow[]>([])
   const [totalRows, setTotalRows] = React.useState(0)
   const [loading, setLoading] = React.useState(true)
-  const [statusFilter, setStatusFilter] = React.useState("all")
+  const [statusFilter, setStatusFilter] = useListState("inventory-categories", "statusFilter", "all", { resetPages: true })
   const listRequest = React.useRef<AbortController | null>(null)
-  const [search, setSearch] = React.useState("")
-  const [sorting, setSorting] = React.useState<SortingState>([])
-  const [pagination, setPagination] = React.useState<PaginationState>({ pageIndex: 0, pageSize: 10 })
+  const [search, setSearch] = useListState("inventory-categories", "search", "", { resetPages: true })
+  const [sorting, setSorting] = useListState<SortingState>("inventory-categories", "sorting", [], { kind: "sorting", resetPages: true })
+  const [pagination, setPagination] = useListState<PaginationState>("inventory-categories", "pagination", { pageIndex: 0, pageSize: 10 })
   const [deleteTarget, setDeleteTarget] = React.useState<InventoryCategoryRow | null>(null)
   const [deleting, setDeleting] = React.useState(false)
   const [viewing, setViewing] = React.useState<InventoryCategoryRow | null>(null)

@@ -1,4 +1,5 @@
 "use client"
+import { useListState } from "@/components/erp/list-navigation"
 import { TaxProfilePreview } from './profile-preview'
 import { useCallback,useEffect,useState,type FormEvent } from 'react'
 import { Button } from '@/components/ui/button'
@@ -32,7 +33,7 @@ function History({items,paging,onPage}:{items:Revision[];paging?:Paging;onPage:(
 
 export function TaxConfigurationSettings(){
  const [preview,setPreview]=useState<string>()
- const [company,setCompany]=useState(''),[tab,setTab]=useState<Tab>('registrations'),[page,setPage]=useState(1),[q,setQ]=useState(''),[status,setStatus]=useState('all'),[result,setData]=useState<Paging&{items:Row[];key:string}>(),[error,setError]=useState(''),[editing,setEditing]=useState<{tab:Tab;id?:string}>()
+ const [company,setCompany]=useListState("tax-configuration-settings", "company", '', { resetPages: true }),[tab,setTab]=useListState<Tab>("tax-configuration-settings", "tab", 'registrations'),[page,setPage]=useListState("tax-configuration-settings", "page", 1),[q,setQ]=useListState("tax-configuration-settings", "q", '', { resetPages: true }),[status,setStatus]=useListState("tax-configuration-settings", "status", 'all', { resetPages: true }),[result,setData]=useState<Paging&{items:Row[];key:string}>(),[error,setError]=useState(''),[editing,setEditing]=useState<{tab:Tab;id?:string}>()
  const queryKey=JSON.stringify([company,tab,page,q,status]),data=result?.key===queryKey?result:undefined
  const load=useCallback(async(signal?:AbortSignal)=>{if(!company)return;const d=await request<Paging&{items:Row[]}>(`/api/tax-configuration/${tab}?${new URLSearchParams({companyId:company,page:String(page),q,status})}`,{signal});if(!signal?.aborted){setData({...d,key:queryKey});setError('')}},[company,tab,page,q,status,queryKey])
  useEffect(()=>{const c=new AbortController(),timer=setTimeout(()=>load(c.signal).catch(e=>{if(!c.signal.aborted){setData(undefined);setError(e.message)}}),200);return()=>{clearTimeout(timer);c.abort()}},[load])

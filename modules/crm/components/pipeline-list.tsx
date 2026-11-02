@@ -1,4 +1,5 @@
 "use client"
+import { useListState } from "@/components/erp/list-navigation"
 import { useTerminology } from "@/platform/terminology/provider"
 import { AccessPageHeader } from "@/platform/access/record-page"
 import { Surface, pageClass } from "@/components/erp/page"
@@ -20,9 +21,9 @@ export function PipelineList() {
   const [canManage, setCanManage] = React.useState(false)
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState("")
-  const [q, setQ] = React.useState("")
-  const [archived, setArchived] = React.useState("false")
-  const [pagination, setPagination] = React.useState({ pageIndex: 0, pageSize: 20 })
+  const [q, setQ] = useListState("pipeline-list", "q", "", { resetPages: true })
+  const [archived, setArchived] = useListState("pipeline-list", "archived", "false", { resetPages: true })
+  const [pagination, setPagination] = useListState("pipeline-list", "pagination", { pageIndex: 0, pageSize: 20 })
   React.useEffect(() => {
     const controller = new AbortController()
     const timer = setTimeout(async () => {
@@ -47,6 +48,6 @@ export function PipelineList() {
   })
   return <section className={pageClass}><AccessPageHeader title="Sales pipelines" description={term("crm.opportunity.plural", "Manage the stages your team uses to track opportunities.", "Manage the stages your team uses to track {label}.")} actions={canManage && <Button asChild><Link href="/crm/pipelines/new">New pipeline</Link></Button>} />
     <Surface><TableToolbar table={table} searchPlaceholder="Search pipelines…" showColumnToggle={false}><Select aria-label="Pipeline status" className={selectClass} value={archived} onValueChange={event => { setArchived(event); setPagination(previous => ({ ...previous, pageIndex: 0 })) }}><option value="false">Active</option><option value="true">Archived</option></Select></TableToolbar>
-    {error && <p role="alert" className="text-destructive">{error}</p>}<DataTable table={table} loading={loading} emptyMessage="No pipelines. A manager can create one to get started." /><TablePagination table={table} totalRows={total} loading={loading} /></Surface>
+    {error && <p role="alert" className="text-destructive">{error}</p>}<DataTable table={table} loading={loading} emptyMessage="No pipelines. A manager can create one to get started." /><TablePagination resolved={!error} table={table} totalRows={total} loading={loading} /></Surface>
   </section>
 }

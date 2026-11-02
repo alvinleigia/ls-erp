@@ -1,14 +1,25 @@
 "use client"
 
 import { ChevronLeft, ChevronRight } from "lucide-react"
+import { useEffect, useRef } from "react"
 import type { Table } from "@tanstack/react-table"
 import { Button } from "@/components/ui/button"
 import { DropdownSelect } from "@/components/ui/dropdown-select"
 
-export function Pagination({ page, pageSize, total, totalPages = Math.max(1, Math.ceil(total / pageSize)), loading = false, onPageChange, onPageSizeChange, label = "Pagination" }: {
-  page: number; pageSize: number; total: number; totalPages?: number; loading?: boolean;
+export function Pagination({ page, pageSize, total, totalPages = Math.max(1, Math.ceil(total / pageSize)), loading = false, resolved = false, onPageChange, onPageSizeChange, label = "Pagination" }: {
+  page: number; pageSize: number; total: number; totalPages?: number; loading?: boolean; resolved?: boolean;
   onPageChange: (page: number) => void; onPageSizeChange?: (size: number) => void; label?: string;
 }) {
+  const pending = useRef(loading)
+  useEffect(() => {
+    // Correct bounds only after a completed successful fetch. A restored URL or
+    // an in-flight/failed request must never be clamped against stale totals.
+    if (loading) { pending.current = true; return }
+    if (!pending.current) return
+    pending.current = false
+    const last = Math.max(1, totalPages)
+    if (resolved && page > last) onPageChange(last)
+  }, [loading, resolved, totalPages, page, onPageChange])
   if (!loading && total === 0) return null
   const start = total ? Math.min(total, (page - 1) * pageSize + 1) : 0
   const end = Math.min(total, page * pageSize)
@@ -25,7 +36,7 @@ export function Pagination({ page, pageSize, total, totalPages = Math.max(1, Mat
   </nav>
 }
 
-export function TablePagination<T>({ table, totalRows, loading = false }: { table: Table<T>; totalRows: number; loading?: boolean }) {
+export function TablePagination<T>({ table, totalRows, loading = false, resolved = false }: { table: Table<T>; totalRows: number; loading?: boolean; resolved?: boolean }) {
   const { pageIndex, pageSize } = table.getState().pagination
-  return <Pagination page={pageIndex + 1} pageSize={pageSize} total={totalRows} loading={loading} onPageChange={page => table.setPageIndex(page - 1)} onPageSizeChange={size => { table.setPageSize(size); table.setPageIndex(0) }} />
+  return <Pagination page={pageIndex + 1} pageSize={pageSize} total={totalRows} loading={loading} resolved={resolved} onPageChange={page => table.setPageIndex(page - 1)} onPageSizeChange={size => { table.setPageSize(size); table.setPageIndex(0) }} />
 }

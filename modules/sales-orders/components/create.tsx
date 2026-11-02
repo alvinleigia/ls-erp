@@ -1,6 +1,6 @@
 "use client"
 import { useState } from "react"
-import { useRouter } from "next/navigation"
+import { useListRouter as useRouter } from "@/components/erp/list-navigation"
 import { useBusinessModules } from "@/platform/module-provider"
 import { useTerminology } from "@/platform/terminology/provider"
 import { Button } from "@/components/ui/button"

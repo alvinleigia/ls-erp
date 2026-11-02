@@ -3,7 +3,7 @@
 import { PageHeader, pageClass, FormActions } from "@/components/erp/page"
 
 import * as React from "react"
-import { useRouter } from "next/navigation"
+import { useListRouter as useRouter } from "@/components/erp/list-navigation"
 import { toast } from "sonner"
 
 import { LeaveDefinitionFormFields } from "@/app/(protected)/leaves/leave-definition-form-fields"

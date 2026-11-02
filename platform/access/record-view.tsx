@@ -1,4 +1,5 @@
 "use client"
+import { useListState } from "@/components/erp/list-navigation"
 
 import { useCurrentResourceAction } from "@/platform/access/view-guard"
 import type { Requirement } from "@/platform/access/catalog"
@@ -19,7 +20,7 @@ export const useRecordView = () => React.useContext(Context)
 // including extension drafts and custom fields. No editor-specific reset copies.
 function RecordView({ existing, children }: { existing: boolean; children: React.ReactNode }) {
   const [editing, setEditing] = React.useState(false), [section, setSection] = React.useState("")
-  const [revision, setRevision] = React.useState(0), [tab, setTab] = React.useState("overview")
+  const [revision, setRevision] = React.useState(0), [tab, setTab] = useListState("record-view", "tab", "overview")
   const [access, setAccess] = React.useState<RecordAccess>()
   const loadAccess = React.useCallback((next: RecordAccess | undefined) => { if (next) setAccess(previous => JSON.stringify(previous) === JSON.stringify(next) ? previous : next) }, [])
   const begin = React.useCallback((section = "") => { setSection(section); setEditing(true) }, [])

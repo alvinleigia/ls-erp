@@ -1,4 +1,5 @@
 "use client"
+import { useListState } from "@/components/erp/list-navigation"
 import { inclusiveTaxMinor,percentageMinor,sumRates } from "@/platform/tax/arithmetic"
 
 import * as React from "react"
@@ -80,13 +81,13 @@ export default function ServicesPage() {
   const [loading, setLoading] = React.useState(true)
   const [totalRows, setTotalRows] = React.useState(0)
 
-  const [search, setSearch] = React.useState("")
-  const [statusFilter, setStatusFilter] = React.useState<"all" | ServiceStatus>("all")
-  const [categoryFilter, setCategoryFilter] = React.useState("all")
+  const [search, setSearch] = useListState("services", "search", "", { resetPages: true })
+  const [statusFilter, setStatusFilter] = useListState<"all" | ServiceStatus>("services", "statusFilter", "all", { resetPages: true })
+  const [categoryFilter, setCategoryFilter] = useListState("services", "categoryFilter", "all", { resetPages: true })
 
-  const [sorting, setSorting] = React.useState<SortingState>([])
+  const [sorting, setSorting] = useListState<SortingState>("services", "sorting", [], { kind: "sorting", resetPages: true })
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([])
-  const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({
+  const [columnVisibility, setColumnVisibility] = useListState<VisibilityState>("services", "columnVisibility", {
     name: true,
     category: true,
     durationMinutes: true,
@@ -97,8 +98,8 @@ export default function ServicesPage() {
     totalWithTax: true,
     status: true,
     type: true,
-  })
-  const [pagination, setPagination] = React.useState({ pageIndex: 0, pageSize: 10 })
+  }, { kind: "visibility" })
+  const [pagination, setPagination] = useListState("services", "pagination", { pageIndex: 0, pageSize: 10 })
 
   const [createOpen, setCreateOpen] = React.useState(false)
   const [editOpen, setEditOpen] = React.useState(false)
@@ -232,7 +233,7 @@ export default function ServicesPage() {
         return next
       })
     },
-    []
+    [setPagination]
   )
 
   const priceToCents = (value: string) => {

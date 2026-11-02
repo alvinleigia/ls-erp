@@ -1,4 +1,5 @@
 "use client"
+import { useListState } from "@/components/erp/list-navigation"
 import { useCallback, useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -17,7 +18,7 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
   return result
 }
 export function OrderReservations({ orderId }: { orderId: string }) {
-  const [data, setData] = useState<Result>(), [page, setPage] = useState(1), [error, setError] = useState(""), [busy, setBusy] = useState(false)
+  const [data, setData] = useState<Result>(), [page, setPage] = useListState("order-reservations", "page", 1), [error, setError] = useState(""), [busy, setBusy] = useState(false)
   const [action, setAction] = useState<{ kind: "reserve" | "allocate" | "release"; id: string; name: string; version?: number } | null>(null)
   const [expiry, setExpiry] = useState(""), [reason, setReason] = useState("")
   const { formatDateTime } = useDateFormatter(), endpoint = `/api/sales-orders/${orderId}/reservations`

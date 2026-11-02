@@ -1,4 +1,5 @@
 "use client"
+import { useListState } from "@/components/erp/list-navigation"
 
 import * as React from "react"
 import {
@@ -34,21 +35,21 @@ export default function AuditLogsReportPage() {
   const [error, setError] = React.useState("")
   const [refresh, setRefresh] = React.useState(0)
   const [loading, setLoading] = React.useState(true)
-  const [search, setSearch] = React.useState("")
-  const [event, setEvent] = React.useState("")
-  const [entityType, setEntityType] = React.useState("")
-  const [requestId, setRequestId] = React.useState("")
-  const [dateFrom, setDateFrom] = React.useState("")
-  const [dateTo, setDateTo] = React.useState("")
+  const [search, setSearch] = useListState("audit-logs-report", "search", "", { resetPages: true })
+  const [event, setEvent] = useListState("audit-logs-report", "event", "", { resetPages: true })
+  const [entityType, setEntityType] = useListState("audit-logs-report", "entityType", "", { resetPages: true })
+  const [requestId, setRequestId] = useListState("audit-logs-report", "requestId", "", { resetPages: true })
+  const [dateFrom, setDateFrom] = useListState("audit-logs-report", "dateFrom", "", { resetPages: true })
+  const [dateTo, setDateTo] = useListState("audit-logs-report", "dateTo", "", { resetPages: true })
   const [totalRows, setTotalRows] = React.useState(0)
-  const [pagination, setPagination] = React.useState<PaginationState>({
+  const [pagination, setPagination] = useListState<PaginationState>("audit-logs-report", "pagination", {
     pageIndex: 0,
     pageSize: 10,
   })
   const [detailId, setDetailId] = React.useState<string | null>(null)
-  const [category, setCategory] = React.useState("all")
-  const [actorUserId, setActorUserId] = React.useState("")
-  const [entityId, setEntityId] = React.useState("")
+  const [category, setCategory] = useListState("audit-logs-report", "category", "all", { resetPages: true })
+  const [actorUserId, setActorUserId] = useListState("audit-logs-report", "actorUserId", "", { resetPages: true })
+  const [entityId, setEntityId] = useListState("audit-logs-report", "entityId", "", { resetPages: true })
   const [context, setContext] = React.useState<ReportDateContext | null>(null)
   const [canReviewSecurity, setCanReviewSecurity] = React.useState(false)
 
@@ -259,7 +260,7 @@ export default function AuditLogsReportPage() {
           </FormField></Filters></TableToolbar>
 
       {error ? <p role="alert" className="text-sm text-destructive">{error}</p> : <DataTable table={table} loading={loading} emptyMessage="No audit logs found." />}
-      <TablePagination table={table} totalRows={totalRows} loading={loading} />
+      <TablePagination resolved={!error} table={table} totalRows={totalRows} loading={loading} />
       </Surface>
 
       {detailId && <AuditEntry id={detailId} onClose={() => setDetailId(null)} />}

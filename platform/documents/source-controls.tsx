@@ -1,4 +1,5 @@
 "use client"
+import { useListState } from "@/components/erp/list-navigation"
 import { useCallback,useEffect,useState } from "react"
 import { Section } from "@/components/erp/section"
 import { Button } from "@/components/ui/button"
@@ -12,7 +13,7 @@ type Row={id:string;providerKey:string;version:number;reference:string;templateV
 type Result={items:Row[];latest:Pick<Row,'id'|'providerKey'|'version'|'reference'>[];total:number;page:number;pageSize:number;providers:{key:string;name:string}[];canIssue:boolean;notice?:string;historical?:boolean;historicalQuery?:string;recordAccess:{permissions:Record<string,boolean>}}
 type Prepared={providerKey:string;templateVersion:number;version:number;supersedesId:string|null;previewHash:string;title:string;reference:string;date:string}
 export function SourceDocuments({endpoint,permissionResource,title="Issued documents",description="Preview a new document, then issue its exact PDF. Replacements retain the original file and its history."}:{endpoint:string;permissionResource:"orderDocuments"|"paymentDocuments"|"invoiceDocuments";title?:string;description?:string}){
-  const [data,setData]=useState<Result>(),[page,setPage]=useState(1),[providerKey,setProviderKey]=useState(''),[reason,setReason]=useState(''),[prepared,setPrepared]=useState<Prepared>(),[requestKey,setRequestKey]=useState(''),[error,setError]=useState(''),[busy,setBusy]=useState(false),[confirm,setConfirm]=useState(false)
+  const [data,setData]=useState<Result>(),[page,setPage]=useListState("source-documents", "page", 1),[providerKey,setProviderKey]=useState(''),[reason,setReason]=useState(''),[prepared,setPrepared]=useState<Prepared>(),[requestKey,setRequestKey]=useState(''),[error,setError]=useState(''),[busy,setBusy]=useState(false),[confirm,setConfirm]=useState(false)
   const {formatDateTime}=useDateFormatter()
   const load=useCallback(async(signal?:AbortSignal)=>{const value=await sourceDocumentRequest<Result>(`${endpoint}?page=${page}`,{signal});if(signal?.aborted)return;setData(value);setProviderKey(current=>value.providers.some(row=>row.key===current)?current:value.providers[0]?.key??'')},[endpoint,page])
   useEffect(()=>{const c=new AbortController();load(c.signal).catch(e=>{if(!c.signal.aborted){setData(undefined);setError(e.message)}});return()=>c.abort()},[load])

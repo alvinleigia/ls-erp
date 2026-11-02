@@ -1,4 +1,5 @@
 "use client"
+import { useListState } from "@/components/erp/list-navigation"
 import * as React from "react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
@@ -36,7 +37,7 @@ const linkFor = (token: string) => new URL(`/auth/invite?token=${encodeURICompon
 export function CollaboratorLogins({ id }: { id: string }) {
   const [parent, setParent] = React.useState<Collaborator | null>(null)
   const [accounts, setAccounts] = React.useState(empty<Login>), [invites, setInvites] = React.useState(empty<Invite>)
-  const [query, setQuery] = React.useState(initialPage), [inviteQuery, setInviteQuery] = React.useState(initialPage)
+  const [query, setQuery] = useListState("collaborator-logins", "query", initialPage), [inviteQuery, setInviteQuery] = useListState("collaborator-logins", "inviteQuery", initialPage)
   const [revision, reload] = React.useReducer(value => value + 1, 0)
   const [loading, setLoading] = React.useState(true), [loadError, setLoadError] = React.useState("")
   const [message, setMessage] = React.useState(""), [busy, setBusy] = React.useState(false)

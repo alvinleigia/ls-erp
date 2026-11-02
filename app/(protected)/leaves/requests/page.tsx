@@ -1,4 +1,5 @@
 "use client"
+import { useListState } from "@/components/erp/list-navigation"
 import { useCreationOfficeSnapshot } from "@/platform/companies/creation-snapshot"
 import { useDateFormatter } from "@/hooks/use-date-formatter"
 import { useBusinessModules } from "@/platform/module-provider"
@@ -23,7 +24,7 @@ import {
   useReactTable,
 } from "@tanstack/react-table"
 import { ArrowDownIcon, ArrowUpDownIcon, ArrowUpIcon, MoreHorizontalIcon } from "lucide-react"
-import { useRouter } from "next/navigation"
+import { useListRouter as useRouter } from "@/components/erp/list-navigation"
 import { useSession } from "next-auth/react"
 import Link from "next/link"
 import { toast } from "sonner"
@@ -108,10 +109,10 @@ export default function LeaveRequestsPage() {
   const [loading, setLoading] = React.useState(true)
   const [rows, setRows] = React.useState<LeaveRequestRow[]>([])
   const [totalRows, setTotalRows] = React.useState(0)
-  const [search, setSearch] = React.useState("")
-  const [statusFilter, setStatusFilter] = React.useState<LeaveRequestStatus | "all">("all")
-  const [sorting, setSorting] = React.useState<SortingState>([{ id: "createdAt", desc: true }])
-  const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({
+  const [search, setSearch] = useListState("leave-requests", "search", "", { resetPages: true })
+  const [statusFilter, setStatusFilter] = useListState<LeaveRequestStatus | "all">("leave-requests", "statusFilter", "all", { resetPages: true })
+  const [sorting, setSorting] = useListState<SortingState>("leave-requests", "sorting", [{ id: "createdAt", desc: true }], { kind: "sorting", resetPages: true })
+  const [columnVisibility, setColumnVisibility] = useListState<VisibilityState>("leave-requests", "columnVisibility", {
     staff: true,
     leave: true,
     range: true,
@@ -119,8 +120,8 @@ export default function LeaveRequestsPage() {
     status: true,
     reason: true,
     createdAt: true,
-  })
-  const [pagination, setPagination] = React.useState<PaginationState>({ pageIndex: 0, pageSize: 10 })
+  }, { kind: "visibility" })
+  const [pagination, setPagination] = useListState<PaginationState>("leave-requests", "pagination", { pageIndex: 0, pageSize: 10 })
   const [createOpen, setCreateOpen] = React.useState(false)
   const creationOfficeHeaders = useCreationOfficeSnapshot(createOpen)
   const [creating, setCreating] = React.useState(false)
@@ -182,9 +183,7 @@ export default function LeaveRequestsPage() {
     if (personalLeaveEligible) void loadLeaveOptions()
   }, [loadLeaveOptions, personalLeaveEligible])
 
-  React.useEffect(() => {
-    setPagination((prev) => (prev.pageIndex === 0 ? prev : { ...prev, pageIndex: 0 }))
-  }, [search, sorting, statusFilter])
+
 
   const requestCancel = React.useCallback((item: LeaveRequestRow) => {
     setCancelTarget(item)

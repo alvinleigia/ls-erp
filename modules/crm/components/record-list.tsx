@@ -1,4 +1,5 @@
 "use client"
+import { useListState } from "@/components/erp/list-navigation"
 import { useTerminology } from "@/platform/terminology/provider"
 import { SalesTeamSelect } from "@/platform/teams/controls"
 import { CustomFieldFilter, emptyCustomFilter } from "./custom-fields"
@@ -38,17 +39,17 @@ export function RecordList({ kind, enquiryId, accountId, extensionReferences, he
   const [total, setTotal] = React.useState(0)
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState("")
-  const [customFilter, setCustomFilter] = React.useState(emptyCustomFilter)
-  const [search, setSearch] = React.useState("")
-  const [filter, setFilter] = React.useState("")
-  const [primaryId, setPrimaryId] = React.useState(extensionReferences?.primaryId || "")
-  const [secondaryId, setSecondaryId] = React.useState(extensionReferences?.secondaryId || "")
+  const [customFilter, setCustomFilter] = useListState(`crm-${kind}-${accountId || enquiryId || extensionReferences?.primaryId || "all"}`, "customFilter", emptyCustomFilter, { resetPages: true })
+  const [search, setSearch] = useListState(`crm-${kind}-${accountId || enquiryId || extensionReferences?.primaryId || "all"}`, "search", "", { resetPages: true })
+  const [filter, setFilter] = useListState(`crm-${kind}-${accountId || enquiryId || extensionReferences?.primaryId || "all"}`, "filter", "", { resetPages: true })
+  const [primaryId, setPrimaryId] = useListState(`crm-${kind}-${accountId || enquiryId || extensionReferences?.primaryId || "all"}`, "primaryId", extensionReferences?.primaryId || "", { resetPages: true })
+  const [secondaryId, setSecondaryId] = useListState(`crm-${kind}-${accountId || enquiryId || extensionReferences?.primaryId || "all"}`, "secondaryId", extensionReferences?.secondaryId || "", { resetPages: true })
   const extensionQuery = useCrmExtensionFilterQuery(primaryId, secondaryId)
-  const [salesTeamId, setSalesTeamId] = React.useState("")
-  const [sourceId, setSourceId] = React.useState("")
-  const [lostReasonId, setLostReasonId] = React.useState("")
-  const [assignedUserId, setAssignedUserId] = React.useState("")
-  const [pagination, setPagination] = React.useState<PaginationState>({ pageIndex: 0, pageSize: 20 })
+  const [salesTeamId, setSalesTeamId] = useListState(`crm-${kind}-${accountId || enquiryId || extensionReferences?.primaryId || "all"}`, "salesTeamId", "", { resetPages: true })
+  const [sourceId, setSourceId] = useListState(`crm-${kind}-${accountId || enquiryId || extensionReferences?.primaryId || "all"}`, "sourceId", "", { resetPages: true })
+  const [lostReasonId, setLostReasonId] = useListState(`crm-${kind}-${accountId || enquiryId || extensionReferences?.primaryId || "all"}`, "lostReasonId", "", { resetPages: true })
+  const [assignedUserId, setAssignedUserId] = useListState(`crm-${kind}-${accountId || enquiryId || extensionReferences?.primaryId || "all"}`, "assignedUserId", "", { resetPages: true })
+  const [pagination, setPagination] = useListState<PaginationState>(`crm-${kind}-${accountId || enquiryId || extensionReferences?.primaryId || "all"}`, "pagination", { pageIndex: 0, pageSize: 20 })
   const [revision, setRevision] = React.useState(0)
   const [completing, setCompleting] = React.useState<string | null>(null)
   const endpoint = accountId ? `/api/crm/accounts/${accountId}/contacts` : enquiryId ? `/api/crm/enquiries/${enquiryId}/tasks` : `/api/crm/${kind}`
@@ -139,7 +140,7 @@ export function RecordList({ kind, enquiryId, accountId, extensionReferences, he
     </TableToolbar>
     {error && <p className="text-destructive" role="alert">{error} <Button variant="link" onClick={() => setRevision(value => value + 1)}>Retry</Button></p>}
     <DataTable table={table} loading={loading} emptyMessage={`No ${title.toLowerCase()} found.`} />
-    <TablePagination table={table} totalRows={total} loading={loading} />
+    <TablePagination resolved={!error} table={table} totalRows={total} loading={loading} />
   </>
   return enquiryId || accountId || extensionReferences?.primaryId ? <Section title={title} help={help}>{content}</Section> : <section className={pageClass}><AccessPageHeader title={title} help={help} actions={kind !== "tasks" && !accountId && <>{kind === "enquiries" && <Button variant="outline" asChild><Link href="/crm/enquiries/import">{term("crm.enquiry.plural", "Import enquiries", "Import {label}")}</Link></Button>}<Button asChild><Link href={"/crm/" + kind + "/new"}>{term(`${recordKey}.singular`, `New ${kind === "accounts" ? "account" : kind === "contacts" ? "contact" : "enquiry"}`, "New {label}")}</Link></Button></>} /><Surface>{content}</Surface></section>
 }

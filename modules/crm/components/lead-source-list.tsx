@@ -1,4 +1,5 @@
 "use client"
+import { useListState } from "@/components/erp/list-navigation"
 import { useTerminology } from "@/platform/terminology/provider"
 import * as React from "react"
 import { toast } from "sonner"
@@ -15,7 +16,7 @@ type Source = { id: string; name: string; archived: boolean; version: number }
 export function LeadSourceList() {
   const term = useTerminology()
   const [rows, setRows] = React.useState<Source[]>([])
-  const [query, setQuery] = React.useState({ q: "", archived: "false", page: 1, pageSize: 20 })
+  const [query, setQuery] = useListState("lead-source-list", "query", { q: "", archived: "false", page: 1, pageSize: 20 })
   const [total, setTotal] = React.useState(0)
   const [canManage, setCanManage] = React.useState(false)
   const [loading, setLoading] = React.useState(true)
@@ -55,7 +56,7 @@ export function LeadSourceList() {
       <div className="flex flex-wrap gap-3"><Input aria-label="Search lead sources" placeholder="Search sources…" className="min-w-0 flex-1 basis-48" value={query.q} onChange={event => setQuery({ ...query, q: event.target.value, page: 1 })} /><DropdownSelect label="Source status" value={query.archived} options={[{ value: "false", label: "Active sources" }, { value: "true", label: "Archived sources" }]} onValueChange={archived => setQuery({ ...query, archived, page: 1 })} /><Button variant="outline" onClick={() => setRevision(value => value + 1)}>Refresh</Button></div>
       {error && <p role="alert" className="text-destructive">{error}</p>}
       <div className="overflow-x-auto rounded-lg border"><table className="w-full text-sm"><thead className="bg-muted/50"><tr><th className="p-3 text-left">Source</th><th className="p-3 text-left">Status</th>{canManage && <th className="p-3 text-right">Action</th>}</tr></thead><tbody>{rows.map(row => <tr key={row.id} className="border-t"><td className="p-3">{row.name}</td><td className="p-3">{row.archived ? "Archived" : "Active"}</td>{canManage && <td className="p-3 text-right"><Button variant="outline" size="sm" onClick={() => { setSaveError(""); setEditing(row) }}>Edit<span className="sr-only"> {row.name}</span></Button></td>}</tr>)}{!rows.length && <tr><td className="p-6 text-center text-muted-foreground" colSpan={canManage ? 3 : 2}>{loading ? "Loading sources…" : "No sources found."}</td></tr>}</tbody></table></div>
-      <Pagination {...query} total={total} loading={loading} onPageChange={page => setQuery({ ...query, page })} onPageSizeChange={pageSize => setQuery({ ...query, pageSize, page: 1 })} />
+      <Pagination resolved={!error} {...query} total={total} loading={loading} onPageChange={page => setQuery({ ...query, page })} onPageSizeChange={pageSize => setQuery({ ...query, pageSize, page: 1 })} />
     </Surface>
     {editing && <DraftPanel title={editing.id ? "Edit lead source" : "New lead source"} description="Archive a source to stop new selections while keeping historical records." onClose={() => setEditing(null)} onSubmit={save} saving={saving} fingerprint={editing} error={saveError} saveLabel="Save source"><fieldset disabled={saving} className="space-y-4"><FormField id="source-name" label="Source name"><Input id="source-name" required maxLength={100} value={editing.name} onChange={event => setEditing({ ...editing, name: event.target.value })} /></FormField>{editing.id && <FormField id="source-status" label="Status"><DropdownSelect id="source-status" className="w-full" value={editing.archived ? "archived" : "active"} options={[{ value: "active", label: "Active" }, { value: "archived", label: "Archived" }]} onValueChange={value => setEditing({ ...editing, archived: value === "archived" })} /></FormField>}</fieldset></DraftPanel>}
   </div>

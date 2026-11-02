@@ -1,4 +1,5 @@
 "use client"
+import { useListState } from "@/components/erp/list-navigation"
 import { useCreationOfficeSnapshot } from "@/platform/companies/creation-snapshot"
 import { useTerminology, useTerminologyReader } from "@/platform/terminology/provider"
 import { useCustomFields } from "@/modules/crm/components/custom-fields"
@@ -6,7 +7,7 @@ import { useBusinessModules } from "@/platform/module-provider"
 import { withRecordView, useRecordView } from "@/platform/access/record-view"
 import * as React from "react"
 import Link from "@/platform/access/link"
-import { useRouter } from "next/navigation"
+import { useListRouter as useRouter } from "@/components/erp/list-navigation"
 import { toast } from "sonner"
 import { formatDecimalCurrency } from "@/lib/formatting"
 import type { AppSettingsPayload } from "@/types/scheduling"
@@ -47,7 +48,7 @@ function ProjectEditorBody({ id, parentId = "" }: { id?: string; parentId?: stri
   const [saved, setSaved] = React.useState<Project | null>(null)
   const [editing, setEditing] = React.useState<"details" | "pricing" | "custom" | null>(null)
   const [displaySettings, setDisplaySettings] = React.useState<AppSettingsPayload>()
-  const [tab, setTab] = React.useState("overview")
+  const [tab, setTab] = useListState("project-editor-body", "tab", "overview")
   const { errors, setErrorsFromResponse, clearErrors } = useFormErrors()
   React.useEffect(() => {
     const controller = new AbortController()
@@ -167,7 +168,7 @@ function ProjectEditorBody({ id, parentId = "" }: { id?: string; parentId?: stri
 function ProjectMembers({ id, version, archived, onVersion }: { id: string; version: number; archived: boolean; onVersion: (version: number) => void }) {
   const term = useTerminology()
   const { can } = useBusinessModules()
-  const [page, setPage] = React.useState(1), [pageSize, setPageSize] = React.useState(10)
+  const [page, setPage] = useListState("project-members", "page", 1), [pageSize, setPageSize] = useListState("project-members", "pageSize", 10)
   const [rows, setRows] = React.useState<{ id: string; name: string | null; status: string }[]>([]), [total, setTotal] = React.useState(0)
   const [selected, setSelected] = React.useState(""), [error, setError] = React.useState(""), [saving, setSaving] = React.useState(false), [loading, setLoading] = React.useState(true)
   const [remove, setRemove] = React.useState<{ id: string; name: string | null } | null>(null)

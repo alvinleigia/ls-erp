@@ -1,4 +1,5 @@
 "use client"
+import { useListState } from "@/components/erp/list-navigation"
 import { useCallback, useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -23,7 +24,7 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
 export function OrderReceivables({ orderId, renderFollowUps }: { orderId: string; renderFollowUps?: (version: number) => React.ReactNode }) {
   const modules=useBusinessModules(),[receiptPayment,setReceiptPayment]=useState<string>()
   const endpoint = `/api/sales-orders/${orderId}/receivables`, { formatDateOnly, formatDateTime } = useDateFormatter()
-  const [data, setData] = useState<Result>(), [page, setPage] = useState(1), [error, setError] = useState(""), [busy, setBusy] = useState(false)
+  const [data, setData] = useState<Result>(), [page, setPage] = useListState("order-receivables", "page", 1), [error, setError] = useState(""), [busy, setBusy] = useState(false)
   const [action, setAction] = useState<{ kind: "open" | "record" | "reverse"; payment?: Payment; key: string; version: number } | null>(null)
   const [dates, setDates] = useState<string[]>([]), [amount, setAmount] = useState(""), [effective, setEffective] = useState(""), [method, setMethod] = useState("BANK_TRANSFER"), [reference, setReference] = useState(""), [note, setNote] = useState(""), [reversal, setReversal] = useState("CORRECTION")
   const load = useCallback(async (signal?: AbortSignal) => { setData(await request<Result>(`${endpoint}?page=${page}`, { signal })) }, [endpoint, page])

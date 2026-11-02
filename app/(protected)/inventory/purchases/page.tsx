@@ -1,4 +1,5 @@
 "use client"
+import { useListState } from "@/components/erp/list-navigation"
 
 import { InventoryCreationOffice } from "@/components/inventory/office-notice"
 import { useCreationOfficeSnapshot } from "@/platform/companies/creation-snapshot"
@@ -75,15 +76,15 @@ export default function InventoryPurchasesPage() {
   const canReceiveStock = can("inventoryProducts.edit")
   const canReceive = canEdit && canReceiveStock
 
-  const [officeId,setOfficeId] = React.useState("")
+  const [officeId,setOfficeId] = useListState("inventory-purchases", "officeId", "", { resetPages: true })
   const [items, setItems] = React.useState<PurchaseOrderRow[]>([])
   const [totalRows, setTotalRows] = React.useState(0)
   const [loading, setLoading] = React.useState(true)
-  const [statusFilter, setStatusFilter] = React.useState("all")
+  const [statusFilter, setStatusFilter] = useListState("inventory-purchases", "statusFilter", "all", { resetPages: true })
   const listRequest = React.useRef<AbortController | null>(null)
-  const [search, setSearch] = React.useState("")
-  const [sorting, setSorting] = React.useState<SortingState>([])
-  const [pagination, setPagination] = React.useState<PaginationState>({ pageIndex: 0, pageSize: 10 })
+  const [search, setSearch] = useListState("inventory-purchases", "search", "", { resetPages: true })
+  const [sorting, setSorting] = useListState<SortingState>("inventory-purchases", "sorting", [], { kind: "sorting", resetPages: true })
+  const [pagination, setPagination] = useListState<PaginationState>("inventory-purchases", "pagination", { pageIndex: 0, pageSize: 10 })
   const [receiveTarget, setReceiveTarget] = React.useState<PurchaseOrderRow | null>(null)
   const [receiving, setReceiving] = React.useState(false)
   const [viewing, setViewing] = React.useState<PurchaseOrderRow | null>(null)

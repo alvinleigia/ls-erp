@@ -1,4 +1,5 @@
 "use client"
+import { useListState } from "@/components/erp/list-navigation"
 import * as React from "react"
 import Link from "@/platform/access/link"
 import { getCoreRowModel, useReactTable, type ColumnDef } from "@tanstack/react-table"
@@ -12,7 +13,7 @@ import { TablePagination } from "@/components/erp/pagination"
 import { choiceTitles, type ChoiceKind, type PropertyChoice } from "../choices"
 
 export function PropertyChoiceList({ kind }: { kind: ChoiceKind }) {
-  const [query, setQuery] = React.useState({ q: "", archived: "false", page: 1, pageSize: 20 })
+  const [query, setQuery] = useListState("property-choice-list", "query", { q: "", archived: "false", page: 1, pageSize: 20 })
   const [data, setData] = React.useState<{ items: PropertyChoice[]; total: number; canManage: boolean }>({ items: [], total: 0, canManage: false })
   const [loading, setLoading] = React.useState(true), [error, setError] = React.useState(""), [revision, setRevision] = React.useState(0)
   const href = `/crm/configuration/real-estate/${kind}`

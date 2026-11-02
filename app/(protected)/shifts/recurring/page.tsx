@@ -1,4 +1,5 @@
 "use client"
+import { useListState } from "@/components/erp/list-navigation"
 import { WorkforceStaffPicker } from "@/components/workforce/staff-picker"
 import { useBusinessModules } from "@/platform/module-provider"
 import { useCurrentResourceAction } from "@/platform/access/view-guard"
@@ -118,15 +119,15 @@ export default function ShiftRecurringPlansPage() {
   const [loading, setLoading] = React.useState(true)
   const [totalRows, setTotalRows] = React.useState(0)
 
-  const [search, setSearch] = React.useState("")
-  const [staffFilter, setStaffFilter] = React.useState("all")
-  const [statusFilter, setStatusFilter] = React.useState<"all" | "active" | "inactive">("all")
-  const [effectiveOn, setEffectiveOn] = React.useState("")
+  const [search, setSearch] = useListState("shift-recurring-plans", "search", "", { resetPages: true })
+  const [staffFilter, setStaffFilter] = useListState("shift-recurring-plans", "staffFilter", "all", { resetPages: true })
+  const [statusFilter, setStatusFilter] = useListState<"all" | "active" | "inactive">("shift-recurring-plans", "statusFilter", "all", { resetPages: true })
+  const [effectiveOn, setEffectiveOn] = useListState("shift-recurring-plans", "effectiveOn", "", { resetPages: true })
 
-  const [sorting, setSorting] = React.useState<SortingState>([
+  const [sorting, setSorting] = useListState<SortingState>("shift-recurring-plans", "sorting", [
     { id: "updatedAt", desc: true },
-  ])
-  const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({
+  ], { kind: "sorting", resetPages: true })
+  const [columnVisibility, setColumnVisibility] = useListState<VisibilityState>("shift-recurring-plans", "columnVisibility", {
     pattern: true,
     staff: true,
     cycle: true,
@@ -135,8 +136,8 @@ export default function ShiftRecurringPlansPage() {
     effectiveNow: true,
     updatedAt: true,
     actions: true,
-  })
-  const [pagination, setPagination] = React.useState<PaginationState>({
+  }, { kind: "visibility" })
+  const [pagination, setPagination] = useListState<PaginationState>("shift-recurring-plans", "pagination", {
     pageIndex: 0,
     pageSize: 10,
   })
@@ -226,11 +227,7 @@ export default function ShiftRecurringPlansPage() {
     void loadPlans()
   }, [loadPlans])
 
-  React.useEffect(() => {
-    setPagination((prev) =>
-      prev.pageIndex === 0 ? prev : { ...prev, pageIndex: 0 }
-    )
-  }, [search, sorting, staffFilter, statusFilter, effectiveOn])
+
 
   const handlePaginationChange = React.useCallback(
     (updater: PaginationState | ((prev: PaginationState) => PaginationState)) => {
@@ -242,7 +239,7 @@ export default function ShiftRecurringPlansPage() {
         return next
       })
     },
-    []
+    [setPagination]
   )
 
   const nextMonday = React.useCallback(() => {

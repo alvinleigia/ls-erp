@@ -43,6 +43,40 @@ This is the baseline for new modules (API + UI) in this codebase.
   - Keep server-side pagination (do not load all rows).
   - List endpoints may optionally accept `status` filters when applicable.
 
+## List navigation (P13I)
+
+- Use `useListState` from `components/erp/list-navigation` for audited list controls:
+  pagination, applied filters/search, sorting, column visibility, report selections
+  and record tabs. Give each independent list a stable scope and each control a
+  stable field name. Include a context identifier when multiple instances share a
+  route. The `l.<scope>.<field>` query parameters are the source of truth; shallow
+  history updates preserve other route parameters and do not reload the server page.
+- Use `resetPages: true` on separate dataset-changing controls. Use `resetScopes`
+  when a report or board controls independently paginated children. Bundled query
+  objects still set their own page to 1 in filter handlers. Never reset pagination
+  in a mount effect: that erases restored URLs. Page-size handlers reset to page 1.
+- Supply `kind: "sorting"`, `"visibility"`, `"date-range"` or `"period"` for these
+  shapes; nullable/dynamic shapes need a stable explicit validator. Date-only UI
+  selections retain their calendar date across timezones. Invalid values fall back
+  to the initial control value. Keep API validation and authorization in place.
+- `PageHeader`, `AccessPageHeader`, `FormActions` and `useListRouter` restore the
+  last matching internal destination. Use `ListBackLink` for plain Back links or
+  `restoreList` on an existing access-aware link. Ordinary sidebar/record links keep
+  their explicit destination. An explicit query constraint never restores a
+  conflicting saved view. Do not use a caller-provided external return URL.
+- The protected layout owns one `ListNavigationProvider`, keyed by tenant and user.
+  It keeps at most 64 sanitized return addresses per identity in tab-local storage,
+  with an in-memory fallback if storage is unavailable. Keep it above page boundaries.
+  Business records, credentials, access decisions, unsaved drafts, selected bulk
+  actions and lookup-dialog choices must remain outside this mechanism. Lists fetch
+  current data through their normal APIs when reopened.
+- A pager may pass `resolved` only for an authoritative successful response, with
+  its real `loading` state. The shared pager corrects an out-of-range page after
+  that fetch completes. Never clamp against loading, stale or failed-query totals.
+- Run `npx.cmd playwright test --config playwright.list-navigation.config.ts` for
+  the isolated navigation, real enquiry/core list, report and information-control
+  regressions. All APIs in those fixtures are synthetic; they never change tenant data.
+
 ## Permissions
 - Every module uses composable access profiles from the shared access resolver. Active profiles add action permissions; per-user resource/action record limits, module activation and tenant isolation remain mandatory bounds. Staff/Manager labels grant no business permissions. Tenant Admin retains security administration. See `docs/ACCESS_STANDARDIZATION_R9.md` for the current contract and migration.
 - Teams are shared business data under `/users/teams`; CRM owns the sales workflow setting. See `docs/ACCESS_MODEL_R9.md` for module record policies and migration rules.

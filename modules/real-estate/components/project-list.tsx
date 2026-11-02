@@ -1,4 +1,5 @@
 "use client"
+import { useListState } from "@/components/erp/list-navigation"
 import { useTerminology, useTerminologyReader } from "@/platform/terminology/provider"
 import { CustomFieldFilter, emptyCustomFilter } from "@/modules/crm/components/custom-fields"
 import { ExportButton } from "@/components/erp/export-button"
@@ -21,8 +22,8 @@ export function ProjectList({ parentId, canManage: manager = false, parentArchiv
   const readTerm = useTerminologyReader()
   const term = useTerminology()
   const recordKey = parentId ? "realEstate.subproject" : "realEstate.project"
-  const [customFilter, setCustomFilter] = React.useState(emptyCustomFilter)
-  const [query, setQuery] = React.useState({ q: "", archived: "false", lifecycle: "", page: 1, pageSize: 20 })
+  const [customFilter, setCustomFilter] = useListState("project-list", "customFilter", emptyCustomFilter, { resetPages: true })
+  const [query, setQuery] = useListState("project-list", "query", { q: "", archived: "false", lifecycle: "", page: 1, pageSize: 20 })
   const [data, setData] = React.useState<{ items: Project[]; total: number; canManage: boolean }>({ items: [], total: 0, canManage: manager })
   const [loading, setLoading] = React.useState(true), [error, setError] = React.useState(""), [revision, setRevision] = React.useState(0)
   const columns = React.useMemo<ColumnDef<Project>[]>(() => [

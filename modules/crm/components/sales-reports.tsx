@@ -1,4 +1,5 @@
 "use client"
+import { useListState } from "@/components/erp/list-navigation"
 import { AttributionFilters, emptyAttributionFilters } from "@/platform/collaborators/report-controls"
 import { attributionQuery, type AttributionFilter } from "@/platform/collaborators/report-validation"
 import { useTerminology } from "@/platform/terminology/provider"
@@ -31,6 +32,7 @@ import { InfoHelp } from "@/components/erp/info-help"
 
 type SelectReport = (view: SalesReportView, extra?: Record<string, string>, caption?: string) => void
 type MoneyFormatter = (amount: string, currency: string) => string
+const validSelection = (value: unknown) => value === null || typeof value === "object" && value !== null && "base" in value && typeof value.base === "string" && "view" in value && ["leads", "converted", "pipeline", "won", "lost", "overdue", "gaps"].includes(String(value.view)) && "extra" in value && typeof value.extra === "object" && value.extra !== null && !Array.isArray(value.extra) && Object.values(value.extra).every(v => typeof v === "string") && (!("caption" in value) || typeof value.caption === "string")
 
 function useReport<T>(path: string, params: string, revision: number, enabled = true) {
   const [state, setState] = React.useState<{ data: T | null; error: string; key: string }>({ data: null, error: "", key: "" })
@@ -53,11 +55,11 @@ function useReport<T>(path: string, params: string, revision: number, enabled = 
 }
 function ReportError({ error }: { error: string }) { return error ? <p role="alert" className="text-sm text-destructive">{error} Use Refresh to retry.</p> : null }
 function Pager({ data, page, size, loading, setPage, setSize }: { data: { total: number; totalPages: number } | null; page: number; size: number; loading: boolean; setPage: (p: number) => void; setSize: (n: number) => void }) {
-  return <Pagination page={page} pageSize={size} total={data?.total || 0} totalPages={data?.totalPages} loading={loading} onPageChange={setPage} onPageSizeChange={n => { setSize(n); setPage(1) }} />
+  return <Pagination resolved={!!data} page={page} pageSize={size} total={data?.total || 0} totalPages={data?.totalPages} loading={loading} onPageChange={setPage} onPageSizeChange={n => { setSize(n); setPage(1) }} />
 }
 function LeadBreakdown({ params, revision, dimensions, onSelect }: { params: string; revision: number; dimensions: SalesReportSummary["dimensions"]; onSelect: SelectReport }) {
   const term = useTerminology()
-  const [dimension, setDimension] = React.useState<SalesReportDimension>("source"), [page, setPage] = React.useState(1), [size, setSize] = React.useState(10)
+  const [dimension, setDimension] = useListState<SalesReportDimension>("lead-breakdown", "dimension", "source", { resetPages: true }), [page, setPage] = useListState("lead-breakdown", "page", 1), [size, setSize] = useListState("lead-breakdown", "size", 10)
   const { data, loading, error } = useReport<ListResponse<SalesLeadGroup>>("/breakdown", `${params}&dimension=${dimension}&page=${page}&pageSize=${size}`, revision)
   const group = dimensions.find(item => item.key === dimension)
   const bucketLabel = (row: SalesLeadGroup) => reportBucketLabel(term, group, row.id, row.label)
@@ -72,7 +74,7 @@ function LeadBreakdown({ params, revision, dimensions, onSelect }: { params: str
 }
 function DealValues({ params, revision, onSelect, formatMoney }: { params: string; revision: number; onSelect: SelectReport; formatMoney: MoneyFormatter }) {
   const term = useTerminology()
-  const [view, setView] = React.useState("pipeline"), [page, setPage] = React.useState(1), [size, setSize] = React.useState(10)
+  const [view, setView] = useListState("deal-values", "view", "pipeline"), [page, setPage] = useListState("deal-values", "page", 1), [size, setSize] = useListState("deal-values", "size", 10)
   const { data, loading, error } = useReport<ListResponse<SalesValueGroup>>("/values", `${params}&view=${view}&page=${page}&pageSize=${size}`, revision)
   return <Section title={term("crm.opportunity.singular", "Deal values by stage", "{label} values by stage")} description={term("crm.opportunity.singular", "Values are separate for each currency. Open pipeline is current; won and lost use the closing date in the selected period. These are deal values, not payments received.", "Values are separate for each currency. Open pipeline is current; won and lost use the closing date in the selected period. These are {label} values, not payments received.")} actions={<Select aria-label={term("crm.opportunity.singular", "Deal value report", "{label} value report")} value={view} onValueChange={v => { setView(v); setPage(1) }}><option value="pipeline">Current pipeline</option><option value="won">Won in period</option><option value="lost">Lost in period</option></Select>}>
     <ReportError error={error} />
@@ -86,7 +88,7 @@ function DealValues({ params, revision, onSelect, formatMoney }: { params: strin
 function ReportRecords({ params, view, revision, columns, formatMoney, caption }: { params: string; view: SalesReportView; revision: number; columns: SalesReportSummary["extensionColumns"]; formatMoney: MoneyFormatter; caption?: string }) {
   const term = useTerminology()
   const { formatDate } = useDateFormatter()
-  const [page, setPage] = React.useState(1), [size, setSize] = React.useState(20)
+  const [page, setPage] = useListState("report-records", "page", 1), [size, setSize] = useListState("report-records", "size", 20)
   const { data, loading, error } = useReport<ListResponse<SalesReportRecord>>("/records", `${params}&page=${page}&pageSize=${size}`, revision)
   return <Section title={salesReportLabels(term)[view]} description="These records match the selected metric or breakdown. Export includes all matching pages, up to 2,000 rows." actions={<ExportButton requirement={["reports.export", view === "leads" || view === "converted" ? "enquiries.export" : view === "overdue" ? "activities.export" : "opportunities.export"]} href={`/api/crm/reports/sales/export?${params}`} filename={`sales-${view}.csv`} disabled={loading || !!error || !data?.total} />}>
     {caption && <p className="text-sm font-medium">Selected: {caption}</p>}
@@ -108,15 +110,15 @@ export function SalesReports({ initialView = "sales" }: { initialView?: "sales" 
     return () => controller.abort()
   }, [])
   const formatMoney = (amount: string, currency: string) => formatDecimalCurrency(amount, currency, moneySettings)
-  const [scope, setScope] = React.useState(initialView === "team" ? "team" : "mine"), [owner, setOwner] = React.useState(""), [source, setSource] = React.useState("")
-  const [lostReasonId, setLostReasonId] = React.useState("")
-  const [primaryId, setPrimaryId] = React.useState(""), [secondaryId, setSecondaryId] = React.useState("")
-  const [period, setPeriod] = React.useState<{ from: string; through: string } | null>(null), [from, setFrom] = React.useState(""), [through, setThrough] = React.useState("")
+  const [scope, setScope] = useListState("sales-reports", "scope", initialView === "team" ? "team" : "mine", { resetPages: true, resetScopes: ["team-performance","lead-breakdown","deal-values","report-records","performance-records"] }), [owner, setOwner] = useListState("sales-reports", "owner", "", { resetPages: true, resetScopes: ["team-performance","lead-breakdown","deal-values","report-records","performance-records"] }), [source, setSource] = useListState("sales-reports", "source", "", { resetPages: true, resetScopes: ["team-performance","lead-breakdown","deal-values","report-records","performance-records"] })
+  const [lostReasonId, setLostReasonId] = useListState("sales-reports", "lostReasonId", "", { resetPages: true, resetScopes: ["team-performance","lead-breakdown","deal-values","report-records","performance-records"] })
+  const [primaryId, setPrimaryId] = useListState("sales-reports", "primaryId", "", { resetPages: true, resetScopes: ["team-performance","lead-breakdown","deal-values","report-records","performance-records"] }), [secondaryId, setSecondaryId] = useListState("sales-reports", "secondaryId", "", { resetPages: true, resetScopes: ["team-performance","lead-breakdown","deal-values","report-records","performance-records"] })
+  const [period, setPeriod] = useListState<{ from: string; through: string } | null>("sales-reports", "period", null, { kind: "period", resetPages: true, resetScopes: ["team-performance","lead-breakdown","deal-values","report-records","performance-records"] }), [from, setFrom] = React.useState(""), [through, setThrough] = React.useState("")
   const [periodOpen, setPeriodOpen] = React.useState(false), [periodError, setPeriodError] = React.useState(""), [revision, setRevision] = React.useState(0)
-  const [selection, setSelection] = React.useState<{ base: string; view: SalesReportView; extra: Record<string, string>; caption?: string } | null>(null)
-  const [attribution, setAttribution] = React.useState<AttributionFilter>(emptyAttributionFilters)
-  const [salesTeamId, setSalesTeamId] = React.useState("")
-  const [reportTab, setReportTab] = React.useState<"sales" | "team">(initialView)
+  const [selection, setSelection] = useListState<{ base: string; view: SalesReportView; extra: Record<string, string>; caption?: string } | null>("sales-reports", "selection", null, { validate: validSelection, resetScopes: ["report-records"] })
+  const [attribution, setAttribution] = useListState<AttributionFilter>("sales-reports", "attribution", emptyAttributionFilters, { resetPages: true, resetScopes: ["team-performance","lead-breakdown","deal-values","report-records","performance-records"] })
+  const [salesTeamId, setSalesTeamId] = useListState("sales-reports", "salesTeamId", "", { resetPages: true, resetScopes: ["team-performance","lead-breakdown","deal-values","report-records","performance-records"] })
+  const [reportTab, setReportTab] = useListState<"sales" | "team">("sales-reports", "reportTab", initialView)
   const extensionQuery = useCrmExtensionFilterQuery(primaryId, secondaryId)
   const params = new URLSearchParams({ ...attributionQuery(attribution), ...(salesTeamId ? { salesTeamId } : {}), scope, ...(lostReasonId ? { lostReasonId } : {}), ...(period || {}), ...(owner ? { assignedUserId: owner } : {}), ...(source ? { sourceId: source } : {}), ...extensionQuery }).toString()
   const { data, loading, error: summaryError } = useReport<SalesReportSummary>("", params, revision, reportTab === "sales")
@@ -133,7 +135,7 @@ export function SalesReports({ initialView = "sales" }: { initialView?: "sales" 
     else if (!metadata?.canManage) { setScope("mine"); setSalesTeamId("") }
     const url = new URL(window.location.href)
     if (next === "team") url.searchParams.set("view", "team"); else url.searchParams.delete("view")
-    window.history.replaceState(window.history.state, "", url)
+    window.history.replaceState(null, "", url)
   }
   function applyPeriod() {
     if (!from || !through || through < from || Date.parse(through) - Date.parse(from) > 365 * 86400000) { setPeriodError("Choose both dates, covering at most 366 days."); return }

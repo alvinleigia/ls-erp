@@ -1,4 +1,5 @@
 "use client"
+import { useListState } from "@/components/erp/list-navigation"
 import { useTerminology, useTerminologyReader } from "@/platform/terminology/provider"
 import { ActionBar } from "@/components/erp/page"
 import { Textarea } from "@/components/erp/controls"
@@ -29,7 +30,7 @@ export function WorkHistory({ id, revision, canEdit, settings }: { id: string; r
   const readTerm = useTerminologyReader()
   const term = useTerminology()
   const [data, setData] = React.useState<ListResponse<CrmActivityRow> | null>(null)
-  const [page, setPage] = React.useState(1)
+  const [page, setPage] = useListState("work-history", "page", 1)
   const [refresh, setRefresh] = React.useState(0)
   const [message, setMessage] = React.useState("")
   const [error, setError] = React.useState("")
@@ -60,6 +61,6 @@ export function WorkHistory({ id, revision, canEdit, settings }: { id: string; r
       detail: <p className="whitespace-pre-wrap break-words">{formatWorkHistoryMessage(item, settings)}</p>,
     }))} />}
     {!loading && data?.total === 0 && <EmptyState title={term("crm.activity.singular", "No activity history yet", "No {label} history yet")} description={term("crm.activity.singular", "Activity updates and internal notes will appear here.", "{label} updates and internal notes will appear here.")} />}
-    {data && <Pagination label={term("crm.activity.singular", "Activity history pages", "{label} history pages")} page={page} totalPages={data.totalPages} total={data.total} pageSize={data.pageSize} loading={loading} onPageChange={setPage} />}
+    {data && <Pagination resolved={!error} label={term("crm.activity.singular", "Activity history pages", "{label} history pages")} page={page} totalPages={data.totalPages} total={data.total} pageSize={data.pageSize} loading={loading} onPageChange={setPage} />}
   </Section>
 }

@@ -1,4 +1,5 @@
 "use client"
+import { useListState } from "@/components/erp/list-navigation"
 import { useTerminology } from "@/platform/terminology/provider"
 import * as React from "react"
 import { History, Phone, Mail, Users, CheckSquare } from "lucide-react"
@@ -19,7 +20,7 @@ const interactionAppearance = {
 export function ContactInteractions({ contactId, revision = 0 }: { contactId: string; revision?: number }) {
   const term = useTerminology()
   const [data, setData] = React.useState<ListResponse<InteractionRow> | null>(null)
-  const [page, setPage] = React.useState(1)
+  const [page, setPage] = useListState("contact-interactions", "page", 1)
   const [error, setError] = React.useState("")
   const [loading, setLoading] = React.useState(true)
   const { formatDate } = useDateFormatter()
@@ -40,7 +41,7 @@ export function ContactInteractions({ contactId, revision = 0 }: { contactId: st
       detail: <><div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground"><span className="rounded-md border bg-background px-2 py-0.5 font-medium text-foreground">{item.outcome.replaceAll("_", " ")}</span>{item.callDirection && <span>{item.callDirection === "INBOUND" ? "Inbound" : "Outbound"}</span>}{item.durationMinutes !== null && <span>{item.durationMinutes} min</span>}</div><p className="whitespace-pre-wrap break-words">{item.summary}</p></>,
     }))} />}
     {!loading && data?.total === 0 && <EmptyState title="No interactions logged yet" description="Completed calls, meetings, emails and tasks will appear here." />}
-    {data && <Pagination label={term("crm.contact.singular", "Customer interaction pages", "{label} interaction pages")} page={page} totalPages={data.totalPages} total={data.total} pageSize={data.pageSize} loading={loading} onPageChange={setPage} />}
+    {data && <Pagination resolved={!error} label={term("crm.contact.singular", "Customer interaction pages", "{label} interaction pages")} page={page} totalPages={data.totalPages} total={data.total} pageSize={data.pageSize} loading={loading} onPageChange={setPage} />}
   </>
   return <Section title={term("crm.contact.singular", "Previous customer interactions", "Previous {label} interactions")} description={term("crm.contact.singular", "Shared conversation history for everyone working with this contact.", "Shared conversation history for everyone working with this {label}.")} icon={History}>{content}</Section>
 }

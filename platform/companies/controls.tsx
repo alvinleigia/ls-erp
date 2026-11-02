@@ -1,7 +1,8 @@
 "use client"
+import { useListState } from "@/components/erp/list-navigation"
 import * as React from "react"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
+import { useListRouter as useRouter } from "@/components/erp/list-navigation"
 import { getCoreRowModel, useReactTable, type ColumnDef } from "@tanstack/react-table"
 import { DataTable } from "@/components/data-table"
 import { FormField } from "@/components/form-field"
@@ -23,7 +24,7 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
 }
 export function CompanyStructureList({ kind }: { kind: Kind }) {
   const path = paths[kind]
-  const [query, setQuery] = React.useState({ q: "", status: "active", page: 1, pageSize: 20 })
+  const [query, setQuery] = useListState("company-structure-list", "query", { q: "", status: "active", page: 1, pageSize: 20 })
   const [data, setData] = React.useState<ListResponse<Company | Office>>({ items: [], page: 1, pageSize: 20, total: 0, totalPages: 1 })
   const [loading, setLoading] = React.useState(true), [error, setError] = React.useState("")
   React.useEffect(() => {
