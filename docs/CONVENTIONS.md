@@ -33,6 +33,25 @@ This is the baseline for new modules (API + UI) in this codebase.
   isolated interaction/mobile and report-regression checks. It uses synthetic UI
   fixtures with no database or saved hosted login.
 
+## Built-in choice labels (P13J)
+
+- Display fixed system choices in sentence case: `New`, `Contacted`, `In progress`,
+  `Selected staff`. Use `enumLabel` from `lib/enum-label` for enum codes; reuse the
+  same labels in filters and matching record summaries. Domain wording remains
+  explicit: `enquiryStatusLabel` displays persisted `CLOSED` as `Lost`.
+- Keep acronym casing such as GST, HSN, SAC, ID and INR. Inventory units have an
+  explicit `inventoryUnitLabels` map, e.g. `Kilograms (kg)`; their stored codes stay
+  unchanged. Write static descriptive choices in sentence case as well.
+- Never apply case conversion automatically inside generic selects or with CSS.
+  Customer/staff names, tenant-defined stages, custom field choices, provider
+  names, brands, geographical names and codes retain their supplied spelling.
+- Every enum option must have its original explicit `value`. Changing the text of
+  an option without a value changes what the browser submits. Formatting belongs
+  only to display labels, never validation, comparisons, imports or API payloads.
+- Run `npx.cmd playwright test --config playwright.dropdown-labels.config.ts` for
+  label, native/Radix submission, custom-name/acronym, enquiry/pipeline, inventory
+  and leave-form regressions against the synthetic component host.
+
 ## List API contract
 - Params: `page` (1-based), `pageSize`, `sort`, `order`, `q`
 - Response: `{ items, page, pageSize, total, totalPages }`

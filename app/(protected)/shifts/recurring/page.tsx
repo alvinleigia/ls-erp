@@ -1253,7 +1253,7 @@ export default function ShiftRecurringPlansPage() {
           value={statusFilter}
           onValueChange={(value) => setStatusFilter(value as "all" | "active" | "inactive")}
         >
-          <option value="all">All status</option>
+          <option value="all">All statuses</option>
           <option value="active">Active</option>
           <option value="inactive">Inactive</option>
         </Select>

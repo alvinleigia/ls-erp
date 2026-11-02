@@ -1,4 +1,5 @@
 "use client"
+import { enumLabel } from "@/lib/enum-label"
 import { useListState } from "@/components/erp/list-navigation"
 import { useDateFormatter } from "@/hooks/use-date-formatter"
 import { wallTimeToInstant } from "@/lib/business-time"
@@ -674,9 +675,7 @@ export default function LeaveApprovalsPage() {
           onValueChange={(value) => setStatusFilter(value as LeaveRequestStatus | "all")}
         >
           {statusOptions.map((item) => (
-            <option key={item} value={item}>
-              {item === "all" ? "All statuses" : item}
-            </option>
+            <option key={item} value={item}>{item === "all" ? "All statuses" : enumLabel(item)}</option>
           ))}
         </Select>
       </TableToolbar>

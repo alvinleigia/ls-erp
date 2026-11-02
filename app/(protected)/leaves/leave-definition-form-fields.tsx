@@ -1,4 +1,5 @@
 "use client"
+import { enumLabel } from "@/lib/enum-label"
 import { useCurrentResourceAction } from "@/platform/access/view-guard"
 
 import { Section } from "@/components/erp/section"
@@ -80,9 +81,7 @@ export function LeaveDefinitionFormFields({
             }
           >
             {leaveDefinitionTypeOptions.map((item) => (
-              <option key={item} value={item}>
-                {item}
-              </option>
+              <option key={item} value={item}>{enumLabel(item)}</option>
             ))}
           </Select>
         </FormField>
@@ -96,9 +95,7 @@ export function LeaveDefinitionFormFields({
             }
           >
             {leaveAllowedUsersOptions.map((item) => (
-              <option key={item} value={item}>
-                {item}
-              </option>
+              <option key={item} value={item}>{enumLabel(item)}</option>
             ))}
           </Select>
         </FormField>
@@ -111,9 +108,7 @@ export function LeaveDefinitionFormFields({
             }
           >
             {leaveDefinitionStatusOptions.map((item) => (
-              <option key={item} value={item}>
-                {item}
-              </option>
+              <option key={item} value={item}>{enumLabel(item)}</option>
             ))}
           </Select>
         </FormField>

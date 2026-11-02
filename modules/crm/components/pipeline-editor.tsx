@@ -1,4 +1,5 @@
 "use client"
+import { enumLabel } from "@/lib/enum-label"
 import { useTerminology } from "@/platform/terminology/provider"
 import { withRecordView, useRecordView, AccessRecordForm, AccessSummarySection } from "@/platform/access/record-view"
 import { Section } from "@/components/erp/section"
@@ -86,7 +87,7 @@ function PipelineEditorBody({ id, template }: { id?: string; template?: Pipeline
           <div className="flex flex-wrap items-center justify-between gap-2"><h2 className="font-medium">{index + 1}. {stage.name || "New stage"}</h2><div className="flex gap-2"><Button type="button" variant="outline" size="sm" aria-label={`Move ${stage.name} up`} disabled={index === 0} onClick={() => reorder(index, -1)}>↑</Button><Button type="button" variant="outline" size="sm" aria-label={`Move ${stage.name} down`} disabled={index === values.stages.length - 1} onClick={() => reorder(index, 1)}>↓</Button>{!stage.id && <Button type="button" variant="outline" size="sm" onClick={() => setValues({ ...values, stages: values.stages.filter((_, at) => at !== index) })}>Remove new stage</Button>}</div></div>
           <div className="grid gap-4 sm:grid-cols-4">
             <FormField id={`stage-name-${index}`} label="Name"><Input id={`stage-name-${index}`} required maxLength={80} value={stage.name} onChange={event => updateStage(index, { name: event.target.value })} /></FormField>
-            <FormField id={`stage-kind-${index}`} label="Outcome type"><Select id={`stage-kind-${index}`} className={`${selectClass} w-full`} value={stage.kind} onValueChange={event => { const kind = event as "OPEN" | "WON" | "LOST"; updateStage(index, { kind, probability: kind === "WON" ? 100 : kind === "LOST" ? 0 : 10 }) }}><option>OPEN</option><option>WON</option><option>LOST</option></Select></FormField>
+            <FormField id={`stage-kind-${index}`} label="Outcome type"><Select id={`stage-kind-${index}`} className={`${selectClass} w-full`} value={stage.kind} onValueChange={event => { const kind = event as "OPEN" | "WON" | "LOST"; updateStage(index, { kind, probability: kind === "WON" ? 100 : kind === "LOST" ? 0 : 10 }) }}><option value={"OPEN"}>{enumLabel("OPEN")}</option><option value={"WON"}>{enumLabel("WON")}</option><option value={"LOST"}>{enumLabel("LOST")}</option></Select></FormField>
             <FormField id={`probability-${index}`} label="Default probability %"><Input id={`probability-${index}`} type="number" min={0} max={stage.kind === "OPEN" ? 99 : 100} required disabled={stage.kind !== "OPEN"} value={stage.probability} onChange={event => updateStage(index, { probability: Number(event.target.value) })} /></FormField>
             <FormField id={`color-${index}`} label="Colour"><Input id={`color-${index}`} type="color" value={stage.color} onChange={event => updateStage(index, { color: event.target.value })} /></FormField>
           </div>

@@ -65,6 +65,7 @@ import { SalesReports } from '@/modules/crm/components/sales-reports';
 import { ApplicationAccessProvider } from '@/application/access-provider';
 import { InfoHelpPreview } from '@/tests/browser/fixtures/info-help-preview';
 import { ListNavigationPreview } from '@/tests/browser/fixtures/list-navigation-preview';
+import { DropdownLabelsPreview } from '@/tests/browser/fixtures/dropdown-labels-preview';
 import { RecordList } from '@/modules/crm/components/record-list';
 import { ProjectList } from '@/modules/real-estate/components/project-list';
 import { RouteAccessProvider } from '@/platform/access/route-provider';
@@ -75,6 +76,7 @@ function Preview(){
  const path=usePathname().split('/'), query=useSearchParams(), key=path[2]==='configuration'?path[3]:path[2], raw=path[2]==='configuration'?path[4]:path[3], id=raw==='new'?undefined:raw;
  if(path[1]==='help-fixture')return <InfoHelpPreview/>;
  if(path[1]==='navigation-fixture')return <ListNavigationPreview/>;
+ if(path[1]==='dropdown-labels-fixture')return <DropdownLabelsPreview/>;
  if(path[1]==='crm' && key==='sales')return <BusinessModuleProvider><ApplicationAccessProvider><SalesReports initialView={query.get('view')==='team'?'team':'sales'}/></ApplicationAccessProvider></BusinessModuleProvider>;
  if(path[1]==='dashboard' || path[1]==='settings' && (!path[2] || path[2]==='taxes'))return <BusinessModuleProvider><CoreViewGuard role={query.get('role')||'MANAGER'} userId='manager'>{path[1]==='dashboard'?<Dashboard/>:path[2]==='taxes'?<Taxes/>:<Settings/>}</CoreViewGuard></BusinessModuleProvider>;
  if(path[1]==='reports')return <BusinessModuleProvider><CoreViewGuard role={query.get('role')||'MANAGER'} userId='manager'>{path[2]==='coupon-usage'?<CouponUsageReport/>:<AuditLogsReport/>}</CoreViewGuard></BusinessModuleProvider>;

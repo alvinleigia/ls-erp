@@ -420,7 +420,7 @@ export default function InventorySuppliersPage() {
                   <option value="">Select type</option>
                   <option value="VAT">VAT</option>
                   <option value="GST">GST</option>
-                  <option value="SALES_TAX_ID">Sales Tax ID</option>
+                  <option value="SALES_TAX_ID">Sales tax ID</option>
                   <option value="EIN">EIN</option>
                   <option value="OTHER">Other</option>
                 </Select>

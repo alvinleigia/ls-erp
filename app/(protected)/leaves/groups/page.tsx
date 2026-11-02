@@ -1,4 +1,5 @@
 "use client"
+import { enumLabel } from "@/lib/enum-label"
 import { useListState } from "@/components/erp/list-navigation"
 import { useDateFormatter } from "@/hooks/use-date-formatter"
 import { useCurrentResourceAction } from "@/platform/access/view-guard"
@@ -279,9 +280,7 @@ export default function LeaveGroupsPage() {
         >
           <option value="all">All assignment modes</option>
           {assignmentModeOptions.map((item) => (
-            <option key={item} value={item}>
-              {item}
-            </option>
+            <option key={item} value={item}>{enumLabel(item)}</option>
           ))}
         </Select>
         <Select
@@ -289,11 +288,9 @@ export default function LeaveGroupsPage() {
           value={statusFilter}
           onValueChange={(value) => setStatusFilter(value as LeaveGroupStatus | "all")}
         >
-          <option value="all">All status</option>
+          <option value="all">All statuses</option>
           {statusOptions.map((item) => (
-            <option key={item} value={item}>
-              {item}
-            </option>
+            <option key={item} value={item}>{enumLabel(item)}</option>
           ))}
         </Select>
       </TableToolbar>

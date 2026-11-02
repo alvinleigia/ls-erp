@@ -85,6 +85,33 @@ for (const [route, field, section] of [
   })
 }
 
+test("enquiry dropdown labels retain the stored status and use sentence case", async ({ page }, info) => {
+  const state = await fixture(page)
+  await page.goto('/crm/enquiries/test')
+  await page.getByRole('button', { name: 'Edit enquiry details', exact: true }).click()
+  await expect(page.locator('#status')).toHaveText('Qualified')
+  await page.locator('#status').click()
+  await expect(page.getByRole('menuitemradio')).toHaveText(['New', 'Contacted', 'Qualified', 'Lost'])
+  await page.screenshot({ path: info.outputPath('enquiry-status-labels.png'), fullPage: true, animations: 'disabled' })
+  await page.getByRole('menuitemradio', { name: 'Contacted', exact: true }).click()
+  await page.getByRole('button', { name: 'Save changes', exact: true }).click()
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+  expect(state.writes[0].body).toMatchObject({ status: 'CONTACTED', version: 2 })
+  await expect(page.getByRole('region', { name: 'Enquiry details', exact: true })).toContainText('Contacted')
+})
+
+test("pipeline outcome labels preserve formerly implicit option values", async ({ page }) => {
+  await fixture(page)
+  await page.goto('/crm/pipelines/test')
+  await page.getByRole('button', { name: 'Edit pipeline configuration', exact: true }).click()
+  const select = page.locator('#stage-kind-0').locator('..').locator('select')
+  expect(await select.locator('option').evaluateAll(nodes => nodes.map(n => (n as HTMLOptionElement).value))).toEqual(['OPEN', 'WON', 'LOST'])
+  await page.locator('#stage-kind-0').click()
+  await expect(page.getByRole('menuitemradio')).toHaveText(['Open', 'Won', 'Lost'])
+  await page.getByRole('menuitemradio', { name: 'Won', exact: true }).click()
+  await expect(select).toHaveValue('WON')
+})
+
 test("enquiry save, lazy history, version conflict and responsive panel", async ({ page }, info) => {
   const state = await fixture(page)
   await page.setViewportSize({ width: 390, height: 844 })

@@ -1,4 +1,5 @@
 "use client"
+import { enumLabel } from "@/lib/enum-label"
 import { useListState } from "@/components/erp/list-navigation"
 import { useCreationOfficeSnapshot } from "@/platform/companies/creation-snapshot"
 import { useDateFormatter } from "@/hooks/use-date-formatter"
@@ -389,9 +390,7 @@ export default function LeaveRequestsPage() {
           onValueChange={(value) => setStatusFilter(value as LeaveRequestStatus | "all")}
         >
           {statusOptions.map((item) => (
-            <option key={item} value={item}>
-              {item === "all" ? "All statuses" : item}
-            </option>
+            <option key={item} value={item}>{item === "all" ? "All statuses" : enumLabel(item)}</option>
           ))}
         </Select>
       </TableToolbar>

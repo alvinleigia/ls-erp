@@ -2052,7 +2052,7 @@ export default function RosterPage() {
                   }
                 }}
               >
-                <option value="TEMPLATE">Template/Unavailable override</option>
+                <option value="TEMPLATE">Template/unavailable override</option>
                 {isOverrideStaffFlexible ? (
                   <option value="FLEXIBLE">Flexible weekly plan</option>
                 ) : null}

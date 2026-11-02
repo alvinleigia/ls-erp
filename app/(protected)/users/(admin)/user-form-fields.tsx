@@ -1,4 +1,5 @@
 "use client"
+import { enumLabel } from "@/lib/enum-label"
 import { defaultRecordRules } from "@/platform/access/rules"
 
 
@@ -109,9 +110,7 @@ export function UserFormFields({
           disabled={!canSelfEdit}
         >
           {genderOptions.map((gender) => (
-            <option key={gender} value={gender}>
-              {gender.replaceAll("_", " ")}
-            </option>
+            <option key={gender} value={gender}>{enumLabel(gender)}</option>
           ))}
         </select>
       </FormField>
@@ -124,9 +123,7 @@ export function UserFormFields({
           disabled={mode === "edit" && !canManage}
         >
           {statusOptions.map((status) => (
-            <option key={status} value={status}>
-              {status.replaceAll("_", " ")}
-            </option>
+            <option key={status} value={status}>{enumLabel(status)}</option>
           ))}
         </select>
       </FormField>
@@ -142,9 +139,7 @@ export function UserFormFields({
           disabled={external || (mode === "edit" && !canManage)}
         >
           {(external ? ["STAFF"] as const : roleOptions).map((role) => (
-            <option key={role} value={role}>
-              {external ? "External collaborator" : role}
-            </option>
+            <option key={role} value={role}>{external ? "External collaborator" : enumLabel(role)}</option>
           ))}
         </select>
       </FormField>

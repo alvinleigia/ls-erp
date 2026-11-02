@@ -1,4 +1,5 @@
 "use client"
+import { enquiryStatusLabel } from "@/modules/crm/display-labels"
 import { useListState } from "@/components/erp/list-navigation"
 import { useTerminology } from "@/platform/terminology/provider"
 import { SalesTeamSelect } from "@/platform/teams/controls"
@@ -101,7 +102,7 @@ export function RecordList({ kind, enquiryId, accountId, extensionReferences, he
       { id: "phone", header: "Phone", cell: ({ row }) => row.original.contact?.phone || "—" },
       { id: "company", header: term("crm.account.singular", "Company"), cell: ({ row }) => row.original.account?.name || "—" },
       { accessorKey: "source", header: "Source", cell: ({ row }) => row.original.source || "—" },
-      { accessorKey: "status", header: "Status", cell: ({ row }) => row.original.status === "CLOSED" ? "Lost" : row.original.status },
+      { accessorKey: "status", header: "Status", cell: ({ row }) => enquiryStatusLabel(row.original.status || "") },
       { accessorKey: "lostReasonName", header: "Lost reason", cell: ({ row }) => row.original.lostReasonName || (row.original.status === "CLOSED" ? "Not recorded (legacy)" : "—") },
       { id: "assignee", header: "Salesperson", cell: ({ row }) => row.original.assignee?.name || "Unnamed user" },
       { id: "targetCloseOn", header: "Target close", cell: ({ row }) => formatDate(row.original.targetCloseOn?.slice(0, 10)) },
@@ -126,7 +127,7 @@ export function RecordList({ kind, enquiryId, accountId, extensionReferences, he
   const content = <>
     <TableToolbar table={table} searchPlaceholder={kind === "enquiries" ? "Search title, customer, phone or company…" : `Search ${title.toLowerCase()}…`} showColumnToggle={false}>
       <Select aria-label={`${title} filter`} className={selectClass} value={filter} onValueChange={event => { setFilter(event); setPagination(previous => ({ ...previous, pageIndex: 0 })) }}>
-        {kind === "contacts" || kind === "accounts" ? <><option value="">{term(`${recordKey}.plural`, `Active ${kind}`, "Active {label}")}</option><option value="true">{term(`${recordKey}.plural`, `Archived ${kind}`, "Archived {label}")}</option></> : kind === "tasks" ? <><option value="">Open follow-ups</option><option value="overdue">Overdue</option><option value="completed">Completed</option></> : <><option value="">All statuses</option>{enquiryStatuses.map(status => <option key={status} value={status}>{status === "CLOSED" ? "Lost" : status}</option>)}</>}
+        {kind === "contacts" || kind === "accounts" ? <><option value="">{term(`${recordKey}.plural`, `Active ${kind}`, "Active {label}")}</option><option value="true">{term(`${recordKey}.plural`, `Archived ${kind}`, "Archived {label}")}</option></> : kind === "tasks" ? <><option value="">Open follow-ups</option><option value="overdue">Overdue</option><option value="completed">Completed</option></> : <><option value="">All statuses</option>{enquiryStatuses.map(status => <option key={status} value={status}>{enquiryStatusLabel(status)}</option>)}</>}
       </Select>
       {kind === "enquiries" && <Filters label={term("crm.enquiry.singular", "Enquiry filters", "{label} filters")} activeCount={Number(!!salesTeamId) + Number(!!customFilter.customFieldId) + Number(!!lostReasonId) + Number(!!sourceId) + Number(!!assignedUserId) + (extensionReferences ? 0 : Object.keys(extensionQuery).length)} onReset={() => { setCustomFilter(emptyCustomFilter); setLostReasonId(""); setSourceId(""); setSalesTeamId(""); setAssignedUserId(""); setPrimaryId(extensionReferences?.primaryId || ""); setSecondaryId(extensionReferences?.secondaryId || ""); setPagination(previous => ({ ...previous, pageIndex: 0 })) }}>
         {!extensionReferences?.primaryId && <CrmExtensionFilter primaryId={primaryId} secondaryId={secondaryId} onChange={(primary, secondary) => { setPrimaryId(primary); setSecondaryId(secondary); setPagination(previous => ({ ...previous, pageIndex: 0 })) }} />}

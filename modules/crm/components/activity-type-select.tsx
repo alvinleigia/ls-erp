@@ -1,4 +1,5 @@
 "use client"
+import { enumLabel } from "@/lib/enum-label"
 import { useTerminology } from "@/platform/terminology/provider"
 import * as React from "react"
 import { SearchableSelect } from "@/components/searchable-select"
@@ -35,7 +36,7 @@ export function ActivityTypeSelect({ id, value, selectedName, onChange, filter =
     }, 150)
     return () => { clearTimeout(timer); controller.abort() }
   }, [q, filter])
-  const builtins = workTypes.map(type => ({ value: type, label: type.charAt(0) + type.slice(1).toLowerCase() + (filter ? " (all types with this behaviour)" : "") })).filter(option => option.label.toLowerCase().includes(q.toLowerCase()))
+  const builtins = workTypes.map(type => ({ value: type, label: enumLabel(type) + (filter ? " (all types with this behaviour)" : "") })).filter(option => option.label.toLowerCase().includes(q.toLowerCase()))
   const options = [...(filter && !q ? [{ value: "", label: "All types" }] : []), ...builtins, ...rows.map(row => ({ value: row.id, label: (row.id === value && selectedName ? selectedName : row.name) + (row.archived ? " (archived)" : "") }))]
   const retained = options.find(option => option.value === value) || (value ? { value, label: picked?.id === value ? picked.name : selectedName || term("crm.activity.singular", "Selected activity type", "Selected {label} type") } : undefined)
   return <SearchableSelect id={id} value={value} selectedOption={retained} options={options} placeholder={filter ? "All types" : term("crm.activity.singular", "Choose activity type", "Choose {label} type")} emptyLabel={message}

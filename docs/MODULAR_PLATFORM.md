@@ -1,3 +1,18 @@
+## P13J built-in dropdown labels
+
+System enum choices use sentence-case display labels across CRM, user/profile
+forms, leave management, appointments, real-estate outcomes and tax settings.
+Inventory units use explicit readable labels with their symbols. Enquiry status
+labels are shared by the editor, list filter and record summary, retaining the
+`CLOSED` → `Lost` business wording. Existing activity type labels use the shared
+enum formatter as well.
+
+Native and shared selects retain their original option values, including options
+which previously inferred a value from their text. Custom names/stages/choices,
+codes, currencies and acronyms are not globally rewritten. No stored-data migration,
+schema or authorization change is required. Conventions and the focused test command
+are in `docs/CONVENTIONS.md`; release verification is recorded separately.
+
 ## P13I ERP list navigation
 
 Shared URL-backed presentation state covers CRM, reports, projects, quotations,

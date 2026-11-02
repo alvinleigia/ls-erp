@@ -1,4 +1,5 @@
 "use client"
+import { enumLabel } from "@/lib/enum-label"
 import { useListState } from "@/components/erp/list-navigation"
 
 import * as React from "react"
@@ -447,9 +448,7 @@ export default function UsersPage() {
         >
           <option value="all">All roles</option>
           {roleOptions.map((role) => (
-            <option key={role} value={role}>
-              {role}
-            </option>
+            <option key={role} value={role}>{enumLabel(role)}</option>
           ))}
         </select>
         <select
@@ -457,11 +456,9 @@ export default function UsersPage() {
           value={statusFilter}
           onChange={(event) => handleStatusFilter(event.target.value as UserStatus | "all")}
         >
-          <option value="all">All status</option>
+          <option value="all">All statuses</option>
           {statusOptions.map((status) => (
-            <option key={status} value={status}>
-              {status.replaceAll("_", " ")}
-            </option>
+            <option key={status} value={status}>{enumLabel(status)}</option>
           ))}
         </select>
       </DataTableToolbar>

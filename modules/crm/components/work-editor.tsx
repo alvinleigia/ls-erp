@@ -1,4 +1,5 @@
 "use client"
+import { enumLabel } from "@/lib/enum-label"
 import { useCreationOfficeSnapshot } from "@/platform/companies/creation-snapshot"
 import { useTerminology, useTerminologyReader } from "@/platform/terminology/provider"
 import { withRecordView, useRecordView, AccessRecordForm, AccessSummarySection } from "@/platform/access/record-view"
@@ -37,7 +38,7 @@ function CompletionFields({ type, value, onChange, timeZone }: { type: WorkType;
   const term = useTerminology()
   const outcomes = workOutcomes[type] as readonly string[]
   return <div className="grid gap-4 sm:grid-cols-2">
-    <FormField id="completion-outcome" label="Outcome"><Select id="completion-outcome" required className={`${selectClass} w-full`} value={outcomes.includes(value.outcome) ? value.outcome : ""} onValueChange={event => onChange({ ...value, outcome: event })}><option value="">Choose an outcome</option>{outcomes.map(outcome => <option key={outcome} value={outcome}>{outcome.replaceAll("_", " ")}</option>)}</Select></FormField>
+    <FormField id="completion-outcome" label="Outcome"><Select id="completion-outcome" required className={`${selectClass} w-full`} value={outcomes.includes(value.outcome) ? value.outcome : ""} onValueChange={event => onChange({ ...value, outcome: event })}><option value="">Choose an outcome</option>{outcomes.map(outcome => <option key={outcome} value={outcome}>{enumLabel(outcome)}</option>)}</Select></FormField>
     <FormField id="completion-when" label={`When it happened (${timeZone})`}><Input id="completion-when" type="datetime-local" required value={value.when} onChange={event => onChange({ ...value, when: event.target.value })} /></FormField>
     <FormField id="completion-duration" label="Actual duration, minutes (optional)"><Input id="completion-duration" type="number" min={0} max={1440} value={value.duration} onChange={event => onChange({ ...value, duration: event.target.value })} /></FormField>
     <FormField id="completion-summary" label={term("crm.contact.singular", "Customer interaction summary", "{label} interaction summary")} className="sm:col-span-2"><Textarea id="completion-summary" required maxLength={5000} placeholder="What was discussed, what the customer needs, and what should happen next…" value={value.summary} onChange={event => onChange({ ...value, summary: event.target.value })} /><p className="text-xs text-muted-foreground">{term("crm.contact.singular", "Shared with staff who can access this customer.", "Shared with staff who can access this {label}.")} {term("crm.activity.singular", "Put private preparation details in the activity’s internal notes.", "Put private preparation details in the {label}'s internal notes.")}</p></FormField>

@@ -962,11 +962,11 @@ export default function AppointmentsPage() {
               )
             }
           >
-            <option value="non_canceled">Calendar: Active only</option>
-            <option value="all">Calendar: All statuses</option>
+            <option value="non_canceled">Calendar: active only</option>
+            <option value="all">Calendar: all statuses</option>
             {APPOINTMENT_STATUS_OPTIONS.filter((status) => status !== "all").map((status) => (
               <option key={`calendar-${status}`} value={status}>
-                Calendar: {APPOINTMENT_STATUS_META[status].label}
+                Calendar: {APPOINTMENT_STATUS_META[status].label.toLowerCase()}
               </option>
             ))}
           </Select>

@@ -1,4 +1,5 @@
 "use client"
+import { inventoryUnitLabels } from "@/lib/constants/inventory"
 
 import { Select, Textarea, Checkbox } from "@/components/erp/controls"
 
@@ -88,9 +89,7 @@ export function ProductFormFields({
             }
           >
             {inventoryProductUnitOptions.map((unit) => (
-              <option key={unit} value={unit}>
-                {unit}
-              </option>
+              <option key={unit} value={unit}>{inventoryUnitLabels[unit]}</option>
             ))}
           </Select>
         </FormField>

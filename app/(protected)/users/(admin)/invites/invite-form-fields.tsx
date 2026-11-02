@@ -1,4 +1,5 @@
 "use client"
+import { enumLabel } from "@/lib/enum-label"
 
 import { FormField } from "@/components/form-field"
 import { Input } from "@/components/ui/input"
@@ -36,9 +37,7 @@ export function InviteFormFields({ values, errors, onChange }: InviteFormFieldsP
           onChange={(event) => onChange({ ...values, role: event.target.value as Role, accessRoleIds: [], officeAccess: event.target.value === "CUSTOMER" ? undefined : values.officeAccess })}
         >
           {inviteRoleOptions.map((role) => (
-            <option key={role} value={role}>
-              {role}
-            </option>
+            <option key={role} value={role}>{enumLabel(role)}</option>
           ))}
         </select>
       </FormField>

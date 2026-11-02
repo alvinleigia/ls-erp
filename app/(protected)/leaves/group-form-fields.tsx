@@ -1,4 +1,5 @@
 "use client"
+import { enumLabel } from "@/lib/enum-label"
 import { useCurrentResourceAction } from "@/platform/access/view-guard"
 
 import { Section } from "@/components/erp/section"
@@ -77,9 +78,7 @@ export function LeaveGroupFormFields({
             }
           >
             {leaveGroupStatusOptions.map((item) => (
-              <option key={item} value={item}>
-                {item}
-              </option>
+              <option key={item} value={item}>{enumLabel(item)}</option>
             ))}
           </Select>
         </FormField>

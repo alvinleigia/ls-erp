@@ -1,4 +1,5 @@
 "use client"
+import { enumLabel } from "@/lib/enum-label"
 
 import { FormField } from "@/components/form-field"
 import { Input } from "@/components/ui/input"
@@ -63,9 +64,7 @@ export function ProfileFormFields({ values, errors, onChange }: ProfileFormField
           onChange={(event) => update("gender", event.target.value as ProfileFormValues["gender"])}
         >
           {profileGenderOptions.map((gender) => (
-            <option key={gender} value={gender}>
-              {gender.replaceAll("_", " ")}
-            </option>
+            <option key={gender} value={gender}>{enumLabel(gender)}</option>
           ))}
         </select>
       </FormField>

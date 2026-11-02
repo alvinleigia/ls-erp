@@ -1,4 +1,5 @@
 "use client"
+import { enumLabel } from "@/lib/enum-label"
 import { useListState } from "@/components/erp/list-navigation"
 import { useDateFormatter } from "@/hooks/use-date-formatter"
 import { useCurrentResourceAction } from "@/platform/access/view-guard"
@@ -312,9 +313,7 @@ export default function LeavesPage() {
         >
           <option value="all">All leave types</option>
           {leaveTypeOptions.map((item) => (
-            <option key={item} value={item}>
-              {item}
-            </option>
+            <option key={item} value={item}>{enumLabel(item)}</option>
           ))}
         </Select>
         <Select
@@ -326,9 +325,7 @@ export default function LeavesPage() {
         >
           <option value="all">All users</option>
           {allowedUsersOptions.map((item) => (
-            <option key={item} value={item}>
-              {item}
-            </option>
+            <option key={item} value={item}>{enumLabel(item)}</option>
           ))}
         </Select>
         </Filters>
@@ -337,11 +334,9 @@ export default function LeavesPage() {
           value={statusFilter}
           onValueChange={(value) => setStatusFilter(value as LeaveDefinitionStatus | "all")}
         >
-          <option value="all">All status</option>
+          <option value="all">All statuses</option>
           {statusOptions.map((item) => (
-            <option key={item} value={item}>
-              {item}
-            </option>
+            <option key={item} value={item}>{enumLabel(item)}</option>
           ))}
         </Select>
       </TableToolbar>

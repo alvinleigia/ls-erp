@@ -1,4 +1,5 @@
 "use client"
+import { enumLabel } from "@/lib/enum-label"
 
 import { BookingStaffPicker, type BookingStaffScope } from "@/components/appointments/choice-picker"
 import { Select } from "@/components/erp/controls"
@@ -116,12 +117,12 @@ export function AppointmentFormFields({
             value={values.status}
             onValueChange={(value) => update("status", value as AppointmentStatus)}
           >
-            <option value="SCHEDULED">SCHEDULED</option>
-            <option value="CONFIRMED">CONFIRMED</option>
-            <option value="IN_PROGRESS">IN_PROGRESS</option>
-            <option value="COMPLETED">COMPLETED</option>
-            <option value="CANCELED" disabled={!canCancel}>CANCELED</option>
-            <option value="NO_SHOW">NO_SHOW</option>
+            <option value="SCHEDULED">{enumLabel("SCHEDULED")}</option>
+            <option value="CONFIRMED">{enumLabel("CONFIRMED")}</option>
+            <option value="IN_PROGRESS">{enumLabel("IN_PROGRESS")}</option>
+            <option value="COMPLETED">{enumLabel("COMPLETED")}</option>
+            <option value="CANCELED" disabled={!canCancel}>{enumLabel("CANCELED")}</option>
+            <option value="NO_SHOW">{enumLabel("NO_SHOW")}</option>
           </Select>
         </FormField>
       ) : null}
