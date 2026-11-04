@@ -9,6 +9,7 @@ import { formatDateForDisplay } from "@/lib/date"
 import { formatDecimalCurrency } from "@/lib/formatting"
 import type { QuotationSnapshot } from "./quotation-service"
 import { BusinessError } from "@/platform/policy"
+import { participantDocumentBlocks } from "@/platform/participants/document-blocks"
 
 export async function buildQuotationPdf(record: { id: string; revision: number; revisionCreatedAt: Date | string; snapshot: QuotationSnapshot }, preview = false) {
   if(record.snapshot.content.layout){const [{quotationLayoutDocument},{renderBusinessDocument}]=await Promise.all([import("./quotation-layout"),import("@/platform/documents/pdf")]);return renderBusinessDocument(quotationLayoutDocument(record),preview)}
@@ -16,6 +17,7 @@ export async function buildQuotationPdf(record: { id: string; revision: number; 
   const font = await pdf.embedFont(await readFile(path.join(process.cwd(), "public/assets/fonts/NotoSans-Regular.ttf")), { subset: true })
   const supportedCharacters = new Set(font.getCharacterSet())
   const { content: c, calculation: calc } = record.snapshot
+  const customers = record.snapshot.participants ? participantDocumentBlocks(record.snapshot.participants) : null
   const labels = record.snapshot.labels ?? quotationDocumentLabels()
   const money = (value: string) => formatDecimalCurrency(value, c.currency, record.snapshot)
   const date = (value: string) => formatDateForDisplay(value, record.snapshot.dateFormat)
@@ -76,12 +78,18 @@ export async function buildQuotationPdf(record: { id: string; revision: number; 
   }
   paragraph(c.supplierName, 17, accent); paragraph(c.title, 21)
   paragraph(`Reference ${record.id}  |  Version ${record.revision}  |  ${date(new Date(record.revisionCreatedAt).toISOString().slice(0, 10))}`, 8, muted)
-  paragraph(`Prepared for ${record.snapshot.customer.name}`, 11)
-  const contact = [record.snapshot.customer.email, record.snapshot.customer.phone].filter(Boolean).join(" · ")
-  if (contact) paragraph(contact, 9, muted)
+  if (!customers) {
+    paragraph(`Prepared for ${record.snapshot.customer.name}`, 11)
+    const contact = [record.snapshot.customer.email, record.snapshot.customer.phone].filter(Boolean).join(" · ")
+    if (contact) paragraph(contact, 9, muted)
+  }
   paragraph(`${labels.opportunity}: ${record.snapshot.opportunity}`, 9, muted)
   if (c.bookingDate) paragraph(`Booking date: ${date(c.bookingDate)}`, 9)
   if (c.validUntil) paragraph(`Valid until: ${date(c.validUntil)}`, 9)
+  for (const customer of customers || []) {
+    section(customer.title)
+    for (const value of customer.paragraphs || []) paragraph(value, 9)
+  }
   if (record.snapshot.context.length || c.details.length) {
     section("Reference details")
     table(["Detail", "Value"], [...record.snapshot.context, ...c.details].map(item => [item.label, item.value]), [160, 351])

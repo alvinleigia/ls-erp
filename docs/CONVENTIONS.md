@@ -241,6 +241,14 @@ This is the baseline for new modules (API + UI) in this codebase.
 
 ## Document issuance
 
+- Company document template publication keeps a normalized saved-content baseline.
+  Show a persistent version/issuance state and an inline success acknowledgement
+  beside the action. Unchanged published content cannot create another version
+  through the UI; edits require fresh review and failures retain their draft.
+  Apply the confirmed PUT version in place, rather than reporting a failed refresh
+  as a failed publish. Keep native server authority and stale-version checks.
+  Run `npx.cmd playwright test --config playwright.document-templates.config.ts`
+  for synthetic desktop/mobile publication and recovery checks.
 - Visual company document layouts use the closed `platform/documents/layout.ts` schema. Source providers register scalar fields, required section keys and sample facts; resolve only explicit accepted values, never client-selected ORM paths or expressions. Keep repeated identities and mandatory financial/property sections intact. Freeze the resolved body with issuance and preserve historical template/file versions. Preview uses explicit sample data under actual administrator authority, never customer-directory reads. See `docs/DOCUMENT_TEMPLATE_EDITOR_P8.md`.
 - Source-owned business documents use `platform/documents` and a typed owner/provider registered by application composition. Authorize Read, Create and Export record bounds separately, as well as each provider's source Read limits. Keep rendering/upload outside transactions and recheck fresh authority and the prepared fingerprint before immutable issuance/audit. Use source-owned native child tables, reviewed per-company template versions, explicit replacements and private exact-file downloads. Real Estate letter fields and eligibility belong in its provider. Do not infer missing historical participant/property facts on read or silently refresh accepted references. See `docs/DOCUMENT_ISSUANCE_P5.md`.
 - Recovery inventories must include every native document version and its frozen asset references. Reuse the operator-only `scripts/document-recovery.cjs`; validate tenant paths, bucket privacy, sizes and saved checksums against the authenticated storage companion. Keep release manifests separate from the previously released inventory. Copied-data rehearsal utilities remain private, never application compatibility/backfill code. See `docs/PARTICIPANTS_P6_REHEARSAL.md`.

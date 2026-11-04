@@ -59,6 +59,7 @@ import { PipelineEditor } from '@/modules/crm/components/pipeline-editor';
 import { TeamEditor } from '@/platform/teams/controls';
 import { CustomFieldEditor } from '@/modules/crm/components/custom-field-configuration';
 import { QuotationEditor } from '@/modules/sales-documents/components/quotations';
+import { DocumentTemplateControls } from '@/platform/documents/template-controls';
 import { LeadSourceList } from '@/modules/crm/components/lead-source-list';
 import { LostReasonList } from '@/modules/crm/components/lost-reason-list';
 import { SalesReports } from '@/modules/crm/components/sales-reports';
@@ -77,6 +78,7 @@ function Preview(){
  if(path[1]==='help-fixture')return <InfoHelpPreview/>;
  if(path[1]==='navigation-fixture')return <ListNavigationPreview/>;
  if(path[1]==='dropdown-labels-fixture')return <DropdownLabelsPreview/>;
+ if(path[1]==='settings' && path[2]==='documents')return <DocumentTemplateControls/>;
  if(path[1]==='crm' && key==='sales')return <BusinessModuleProvider><ApplicationAccessProvider><SalesReports initialView={query.get('view')==='team'?'team':'sales'}/></ApplicationAccessProvider></BusinessModuleProvider>;
  if(path[1]==='dashboard' || path[1]==='settings' && (!path[2] || path[2]==='taxes'))return <BusinessModuleProvider><CoreViewGuard role={query.get('role')||'MANAGER'} userId='manager'>{path[1]==='dashboard'?<Dashboard/>:path[2]==='taxes'?<Taxes/>:<Settings/>}</CoreViewGuard></BusinessModuleProvider>;
  if(path[1]==='reports')return <BusinessModuleProvider><CoreViewGuard role={query.get('role')||'MANAGER'} userId='manager'>{path[2]==='coupon-usage'?<CouponUsageReport/>:<AuditLogsReport/>}</CoreViewGuard></BusinessModuleProvider>;

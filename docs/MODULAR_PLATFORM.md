@@ -1,3 +1,43 @@
+## P13K quotation participants and company template publication
+
+The standard quotation PDF now uses the same saved participant document blocks
+as custom layouts and company letters. It prints every accepted customer and
+representative, groups roles by identity, and uses transaction correspondence
+instead of the primary directory contact's email/phone. Saved role captions are
+retained, so generic business customers and Real Estate applicants share the fix.
+Revisions without participant evidence keep their original saved customer display;
+malformed supplied participant evidence fails validation. No live master lookup,
+price recalculation, data migration or rewrite of archived issued files is added.
+
+Implemented during the local booking walkthrough. The demo tenant's saved two-applicant quotation was
+previewed read-only; its revision, snapshot and financial values were unchanged.
+Focused regression coverage includes standard/custom PDFs, multiple applicants,
+business representatives, grouped roles, correspondence and historical snapshots.
+The literal `Leave blank` entered in two demo instalment notes was corrected by
+the user through quotation revision 2, retaining the earlier revision unchanged.
+
+Company template publication now confirms the successful version beside the
+action, retains the saved fields in place and displays the issuance state.
+Published content cannot be resubmitted unchanged through this UI; editing shows
+an unpublished draft and requires fresh review. First publication of starter
+values still requires review. Errors retain the draft, and stale-version reloads
+require explicit discard. Successful PUT responses update the displayed saved
+version directly, so a failed follow-up GET cannot misreport a completed publish.
+The same control serves every registered document type and issuing company.
+Native publication authority, version checks, archival rules and APIs are unchanged.
+Run `npx.cmd playwright test --config playwright.document-templates.config.ts`
+for the isolated browser regressions; every API in that host is synthetic.
+
+Local verification passed seven browser scenarios and 45 document/participant
+checks, TypeScript, changed-file lint and whitespace checks. Desktop/mobile
+success captures were inspected. The real local demo's enabled version 2 was
+also opened, edited without saving and explicitly reloaded: its saved content
+was unchanged, with no business writes or browser page errors. No additional
+template version was published in the demo tenant during this verification.
+
+The walkthrough verification above is local. Staging and production release
+verification is recorded separately under `tmp/document-publication-release/`.
+
 ## P13J built-in dropdown labels
 
 System enum choices use sentence-case display labels across CRM, user/profile

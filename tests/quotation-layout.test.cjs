@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
-const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('fs'),{PDFDocument}=require('pdf-lib')
+const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('fs'),{PDFDocument,PDFPage}=require('pdf-lib')
 const {starterDocumentLayout,validateDocumentLayout}=require('../platform/documents/layout.ts')
 const {quotationLayoutCatalog:catalog}=require('../modules/sales-documents/quotation-layout-catalog.ts')
 const {quotationLayoutSample}=require('../modules/sales-documents/quotation-layout-sample.ts')
@@ -7,7 +7,15 @@ const {quotationLayoutDocument}=require('../modules/sales-documents/quotation-la
 const {quotationContentSchema}=require('../modules/sales-documents/quotation-validation.ts')
 const {calculateQuotation}=require('../modules/sales-documents/quotation-calculation.ts')
 const {buildQuotationPdf}=require('../modules/sales-documents/quotation-pdf.ts')
+const {emptyCorrespondence,informationLabels}=require('../platform/participants/information.ts')
 const record=snapshot=>({id:'QA-QUOTE',revision:2,revisionCreatedAt:'2026-10-29',snapshot})
+
+function capturePdfText(t){
+ const text=[],drawText=PDFPage.prototype.drawText
+ t.mock.method(PDFPage.prototype,'drawText',function(value,...args){text.push(value);return drawText.call(this,value,...args)})
+ return text
+}
+function standardSample(){const s=quotationLayoutSample(starterDocumentLayout(catalog));delete s.content.layout;return s}
 test('source-specific starter has no order-only fields and resets independently of other drafts',()=>{
  const a=starterDocumentLayout(catalog),b=starterDocumentLayout(catalog);a.content.reverse();assert.notDeepEqual(a,b);assert.deepEqual(validateDocumentLayout(b,catalog),b)
  const sample=quotationLayoutSample(b);for(const key of ['order.reference','customer.password']){const bad=structuredClone(sample.content);bad.layout.content.unshift({type:'paragraph',content:[{type:'documentField',attrs:{key}}]});assert.equal(quotationContentSchema.safeParse(bad).success,false)}
@@ -33,4 +41,36 @@ test('custom PDF supports Unicode, formatting, inline logos, registration QR and
  const bytes=await buildQuotationPdf(record(s),true),pdf=await PDFDocument.load(bytes);assert.equal(Buffer.from(bytes).subarray(0,5).toString(),'%PDF-');assert(pdf.getPageCount()>=2)
  fs.mkdirSync('tmp/pdfs',{recursive:true});fs.writeFileSync('tmp/pdfs/p9-quotation-layout.pdf',bytes)
  const normal=structuredClone(s);delete normal.content.layout;const standard=await buildQuotationPdf(record(normal),true);assert.equal((await PDFDocument.load(standard)).getTitle(),normal.content.title)
+})
+
+test('standard quotation PDF prints every saved applicant and transaction correspondence',async t=>{
+ const s=standardSample(),text=capturePdfText(t)
+ s.customer.email='master-only@example.test';s.customer.phone='+910000000000'
+ s.participants.presentation={configurationVersion:1,title:'Customer information (CIF)',labels:informationLabels,roleLabels:{CUSTOMER:'Primary applicant',ADDITIONAL_CUSTOMER:'Co-applicant',REPRESENTATIVE:'Representative'}}
+ s.participants.participants.forEach((row,i)=>{row.information={...emptyCorrespondence,email:`accepted-${i}@example.test`,phone:`+91987654321${i}`,addressLine1:`Accepted address ${i}`,addressLine2:`Building ${i}`,city:'Panaji',region:'Goa',postalCode:'403001',country:'India'}})
+ const before=JSON.stringify(s),bytes=await buildQuotationPdf(record(s),true),rendered=text.join('\n')
+ assert.equal(JSON.stringify(s),before)
+ for(const value of ['Sample Customer','Sample Additional Customer','Primary applicant','Co-applicant','Accepted address 0','Accepted address 1','Building 0','Building 1','Panaji, Goa, 403001','India','accepted-0@example.test','accepted-1@example.test','+919876543210','+919876543211','100,000.00'])assert(rendered.includes(value),`Missing printed value: ${value}`)
+ assert(!rendered.includes('master-only@example.test'));assert(!rendered.includes('+910000000000'))
+ assert((await PDFDocument.load(bytes)).getPageCount()>=1)
+ fs.mkdirSync('tmp/pdfs',{recursive:true});fs.writeFileSync('tmp/pdfs/standard-quotation-applicants.pdf',bytes)
+})
+
+test('standard quotation PDF supports a business customer and groups its representative roles',async t=>{
+ const s=standardSample(),text=capturePdfText(t),party=(id,name,kind='PERSON')=>({id,name,kind,email:null,phone:null,sourceVersion:1})
+ const representative=party('representative','QA Joint Representative')
+ s.participants={format:1,participants:[{role:'CUSTOMER',party:party('buyer','QA Buying Business','BUSINESS')},{role:'ADDITIONAL_CUSTOMER',party:representative},{role:'REPRESENTATIVE',party:representative},{role:'REPRESENTATIVE',party:party('second','QA Second Representative')}]}
+ await buildQuotationPdf(record(s),true)
+ const rendered=text.join('\n');for(const name of ['QA Buying Business','QA Joint Representative','QA Second Representative','Main customer','Additional customer, Representative'])assert(rendered.includes(name),`Missing printed value: ${name}`)
+ assert.equal(text.filter(value=>value==='QA Joint Representative').length,1)
+ assert(!rendered.includes('Co-applicant'))
+})
+
+test('standard quotation PDF retains historical customer evidence and rejects malformed participant snapshots',async t=>{
+ const s=standardSample(),text=capturePdfText(t);delete s.participants
+ s.customer={name:'Historical Buyer',email:'historic@example.test',phone:'+919876543210'}
+ await buildQuotationPdf(record(s),true)
+ const rendered=text.join('\n');assert(rendered.includes('Prepared for Historical Buyer'));assert(rendered.includes('historic@example.test'));assert(rendered.includes('+919876543210'));assert(!rendered.includes('Sample Additional Customer'))
+ s.participants={format:1,participants:[]}
+ await assert.rejects(buildQuotationPdf(record(s),true),error=>error.status===409)
 })
