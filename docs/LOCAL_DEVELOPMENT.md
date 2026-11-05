@@ -2,7 +2,8 @@
 
 The local demo uses its own PostgreSQL 17 Docker volume. It does not connect to
 either Supabase project and never copies client data. Docker Desktop and installed
-project dependencies are required. Ports 55445 (database) and 3109 (app) must be free.
+project dependencies are required. Ports 55445 (database), 55446 (storage) and
+3109 (app) must be free. All three bind only to the local machine.
 
 ## Start and sign in
 
@@ -13,7 +14,8 @@ npm.cmd run local:demo
 ```
 
 The command creates local credentials if needed, starts PostgreSQL, checks immutable
-migration history, applies pending committed migrations, generates Prisma Client, starts the real application
+migration history, applies pending committed migrations, generates Prisma Client,
+starts isolated Supabase Storage, starts the real application
 and provisions sample data once through its normal APIs. Subsequent starts preserve
 records, edits, passwords, access profiles and assignments. Schema migrations still
 run when new committed migrations are added. There is no automatic database reset.
@@ -44,9 +46,10 @@ covering creation when reviewing the demo later.
 
 All business modules are initially enabled. The prepopulated business data focuses
 on generic CRM and team reporting; other modules can be tested with new local
-records. Hosted email and Supabase Storage credentials are deliberately absent.
-Storage/provider-dependent workflows continue to use isolated staging checks;
-local startup must never borrow production service credentials.
+records. Hosted email and hosted Supabase credentials are deliberately absent.
+Local document archives and branding use their own Docker Storage service, not
+either hosted Supabase project. Local startup never borrows production service
+credentials. Email delivery still requires a separately configured test provider.
 
 `Ctrl+C` stops the application; the database and its named volume remain. To stop
 PostgreSQL without deleting data, use `npm.cmd run local:stop-db`. Keep
@@ -57,6 +60,38 @@ also stop for explicit review instead of retrying business writes blindly.
 
 The local app uses `tmp/local-demo/next` and an isolated TypeScript configuration,
 so it does not overwrite the optimized `.next` build used by workflow tests.
+
+## Local PDF and branding storage
+
+`local:demo` and `local:setup` start the real Supabase Storage API with a separate
+metadata database, a file volume and a loopback gateway. The storage database has
+no host port. This uses the existing application upload, immutable archive and
+signed-download code; it does not emulate successful uploads or change issuance
+requirements. Issuing a document still requires a reviewed company template and
+an eligible source record. Downloading a draft does not issue it.
+
+The private `tenant-documents` bucket accepts PDFs up to 10 MiB. Issued documents
+are downloaded through the application access checks and a short-lived signed
+URL. The public `tenant-branding` bucket accepts PNG/WebP assets up to 512 KiB.
+Both buckets match the application's existing storage limits and visibility.
+
+Generated local keys are saved in ignored `.env.local-demo-storage`; they are
+injected into the demo process automatically. Keep this file with the persistent
+`ls-erp-local-storage_metadata` and `ls-erp-local-storage_files` Docker volumes.
+Startup refuses to replace missing credentials when either volume already exists.
+Do not delete volumes to restart services. Files survive container restarts.
+
+To start storage independently, run `npm.cmd run local:storage`. To stop its
+services without deleting files:
+
+```powershell
+docker compose --env-file .env.local-demo-storage -f compose.local-storage.yml stop
+```
+
+The HTTP exception is restricted to development demo mode, no Vercel environment,
+the dedicated local database on port 55445, and exactly `http://127.0.0.1:55446`.
+Hosted and production applications retain the HTTPS Supabase origin requirement.
+Keep storage administration secrets and credentials out of logs and Git.
 
 ## Migration workflow
 

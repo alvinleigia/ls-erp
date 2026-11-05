@@ -22,10 +22,12 @@ export async function fixture(page: Page) {
       return route.fulfill({ json: { ok: true, item: { ...(path.includes("definitions") ? definition : path.includes("groups") ? group : request), ...body } } })
     }
     if (path === "/api/modules") return route.fulfill({ json: { modules: ["leaves","shifts","appointments","services"].map(key => ({ key, allowed: true, enabled: true })), permissions: null } })
+    if (path === "/api/shifts/staff-choices") return route.fulfill({ json: { items: [staff, flexStaff].map(row=>({...row,eligible:true,retained:false})), selected: [staff,flexStaff].filter(row=>(url.searchParams.get("selected")||"").split(",").includes(row.id)), total: 2, totalPages: 1 } })
+    if (path === "/api/workspace/office") return route.fulfill({ json: { creationOffice: { id: "office" }, version: 1 } })
     queries.push(url)
     if (path === "/api/leaves/request-options") return route.fulfill({ json: { items: [{ value: "leave", label: "AL - Annual leave" }] } })
     if (path.startsWith("/api/settings")) return route.fulfill({ json: { settings: { timeFormat: "H24", dateFormat: "dd/MM/yyyy", firstDayOfWeek: "MONDAY", workingHours: [] } } })
-    if (path === "/api/shifts/roster") return route.fulfill({ json: { items: [staff, flexStaff], days: [], total: 2, page: Number(url.searchParams.get("page") || 1), pageSize: 100, totalPages: 1 } })
+    if (path === "/api/shifts/roster") { const days=[]; for(let date=new Date(url.searchParams.get("startDate")+"T00:00:00Z");date<=new Date(url.searchParams.get("endDate")+"T00:00:00Z");date.setUTCDate(date.getUTCDate()+1))for(const user of [staff,flexStaff])days.push({staffId:user.id,date:date.toISOString().slice(0,10),state:"NONWORKING",periods:[],paidMinutes:0,frozen:false,canEdit:true});return route.fulfill({ json: { items: [staff, flexStaff], days, total: 2, page: Number(url.searchParams.get("page") || 1), pageSize: 100, totalPages: 1 } }) }
     if (path === "/api/leaves/definitions/leave") return route.fulfill({ json: { item: definition } })
     if (path === "/api/leaves/groups/group") return route.fulfill({ json: { item: group } })
     if (path === "/api/shifts/flexible-patterns/pattern") return route.fulfill({ json: { item: pattern } })

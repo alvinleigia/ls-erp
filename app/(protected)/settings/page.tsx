@@ -1,4 +1,5 @@
 "use client"
+import { SectionTabs } from "@/components/erp/section-tabs"
 import { InfoHelp } from "@/components/erp/info-help"
 import { useCurrentResourceAction } from "@/platform/access/view-guard"
 
@@ -275,8 +276,7 @@ export default function SettingsPage() {
       </div>
 
       {!canEdit && <p role="status" className="text-sm text-muted-foreground">You have read-only access to business settings.</p>}
-      <fieldset disabled={!canEdit} className="space-y-6">
-      <div className="rounded-xl border bg-card p-6">
+      <><SectionTabs scope="business-settings" keepMounted validationErrors={errors} tabs={[{value:"overview",label:"Locale and format",content:<fieldset disabled={!canEdit}><div className="rounded-xl border bg-card p-6">
         <div className="grid gap-4 sm:grid-cols-2">
           <FormField id="settings-locale" label="Locale" error={errors.locale}>
             <select
@@ -374,23 +374,7 @@ export default function SettingsPage() {
               ))}
             </select>
           </FormField>
-          <FormField
-            id="settings-email-notifications"
-            label="Email notifications"
-            error={errors.emailNotificationsEnabled}
-          >
-            <label className="flex h-9 items-center gap-2 rounded-md border border-input bg-background px-3 text-sm">
-              <input
-                id="settings-email-notifications"
-                type="checkbox"
-                checked={form.emailNotificationsEnabled}
-                onChange={(event) =>
-                  updateField("emailNotificationsEnabled", event.target.checked)
-                }
-              />
-              Enable app email notifications
-            </label>
-          </FormField>
+
           <FormField
             id="settings-currency-placement"
             label="Currency symbol placement"
@@ -430,9 +414,24 @@ export default function SettingsPage() {
             </select>
           </FormField>
         </div>
-      </div>
-
-      <div className="rounded-xl border bg-card p-6">
+      </div></fieldset>},
+{value:"email",label:"Email delivery",content:<fieldset disabled={!canEdit}><div className="rounded-xl border bg-card p-6"><FormField
+            id="settings-email-notifications"
+            label="Email notifications"
+            error={errors.emailNotificationsEnabled}
+          >
+            <label className="flex h-9 items-center gap-2 rounded-md border border-input bg-background px-3 text-sm">
+              <input
+                id="settings-email-notifications"
+                type="checkbox"
+                checked={form.emailNotificationsEnabled}
+                onChange={(event) =>
+                  updateField("emailNotificationsEnabled", event.target.checked)
+                }
+              />
+              Enable app email notifications
+            </label>
+          </FormField>
         <div className="flex items-center gap-2">
           <h2 className="text-lg font-semibold">Email delivery</h2>
           <InfoHelp title="Email delivery">
@@ -462,9 +461,8 @@ export default function SettingsPage() {
             <p className="mt-1 text-muted-foreground">{emailDelivery?.usernameMasked ?? "-"}</p>
           </div>
         </div>
-      </div>
-
-      <div className="rounded-xl border bg-card p-6">
+      </div></fieldset>},
+{value:"hours",label:"Working hours",content:<fieldset disabled={!canEdit}><div className="rounded-xl border bg-card p-6">
         <div className="space-y-1">
           <h2 className="text-lg font-semibold">Working hours</h2>
           <p className="text-sm text-muted-foreground">
@@ -578,9 +576,8 @@ export default function SettingsPage() {
             </div>
           ))}
         </div>
-      </div>
-
-      <div className="rounded-xl border bg-card p-6">
+      </div></fieldset>},
+{value:"special",label:"Special hours",content:<fieldset disabled={!canEdit}><div className="rounded-xl border bg-card p-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="space-y-1">
             <h2 className="text-lg font-semibold">Special hours</h2>
@@ -752,14 +749,11 @@ export default function SettingsPage() {
             No overrides yet.
           </p>
         )}
-      </div>
-
-      <div className="flex justify-end">
+      </div></fieldset>}]}/><div className="flex justify-end">
         <Button disabled={!canEdit} onClick={save} loading={saving} loadingText="Saving...">
           Save settings
         </Button>
-      </div>
-      </fieldset>
+      </div></>
     </div>
   )
 }

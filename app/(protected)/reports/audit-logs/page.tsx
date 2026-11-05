@@ -1,4 +1,5 @@
 "use client"
+import { SectionTabs } from "@/components/erp/section-tabs"
 import { useListState } from "@/components/erp/list-navigation"
 
 import * as React from "react"
@@ -290,19 +291,21 @@ function AuditEntry({ id, onClose }: { id: string; onClose: () => void }) {
  }, [])
  return <RecordPanel title={row?.event || "Audit entry"} description={row ? formatReportDateTime(row.createdAt, row.context) : "Read-only event history"} onClose={onClose} actions={<Button variant="outline" onClick={() => { setRow(null); refresh() }}>Reload entry</Button>}>
   {error ? <p role="alert" className="text-destructive">{error}</p> : !row ? <p>Loading audit entry...</p> : <>
-   <Section title="Event details"><ReadOnlyFields fields={[
+<SectionTabs scope="audit-entry-view" tabs={[
+{ value: "overview", label: "Event details", content: <><Section title="Event details"><ReadOnlyFields fields={[
     { label: "Actor", value: row.actorName || row.actorEmail || row.actorUserId }, { label: "Actor role", value: row.actorRole },
     { label: "Actor ID", value: row.actorUserId }, { label: "Request ID", value: row.requestId },
     { label: "Entity type", value: row.entityType }, { label: "Entity ID", value: row.entityId },
-   ]} /></Section>
-   <Section title="Changed fields"><p className="mb-3 text-sm text-muted-foreground">Only recorded changes are shown. Credentials are redacted.</p>
+   ]} /></Section></> },
+{ value: "changes", label: "Changed fields", content: <><Section title="Changed fields"><p className="mb-3 text-sm text-muted-foreground">Only recorded changes are shown. Credentials are redacted.</p>
     {row.changes.length ? <div className="overflow-x-auto rounded-md border"><table className="w-full text-sm"><thead><tr><th className="p-3 text-left">Field</th><th className="p-3 text-left">Before</th><th className="p-3 text-left">After</th></tr></thead><tbody>{row.changes.map(change => <tr key={change.field} className="border-t"><th className="max-w-40 break-words p-3 text-left font-medium">{change.field}</th><td className="p-3 align-top"><pre className="max-h-48 max-w-64 overflow-auto whitespace-pre-wrap break-words text-xs">{prettyJson(change.before)}</pre></td><td className="p-3 align-top"><pre className="max-h-48 max-w-64 overflow-auto whitespace-pre-wrap break-words text-xs">{prettyJson(change.after)}</pre></td></tr>)}</tbody></table></div> : <p className="text-sm text-muted-foreground">No field changes were recorded for this event.</p>}
-   </Section>
-   <details className="rounded-lg border p-4"><summary className="cursor-pointer font-medium">Recorded snapshots</summary><div className="mt-4 space-y-4">
+   </Section></> },
+{ value: "evidence", label: "Recorded evidence", content: <><details className="rounded-lg border p-4"><summary className="cursor-pointer font-medium">Recorded snapshots</summary><div className="mt-4 space-y-4">
     <Section title="Metadata"><pre className="max-h-64 overflow-auto rounded-md bg-muted p-3 text-xs">{prettyJson(row.metadata)}</pre></Section>
     <Section title="Before"><pre className="max-h-80 overflow-auto rounded-md bg-muted p-3 text-xs">{prettyJson(row.before)}</pre></Section>
     <Section title="After"><pre className="max-h-80 overflow-auto rounded-md bg-muted p-3 text-xs">{prettyJson(row.after)}</pre></Section>
-   </div></details>
-  </>}
+   </div></details></> }
+]} />
+</>}
  </RecordPanel>
 }

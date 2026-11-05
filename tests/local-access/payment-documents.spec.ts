@@ -15,9 +15,10 @@ test('posted partial payment issues a receipt, preserves the balance, then warns
   const payment=await json(context,`/api/sales-orders/${order.id}/receivables/payments`,200,'POST',{requestKey:crypto.randomUUID(),version:1,amount:'30',receivedOn:'2026-01-01',method:'BANK_TRANSFER',reference:'QA-TXN',note:''}),endpoint=`/api/payment-receipts/${payment.id}/documents`
   const company=(await json(context,'/api/document-templates/catalog')).items[0],current=await json(context,`/api/document-templates?${new URLSearchParams({companyId:company.id,providerKey:'payment-receipt'})}`)
   await page.goto('/settings/documents');await page.getByLabel('Document type',{exact:true}).click();await page.getByRole('menuitemradio',{name:'Payment receipt',exact:true}).click();await expect(page.getByLabel('Document title',{exact:true})).toHaveValue('Payment receipt')
-  await page.getByLabel('Issuing company address',{exact:true}).fill('QA office, Pune');await page.getByLabel('Enable new issuance with this version').check();await page.getByLabel('I have reviewed the wording').check();await page.getByRole('button',{name:'Publish template version',exact:true}).click();await expect(page.getByRole('heading',{name:/version 1$/})).toBeVisible()
+  await page.getByRole('tab',{name:'Company',exact:true}).click();await page.getByLabel('Issuing company address',{exact:true}).fill('QA office, Pune');await page.getByLabel('Enable new issuance with this version').check();await page.getByLabel('I have reviewed the wording').check();await page.getByRole('button',{name:'Publish template version',exact:true}).click();await expect(page.getByRole('heading',{name:/version 1$/})).toBeVisible()
   expect(current.version).toBe(0)
-  await page.goto(`/sales-orders/${order.id}`)
+  await page.goto(`/sales-orders/${order.id}`);await page.getByRole('tab',{name:'Payments',exact:true}).click()
+  await page.getByRole('tab',{name:'Payment history',exact:true}).click();
   const card=page.getByRole('article',{name:'Payment QA-TXN',exact:true});await card.getByRole('button',{name:'Receipt documents',exact:true}).click()
   const receipt=card.getByRole('region',{name:'Payment receipt documents',exact:true})
   await receipt.getByRole('button',{name:'Prepare document',exact:true}).click();await expect(receipt.getByRole('button',{name:'Download draft preview',exact:true})).toBeVisible()

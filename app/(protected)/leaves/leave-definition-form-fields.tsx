@@ -1,4 +1,5 @@
 "use client"
+import { SectionTabs } from "@/components/erp/section-tabs"
 import { enumLabel } from "@/lib/enum-label"
 import { useCurrentResourceAction } from "@/platform/access/view-guard"
 
@@ -49,7 +50,9 @@ export function LeaveDefinitionFormFields({
     }
 
   return (
-    <div className="space-y-5"><Section title="Leave details"><div className="grid gap-4 md:grid-cols-2">
+    <div className="space-y-5">
+<SectionTabs scope="leave-definition-form" keepMounted validationErrors={errors} tabs={[
+{ value: "overview", label: "Details", content: <><Section title="Leave details"><div className="grid gap-4 md:grid-cols-2">
         <FormField id="code" label="Leave code" error={errors.code}>
           <Input
             id="code"
@@ -112,8 +115,8 @@ export function LeaveDefinitionFormFields({
             ))}
           </Select>
         </FormField>
-      </div></Section>
-<Section title="Request limits"><div className="grid gap-4 md:grid-cols-3">
+      </div></Section></> },
+{ value: "rules", label: "Request rules", content: <><Section title="Request limits"><div className="grid gap-4 md:grid-cols-3">
         <FormField
           id="minDaysPerRequest"
           label="Minimum allowed at a time"
@@ -218,8 +221,8 @@ export function LeaveDefinitionFormFields({
             searchPlaceholder="Search leave definitions..."
           />
         </FormField>
-      </div></Section>
-<Section title="Week off and holiday rules"><div className="space-y-3">
+      </div></Section></> },
+{ value: "calendar", label: "Week off and holidays", content: <><Section title="Week off and holiday rules"><div className="space-y-3">
         <div className="grid gap-4 md:grid-cols-2">
           <FormField
             id="weekOffSingleSideAllowed"
@@ -278,6 +281,8 @@ export function LeaveDefinitionFormFields({
             </label>
           </FormField>
         </div>
-      </div></Section></div>
+      </div></Section></> }
+]} />
+</div>
   )
 }

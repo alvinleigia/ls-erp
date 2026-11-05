@@ -6,10 +6,10 @@ import { DocumentDashboardWidgets } from "@/modules/sales-documents/components/d
 import type { DashboardDisplaySettings } from "@/components/dashboard/widgets"
 import type { SalesDashboard, DashboardFilterContext } from "./types"
 
-export function SalesWidgets({ data, settings, context }: { data: SalesDashboard; settings: DashboardDisplaySettings; context: DashboardFilterContext }) {
+export function SalesWidgets({ data, settings, context, section }: { data: SalesDashboard; settings: DashboardDisplaySettings; context: DashboardFilterContext; section?: "crm" | "projects" | "documents" }) {
   return <>
-    <CrmDashboardWidgets data={data} settings={settings} links={context.links} />
-    <ProjectDashboardWidgets projects={data.projects} />
-    <DocumentDashboardWidgets data={data} settings={settings} links={context.links} />
+    {(!section || section === "crm") && <CrmDashboardWidgets data={data} settings={settings} links={context.links} />}
+    {(!section || section === "projects") && <ProjectDashboardWidgets projects={data.projects} />}
+    {(!section || section === "documents") && <DocumentDashboardWidgets data={data} settings={settings} links={context.links} />}
   </>
 }

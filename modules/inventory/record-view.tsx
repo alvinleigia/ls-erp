@@ -1,4 +1,5 @@
 "use client"
+import { SectionTabs } from "@/components/erp/section-tabs"
 
 import type { ReactNode } from "react"
 import { Button } from "@/components/ui/button"
@@ -18,26 +19,32 @@ export function CategoryView({ item, onClose, onEdit }: ViewProps & { item: Inve
 
 export function SupplierView({ item, onClose, onEdit }: ViewProps & { item: SupplierRow }) {
   return <RecordPanel title={item.name} description="Supplier details" onClose={onClose} actions={edit(onEdit)}>
-    <Section title="Contact and ordering"><ReadOnlyFields fields={[{ label: "Contact person", value: item.contactPerson }, { label: "Email", value: item.email }, { label: "Phone", value: item.phone }, { label: "Lead days", value: item.leadTimeDays }, { label: "Status", value: status(item.status) }]} /></Section>
-    <Section title="Tax registration"><ReadOnlyFields fields={[{ label: "Tax registered", value: item.isTaxRegistered ? "Yes" : "No" }, { label: "Registration type", value: item.taxRegistrationType }, { label: "Registration number", value: item.taxRegistrationNumber }]} /></Section>
-    <Section title="Address"><ReadOnlyFields fields={[{ label: "City", value: item.city }, { label: "State / province", value: item.state }, { label: "Country", value: item.country }]} /></Section>
-    <Section title="Notes"><p className="whitespace-pre-wrap break-words text-sm">{item.notes || "No notes."}</p></Section>
-  </RecordPanel>
+<SectionTabs scope="supplier-view" tabs={[
+{ value: "overview", label: "Contact", content: <><Section title="Contact and ordering"><ReadOnlyFields fields={[{ label: "Contact person", value: item.contactPerson }, { label: "Email", value: item.email }, { label: "Phone", value: item.phone }, { label: "Lead days", value: item.leadTimeDays }, { label: "Status", value: status(item.status) }]} /></Section></> },
+{ value: "address", label: "Address", content: <><Section title="Address"><ReadOnlyFields fields={[{ label: "City", value: item.city }, { label: "State / province", value: item.state }, { label: "Country", value: item.country }]} /></Section></> },
+{ value: "tax", label: "Tax registration", content: <><Section title="Tax registration"><ReadOnlyFields fields={[{ label: "Tax registered", value: item.isTaxRegistered ? "Yes" : "No" }, { label: "Registration type", value: item.taxRegistrationType }, { label: "Registration number", value: item.taxRegistrationNumber }]} /></Section></> },
+{ value: "notes", label: "Notes", content: <><Section title="Notes"><p className="whitespace-pre-wrap break-words text-sm">{item.notes || "No notes."}</p></Section></> }
+]} />
+</RecordPanel>
 }
 
 export function ProductView({ item, onClose, onEdit, formatMoney, taxNames }: ViewProps & { item: InventoryProductRow; formatMoney: (cents: number) => string; taxNames: string[] }) {
   return <RecordPanel title={item.name} description={item.sku} onClose={onClose} actions={edit(onEdit)}>
-    <Section title="Product details"><ReadOnlyFields fields={[{ label: "SKU", value: item.sku }, { label: "Category", value: item.category.name }, { label: "Unit", value: item.unit }, { label: "Status", value: status(item.status) }, { label: "Description", value: item.description }]} /></Section>
-    <Section title="Pricing and stock"><ReadOnlyFields fields={[{ label: "Stock office", value: `${item.office.companyName} / ${item.office.name}${item.office.active ? "" : " (Closed)"}` }, { label: "Cost price", value: formatMoney(item.costPriceCents) }, { label: "MRP", value: formatMoney(item.mrpCents) }, { label: "Stock on hand", value: item.onHandQty }, { label: "Reorder point", value: item.reorderPoint }, { label: "Reorder quantity", value: item.reorderQty }, { label: "Physical product", value: item.isPhysical ? "Yes" : "No" }]} /></Section>
-    <Section title="Taxes"><p className="text-sm">{taxNames.length ? taxNames.join(", ") : item.taxIds.length ? `${item.taxIds.length} assigned taxes` : "No taxes assigned."}</p></Section>
-    <Section title="Suppliers">{!item.supplierLinks.length ? <p className="text-sm text-muted-foreground">No linked suppliers.</p> : item.supplierLinks.map(link => <div key={link.supplierId} className="space-y-3 rounded-lg border p-4"><h3 className="font-medium">{link.supplierName}{link.isPreferred ? " (Preferred)" : ""}</h3><ReadOnlyFields fields={[{ label: "Supplier SKU", value: link.supplierSku }, { label: "Supplier cost", value: link.supplierCostCents === null ? null : formatMoney(link.supplierCostCents) }, { label: "Minimum order", value: link.minOrderQty }, { label: "Lead days", value: link.leadTimeDays }]} /></div>)}</Section>
-  </RecordPanel>
+<SectionTabs scope="product-view" tabs={[
+{ value: "overview", label: "Details", content: <><Section title="Product details"><ReadOnlyFields fields={[{ label: "SKU", value: item.sku }, { label: "Category", value: item.category.name }, { label: "Unit", value: item.unit }, { label: "Status", value: status(item.status) }, { label: "Description", value: item.description }]} /></Section></> },
+{ value: "stock", label: "Pricing and stock", content: <><Section title="Pricing and stock"><ReadOnlyFields fields={[{ label: "Stock office", value: `${item.office.companyName} / ${item.office.name}${item.office.active ? "" : " (Closed)"}` }, { label: "Cost price", value: formatMoney(item.costPriceCents) }, { label: "MRP", value: formatMoney(item.mrpCents) }, { label: "Stock on hand", value: item.onHandQty }, { label: "Reorder point", value: item.reorderPoint }, { label: "Reorder quantity", value: item.reorderQty }, { label: "Physical product", value: item.isPhysical ? "Yes" : "No" }]} /></Section>
+<Section title="Taxes"><p className="text-sm">{taxNames.length ? taxNames.join(", ") : item.taxIds.length ? `${item.taxIds.length} assigned taxes` : "No taxes assigned."}</p></Section></> },
+{ value: "suppliers", label: "Suppliers", content: <><Section title="Suppliers">{!item.supplierLinks.length ? <p className="text-sm text-muted-foreground">No linked suppliers.</p> : item.supplierLinks.map(link => <div key={link.supplierId} className="space-y-3 rounded-lg border p-4"><h3 className="font-medium">{link.supplierName}{link.isPreferred ? " (Preferred)" : ""}</h3><ReadOnlyFields fields={[{ label: "Supplier SKU", value: link.supplierSku }, { label: "Supplier cost", value: link.supplierCostCents === null ? null : formatMoney(link.supplierCostCents) }, { label: "Minimum order", value: link.minOrderQty }, { label: "Lead days", value: link.leadTimeDays }]} /></div>)}</Section></> }
+]} />
+</RecordPanel>
 }
 
 export function PurchaseView({ item, onClose, actions, formatMoney, formatDate }: { item: PurchaseOrderRow; onClose: () => void; actions?: ReactNode; formatMoney: (cents: number) => string; formatDate: (value: string) => string }) {
   return <RecordPanel title={item.orderNumber} description="Purchase order" onClose={onClose} actions={actions}>
-    <Section title="Order details"><ReadOnlyFields fields={[{ label: "Office", value: `${item.office.companyName} / ${item.office.name}${item.office.active ? "" : " (Closed)"}` }, { label: "Supplier", value: item.supplier.name }, { label: "Status", value: status(item.status) }, { label: "Order date", value: formatDate(item.orderDate) }, { label: "Expected date", value: item.expectedDate ? formatDate(item.expectedDate) : null }, { label: "Notes", value: item.notes }]} /></Section>
-    <Section title="Order items">{item.items.map(line => <div key={line.id} className="space-y-3 rounded-lg border p-4"><h3 className="font-medium">{line.product.sku} — {line.product.name}</h3><ReadOnlyFields fields={[{ label: "Ordered quantity", value: line.quantity }, { label: "Received quantity", value: line.receivedQty }, { label: "Unit cost", value: formatMoney(line.unitCostCents) }, { label: "Tax", value: formatMoney(line.lineTaxCents) }, { label: "Line total", value: formatMoney(line.lineTotalCents) }]} /></div>)}</Section>
-    <Section title="Totals"><ReadOnlyFields fields={[{ label: "Subtotal", value: formatMoney(item.subtotalCents) }, { label: "Tax", value: formatMoney(item.taxCents) }, { label: "Total", value: formatMoney(item.totalCents) }]} /></Section>
-  </RecordPanel>
+<SectionTabs scope="purchase-view" tabs={[
+{ value: "overview", label: "Summary", content: <><Section title="Order details"><ReadOnlyFields fields={[{ label: "Office", value: `${item.office.companyName} / ${item.office.name}${item.office.active ? "" : " (Closed)"}` }, { label: "Supplier", value: item.supplier.name }, { label: "Status", value: status(item.status) }, { label: "Order date", value: formatDate(item.orderDate) }, { label: "Expected date", value: item.expectedDate ? formatDate(item.expectedDate) : null }, { label: "Notes", value: item.notes }]} /></Section>
+<Section title="Totals"><ReadOnlyFields fields={[{ label: "Subtotal", value: formatMoney(item.subtotalCents) }, { label: "Tax", value: formatMoney(item.taxCents) }, { label: "Total", value: formatMoney(item.totalCents) }]} /></Section></> },
+{ value: "items", label: "Order items", content: <><Section title="Order items">{item.items.map(line => <div key={line.id} className="space-y-3 rounded-lg border p-4"><h3 className="font-medium">{line.product.sku} — {line.product.name}</h3><ReadOnlyFields fields={[{ label: "Ordered quantity", value: line.quantity }, { label: "Received quantity", value: line.receivedQty }, { label: "Unit cost", value: formatMoney(line.unitCostCents) }, { label: "Tax", value: formatMoney(line.lineTaxCents) }, { label: "Line total", value: formatMoney(line.lineTotalCents) }]} /></div>)}</Section></> }
+]} />
+</RecordPanel>
 }

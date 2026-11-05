@@ -1,4 +1,5 @@
 "use client"
+import { SectionTabs } from "@/components/erp/section-tabs"
 import { inventoryUnitLabels } from "@/lib/constants/inventory"
 
 import { Select, Textarea, Checkbox } from "@/components/erp/controls"
@@ -50,7 +51,9 @@ export function ProductFormFields({
   const canArchive = useCurrentResourceAction("archive")
 
   return (
-    <div className="space-y-5"><Section title="Product details">
+    <div className="space-y-5">
+<SectionTabs scope="product-form" keepMounted validationErrors={errors} tabs={[
+{ value: "overview", label: "Product", content: <><Section title="Product details">
       <div className="grid gap-4 md:grid-cols-2">
         <FormField id="product-sku" label="SKU" error={errors.sku}>
           <Input
@@ -125,7 +128,8 @@ export function ProductFormFields({
         </FormField>
       </div>
 
-      </Section><Section title="Pricing and stock" help={<div><p className="font-medium">Shared product and stock fields</p>MRP is shared across offices. Cost, count and reorder settings apply to the stock office shown above.</div>}>
+      </Section></> },
+{ value: "stock", label: "Pricing and stock", content: <><Section title="Pricing and stock" help={<div><p className="font-medium">Shared product and stock fields</p>MRP is shared across offices. Cost, count and reorder settings apply to the stock office shown above.</div>}>
 
       <div className="grid gap-4 sm:grid-cols-2">
         <FormField id="product-cp" label="Cost price (CP)" error={errors.costPriceCents}>
@@ -198,7 +202,8 @@ export function ProductFormFields({
         </label>
       </div>
 
-      </Section><Section title="Taxes">
+      </Section></> },
+{ value: "tax", label: "Taxes", content: <><Section title="Taxes">
       <div className="space-y-2">
         <div className="grid gap-2 md:grid-cols-2">
           {taxes.map((tax) => {
@@ -223,7 +228,8 @@ export function ProductFormFields({
         </div>
       </div>
 
-      </Section><Section title="Suppliers">
+      </Section></> },
+{ value: "suppliers", label: "Suppliers", content: <><Section title="Suppliers">
       <div className="space-y-3">
         <div className="flex items-center justify-between">
           <p className="text-sm font-medium">Supplier links</p>
@@ -396,7 +402,8 @@ export function ProductFormFields({
           </div>
         ))}
       </div>
-    </Section>
-    </div>
+    </Section></> }
+]} />
+</div>
   )
 }

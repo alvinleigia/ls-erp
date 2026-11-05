@@ -1,4 +1,5 @@
 "use client"
+import { SectionTabs } from "@/components/erp/section-tabs"
 import { useListState } from "@/components/erp/list-navigation"
 import { useBusinessModules } from "@/platform/module-provider"
 import { useCurrentResourceAction } from "@/platform/access/view-guard"
@@ -451,13 +452,16 @@ export default function AppointmentCouponsPage() {
     <PageHeader title="Appointment coupons" description="Manage reusable booking discounts and eligibility." actions={<Button disabled={!canCreate} onClick={openCreate}><PlusIcon className="size-4" />New coupon</Button>} />
     <Surface><TableToolbar table={table} searchPlaceholder="Search coupons"><Button variant="outline" disabled={loading} onClick={() => void loadCoupons()}>Refresh</Button></TableToolbar><DataTable table={table} loading={loading} emptyMessage="No coupons found." /><TablePagination table={table} totalRows={totalRows} loading={loading} /></Surface>
     {viewing && <RecordPanel title={viewing.code} description={viewing.name || "Appointment coupon"} onClose={() => setViewing(null)} actions={<Button disabled={!canEdit} onClick={() => openEdit(viewing)}>Edit details</Button>}>
-      <Section title="Discount"><ReadOnlyFields fields={[{ label: "Type", value: viewing.discountType }, { label: "Value", value: viewing.discountType === "PERCENT" ? `${viewing.discountValue}%` : formatMoney(Math.round(viewing.discountValue * 100)) }, { label: "Applies to", value: formatAppliesTo(viewing.appliesTo) }, { label: "Stacking", value: viewing.stackingMode }, { label: "Minimum subtotal", value: formatMoney(viewing.minSubtotalCents) }, { label: "Status", value: viewing.isActive ? "Active" : "Inactive" }]} /></Section>
-      <Section title="Eligibility"><ReadOnlyFields fields={[{ label: "Services", value: viewing.allowedServiceIds.map(id => serviceOptions.find(item => item.value === id)?.label || "Selected service").join(", ") || "All services" }, { label: "Categories", value: viewing.allowedCategoryIds.map(id => serviceCategoryOptions.find(item => item.value === id)?.label || "Selected category").join(", ") || "All categories" }, { label: "Products", value: viewing.allowedProductIds.map(id => productOptions.find(item => item.value === id)?.label || "Selected product").join(", ") || "All products" }]} /></Section>
-      <Section title="Validity and limits"><ReadOnlyFields fields={[{ label: "Valid from", value: viewing.validFrom ? formatDate(viewing.validFrom) : "No start date" }, { label: "Valid to", value: viewing.validTo ? formatDate(viewing.validTo) : "No end date" }, { label: "Maximum uses", value: viewing.maxUses ?? "Unlimited" }, { label: "Per customer", value: viewing.maxUsesPerCustomer ?? "Unlimited" }, { label: "Used", value: viewing.usedCount }]} /></Section>
-    </RecordPanel>}
+<SectionTabs scope="coupon-detail" keepMounted tabs={[
+{ value: "overview", label: "Discount", content: <><Section title="Discount"><ReadOnlyFields fields={[{ label: "Type", value: viewing.discountType }, { label: "Value", value: viewing.discountType === "PERCENT" ? `${viewing.discountValue}%` : formatMoney(Math.round(viewing.discountValue * 100)) }, { label: "Applies to", value: formatAppliesTo(viewing.appliesTo) }, { label: "Stacking", value: viewing.stackingMode }, { label: "Minimum subtotal", value: formatMoney(viewing.minSubtotalCents) }, { label: "Status", value: viewing.isActive ? "Active" : "Inactive" }]} /></Section></> },
+{ value: "eligibility", label: "Eligibility", content: <><Section title="Eligibility"><ReadOnlyFields fields={[{ label: "Services", value: viewing.allowedServiceIds.map(id => serviceOptions.find(item => item.value === id)?.label || "Selected service").join(", ") || "All services" }, { label: "Categories", value: viewing.allowedCategoryIds.map(id => serviceCategoryOptions.find(item => item.value === id)?.label || "Selected category").join(", ") || "All categories" }, { label: "Products", value: viewing.allowedProductIds.map(id => productOptions.find(item => item.value === id)?.label || "Selected product").join(", ") || "All products" }]} /></Section></> },
+{ value: "validity", label: "Validity and limits", content: <><Section title="Validity and limits"><ReadOnlyFields fields={[{ label: "Valid from", value: viewing.validFrom ? formatDate(viewing.validFrom) : "No start date" }, { label: "Valid to", value: viewing.validTo ? formatDate(viewing.validTo) : "No end date" }, { label: "Maximum uses", value: viewing.maxUses ?? "Unlimited" }, { label: "Per customer", value: viewing.maxUsesPerCustomer ?? "Unlimited" }, { label: "Used", value: viewing.usedCount }]} /></Section></> }
+]} />
+</RecordPanel>}
     {deleteTarget && <ConfirmAction title="Delete coupon" description={`Delete ${deleteTarget.code}? Used coupons will be deactivated to preserve their history.`} label="Delete" destructive busy={deleting} onCancel={() => setDeleteTarget(null)} onConfirm={() => void removeCoupon(deleteTarget)} />}
     {formOpen && <DraftPanel disabled={!(editing ? canEdit : canCreate)} title={editing ? "Edit coupon" : "New coupon"} description="Set the discount, eligibility and validity below." fingerprint={formValues} error={formError} saving={saving} saveLabel={editing ? "Save changes" : "Create coupon"} onClose={() => setFormOpen(false)} onSubmit={() => void save()}>
-      <Section title="Discount"><div className="grid gap-3">
+<SectionTabs scope="coupon-editor" keepMounted validationErrors={errors} tabs={[
+{ value: "overview", label: "Discount", content: <><Section title="Discount"><div className="grid gap-3">
             <FormField id="coupon-code" label="Code" error={errors.code}>
               <Input
                 id="coupon-code"
@@ -509,7 +513,8 @@ export default function AppointmentCouponsPage() {
                 />
               </FormField>
             </div>
-</div></Section><Section title="Eligibility"><div className="grid gap-3">
+</div></Section></> },
+{ value: "eligibility", label: "Eligibility", content: <><Section title="Eligibility"><div className="grid gap-3">
             <div className="grid gap-3 sm:grid-cols-2">
               <FormField id="coupon-applies-to" label="Applies to" error={errors.appliesTo}>
                 <Select
@@ -627,7 +632,8 @@ export default function AppointmentCouponsPage() {
                 />
               </FormField>
             ) : null}
-</div></Section><Section title="Validity and limits"><div className="grid gap-3">
+</div></Section></> },
+{ value: "validity", label: "Validity and limits", content: <><Section title="Validity and limits"><div className="grid gap-3">
             <div className="grid gap-3 sm:grid-cols-2">
               <FormField id="coupon-valid-from" label="Valid from" error={errors.validFrom}>
                 <Input
@@ -688,7 +694,8 @@ export default function AppointmentCouponsPage() {
               />
               Active
             </label>
-      </div></Section>
-    </DraftPanel>}
+      </div></Section></> }
+]} />
+</DraftPanel>}
   </div>
 }

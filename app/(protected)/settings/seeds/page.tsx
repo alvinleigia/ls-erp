@@ -1,4 +1,5 @@
 "use client"
+import { SectionTabs } from "@/components/erp/section-tabs"
 
 import { useCreationOfficeSnapshot } from "@/platform/companies/creation-snapshot"
 import * as React from "react"
@@ -308,8 +309,7 @@ export default function SeedsPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <div>
+    <div className="space-y-6"><div>
         <h1 className="text-2xl font-semibold">Seeds</h1>
         <p className="text-sm text-muted-foreground">
           Seed demo data and clear business data while preserving global settings and admin users.
@@ -318,9 +318,7 @@ export default function SeedsPage() {
           Seeded non-admin users use password: <span className="font-mono">password123</span>. Admin users are not created
           or updated by seed actions.
         </p>
-      </div>
-
-      <div className="rounded-xl border bg-card p-4 space-y-4">
+      </div><SectionTabs scope="seed-tools" keepMounted tabs={[{value:'overview',label:'Sample data',content:<><div className="rounded-xl border bg-card p-4 space-y-4">
         <div className="flex items-center justify-between gap-2">
           <h2 className="text-sm font-semibold">Seed Groups</h2>
           <div className="flex gap-2">
@@ -351,9 +349,7 @@ export default function SeedsPage() {
         <Button onClick={() => void runSeed()} loading={seeding} loadingText="Seeding...">
           Seed selected
         </Button>
-      </div>
-
-      <div className="rounded-xl border border-destructive/40 bg-card p-4 space-y-3">
+      </div></>},{value:'module-cleanup',label:'Module cleanup',content:<><div className="rounded-xl border border-destructive/40 bg-card p-4 space-y-3">
         <h2 className="text-sm font-semibold text-destructive">Danger Zone</h2>
         <p className="text-xs text-muted-foreground">
           This deletes business data (appointments, inventory, users except admins, services, shifts, taxes, coupons).
@@ -375,9 +371,7 @@ export default function SeedsPage() {
         >
           Clear data (keep admins + global settings)
         </Button>
-      </div>
-
-      <div className="rounded-xl border border-destructive/40 bg-card p-4 space-y-3">
+      </div></>},{value:'tenant-cleanup',label:'Full tenant cleanup',content:<><div className="rounded-xl border border-destructive/40 bg-card p-4 space-y-3">
         <h2 className="text-sm font-semibold text-destructive">Module Clear</h2>
         <p className="text-xs text-muted-foreground">
           Delete specific modules only. In include-dependents mode, required related modules are auto-added and deleted in safe sequence.
@@ -430,13 +424,10 @@ export default function SeedsPage() {
         >
           Clear selected modules
         </Button>
-      </div>
-
-      {result ? (
+      </div></>}]}/>{result ? (
         <div className="rounded-md border bg-muted/30 p-3 text-xs text-muted-foreground">
           {result}
         </div>
-      ) : null}
-    </div>
+      ) : null}</div>
   )
 }

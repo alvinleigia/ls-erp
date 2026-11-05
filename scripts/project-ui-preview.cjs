@@ -11,7 +11,7 @@ write("package.json", JSON.stringify({ private: true }))
 write("next.config.mjs", "export default { devIndicators: false, experimental: { externalDir: true } }")
 write("postcss.config.mjs", "export { default } from '../../postcss.config.mjs'")
 write("tsconfig.json", JSON.stringify({ compilerOptions: { target: "ES2017", lib: ["dom", "esnext"], strict: true, skipLibCheck: true, esModuleInterop: true, module: "esnext", moduleResolution: "bundler", jsx: "react-jsx", noEmit: true, resolveJsonModule: true, isolatedModules: true, plugins: [{ name: "next" }], paths: { "@/*": ["../../*"] } }, include: ["**/*.ts", "**/*.tsx", ".next/types/**/*.ts"] }))
-write("app/navigation.tsx", `"use client"; import {useSearchParams} from 'next/navigation'; import {ListNavigationProvider} from '@/components/erp/list-navigation'; export default function Navigation({children}:{children:React.ReactNode}){const query=useSearchParams(),identity=query.get('identity')||'test-tenant:test-user';return <ListNavigationProvider key={identity} identity={identity}>{children}</ListNavigationProvider>}`)
+write("app/navigation.tsx", `"use client"; import {useSearchParams} from 'next/navigation'; import {ListNavigationProvider} from '@/components/erp/list-navigation'; import {RouteAccessProvider} from '@/platform/access/route-provider'; import {applicationRouteAccess} from '@/application/access-routes'; export default function Navigation({children}:{children:React.ReactNode}){const query=useSearchParams(),identity=query.get('identity')||'test-tenant:test-user';return <RouteAccessProvider access={applicationRouteAccess}><ListNavigationProvider key={identity} identity={identity}>{children}</ListNavigationProvider></RouteAccessProvider>}`)
 write("app/layout.tsx", `import '../../../app/globals.css'; import {Suspense} from 'react'; import Navigation from './navigation'; export default function Layout({children}:{children:React.ReactNode}) { return <html lang="en" className="dark"><body style={{fontFamily:'Arial,sans-serif'}}><div className="flex min-h-screen"><aside className="hidden w-64 shrink-0 border-r p-6 lg:block">Real Estate</aside><main className="min-w-0 flex-1 p-4 sm:p-8" style={{containerType:'inline-size'}}><Suspense><Navigation>{children}</Navigation></Suspense></main></div></body></html> }`)
 write("app/[[...route]]/page.tsx", `"use client";
 import {Suspense} from 'react'; import {usePathname,useSearchParams} from 'next/navigation';
@@ -60,10 +60,12 @@ import { TeamEditor } from '@/platform/teams/controls';
 import { CustomFieldEditor } from '@/modules/crm/components/custom-field-configuration';
 import { QuotationEditor } from '@/modules/sales-documents/components/quotations';
 import { DocumentTemplateControls } from '@/platform/documents/template-controls';
+import { SalesOrderDetail } from '@/application/sales-orders/detail';
 import { LeadSourceList } from '@/modules/crm/components/lead-source-list';
 import { LostReasonList } from '@/modules/crm/components/lost-reason-list';
 import { SalesReports } from '@/modules/crm/components/sales-reports';
 import { ApplicationAccessProvider } from '@/application/access-provider';
+import { SectionTabsPreview } from '@/tests/browser/fixtures/section-tabs-preview';
 import { InfoHelpPreview } from '@/tests/browser/fixtures/info-help-preview';
 import { ListNavigationPreview } from '@/tests/browser/fixtures/list-navigation-preview';
 import { DropdownLabelsPreview } from '@/tests/browser/fixtures/dropdown-labels-preview';
@@ -75,6 +77,7 @@ import { PropertyChoiceEditor } from '@/modules/real-estate/components/choice-ed
 import { ActivityTypeList } from '@/modules/crm/components/activity-type-list';
 function Preview(){
  const path=usePathname().split('/'), query=useSearchParams(), key=path[2]==='configuration'?path[3]:path[2], raw=path[2]==='configuration'?path[4]:path[3], id=raw==='new'?undefined:raw;
+ if(path[1]==='section-tabs-fixture')return <SectionTabsPreview/>;
  if(path[1]==='help-fixture')return <InfoHelpPreview/>;
  if(path[1]==='navigation-fixture')return <ListNavigationPreview/>;
  if(path[1]==='dropdown-labels-fixture')return <DropdownLabelsPreview/>;
@@ -87,6 +90,7 @@ function Preview(){
  if(path[1]==='services')return <BusinessModuleProvider><BusinessViewGuard module='services'><div className='min-w-0 [contain:inline-size]'>{path[2]==='categories'?<ServiceCategories/>:<Services/>}</div></BusinessViewGuard></BusinessModuleProvider>;
  if(path[1]==='appointments')return <BusinessModuleProvider><BusinessViewGuard module='appointments'><div className='min-w-0 [contain:inline-size]'>{path[2]==='coupons'?<Coupons/>:path[2]==='new'?<AppointmentOrderEditor mode='create'/>:path[2]?<AppointmentOrderEditor key={path[2]} mode='edit' appointmentId={path[2]}/>:<Appointments/>}</div></BusinessViewGuard></BusinessModuleProvider>;
  if(path[1]==='inventory'){ const InventoryView=path[2]==='categories'?InventoryCategories:path[2]==='suppliers'?InventorySuppliers:path[2]==='purchases'?InventoryPurchases:InventoryProducts; return <BusinessModuleProvider><BusinessViewGuard module='inventory'><InventoryView/></BusinessViewGuard></BusinessModuleProvider>; }
+ if(path[1]==='sales-orders'&&path[2])return <BusinessModuleProvider><BusinessViewGuard module='salesOrders'><SessionProvider session={{user:{id:'admin',name:'Test Admin',role:'ADMIN'},expires:'2099-01-01'}}><SalesOrderDetail id={path[2]}/></SessionProvider></BusinessViewGuard></BusinessModuleProvider>;
  if(key==='roles')return <AccessRoles/>;
  if(key==='modules')return <><div className='flex items-center gap-2'><h1>Business modules</h1><ModuleActivationHelp platform={Boolean(query.get('tenant'))}/></div><ModuleControls tenantId={query.get('tenant') || undefined}/></>;
  if(key==='tenants')return <TenantsPageClient rootDomain='example.test' platformAccessMode='SUPER_ADMIN'/>;

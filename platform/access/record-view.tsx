@@ -45,6 +45,7 @@ type RecordFormProps = {
   id: string; children: React.ReactNode; overview: React.ReactNode; initialSection: string; createSection?: string;
   onSubmit: React.FormEventHandler<HTMLFormElement>; saving: boolean; disabled?: boolean;
   error?: string; fingerprint: unknown; saveLabel?: string; className?: string;
+  keepMounted?: boolean;
   tabs?: { value: string; label: string; content: React.ReactNode; permission?: Requirement }[];
 }
 export function AccessRecordForm(props: RecordFormProps) {
@@ -53,7 +54,7 @@ export function AccessRecordForm(props: RecordFormProps) {
   const tabs = [{ value: "overview", label: "Overview", content: props.overview }, ...(props.tabs || [])]
   return <>
     {!view.editing && props.error && <p role="alert" className="text-sm text-destructive">{props.error}</p>}
-    {tabs.length > 1 ? <AccessRecordTabs value={tabs.some(tab => tab.value === view.tab) ? view.tab : "overview"} onChange={view.setTab} tabs={tabs} /> : props.overview}
+    {tabs.length > 1 ? <AccessRecordTabs value={tabs.some(tab => tab.value === view.tab) ? view.tab : "overview"} onChange={view.setTab} tabs={tabs} keepMounted={props.keepMounted} /> : props.overview}
     {view.editing && <EditingForm {...props} view={view} />}
   </>
 }

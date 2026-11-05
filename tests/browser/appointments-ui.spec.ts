@@ -14,6 +14,12 @@ async function fixture(page: Page, status = "CONFIRMED") {
   await page.route("**/api/**", async route => {
     if (new URL(route.request().url()).pathname === "/api/modules") return route.fulfill({ json: { modules: ["appointments", "services", "inventory"].map(key => ({ key, enabled: true, allowed: true })), permissions: null } })
     const url = new URL(route.request().url()), path = url.pathname, method = route.request().method()
+    if (path === "/api/appointments/staff-choices") return route.fulfill({ json: { items: [{ ...staff, eligible: true }], selected: [{ ...staff, eligible: true }], total: 1, totalPages: 1 } })
+    if (path === "/api/appointments/office-choices") return route.fulfill({ json: { items: [], selected: null, total: 0, totalPages: 1 } })
+    if (path === "/api/appointments/orders/preview") {
+      const input = route.request().postDataJSON().input
+      return route.fulfill({ json: { source: "saved", totals: { subtotalCents: 10000, lineDiscountCents: 0, couponDiscountCents: 0, taxCents: 1800, totalCents: 11800 }, lines: input.lines.map(() => ({ taxCents: 1800, totalCents: 11800 })), productLines: input.productLines.map(() => ({ taxCents: 0, totalCents: 0 })), couponHints: [] } })
+    }
     if (method !== "GET") {
       const body = method === "DELETE" ? {} : route.request().postDataJSON()
       writes.push({ path, method, body })
@@ -82,7 +88,9 @@ test("historical and missing bookings cannot expose edit controls", async ({ pag
   await expect(page.getByText("This booking is in the past or in a closed status and is read-only.")).toBeVisible()
   await expect(page.getByRole("button", { name: "Edit booking", exact: true })).toHaveCount(0)
   await expect(page.getByRole("textbox")).toHaveCount(0)
-  await expect(page.getByText("₹ 118.00", { exact: true })).toHaveCount(2)
+  await expect(page.getByText("₹ 118.00", { exact: true })).toHaveCount(1)
+  await page.getByRole("tab", { name: "Services", exact: true }).click()
+  await expect(page.getByText("₹ 118.00", { exact: true })).toBeVisible()
   state.missing = true
   await page.reload()
   await expect(page.getByRole("main").getByRole("alert")).toHaveText("Booking order not found.")
@@ -98,6 +106,7 @@ test("mobile draft edit keeps both save actions visible and does not confirm on 
   const panel = page.getByRole("dialog", { name: "Edit booking", exact: true })
   await expect.poll(async () => (await panel.boundingBox())?.x).toBe(0)
   await expect(panel.locator("select:visible")).toHaveCount(0)
+  await page.getByRole("dialog").getByRole("tab", { name: "Services", exact: true }).click()
   await page.getByRole("button", { name: "Add item", exact: true }).click()
   expect(writes).toHaveLength(0)
   await page.getByRole("button", { name: "Remove service item 2", exact: true }).click()
@@ -122,6 +131,7 @@ test("coupon detail, draft controls and confirmed deletion preserve eligibility 
   const { writes } = await fixture(page)
   await page.goto("/appointments/coupons")
   await page.getByRole("button", { name: "WELCOME", exact: true }).click()
+  await page.getByRole("tab", { name: "Eligibility", exact: true }).click()
   await expect(page.getByRole("heading", { name: "Eligibility", exact: true })).toBeVisible()
   await page.getByRole("button", { name: "Edit details" }).click()
   await page.getByLabel("Name", { exact: true }).fill("Updated offer")
@@ -152,6 +162,7 @@ test("new booking uses shared 12-hour time controls and saves the correct draft 
   await page.getByRole("menuitemradio", { name: "PM", exact: true }).click()
   // Let the closing menu restore focus before opening the next popover.
   await expect(page.getByRole("button", { name: "AM or PM", exact: true })).toBeFocused()
+  await page.getByRole("tab", { name: "Services", exact: true }).click()
   await page.getByLabel("Service", { exact: true }).click()
   await page.getByRole("option", { name: "Consultation (60m)", exact: true }).click()
   await page.getByLabel("Attendant", { exact: true }).click()

@@ -55,6 +55,7 @@ test("publishing confirms the saved version in place and cannot republish unchan
   const layout = JSON.stringify(state.templates[booking].content.layout)
   await expect(page.getByRole("button", { name: "Published version 2", exact: true })).toBeDisabled()
   await expect(review(page)).toHaveCount(0)
+  await page.getByRole("tab", { name: "Company", exact: true }).click()
   await page.getByLabel("Issuing company address", { exact: true }).fill("Reviewed Goa office")
   await expect(publish(page)).toBeDisabled()
   await review(page).check(); await publish(page).click()
@@ -133,6 +134,7 @@ test("an unchanged starter can be published once and disabled issuance is stated
 test("published templates remain read-only without publication authority", async ({ page }) => {
   const { state } = await fixture(page, { canPublish: false })
   await expect(page.getByLabel("Document title", { exact: true })).toBeDisabled()
+  await page.getByRole("tab", { name: "PDF layout", exact: true }).click()
   await expect(page.getByRole("button", { name: "Add paragraph", exact: true })).toBeDisabled()
   await expect(publish(page)).toHaveCount(0); await expect(review(page)).toHaveCount(0)
   expect(state.attempts).toHaveLength(0)
@@ -141,6 +143,7 @@ test("published templates remain read-only without publication authority", async
 test("mobile success stays beside the actions and selecting another document clears it", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })
   const { state, unexpected } = await fixture(page)
+  await page.getByRole("tab", { name: "Company", exact: true }).click()
   await page.getByLabel("Office contact details", { exact: true }).fill("reviewed-office@example.test")
   await review(page).check(); await publish(page).click()
   const status = page.getByRole("status")
@@ -153,6 +156,7 @@ test("mobile success stays beside the actions and selecting another document cle
   await page.screenshot({ path: test.info().outputPath("published-template-desktop.png"), animations: "disabled" })
   await page.getByLabel("Document type", { exact: true }).click()
   await page.getByRole("menuitemradio", { name: "Order acknowledgement", exact: true }).click()
+  await page.getByRole("tab", { name: "Wording", exact: true }).click()
   await expect(page.getByLabel("Document title", { exact: true })).toHaveValue("Order acknowledgement")
   await expect(status).toHaveCount(0)
   await expect(page.getByRole("button", { name: "Published version 2", exact: true })).toBeDisabled()

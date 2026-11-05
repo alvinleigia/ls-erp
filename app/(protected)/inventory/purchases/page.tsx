@@ -1,4 +1,5 @@
 "use client"
+import { SectionTabs } from "@/components/erp/section-tabs"
 import { useListState } from "@/components/erp/list-navigation"
 
 import { InventoryCreationOffice } from "@/components/inventory/office-notice"
@@ -335,7 +336,10 @@ export default function InventoryPurchasesPage() {
       {viewing && <PurchaseView item={viewing} onClose={() => setViewing(null)} formatMoney={formatMoney} formatDate={formatDate} actions={canReceive && viewing.office.active && viewing.status !== "RECEIVED" ? <Button onClick={() => { setReceiveTarget(viewing); setViewing(null) }}>Mark as received</Button> : undefined} />}
 
       {formOpen && <DraftPanel error={formError} fingerprint={formValues} title="New purchase order" description="Enter purchase order details in the sections below." onClose={() => setFormOpen(false)} onSubmit={() => void save()} saving={saving} disabled={!canCreate} saveLabel="Create purchase order">
-          <div className="space-y-5"><InventoryCreationOffice headers={creationHeaders} resource="inventoryPurchases" /><Section title="Order details">
+          <div className="space-y-5">
+<SectionTabs scope="purchase-editor" keepMounted tabs={[
+{ value: "overview", label: "Order details", content: <><InventoryCreationOffice headers={creationHeaders} resource="inventoryPurchases" />
+<Section title="Order details">
             <div className="grid gap-3 sm:grid-cols-2">
               <FormField id="po-supplier" label="Supplier">
                 <RecordSelect
@@ -397,7 +401,8 @@ export default function InventoryPurchasesPage() {
               />
             </FormField>
 
-            </Section><Section title="Order items">
+            </Section></> },
+{ value: "items", label: "Order items", content: <><Section title="Order items">
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <p className="text-sm font-medium">Items</p>
@@ -486,7 +491,9 @@ export default function InventoryPurchasesPage() {
                 </div>
               ))}
             </div>
-          </Section></div>
+          </Section></> }
+]} />
+</div>
       </DraftPanel>}
     </div>
   )

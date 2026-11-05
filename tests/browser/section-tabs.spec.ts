@@ -1,0 +1,51 @@
+import { test, expect } from "@playwright/test"
+
+test("tabs preserve drafts and submit fields from every panel", async ({ page }) => {
+  await page.goto("/section-tabs-fixture")
+  await page.getByLabel("Name", {exact:true}).fill("Changed name")
+  await page.getByRole("tab", {name:"Contact",exact:true}).click()
+  await page.getByLabel("Email", {exact:true}).fill("test@example.test")
+  await page.getByLabel("Phone", {exact:true}).fill("1234567890")
+  await page.getByRole("tab", {name:"Notes",exact:true}).click()
+  await page.getByLabel("Note", {exact:true}).fill("Unsaved note")
+  await page.getByRole("tab", {name:"Details",exact:true}).click()
+  await expect(page.getByLabel("Name", {exact:true})).toHaveValue("Changed name")
+  await page.getByRole("button",{name:"Save draft",exact:true}).click()
+  await expect(page.getByLabel("Submitted draft")).toHaveText(JSON.stringify({name:"Changed name",email:"test@example.test",phone:"1234567890",note:"Unsaved note"}))
+})
+
+test("native validation reveals the first invalid field in a hidden panel", async ({ page }) => {
+  const errors:string[]=[];page.on("pageerror",e=>errors.push(e.message))
+  await page.goto("/section-tabs-fixture")
+  await page.getByRole("button",{name:"Save draft",exact:true}).click()
+  await expect(page.getByRole("tab",{name:"Contact",exact:true})).toHaveAttribute("aria-selected","true")
+  await expect(page.getByLabel("Email",{exact:true})).toBeFocused()
+  await expect(page.getByLabel("Submitted draft")).toHaveText("")
+  expect(errors).toEqual([])
+})
+
+test("server validation reveals its panel and readonly fields do not disable navigation", async ({ page }) => {
+  await page.goto("/section-tabs-fixture")
+  await page.getByRole("button",{name:"Simulate server error",exact:true}).click()
+  await expect(page.getByLabel("Email",{exact:true})).toBeFocused()
+  await expect(page.getByText("Email already used",{exact:true})).toBeVisible()
+  await page.getByRole("tab",{name:"Saved history",exact:true}).click()
+  await expect(page.getByText("History is readable")).toBeVisible()
+  await page.getByRole("tab",{name:"Saved details",exact:true}).click()
+  await expect(page.getByLabel("Saved field")).toBeDisabled()
+})
+
+test("keyboard navigation, lazy panels, restored URL and mobile containment", async ({ page }) => {
+  await page.setViewportSize({width:390,height:844})
+  await page.goto("/section-tabs-fixture")
+  const first=page.getByRole("tab",{name:"First lazy panel",exact:true}),second=page.getByRole("tab",{name:"Second lazy panel",exact:true})
+  await first.focus();await page.keyboard.press("ArrowRight")
+  await expect(second).toBeFocused();await expect(second).toHaveAttribute("aria-selected","true")
+  await expect(page.getByText("First panel content")).toHaveCount(0)
+  const id=await second.getAttribute("aria-controls");await expect(page.locator(`[id="${id}"]`)).toHaveAttribute("aria-labelledby",(await second.getAttribute("id"))!)
+  await page.getByRole("tab",{name:"Notes",exact:true}).click()
+  await page.reload()
+  await expect(page.getByRole("tab",{name:"Notes",exact:true})).toHaveAttribute("aria-selected","true")
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true)
+  await page.screenshot({path:test.info().outputPath("tabs-mobile.png"),fullPage:true})
+})

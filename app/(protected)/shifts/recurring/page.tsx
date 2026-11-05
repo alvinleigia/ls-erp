@@ -1,4 +1,5 @@
 "use client"
+import { SectionTabs } from "@/components/erp/section-tabs"
 import { useListState } from "@/components/erp/list-navigation"
 import { WorkforceStaffPicker } from "@/components/workforce/staff-picker"
 import { useBusinessModules } from "@/platform/module-provider"
@@ -1239,7 +1240,12 @@ export default function ShiftRecurringPlansPage() {
     <div className={pageClass}>
       <PageHeader title={<> Recurring Plans </>} description={<> Manage flexible recurring availability patterns across staff. </>} actions={<> <Button disabled={!canCreate} type="button" onClick={openCreateDialog}>New recurring plan</Button> </>} />
 
-      {viewing && <RecordPanel title={viewing.name || "Recurring plan"} description="Saved recurring availability." onClose={() => setViewing(null)} actions={<Button disabled={!canEdit || viewing.office?.active === false} type="button" onClick={() => { void openEditDialog(viewing); setViewing(null) }}>Edit details</Button>}><Section title="Pattern details"><ReadOnlyFields fields={[{label:"Office",value:viewing.office ? `${viewing.office.companyName} / ${viewing.office.name}` : viewing.officeId},{label:"Staff",value:viewing.staffName || viewing.staffEmail},{label:"Cycle weeks",value:viewing.cycleLengthWeeks},{label:"Valid from",value:formatDate(viewing.validFrom)},{label:"Valid to",value:viewing.validTo?formatDate(viewing.validTo):"Open ended"},{label:"Status",value:viewing.isActive?"Active":"Inactive"},{label:"Effective now",value:viewing.isCurrentlyEffective?"Yes":"No"}]} /></Section><RecurringPlanSummary key={viewing.id} id={viewing.id} /></RecordPanel>}
+      {viewing && <RecordPanel title={viewing.name || "Recurring plan"} description="Saved recurring availability." onClose={() => setViewing(null)} actions={<Button disabled={!canEdit || viewing.office?.active === false} type="button" onClick={() => { void openEditDialog(viewing); setViewing(null) }}>Edit details</Button>}>
+<SectionTabs scope="recurring-plan-view" tabs={[
+{ value: "overview", label: "Details", content: <><Section title="Pattern details"><ReadOnlyFields fields={[{label:"Office",value:viewing.office ? `${viewing.office.companyName} / ${viewing.office.name}` : viewing.officeId},{label:"Staff",value:viewing.staffName || viewing.staffEmail},{label:"Cycle weeks",value:viewing.cycleLengthWeeks},{label:"Valid from",value:formatDate(viewing.validFrom)},{label:"Valid to",value:viewing.validTo?formatDate(viewing.validTo):"Open ended"},{label:"Status",value:viewing.isActive?"Active":"Inactive"},{label:"Effective now",value:viewing.isCurrentlyEffective?"Yes":"No"}]} /></Section></> },
+{ value: "availability", label: "Availability", content: <><RecurringPlanSummary key={viewing.id} id={viewing.id} /></> }
+]} />
+</RecordPanel>}
       <Surface>
       <TableToolbar table={table} showSearch={false}>
         <Input
@@ -1272,7 +1278,7 @@ export default function ShiftRecurringPlansPage() {
       <TablePagination table={table} totalRows={totalRows} />
       </Surface>
 
-      {canCreate && createOpen && <DraftPanel title="New recurring plan" description="Create in the selected workspace office. Staff need workplace coverage for the full plan window." fingerprint={{staffId:createStaffId,name:createName,validFrom:createValidFrom,validTo:createValidTo,cycle:createCycleLength,weeks:createDraftWeeks}} saving={actionLoading || previewLoading} error={formError} saveLabel="Create pattern" onClose={() => setCreateOpen(false)} onSubmit={() => void createPattern()} ><div className="space-y-5"><Section title="Pattern details"><div className="space-y-1">
+      {canCreate && createOpen && <DraftPanel title="New recurring plan" description="Create in the selected workspace office. Staff need workplace coverage for the full plan window." fingerprint={{staffId:createStaffId,name:createName,validFrom:createValidFrom,validTo:createValidTo,cycle:createCycleLength,weeks:createDraftWeeks}} saving={actionLoading || previewLoading} error={formError} saveLabel="Create pattern" onClose={() => setCreateOpen(false)} onSubmit={() => void createPattern()} ><div className="space-y-5"><SectionTabs scope="recurring-create" keepMounted tabs={[{value:'overview',label:'Pattern details',content:<><Section title="Pattern details"><div className="space-y-1">
               <Label className="text-xs text-muted-foreground">Staff</Label>
               <WorkforceStaffPicker id="pattern-create-staff" family="PATTERN" action="create" startDate={createValidFrom} endDate={createValidTo} headers={creationHeaders} value={createStaffId ? [createStaffId] : []} onChange={ids => setCreateStaffId(ids[0] || "")} />
             </div>
@@ -1346,7 +1352,7 @@ export default function ShiftRecurringPlansPage() {
                   ))}
                 </Select>
               </div>
-            </div></Section><Section title="Weekly availability"><div className="space-y-3">
+            </div></Section></>},{value:'weekly',label:'Weekly availability',content:<><Section title="Weekly availability"><div className="space-y-3">
               {createCurrentDays.map((day) => (
                 <div key={day.day} className="rounded-md border p-2">
                   <div className="mb-2 flex items-center justify-between">
@@ -1443,12 +1449,12 @@ export default function ShiftRecurringPlansPage() {
                   )}
                 </div>
               ))}
-            </div></Section></div></DraftPanel>}
+            </div></Section></>}]}/></div></DraftPanel>}
 
       {editOpen && !editLoading && <DraftPanel title="Edit recurring plan" description="Configure repeating availability, then review the impact before saving." fingerprint={{staffId:editStaffId,name:editName,validFrom:editValidFrom,validTo:editValidTo,cycle:editCycleLength,weeks:editDraftWeeks}} saving={actionLoading || previewLoading} error={formError} saveLabel="Save changes" onClose={() => setEditOpen(false)} onSubmit={() => void saveEditPattern()} footerActions={<Button type="button" variant="outline" disabled={actionLoading || previewLoading} onClick={() => void previewEditImpact()}>Preview impact</Button>}>{editLoading ? (
             <div className="py-8 text-sm text-muted-foreground">Loading pattern details...</div>
           ) : (
-            <div className="space-y-5"><Section title="Pattern details"><div className="space-y-1">
+            <div className="space-y-5"><SectionTabs scope="recurring-edit" keepMounted tabs={[{value:'overview',label:'Pattern details',content:<><Section title="Pattern details"><div className="space-y-1">
                 <Label className="text-xs text-muted-foreground">Staff</Label>
                 <p className="text-sm">{editStaffLabel || "Saved staff assignment"}</p>
               </div>
@@ -1522,7 +1528,7 @@ export default function ShiftRecurringPlansPage() {
                     ))}
                   </Select>
                 </div>
-              </div></Section><Section title="Weekly availability"><div className="space-y-3">
+              </div></Section></>},{value:'weekly',label:'Weekly availability',content:<><Section title="Weekly availability"><div className="space-y-3">
                 {editCurrentDays.map((day) => (
                   <div key={day.day} className="rounded-md border p-2">
                     <div className="mb-2 flex items-center justify-between">
@@ -1619,7 +1625,7 @@ export default function ShiftRecurringPlansPage() {
                     )}
                   </div>
                 ))}
-              </div></Section>{editPreview ? (
+              </div></Section></>}]}/>{editPreview ? (
                 <div className="space-y-2 rounded-md border p-3 text-sm">
                   <div className="font-medium">Impact preview</div>
                   <div className="text-muted-foreground">

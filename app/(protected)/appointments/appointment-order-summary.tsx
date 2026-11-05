@@ -1,4 +1,5 @@
 "use client"
+import { SectionTabs } from "@/components/erp/section-tabs"
 import { subtotalAfterLineDiscounts } from "@/modules/appointments/order-pricing"
 import { wallTime } from "@/lib/business-time"
 
@@ -14,7 +15,8 @@ export function AppointmentOrderSummary({ order, settings }: { order: Appointmen
   const { formatDate } = useDateFormatter()
   const money = (value: number) => formatCurrencyFromCents(value, settings)
   return <>
-    <Section title="Booking details"><ReadOnlyFields fields={[
+<SectionTabs scope="appointment-view" tabs={[
+{ value: "overview", label: "Summary", content: <><Section title="Booking details"><ReadOnlyFields fields={[
       { label: "Customer", value: order.customer?.name || order.customer?.email },
       { label: "Date", value: formatDate(order.appointmentDate) },
       { label: "Start time", value: formatTimeFromDate(new Date(order.appointmentStartAt), settings) },
@@ -22,7 +24,12 @@ export function AppointmentOrderSummary({ order, settings }: { order: Appointmen
       { label: "Customer note", value: order.customerNote },
       { label: "Internal note", value: order.internalNote },
     ]} /></Section>
-    <Section title="Service items">{order.lines.map(line => <div key={line.id} className="space-y-3 rounded-lg border p-4">
+<Section title="Totals"><ReadOnlyFields fields={[
+      { label: "Subtotal after line discounts (excl. tax)", value: money(subtotalAfterLineDiscounts(order)) }, { label: "Line discounts included", value: money(order.lineDiscountCents) },
+      { label: "Coupon discount", value: money(-order.couponDiscountCents) }, { label: "Tax", value: money(order.taxCents) },
+      { label: "Total", value: money(order.totalCents) }, { label: "Coupons", value: order.coupons.map(coupon => coupon.code).join(", ") || "None" },
+    ]} /></Section></> },
+{ value: "services", label: "Services", content: <><Section title="Service items">{order.lines.map(line => <div key={line.id} className="space-y-3 rounded-lg border p-4">
       <h3 className="font-medium">{line.service?.name || "Service"}</h3><ReadOnlyFields fields={[
         { label: "Attendant", value: line.staffProfile?.user?.name || line.staffProfile?.user?.email },
         { label: "Scheduled start", value: `${formatDate(wallTime(line.startAt, settings.timeZone ?? "UTC").slice(0, 10))} ${formatTimeFromDate(new Date(line.startAt), settings)}` },
@@ -31,16 +38,12 @@ export function AppointmentOrderSummary({ order, settings }: { order: Appointmen
         { label: "Unit price", value: money(line.unitPriceCents) }, { label: "Discount", value: money(line.lineDiscountCents) },
         { label: "Tax", value: money(line.lineTaxCents) }, { label: "Total", value: money(line.lineTotalCents) }, { label: "Note", value: line.note },
       ]} />
-    </div>)}</Section>
-    {!!order.productLines?.length && <Section title="Product items">{order.productLines.map(line => <div key={line.id} className="space-y-3 rounded-lg border p-4"><h3 className="font-medium">{line.product?.name || "Product"}</h3><ReadOnlyFields fields={[
+    </div>)}</Section></> },
+...(!!order.productLines?.length ? [{ value: "products", label: "Products", content: <>{!!order.productLines?.length && <Section title="Product items">{order.productLines.map(line => <div key={line.id} className="space-y-3 rounded-lg border p-4"><h3 className="font-medium">{line.product?.name || "Product"}</h3><ReadOnlyFields fields={[
       { label: "Quantity", value: line.quantity }, { label: "Unit price", value: money(line.unitPriceCents) },
       { label: "Discount", value: money(line.lineDiscountCents) }, { label: "Tax", value: money(line.lineTaxCents) },
       { label: "Total", value: money(line.lineTotalCents) }, { label: "Note", value: line.note },
-    ]} /></div>)}</Section>}
-    <Section title="Totals"><ReadOnlyFields fields={[
-      { label: "Subtotal after line discounts (excl. tax)", value: money(subtotalAfterLineDiscounts(order)) }, { label: "Line discounts included", value: money(order.lineDiscountCents) },
-      { label: "Coupon discount", value: money(-order.couponDiscountCents) }, { label: "Tax", value: money(order.taxCents) },
-      { label: "Total", value: money(order.totalCents) }, { label: "Coupons", value: order.coupons.map(coupon => coupon.code).join(", ") || "None" },
-    ]} /></Section>
-  </>
+    ]} /></div>)}</Section>}</> }] : [])
+]} />
+</>
 }

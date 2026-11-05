@@ -8,6 +8,7 @@ const { Client } = require('pg')
 const bcrypt = require('bcryptjs')
 const net = require('node:net')
 const { root, localUrl, migrate, run } = require('./database-workflow.cjs')
+const { setupStorage, storageEnvironment } = require('./local-storage.cjs')
 const file = path.join(root, '.env.local-demo'), directory = path.join(root, 'tmp/local-demo')
 const compose = ['compose', '--env-file', file, '-f', path.join(root, 'compose.local-demo.yml')]
 const token = () => randomBytes(24).toString('base64url')
@@ -16,7 +17,7 @@ function cleanEnv(values) {
   for (const name of ['.env', '.env.local', '.env.development', '.env.development.local', '.env.production', '.env.production.local']) {
     if (fs.existsSync(path.join(root, name))) for (const key of Object.keys(dotenv.parse(fs.readFileSync(path.join(root, name))))) env[key] = ''
   }
-  for (const key of Object.keys(env)) if (/^(?:SUPABASE|NEXT_PUBLIC_SUPABASE|SMTP_|MAIL_|PLATFORM_ADMIN_|AUTH_|NEXTAUTH_|VERCEL|DATABASE_URL|DIRECT_URL|MIGRATION_DATABASE_URL)/.test(key)) env[key] = ''
+  for (const key of Object.keys(env)) if (/^(?:SUPABASE|NEXT_PUBLIC_SUPABASE|LOCAL_STORAGE_|SMTP_|MAIL_|PLATFORM_ADMIN_|AUTH_|NEXTAUTH_|VERCEL|DATABASE_URL|DIRECT_URL|MIGRATION_DATABASE_URL)/.test(key)) env[key] = ''
   return { ...env, ...values, ERP_LOCAL_DEMO: '1', NODE_ENV: 'development', AUTH_TRUST_HOST: 'true', AUTH_URL: 'http://localhost:3109', NEXTAUTH_URL: 'http://localhost:3109', APP_ROOT_DOMAIN: 'localhost', PLATFORM_ADMIN_TENANT_SLUG: 'platform', RLS_POOL_MAX: '4' }
 }
 function configuration() {
@@ -29,7 +30,7 @@ function configuration() {
   }
   const values = dotenv.parse(fs.readFileSync(file)), runtime = localUrl(values.DATABASE_URL), owner = localUrl(values.DIRECT_URL)
   if (runtime.username !== 'crm_test_runtime' || owner.username !== 'postgres' || !/^[\w-]{25,}$/.test(values.LOCAL_DB_PASSWORD || '') || !/^[\w-]{25,}$/.test(values.DEMO_PASSWORD || '') || !values.AUTH_SECRET || decodeURIComponent(owner.password) !== values.LOCAL_DB_PASSWORD) throw Error('Invalid local demo configuration. No database was changed.')
-  return { values, env: cleanEnv(values), runtime, owner }
+  return { values, env: { ...cleanEnv(values), ...storageEnvironment() }, runtime, owner }
 }
 async function setup() {
   const config = configuration()
@@ -63,6 +64,7 @@ async function setup() {
   } catch (error) { await provision.query('ROLLBACK'); throw error } finally { await provision.end() }
   fs.mkdirSync(directory, { recursive: true })
   fs.writeFileSync(path.join(directory, 'tsconfig.json'), JSON.stringify({ extends: '../../tsconfig.json', compilerOptions: { baseUrl: '../..', incremental: true }, include: ['../../next-env.d.ts', '../../**/*.ts', '../../**/*.tsx', './next/dev/types/**/*.ts'], exclude: ['../../node_modules', '../../test-results', '../../tmp', '../../playwright-report'] }, null, 2))
+  Object.assign(config.env, await setupStorage())
   return config
 }
 function info() { console.log('Local demo: http://demo.localhost:3109/crm/sales?view=team\nAdmin: admin@demo.test\nManagers: manager@demo.test, regional@demo.test\nStaff: staff1@demo.test through staff4@demo.test\nPassword: DEMO_PASSWORD in .env.local-demo\nCtrl+C stops the app; PostgreSQL data persists.') }

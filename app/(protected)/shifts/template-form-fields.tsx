@@ -1,4 +1,5 @@
 "use client"
+import { SectionTabs } from "@/components/erp/section-tabs"
 import { useCurrentResourceAction } from "@/platform/access/view-guard"
 
 import { Section } from "@/components/erp/section"
@@ -45,7 +46,9 @@ export function TemplateFormFields({
   const fieldId = (name: string) => (mode === "create" ? name : `edit-${name}`)
 
   return (
-    <div className="space-y-5"><Section title="Template details"><div className="grid gap-4 sm:grid-cols-2">
+    <div className="space-y-5">
+<SectionTabs scope="shift-template-form" keepMounted validationErrors={errors} tabs={[
+{ value: "overview", label: "Details", content: <><Section title="Template details"><div className="grid gap-4 sm:grid-cols-2">
         <FormField id={fieldId("template-name")} label="Name" error={errors.name}>
           <Input
             id={fieldId("template-name")}
@@ -89,8 +92,8 @@ export function TemplateFormFields({
             ))}
           </Select>
         </FormField>
-      </div></Section>
-<Section title="Shift timing"><div className="rounded-lg border p-4">
+      </div></Section></> },
+{ value: "timing", label: "Timing and breaks", content: <><Section title="Shift timing"><div className="rounded-lg border p-4">
         <h3 className="text-sm font-medium">Shift timing</h3>
         <div className="mt-3 grid gap-4 sm:grid-cols-2">
           <FormField id={fieldId("shift-start")} label="Start" error={errors.startTime}>
@@ -181,7 +184,9 @@ export function TemplateFormFields({
           <p className="mt-2 text-xs text-destructive">{errors.breaks}</p>
         ) : null}
       </div>
-{errors.form ? <p className="text-xs text-destructive">{errors.form}</p> : null}</Section></div>
+{errors.form ? <p className="text-xs text-destructive">{errors.form}</p> : null}</Section></> }
+]} />
+</div>
   )
 }
 

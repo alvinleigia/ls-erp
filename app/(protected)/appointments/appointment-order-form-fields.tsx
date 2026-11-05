@@ -1,4 +1,5 @@
 "use client"
+import { SectionTabs } from "@/components/erp/section-tabs"
 
 import { BookingStaffPicker, type BookingStaffScope } from "@/components/appointments/choice-picker"
 import { Section } from "@/components/erp/section"
@@ -103,7 +104,8 @@ export function AppointmentOrderFormFields({
 
   return (
     <div className="grid gap-6">
-      <div className="space-y-4">
+<SectionTabs scope="appointment-form" keepMounted validationErrors={errors} tabs={[
+{ value: "overview", label: "Booking", content: <><div className="space-y-4">
         <Section title="Booking details">
           <div className="space-y-3">
             <FormField id="order-customer" label="Customer" error={errors.customerId}>
@@ -223,8 +225,8 @@ export function AppointmentOrderFormFields({
             </FormField>
           </div>
         </Section>
-      </div>
-      <Section title="Service items">
+      </div></> },
+{ value: "services", label: "Services", content: <><Section title="Service items">
         <div className="flex items-center justify-between">
 
           <Button
@@ -475,8 +477,8 @@ export function AppointmentOrderFormFields({
           ))}
         </div>
 
-        </Section>
-      <fieldset disabled={!productsEnabled} className="min-w-0">
+        </Section></> },
+...(productsEnabled ? [{ value: "products", label: "Products", content: <><fieldset disabled={!productsEnabled} className="min-w-0">
       <Section title="Product items">
         <div className="flex items-center justify-between">
           <Button
@@ -684,9 +686,8 @@ export function AppointmentOrderFormFields({
           ))}
         </div>
       </Section>
-      </fieldset>
-
-
-    </div>
+      </fieldset></> }] : [])
+]} />
+</div>
   )
 }

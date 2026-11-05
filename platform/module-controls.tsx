@@ -1,4 +1,5 @@
 "use client"
+import { SectionTabs } from "@/components/erp/section-tabs"
 import { InfoHelp } from "@/components/erp/info-help"
 import * as React from "react"
 import Link from "next/link"
@@ -6,6 +7,13 @@ import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
 import { businessModules, moduleKeys, moduleChangeProblem, moduleAllowanceProblem, type BusinessModuleKey } from "./modules"
+
+const moduleGroups: { value: string; label: string; keys: readonly BusinessModuleKey[] }[] = [
+ { value: "sales", label: "CRM and sales", keys: ["crm", "realEstate", "catalog", "salesDocuments", "paymentPlans", "salesOrders"] },
+ { value: "billing", label: "Billing", keys: ["receivables", "invoicing"] },
+ { value: "operations", label: "Operations", keys: ["inventory", "services", "appointments"] },
+ { value: "workforce", label: "Workforce", keys: ["leaves", "shifts"] },
+]
 
 type Module = { key: BusinessModuleKey; parent?: string; name: string; description: string; allowed: boolean; enabled: boolean; href: string }
 
@@ -50,11 +58,11 @@ export function ModuleControls({ tenantId }: { tenantId?: string }) {
   return <div className="space-y-4">
     {loading && <p>Loading modules...</p>}
     {error && <p role="alert" className="text-destructive">{error}</p>}
-    {modules.map(module => {
+    {modules.length > 0 && <SectionTabs scope={tenantId ? `tenant-modules-${tenantId}` : "business-modules"} tabs={moduleGroups.map(group => ({ value: group.value, label: group.label, content: <div className="space-y-4">{modules.filter(module => group.keys.includes(module.key)).sort((a, b) => group.keys.indexOf(a.key) - group.keys.indexOf(b.key)).map(module => {
       const active = platform ? module.allowed : module.enabled
       const problem = platform ? moduleAllowanceProblem(modules, module.key, !active) : module.allowed ? moduleChangeProblem(modules, module.key, !active) : null
       const label = platform ? active ? "Remove allowance" : "Allow" : active ? "Disable" : "Enable"
-      return <section aria-label={module.name} key={module.key} className={`flex flex-col items-stretch justify-between gap-4 rounded-xl border p-5 sm:flex-row sm:items-center ${module.parent ? "sm:ml-8" : ""}`}>
+      return <section aria-label={module.name} key={module.key} className="flex flex-col items-stretch justify-between gap-4 rounded-xl border p-5 sm:flex-row sm:items-center">
         <div className="min-w-0 flex-1"><div className="flex items-center gap-2"><h2 className="font-semibold">{module.name}</h2><InfoHelp title={module.name}>{module.description}</InfoHelp></div>
           <p className="mt-2 text-sm font-medium">{!module.allowed ? "Not allowed by platform" : module.enabled ? "Allowed · Enabled" : "Allowed · Disabled by tenant"}</p>
           {problem && <p className="mt-2 text-sm text-muted-foreground">{problem}</p>}
@@ -63,7 +71,7 @@ export function ModuleControls({ tenantId }: { tenantId?: string }) {
           {canManage && (platform || module.allowed) && <Button variant={active ? "outline" : "default"} loading={saving} disabled={!!problem} aria-label={`${label} ${module.name}`} onClick={() => active ? setPending(module) : void save(module)}>{label}</Button>}
         </div>
       </section>
-    })}
+    })}</div> }))}/>}
     {!loading && !error && !canManage && <p className="text-sm text-muted-foreground">Ask a business administrator to change enabled modules.</p>}
     <Dialog open={!!pending} onOpenChange={open => { if (!saving && !open) setPending(null) }}><DialogContent>
       <DialogHeader><DialogTitle>{platform ? "Remove allowance for" : "Disable"} {pending?.name}?</DialogTitle><DialogDescription>

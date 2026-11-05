@@ -20,6 +20,7 @@ test('generic order creation, confirmation, cancellation and access controls on 
     await expect(page).toHaveURL(/\/sales-orders\/[^/]+$/)
     const id = page.url().split('/').pop()!
     await expect(page.getByRole('heading', { name: 'Annual support agreement', exact: true })).toBeVisible()
+    await page.getByRole('tab', { name: 'History', exact: true }).click()
     await expect(page.getByRole('heading', { name: 'History', exact: true })).toBeVisible()
     await page.screenshot({ path: test.info().outputPath('order-draft-desktop.png'), fullPage: true })
     await page.getByRole('button', { name: 'Confirm sales order', exact: true }).click()
@@ -37,6 +38,7 @@ test('generic order creation, confirmation, cancellation and access controls on 
     await page.screenshot({ path: test.info().outputPath('order-cancel-mobile.png'), fullPage: true })
     await page.getByRole('button', { name: 'Cancel order', exact: true }).click()
     await expect(page.getByRole('dialog')).toHaveCount(0)
+    await page.getByRole('tab', { name: 'History', exact: true }).click()
     await expect(page.getByText('Customer requested revised terms', { exact: true })).toBeVisible()
     const saved = await json(context, `/api/sales-orders/${id}`)
     expect(saved.status).toBe('CANCELLED'); expect(saved.history).toHaveLength(3)

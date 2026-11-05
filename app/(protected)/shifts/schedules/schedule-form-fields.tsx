@@ -1,4 +1,5 @@
 "use client"
+import { SectionTabs } from "@/components/erp/section-tabs"
 import { SearchableSelect } from "@/components/searchable-select"
 import { Section } from "@/components/erp/section"
 
@@ -67,7 +68,9 @@ export function ScheduleFormFields({
   const fieldId = (name: string) => (mode === "create" ? name : `edit-${name}`)
 
   return (
-    <div className="space-y-5"><Section title="Schedule and assignment"><FormField id={fieldId("schedule-name")} label="Schedule name" error={errors.name}>
+    <div className="space-y-5">
+<SectionTabs scope="shift-schedule-form" keepMounted validationErrors={errors} tabs={[
+{ value: "overview", label: "Schedule", content: <><Section title="Schedule and assignment"><FormField id={fieldId("schedule-name")} label="Schedule name" error={errors.name}>
         <Input
           id={fieldId("schedule-name")}
           value={form.name}
@@ -154,8 +157,8 @@ export function ScheduleFormFields({
             })
           }
         />
-      </FormField></Section>
-<Section title="Week off rules"><div className="grid gap-4 sm:grid-cols-2">
+      </FormField></Section></> },
+{ value: "weekoff", label: "Week off rules", content: <><Section title="Week off rules"><div className="grid gap-4 sm:grid-cols-2">
         <FormField id={fieldId("schedule-weekoff-1")} label="Week off day 1" error={errors.weekOffDay1}>
           <Select
             id={fieldId("schedule-weekoff-1")}
@@ -229,8 +232,8 @@ export function ScheduleFormFields({
         {errors.weekOff2Weeks ? (
           <p className="text-xs text-destructive">{errors.weekOff2Weeks}</p>
         ) : null}
-      </div></Section>
-<Section title="Repeating blocks"><div className="space-y-2">
+      </div></Section></> },
+{ value: "blocks", label: "Repeating blocks", content: <><Section title="Repeating blocks"><div className="space-y-2">
         <div className="flex items-center justify-between gap-2">
           <Label>Shift blocks</Label>
           <span className="text-xs text-muted-foreground">
@@ -294,6 +297,8 @@ export function ScheduleFormFields({
             Add shift block
           </Button>
         </div>
-      </div></Section></div>
+      </div></Section></> }
+]} />
+</div>
   )
 }

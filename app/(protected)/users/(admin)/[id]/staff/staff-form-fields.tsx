@@ -1,4 +1,5 @@
 "use client"
+import { SectionTabs } from "@/components/erp/section-tabs"
 
 import * as React from "react"
 import { Trash2Icon } from "lucide-react"
@@ -80,7 +81,8 @@ export function StaffFormFields({
 
   return (
     <>
-      <div className="rounded-xl border bg-card p-6">
+<SectionTabs scope="staff-details" keepMounted tabs={[
+{ value: "overview", label: "Reporting and scheduling", content: <><div className="rounded-xl border bg-card p-6">
         <div className="space-y-2">
           <div className="text-sm font-medium">Reporting manager</div>
           <p className="text-xs text-muted-foreground">
@@ -118,9 +120,8 @@ export function StaffFormFields({
           </select>
         </FormField>
       </div>
-    </div>
-
-      {showEligibility && <div className="rounded-xl border bg-card p-6">
+    </div></> },
+...(showEligibility ? [{ value: "services", label: "Service eligibility", content: <>{showEligibility && <div className="rounded-xl border bg-card p-6">
         <div className="space-y-2">
           <div className="text-sm font-medium">Eligible services</div>
           <p className="text-xs text-muted-foreground">
@@ -151,9 +152,8 @@ export function StaffFormFields({
             )}
           </div>
         </div>
-      </div>}
-
-      <div className="rounded-xl border bg-card p-6">
+      </div>}</> }] : []),
+{ value: "documents", label: "Documents", content: <><div className="rounded-xl border bg-card p-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="space-y-1">
             <h2 className="text-lg font-semibold">Documents</h2>
@@ -252,9 +252,8 @@ export function StaffFormFields({
         ) : (
           <p className="mt-3 text-sm text-muted-foreground">No documents added yet.</p>
         )}
-      </div>
-
-      <div className="rounded-xl border bg-card p-6">
+      </div></> },
+{ value: "certifications", label: "Certifications", content: <><div className="rounded-xl border bg-card p-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="space-y-1">
             <h2 className="text-lg font-semibold">Certifications</h2>
@@ -341,7 +340,8 @@ export function StaffFormFields({
         ) : (
           <p className="mt-3 text-sm text-muted-foreground">No certifications added yet.</p>
         )}
-      </div>
-    </>
+      </div></> }
+]} />
+</>
   )
 }

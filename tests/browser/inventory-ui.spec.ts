@@ -2,8 +2,8 @@ import { test, expect, type Page } from "@playwright/test"
 
 const category = { id: "cat", name: "Equipment", description: "Reusable equipment", status: "ACTIVE", sortOrder: 0 }
 const supplier = { id: "sup", name: "Acme Supplies", contactPerson: "Alex", email: "alex@example.test", phone: "", city: "Pune", state: "Maharashtra", country: "India", status: "ACTIVE", leadTimeDays: 3, isTaxRegistered: false, taxRegistrationType: null, taxRegistrationNumber: null, notes: "Keep these existing notes." }
-const product = { id: "prod", name: "Test product", sku: "STOCK-01", description: "Product description", unit: "unit", category, status: "ACTIVE", costPriceCents: 10000, mrpCents: 15000, onHandQty: 5, reorderPoint: 2, reorderQty: 10, isPhysical: true, taxIds: [], supplierLinks: [{ supplierId: "sup", supplierName: supplier.name, supplierSku: "A1", supplierCostCents: 9500, minOrderQty: 2, leadTimeDays: 3, isPreferred: true }] }
-const purchase = { id: "po", orderNumber: "PO-TEST", supplier, status: "ORDERED", orderDate: "2026-10-03", expectedDate: "2026-10-10", notes: "Deliver to office", subtotalCents: 20000, taxCents: 0, totalCents: 20000, items: [{ id: "line", product, quantity: 2, receivedQty: 0, unitCostCents: 10000, lineTaxCents: 0, lineTotalCents: 20000 }] }
+const product = { office: { id: "office", name: "Main office", companyName: "QA business", active: true }, officeId: "office", stockVersion: 1, id: "prod", name: "Test product", sku: "STOCK-01", description: "Product description", unit: "unit", category, status: "ACTIVE", costPriceCents: 10000, mrpCents: 15000, onHandQty: 5, reorderPoint: 2, reorderQty: 10, isPhysical: true, taxIds: [], supplierLinks: [{ supplierId: "sup", supplierName: supplier.name, supplierSku: "A1", supplierCostCents: 9500, minOrderQty: 2, leadTimeDays: 3, isPreferred: true }] }
+const purchase = { office: { id: "office", name: "Main office", companyName: "QA business", active: true }, id: "po", orderNumber: "PO-TEST", supplier, status: "ORDERED", orderDate: "2026-10-03", expectedDate: "2026-10-10", notes: "Deliver to office", subtotalCents: 20000, taxCents: 0, totalCents: 20000, items: [{ id: "line", product, quantity: 2, receivedQty: 0, unitCostCents: 10000, lineTaxCents: 0, lineTotalCents: 20000 }] }
 
 async function fixture(page: Page, total = 1) {
   const writes: { path: string; method: string; body: Record<string, unknown> }[] = []
@@ -15,10 +15,12 @@ async function fixture(page: Page, total = 1) {
       return route.fulfill({ json: { item: { id: "saved" } } })
     }
     queries.push(url)
+    if (path === "/api/workspace/office") return route.fulfill({ json: { creationOffice: { id: "office" }, version: 1 } })
+    if (path === "/api/inventory/office-choices") return route.fulfill({ json: { items: [purchase.office], selected: purchase.office, total: 1, totalPages: 1 } })
     if (path === "/api/modules") return route.fulfill({ json: { permissions: null, modules: [{ key: "inventory", enabled: true, allowed: true }] } })
     if (path.startsWith("/api/settings")) return route.fulfill({ json: { settings: { currency: "INR", locale: "en-IN", dateFormat: "dd/MM/yyyy", timeZone: "Asia/Kolkata" } } })
     const rows = path.endsWith("/products") ? [product] : path.endsWith("/suppliers") ? [supplier] : path.endsWith("/categories") ? [category] : path.endsWith("/purchases") ? [purchase] : []
-    return route.fulfill({ json: { items: rows, total: rows.length ? total : 0, page: Number(url.searchParams.get("page") || 1), totalPages: Math.ceil(total / 10), pageSize: 10 } })
+    return route.fulfill({ json: { office: { id: "office", name: "Main office", companyName: "QA business", active: true }, items: rows, total: rows.length ? total : 0, page: Number(url.searchParams.get("page") || 1), totalPages: Math.ceil(total / 10), pageSize: 10 } })
   })
   return { writes, queries }
 }
@@ -72,6 +74,7 @@ test("product editor uses shared sections, retains links and fits a mobile scree
   await page.setViewportSize({ width: 390, height: 844 })
   await page.goto("/inventory")
   await page.getByRole("button", { name: "Test product", exact: true }).click()
+  await page.getByRole("tab", { name: "Pricing and stock", exact: true }).click()
   await expect(page.getByRole("heading", { name: "Pricing and stock", exact: true })).toBeVisible()
   await page.getByRole("button", { name: "Edit details" }).click()
   await expect(page.locator("#product-category")).toContainText("Equipment")
@@ -96,9 +99,12 @@ test("supplier view and editor retain saved notes and dropdown selections", asyn
   const { writes } = await fixture(page)
   await page.goto("/inventory/suppliers")
   await page.getByRole("button", { name: "Acme Supplies", exact: true }).click()
+  await page.getByRole("tab", { name: "Notes", exact: true }).click()
   await expect(page.getByText("Keep these existing notes.", { exact: true })).toBeVisible()
   await page.getByRole("button", { name: "Edit details" }).click()
+  await page.getByRole("dialog").getByRole("tab", { name: "Address and notes", exact: true }).click()
   await expect(page.getByRole("textbox", { name: "Notes", exact: true })).toHaveValue("Keep these existing notes.")
+  await page.getByRole("dialog").getByRole("tab", { name: "Contact and ordering", exact: true }).click()
   await page.getByLabel("Contact person", { exact: true }).fill("New contact")
   await expect(page.locator("select:visible")).toHaveCount(0)
   await page.getByRole("button", { name: "Save changes", exact: true }).click()
@@ -121,6 +127,7 @@ test("purchase order details, stock confirmation and creation preserve quantitie
   expect(writes[0].body).toEqual({ status: "RECEIVED" })
   await page.getByRole("button", { name: "New PO", exact: true }).click()
   await choose(page, "po-supplier", "Acme Supplies")
+  await page.getByRole("dialog").getByRole("tab", { name: "Order items", exact: true }).click()
   await choose(page, "po-item-product-0", "Test product")
   await page.getByLabel("Qty", { exact: true }).fill("3")
   await page.getByLabel("Unit cost", { exact: true }).fill("25.50")

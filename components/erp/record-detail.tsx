@@ -10,13 +10,40 @@ import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuIte
 
 // Record-local navigation. Inactive panels are not mounted, so embedded lists
 // fetch only when opened. Business components retain their own permissions.
-export function RecordTabs({ tabs, value, onChange }: {
+export function RecordTabs({ tabs, value, onChange, keepMounted = false, validationErrors }: {
   tabs: { value: string; label: string; content: React.ReactNode }[];
   value: string; onChange: (value: string) => void;
+  keepMounted?: boolean;
+  validationErrors?: unknown;
 }) {
   const id = React.useId()
+  const root = React.useRef<HTMLDivElement>(null)
+  const validating = React.useRef(false)
+  function ownedPanel(element: HTMLElement) {
+    let panel = element.closest<HTMLElement>("[data-record-panel]")
+    while (panel && panel.closest("[data-record-tabs]") !== root.current) panel = panel.parentElement?.closest<HTMLElement>("[data-record-panel]") || null
+    return panel
+  }
+  React.useEffect(() => {
+    if (!validationErrors) return
+    const error = root.current?.querySelector<HTMLElement>("[data-field-error]")
+    const panel = error && ownedPanel(error)
+    if (!panel?.hidden) return
+    onChange(panel.dataset.recordPanel!)
+    requestAnimationFrame(() => document.getElementById(error!.dataset.fieldError!)?.focus())
+  }, [validationErrors, onChange])
   if (!tabs.some(tab => tab.value === value)) value = tabs[0]?.value || ""
-  return <div className="min-w-0 space-y-5">
+  return <div ref={root} data-record-tabs className="min-w-0 space-y-5" onInvalidCapture={event => {
+    const input = event.target as HTMLInputElement
+    const panel = ownedPanel(input)
+    if (validating.current) { if (panel?.hidden) event.preventDefault(); return }
+    validating.current = true
+    requestAnimationFrame(() => { validating.current = false })
+    if (!panel?.hidden) return
+    event.preventDefault()
+    onChange(panel.dataset.recordPanel!)
+    requestAnimationFrame(() => { input.focus(); input.reportValidity() })
+  }}>
     <div role="tablist" aria-label="Record sections" className="flex max-w-full gap-1 overflow-x-auto border-b pb-2" onKeyDown={event => {
       if (!tabs.length) return
       const index = tabs.findIndex(tab => tab.value === value)
@@ -25,9 +52,9 @@ export function RecordTabs({ tabs, value, onChange }: {
       event.preventDefault(); onChange(tabs[next].value)
       document.getElementById(`${id}-${tabs[next].value}`)?.focus()
     }}>
-      {tabs.map(tab => <Button key={tab.value} type="button" role="tab" id={`${id}-${tab.value}`} aria-selected={value === tab.value} aria-controls={`${id}-panel`} tabIndex={value === tab.value ? 0 : -1} variant={value === tab.value ? "secondary" : "ghost"} className="shrink-0" onClick={() => onChange(tab.value)}>{tab.label}</Button>)}
+      {tabs.map(tab => <Button key={tab.value} type="button" role="tab" id={`${id}-${tab.value}`} aria-selected={value === tab.value} aria-controls={`${id}-panel-${tab.value}`} tabIndex={value === tab.value ? 0 : -1} variant={value === tab.value ? "secondary" : "ghost"} className="shrink-0" onClick={() => onChange(tab.value)}>{tab.label}</Button>)}
     </div>
-    <div key={value} role="tabpanel" id={`${id}-panel`} aria-labelledby={`${id}-${value}`} tabIndex={0} className="min-w-0 space-y-6">{tabs.find(tab => tab.value === value)?.content}</div>
+    {tabs.filter(tab => keepMounted || tab.value === value).map(tab => <div key={tab.value} role="tabpanel" id={`${id}-panel-${tab.value}`} data-record-panel={tab.value} hidden={tab.value !== value} aria-labelledby={`${id}-${tab.value}`} tabIndex={0} className="min-w-0 space-y-6">{tab.content}</div>)}
   </div>
 }
 

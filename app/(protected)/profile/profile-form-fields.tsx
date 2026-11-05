@@ -1,4 +1,5 @@
 "use client"
+import { SectionTabs } from "@/components/erp/section-tabs"
 import { enumLabel } from "@/lib/enum-label"
 
 import { FormField } from "@/components/form-field"
@@ -21,18 +22,19 @@ export function ProfileFormFields({ values, errors, onChange }: ProfileFormField
   const stateOptions = getStateOptionsByCountry(values.country)
 
   return (
-    <div className="grid gap-4 sm:grid-cols-2">
-      <FormField id="me-name" label="Full name" error={errors.name}>
+    <div className="space-y-5">
+<SectionTabs scope="profile-form" keepMounted validationErrors={errors} tabs={[
+{ value: "overview", label: "Personal details", content: <div className="grid gap-4 sm:grid-cols-2"><FormField id="me-name" label="Full name" error={errors.name}>
         <Input
           id="me-name"
           value={values.name}
           onChange={(event) => update("name", event.target.value)}
         />
       </FormField>
-      <FormField id="me-email" label="Email">
+<FormField id="me-email" label="Email">
         <Input id="me-email" value={values.email} disabled />
       </FormField>
-      <FormField id="me-phone" label="Mobile" error={errors.phone}>
+<FormField id="me-phone" label="Mobile" error={errors.phone}>
         <Input
           id="me-phone"
           type="tel"
@@ -40,7 +42,7 @@ export function ProfileFormFields({ values, errors, onChange }: ProfileFormField
           onChange={(event) => update("phone", event.target.value)}
         />
       </FormField>
-      <FormField id="me-image" label="Profile image URL" error={errors.image}>
+<FormField id="me-image" label="Profile image URL" error={errors.image}>
         <Input
           id="me-image"
           type="url"
@@ -48,7 +50,7 @@ export function ProfileFormFields({ values, errors, onChange }: ProfileFormField
           onChange={(event) => update("image", event.target.value)}
         />
       </FormField>
-      <FormField id="me-dob" label="Date of birth" error={errors.dateOfBirth}>
+<FormField id="me-dob" label="Date of birth" error={errors.dateOfBirth}>
         <Input
           id="me-dob"
           type="date"
@@ -56,7 +58,7 @@ export function ProfileFormFields({ values, errors, onChange }: ProfileFormField
           onChange={(event) => update("dateOfBirth", event.target.value)}
         />
       </FormField>
-      <FormField id="me-gender" label="Gender" error={errors.gender}>
+<FormField id="me-gender" label="Gender" error={errors.gender}>
         <select
           id="me-gender"
           className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
@@ -67,8 +69,8 @@ export function ProfileFormFields({ values, errors, onChange }: ProfileFormField
             <option key={gender} value={gender}>{enumLabel(gender)}</option>
           ))}
         </select>
-      </FormField>
-      <div className="space-y-2 sm:col-span-2">
+      </FormField></div> },
+{ value: "address", label: "Address and preferences", content: <div className="grid gap-4 sm:grid-cols-2"><div className="space-y-2 sm:col-span-2">
         <Label>Address</Label>
         <div className="grid gap-3 sm:grid-cols-2">
           <Input
@@ -136,7 +138,7 @@ export function ProfileFormFields({ values, errors, onChange }: ProfileFormField
           )}
         </div>
       </div>
-      <div className="sm:col-span-2 flex items-center gap-2">
+<div className="sm:col-span-2 flex items-center gap-2">
         <input
           id="me-marketing"
           type="checkbox"
@@ -144,7 +146,8 @@ export function ProfileFormFields({ values, errors, onChange }: ProfileFormField
           onChange={(event) => update("marketingOptIn", event.target.checked)}
         />
         <Label htmlFor="me-marketing">Marketing opt-in</Label>
-      </div>
-    </div>
+      </div></div> }
+]} />
+</div>
   )
 }

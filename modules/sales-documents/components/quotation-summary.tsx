@@ -12,31 +12,33 @@ import type { QuotationContent } from "../quotation-validation"
 import type { QuotationSnapshot } from "../quotation-service"
 
 // Saved documents display their immutable calculation, never a recalculated draft.
-export function QuotationSummary({ value, snapshot, section, canEdit, name, archived }: {
+export function QuotationSummary({ value, snapshot, section, canEdit, name, archived, overviewSections }: {
   value: QuotationContent; snapshot?: QuotationSnapshot; section: "overview" | "pricing" | "payments" | "terms";
   canEdit: boolean; name?: string; archived?: boolean;
+  overviewSections?: readonly ("document" | "customers" | "context" | "additional" | "totals")[];
 }) {
   const term = useTerminology()
   const documentLabels = snapshot?.labels ?? quotationDocumentLabels()
   const money = (amount: string) => formatDecimalCurrency(amount, value.currency, snapshot)
   const calculation = snapshot?.calculation
+  const overview = new Set(overviewSections ?? ["document", "customers", "context", "additional", "totals"])
   if (section === "overview") return <>
     {name !== undefined && <AccessSummarySection title="Template configuration" canEdit={canEdit} fields={[{ label: "Template name", value: name }, { label: "Status", value: archived ? "Archived" : "Active" }]} />}
-    <AccessSummarySection sectionKey="Document details" title={term("salesDocuments.quotation.singular", "Document details", "{label} details")} canEdit={canEdit} fields={[
+    {overview.has("document") && <AccessSummarySection sectionKey="Document details" title={term("salesDocuments.quotation.singular", "Document details", "{label} details")} canEdit={canEdit} fields={[
       { label: "Title", value: value.title }, { label: "Supplier", value: value.supplierName },
       { label: "Currency", value: value.currency }, { label: "Website", value: value.website },
       { label: "Booking date on quotation", value: formatDateForDisplay(value.bookingDate, snapshot?.dateFormat) }, { label: "Valid until", value: formatDateForDisplay(value.validUntil, snapshot?.dateFormat) },
       { label: "Registration", value: value.registration }, { label: "Registration URL", value: value.registrationUrl },
       { label: "Logo", value: value.logoDataUrl ? "Included in document" : "None" },
-    ]} />
-    {snapshot?.participants && <ParticipantInformationSummary value={snapshot.participants} />}
-    {snapshot && <Section title={snapshot.participants ? "Sales context" : documentLabels.parties}><ReadOnlyFields fields={[
+    ]} />}
+    {overview.has("customers") && snapshot?.participants && <ParticipantInformationSummary value={snapshot.participants} />}
+    {overview.has("context") && snapshot && <Section title={snapshot.participants ? "Sales context" : documentLabels.parties}><ReadOnlyFields fields={[
       ...(!snapshot.participants ? [{ label: documentLabels.customer, value: snapshot.customer.name }, { label: "Email", value: snapshot.customer.email }, { label: "Phone", value: snapshot.customer.phone }] : []),
       { label: documentLabels.opportunity, value: snapshot.opportunity },
       ...snapshot.context,
     ]} /></Section>}
-    <AccessSummarySection title="Additional details" canEdit={canEdit} fields={value.details}>{!value.details.length && <p className="text-sm text-muted-foreground">No additional details.</p>}</AccessSummarySection>
-    {calculation && <Section title="Calculated summary"><ReadOnlyFields fields={[
+    {overview.has("additional") && <AccessSummarySection title="Additional details" canEdit={canEdit} fields={value.details}>{!value.details.length && <p className="text-sm text-muted-foreground">No additional details.</p>}</AccessSummarySection>}
+    {overview.has("totals") && calculation && <Section title="Calculated summary"><ReadOnlyFields fields={[
       { label: "Base price", value: money(calculation.base) }, { label: "Included charges", value: money(calculation.included) },
       { label: "Discount", value: money(calculation.discount) }, { label: "Total consideration", value: money(calculation.consideration) },
       { label: "Extra charges", value: money(calculation.extras) }, { label: "Total known amount", value: money(calculation.totalKnown) },

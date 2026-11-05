@@ -62,6 +62,7 @@ test("tenant creation exposes module choices and row actions expose the same mod
   })
   await page.goto("/settings/tenants")
   await page.getByRole("button", { name: "New tenant", exact: true }).click()
+  await page.getByRole("dialog").getByRole("tab", { name: "Modules", exact: true }).click()
   await expect(page.getByRole("checkbox", { name: "Real Estate", exact: true })).toBeDisabled()
   await page.getByRole("checkbox", { name: "CRM", exact: true }).check()
   await page.getByRole("checkbox", { name: "Sales Documents", exact: true }).check()

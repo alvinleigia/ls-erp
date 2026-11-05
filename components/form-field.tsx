@@ -24,7 +24,7 @@ export function FormField({
   children,
 }: FormFieldProps) {
   return (
-    <div className={cn("space-y-2", className)}>
+    <div className={cn("space-y-2", className)} data-field-error={error ? id : undefined}>
       <div className="flex min-h-5 items-center gap-2"><Label htmlFor={id}>{label}</Label>{help && <InfoHelp title={label}>{help}</InfoHelp>}</div>
       {children}
       {error ? <p className="text-xs text-destructive">{error}</p> : null}

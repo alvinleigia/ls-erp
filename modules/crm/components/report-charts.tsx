@@ -16,7 +16,7 @@ export function ReportDonut({ title, description, rows }: { title: string; descr
     {total > 0 ? <div aria-hidden="true" className="h-52 min-w-0"><ResponsiveContainer width="100%" height="100%"><PieChart accessibilityLayer={false}>
       <Pie data={rows} dataKey="value" nameKey="label" innerRadius={52} outerRadius={85} paddingAngle={2} isAnimationActive={false}>
         {rows.map((row, i) => <Cell key={`${i}:${row.label}`} fill={colors[i % colors.length]} stroke="var(--card)" />)}
-      </Pie><Tooltip contentStyle={tooltipStyle} />
+      </Pie><Tooltip contentStyle={tooltipStyle} itemStyle={{ color: "var(--popover-foreground)" }} labelStyle={{ color: "var(--popover-foreground)" }} />
     </PieChart></ResponsiveContainer></div> : <p className="py-8 text-center text-sm text-muted-foreground">No matching records for this chart.</p>}
     <ul className="space-y-2 text-sm">{rows.map((row, i) => <li key={`${i}:${row.label}`} className="flex items-start justify-between gap-3">
       <span className="flex min-w-0 items-start gap-2"><span aria-hidden="true" className="mt-1 size-3 shrink-0 rounded-sm" style={{ backgroundColor: colors[i % colors.length] }} />{row.label}</span>
@@ -34,7 +34,7 @@ export function ReportBars({ title, description, context, rows, primary = "Recor
         <CartesianGrid horizontal={false} strokeDasharray="3 3" stroke="var(--border)" />
         <XAxis type="number" allowDecimals={false} fontSize={12} stroke="var(--muted-foreground)" />
         <YAxis type="category" dataKey="label" width={105} fontSize={12} stroke="var(--muted-foreground)" tickFormatter={value => String(value).length > 16 ? `${String(value).slice(0, 15)}…` : String(value)} />
-        <Tooltip contentStyle={tooltipStyle} cursor={{ fill: "var(--muted)", opacity: 0.5 }} />
+        <Tooltip contentStyle={tooltipStyle} itemStyle={{ color: "var(--popover-foreground)" }} labelStyle={{ color: "var(--popover-foreground)" }} cursor={{ fill: "var(--muted)", opacity: 0.5 }} />
         <Bar dataKey="value" name={primary} fill={colors[0]} radius={[0, 4, 4, 0]} maxBarSize={22} isAnimationActive={false} />
         {secondary && <Bar dataKey="secondary" name={secondary} fill={colors[1]} radius={[0, 4, 4, 0]} maxBarSize={22} isAnimationActive={false} />}
       </BarChart></ResponsiveContainer>

@@ -1,4 +1,5 @@
 "use client"
+import { SectionTabs } from "@/components/erp/section-tabs"
 import { useListState } from "@/components/erp/list-navigation"
 
 import * as React from "react"
@@ -705,11 +706,12 @@ export default function TenantsPageClient({
             <DialogTitle>New tenant</DialogTitle>
           </DialogHeader>
           <div className="grid gap-3">
-            <div className="rounded-md border border-border/60 bg-muted/30 p-3 text-sm text-muted-foreground">
+<SectionTabs scope="tenant-provisioning" keepMounted validationErrors={errors} tabs={[
+{ value: "overview", label: "Tenant details", content: <div className="space-y-4"><div className="rounded-md border border-border/60 bg-muted/30 p-3 text-sm text-muted-foreground">
               If no custom domain is added, this tenant will use the standard slug-based URL.
               You can add or change the custom domain later.
             </div>
-            <FormField id="tenant-name" label="Tenant name" error={errors.name}>
+<FormField id="tenant-name" label="Tenant name" error={errors.name}>
               <Input
                 id="tenant-name"
                 value={formValues.name}
@@ -718,7 +720,7 @@ export default function TenantsPageClient({
                 }
               />
             </FormField>
-            <FormField id="tenant-slug" label="Tenant slug" error={errors.slug}>
+<FormField id="tenant-slug" label="Tenant slug" error={errors.slug}>
               <Input
                 id="tenant-slug"
                 value={formValues.slug}
@@ -731,7 +733,7 @@ export default function TenantsPageClient({
                 placeholder="example-tenant"
               />
             </FormField>
-            <FormField
+<FormField
               id="tenant-organization"
               label="Organization (optional)"
               error={errors.organizationId}
@@ -755,7 +757,7 @@ export default function TenantsPageClient({
                 ))}
               </select>
             </FormField>
-            <FormField
+<FormField
               id="tenant-custom-domain"
               label="Custom domain (optional)"
               error={errors.customDomain}
@@ -775,8 +777,8 @@ export default function TenantsPageClient({
                 <p className="text-xs text-muted-foreground">{tenantDomainHelpText}</p>
                 <p className="text-xs text-muted-foreground">{tenantDomainDnsHelpText}</p>
               </div>
-            </FormField>
-            <FormField id="admin-name" label="Admin name" error={errors.adminName}>
+            </FormField></div> },
+{ value: "admin", label: "Initial administrator", content: <div className="space-y-4"><FormField id="admin-name" label="Admin name" error={errors.adminName}>
               <Input
                 id="admin-name"
                 value={formValues.adminName}
@@ -785,7 +787,7 @@ export default function TenantsPageClient({
                 }
               />
             </FormField>
-            <FormField id="admin-email" label="Admin email" error={errors.adminEmail}>
+<FormField id="admin-email" label="Admin email" error={errors.adminEmail}>
               <Input
                 id="admin-email"
                 type="email"
@@ -795,7 +797,7 @@ export default function TenantsPageClient({
                 }
               />
             </FormField>
-            <FormField
+<FormField
               id="admin-password"
               label="Temporary password"
               error={errors.adminPassword}
@@ -808,9 +810,10 @@ export default function TenantsPageClient({
                   setFormValues((prev) => ({ ...prev, adminPassword: event.target.value }))
                 }
               />
-            </FormField>
-            {platformAccessMode === "SUPER_ADMIN" && <TenantModuleSelection value={formValues.modules} disabled={creating} onChange={modules => setFormValues(prev => ({ ...prev, modules }))}/>}
-          </div>
+            </FormField></div> },
+...(platformAccessMode === "SUPER_ADMIN" ? [{ value: "modules", label: "Modules", content: <>{platformAccessMode === "SUPER_ADMIN" && <TenantModuleSelection value={formValues.modules} disabled={creating} onChange={modules => setFormValues(prev => ({ ...prev, modules }))}/>}</> }] : [])
+]} />
+</div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setCreateOpen(false)}>
               Cancel

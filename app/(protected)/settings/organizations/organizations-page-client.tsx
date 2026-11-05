@@ -1,4 +1,5 @@
 "use client"
+import { SectionTabs } from "@/components/erp/section-tabs"
 import { useListState } from "@/components/erp/list-navigation"
 
 import * as React from "react"
@@ -578,96 +579,12 @@ export default function OrganizationsPageClient({
           </DialogHeader>
 
           <div className="space-y-6">
-            <div className="rounded-md border border-border/60 bg-muted/30 p-3 text-sm text-muted-foreground">
+<SectionTabs scope="organization-members" keepMounted validationErrors={memberErrors} tabs={[
+{ value: "overview", label: "Members", content: <><div className="rounded-md border border-border/60 bg-muted/30 p-3 text-sm text-muted-foreground">
               Members created here can sign in on the platform domain and will only see the
               parent-company console for their own organization scope.
             </div>
-
-            {canManageMembersInSelectedOrganization ? (
-              <div className="space-y-3">
-                <h2 className="text-sm font-semibold">Add member</h2>
-                <div className="grid gap-3 md:grid-cols-2">
-                  <FormField id="member-name" label="Name" error={memberErrors.name}>
-                    <Input
-                      id="member-name"
-                      value={memberFormValues.name}
-                      onChange={(event) =>
-                        setMemberFormValues((prev) => ({ ...prev, name: event.target.value }))
-                      }
-                    />
-                  </FormField>
-                  <FormField id="member-email" label="Email" error={memberErrors.email}>
-                    <Input
-                      id="member-email"
-                      type="email"
-                      value={memberFormValues.email}
-                      onChange={(event) =>
-                        setMemberFormValues((prev) => ({ ...prev, email: event.target.value }))
-                      }
-                    />
-                  </FormField>
-                  <FormField id="member-phone" label="Phone" error={memberErrors.phone}>
-                    <Input
-                      id="member-phone"
-                      value={memberFormValues.phone}
-                      onChange={(event) =>
-                        setMemberFormValues((prev) => ({ ...prev, phone: event.target.value }))
-                      }
-                    />
-                  </FormField>
-                  <FormField
-                    id="member-password"
-                    label="Temporary password (optional)"
-                    error={memberErrors.password}
-                  >
-                    <Input
-                      id="member-password"
-                      type="password"
-                      value={memberFormValues.password}
-                      onChange={(event) =>
-                        setMemberFormValues((prev) => ({ ...prev, password: event.target.value }))
-                      }
-                    />
-                  </FormField>
-                  <FormField id="member-role" label="Membership role" error={memberErrors.role}>
-                    <select
-                      id="member-role"
-                      className="h-9 rounded-md border border-input bg-background px-3 text-sm"
-                      value={memberFormValues.role}
-                      onChange={(event) =>
-                        setMemberFormValues((prev) => ({
-                          ...prev,
-                          role: event.target.value as OrganizationMemberRole,
-                        }))
-                      }
-                    >
-                      {canAssignOwnerRole ? <option value="OWNER">Owner</option> : null}
-                      <option value="ADMIN">Admin</option>
-                      <option value="VIEWER">Viewer</option>
-                    </select>
-                  </FormField>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Leave the password blank to send the member a set-password link instead.
-                </p>
-                <div className="flex justify-end">
-                  <Button
-                    onClick={() => void createMember()}
-                    loading={memberCreating}
-                    loadingText="Adding..."
-                    disabled={!selectedOrganization}
-                  >
-                    Add member
-                  </Button>
-                </div>
-              </div>
-            ) : (
-              <div className="rounded-md border border-border/60 bg-muted/30 p-3 text-sm text-muted-foreground">
-                You have read-only access for this organization.
-              </div>
-            )}
-
-            <div className="space-y-3">
+<div className="space-y-3">
               <h2 className="text-sm font-semibold">Current members</h2>
               <div className="overflow-x-auto rounded-md border">
                 <table className="min-w-full text-sm">
@@ -749,8 +666,92 @@ export default function OrganizationsPageClient({
                   </tbody>
                 </table>
               </div>
-            </div>
-          </div>
+            </div></> },
+{ value: "create", label: "Add member", content: <>{canManageMembersInSelectedOrganization ? (
+              <div className="space-y-3">
+                <h2 className="text-sm font-semibold">Add member</h2>
+                <div className="grid gap-3 md:grid-cols-2">
+                  <FormField id="member-name" label="Name" error={memberErrors.name}>
+                    <Input
+                      id="member-name"
+                      value={memberFormValues.name}
+                      onChange={(event) =>
+                        setMemberFormValues((prev) => ({ ...prev, name: event.target.value }))
+                      }
+                    />
+                  </FormField>
+                  <FormField id="member-email" label="Email" error={memberErrors.email}>
+                    <Input
+                      id="member-email"
+                      type="email"
+                      value={memberFormValues.email}
+                      onChange={(event) =>
+                        setMemberFormValues((prev) => ({ ...prev, email: event.target.value }))
+                      }
+                    />
+                  </FormField>
+                  <FormField id="member-phone" label="Phone" error={memberErrors.phone}>
+                    <Input
+                      id="member-phone"
+                      value={memberFormValues.phone}
+                      onChange={(event) =>
+                        setMemberFormValues((prev) => ({ ...prev, phone: event.target.value }))
+                      }
+                    />
+                  </FormField>
+                  <FormField
+                    id="member-password"
+                    label="Temporary password (optional)"
+                    error={memberErrors.password}
+                  >
+                    <Input
+                      id="member-password"
+                      type="password"
+                      value={memberFormValues.password}
+                      onChange={(event) =>
+                        setMemberFormValues((prev) => ({ ...prev, password: event.target.value }))
+                      }
+                    />
+                  </FormField>
+                  <FormField id="member-role" label="Membership role" error={memberErrors.role}>
+                    <select
+                      id="member-role"
+                      className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+                      value={memberFormValues.role}
+                      onChange={(event) =>
+                        setMemberFormValues((prev) => ({
+                          ...prev,
+                          role: event.target.value as OrganizationMemberRole,
+                        }))
+                      }
+                    >
+                      {canAssignOwnerRole ? <option value="OWNER">Owner</option> : null}
+                      <option value="ADMIN">Admin</option>
+                      <option value="VIEWER">Viewer</option>
+                    </select>
+                  </FormField>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Leave the password blank to send the member a set-password link instead.
+                </p>
+                <div className="flex justify-end">
+                  <Button
+                    onClick={() => void createMember()}
+                    loading={memberCreating}
+                    loadingText="Adding..."
+                    disabled={!selectedOrganization}
+                  >
+                    Add member
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="rounded-md border border-border/60 bg-muted/30 p-3 text-sm text-muted-foreground">
+                You have read-only access for this organization.
+              </div>
+            )}</> }
+]} />
+</div>
 
           <DialogFooter>
             <Button variant="outline" onClick={() => setMembersOpen(false)}>

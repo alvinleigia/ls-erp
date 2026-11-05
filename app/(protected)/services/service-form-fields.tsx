@@ -1,4 +1,5 @@
 "use client"
+import { SectionTabs } from "@/components/erp/section-tabs"
 
 import * as React from "react"
 import { useCurrentResourceAction } from "@/platform/access/view-guard"
@@ -30,7 +31,8 @@ export function ServiceFormFields({ mode, values, errors, selectedCategory, sele
   const fieldId = (name: string) => `${mode}-${name}`
 
   return <>
-    <Section title="Service details">
+<SectionTabs scope="service-form" keepMounted validationErrors={errors} tabs={[
+{ value: "overview", label: "Service", content: <><Section title="Service details">
       <div className="grid gap-4 sm:grid-cols-2">
         <FormField id={fieldId("service-name")} label="Name" error={errors.name}><Input id={fieldId("service-name")} required minLength={2} maxLength={120} value={values.name} onChange={event => update("name", event.target.value)} /></FormField>
         <FormField id={fieldId("service-category")} label="Category" error={errors.categoryId}>
@@ -48,14 +50,14 @@ export function ServiceFormFields({ mode, values, errors, selectedCategory, sele
         </FormField>
       </div>
       <FormField id={fieldId("service-description")} label="Description" error={errors.description}><Textarea id={fieldId("service-description")} maxLength={1000} value={values.description} onChange={event => update("description", event.target.value)} /></FormField>
-    </Section>
-    <Section title="Pricing and duration">
+    </Section></> },
+{ value: "pricing", label: "Pricing and taxes", content: <><Section title="Pricing and duration">
       <div className="grid gap-4 sm:grid-cols-2">
         <FormField id={fieldId("service-duration")} label="Duration (minutes)" error={errors.durationMinutes}><Input id={fieldId("service-duration")} required type="number" min={5} max={600} value={values.durationMinutes} onChange={event => update("durationMinutes", Number(event.target.value) || 0)} /></FormField>
         <FormField id={fieldId("service-price")} label="Price" error={errors.priceCents}><Input id={fieldId("service-price")} required type="number" min={0} max={10000} step="0.01" inputMode="decimal" value={values.price} onChange={event => update("price", event.target.value)} /></FormField>
       </div>
     </Section>
-    <Section title="Default taxes">
+<Section title="Default taxes">
       <FormField id={fieldId("service-tax-mode")} label="Tax mode" error={errors.taxMode}>
         <Select id={fieldId("service-tax-mode")} className="w-full" value={values.taxMode} onValueChange={value => update("taxMode", value as ServiceFormValues["taxMode"])}><option value="EXCLUSIVE">Exclusive (tax added on top)</option><option value="INCLUSIVE">Inclusive (price includes tax)</option></Select>
       </FormField>
@@ -65,8 +67,8 @@ export function ServiceFormFields({ mode, values, errors, selectedCategory, sele
           {!taxOptions.length && <p className="text-sm text-muted-foreground">No taxes available.</p>}
         </div>
       </FormField>
-    </Section>
-    {values.type === "PACKAGE" && <Section title="Package items" description="Search for services to include in this package.">
+    </Section></> },
+...(values.type === "PACKAGE" ? [{ value: "package", label: "Package items", content: <>{values.type === "PACKAGE" && <Section title="Package items" description="Search for services to include in this package.">
       <FormField id={fieldId("service-package-items")} label="Add a service" error={errors.packageItemIds}>
         <RecordSelect key={pickerKey} id={fieldId("service-package-items")} endpoint="/api/services?status=ACTIVE&type=STANDARD" value="" placeholder="Search services..." onChange={(id, option) => {
           if (!id || !option) return
@@ -80,6 +82,7 @@ export function ServiceFormFields({ mode, values, errors, selectedCategory, sele
         return <li key={id} className="flex items-center justify-between gap-3 rounded-lg border p-3 text-sm"><span className="min-w-0 break-words">{name}</span><Button type="button" size="sm" variant="ghost" aria-label={`Remove ${name}`} onClick={() => update("packageItemIds", values.packageItemIds.filter(value => value !== id))}>Remove</Button></li>
       })}</ul>
       {!values.packageItemIds.length && <p className="text-sm text-muted-foreground">No services added yet.</p>}
-    </Section>}
-  </>
+    </Section>}</> }] : [])
+]} />
+</>
 }

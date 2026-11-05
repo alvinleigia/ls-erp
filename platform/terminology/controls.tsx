@@ -1,4 +1,5 @@
 "use client"
+import { SectionTabs } from "@/components/erp/section-tabs"
 import * as React from "react"
 import { toast } from "sonner"
 import { PageHeader, FormActions, pageClass } from "@/components/erp/page"
@@ -48,12 +49,12 @@ export function TerminologyControls() {
     {data && !data.canManage && <p role="alert">Only a business administrator can change terminology.</p>}
     {data?.canManage && <form id="terminology-form" onSubmit={save} className="space-y-6">
       {!data.terms.length && <p>No configurable labels are available for your active modules.</p>}
-      {[...new Set(data.terms.map(term => term.section))].map(section => <Section key={section} title={section}>
+      <SectionTabs scope="terminology-sections" keepMounted tabs={[...new Set(data.terms.map(term => term.section))].map(section => ({value:section,label:section,content:<Section key={section} title={section}>
         <div className="grid gap-5 sm:grid-cols-2">{data.terms.filter(term => term.section === section).map(term => <FormField key={term.key} id={term.key} label={term.defaultLabel}>
           <Input id={term.key} value={draft[term.key] ?? ""} placeholder={term.defaultLabel} maxLength={60} disabled={saving || loading} onChange={event => setDraft(previous => ({ ...previous, [term.key]: event.target.value }))} />
           <div className="flex min-h-8 items-center justify-between gap-2"><span className="text-xs text-muted-foreground">Default: {term.defaultLabel}</span>{draft[term.key] && <Button type="button" variant="link" size="sm" disabled={saving} aria-label={`Reset ${term.defaultLabel} to default`} onClick={() => setDraft(previous => ({ ...previous, [term.key]: "" }))}>Use default</Button>}</div>
         </FormField>)}</div>
-      </Section>)}
+      </Section>}))}/>
     </form>}
   </div>
 }

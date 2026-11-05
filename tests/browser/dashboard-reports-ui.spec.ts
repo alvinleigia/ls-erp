@@ -1,6 +1,10 @@
 import { test, expect, type Page } from "@playwright/test"
 
 const summary = {
+  stockOffice: null,
+  sales: { enquiries: null, opportunities: null, activities: null, projects: null, quotations: null, paymentPlans: null },
+  salesFilters: { from: "2030-10-07", through: "2030-10-13", timeZone: "Asia/Kolkata", canFilterOrigin: false, omitted: [], links: {} },
+  visibility: { appointments: true, leaves: false, services: true, inventory: true },
   range: { label: "This week", startDate: "2030-10-07", endDate: "2030-10-13" },
   kpis: { revenueCents: 123400, revenueTodayCents: 30000, appointments: 7, appointmentsToday: 2, distinctCustomers: 5, pendingLeaves: 1, activeServices: 4, activeStaff: 3 },
   series: { daily: [{ date: "2030-10-07", label: "Mon", revenueCents: 123400, bookings: 7 }] },
@@ -121,7 +125,9 @@ test("audit filters and read-only snapshots work in a narrow panel with fixed cl
   await expect.poll(() => queries.at(-1)?.searchParams.get("requestId")).toBe("request-123")
   await page.keyboard.press("Escape")
   await page.getByRole("button", { name: "View", exact: true }).click()
+  await page.getByRole("dialog").getByRole("tab", { name: "Changed fields", exact: true }).click()
   await expect(page.getByRole("region", { name: "Changed fields", exact: true })).toContainText("APPROVED")
+  await page.getByRole("dialog").getByRole("tab", { name: "Recorded evidence", exact: true }).click()
   await page.getByText("Recorded snapshots", { exact: true }).click()
   await expect(page.getByRole("region", { name: "Before", exact: true })).toContainText("PENDING")
   await expect(page.getByRole("region", { name: "After", exact: true })).toContainText("APPROVED")
@@ -153,6 +159,7 @@ test("audit security/actor filters reset pagination and a revoked detail clears 
  expect(queries.at(-1)?.searchParams.get("actorUserId")).toBe("manager-id")
  await page.keyboard.press("Escape")
  await page.getByRole("button", { name: "View", exact: true }).click()
+ await page.getByRole("dialog").getByRole("tab", { name: "Changed fields", exact: true }).click()
  await expect(page.getByRole("region", { name: "Changed fields" })).toContainText("APPROVED")
  await page.screenshot({ path: test.info().outputPath("audit-changes-desktop.png"), fullPage: true, animations: "disabled" })
  state.detailDenied = true

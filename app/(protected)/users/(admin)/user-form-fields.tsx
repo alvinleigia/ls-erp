@@ -1,4 +1,5 @@
 "use client"
+import { SectionTabs } from "@/components/erp/section-tabs"
 import { enumLabel } from "@/lib/enum-label"
 import { defaultRecordRules } from "@/platform/access/rules"
 
@@ -47,9 +48,9 @@ export function UserFormFields({
   const stateOptions = getStateOptionsByCountry(values.country)
 
   return (
-    <div className="grid gap-4 sm:grid-cols-2">
-      {mode === "create" && canManage && ["STAFF", "MANAGER"].includes(values.role) && <div className="space-y-4 sm:col-span-2"><ProfilePicker id="new-user-access-profiles" value={values.accessRoleIds || []} onChange={ids => update("accessRoleIds", ids)} /><RecordPolicyFields value={{ rules: values.recordRules ?? defaultRecordRules() }} onChange={patch => onChange({ ...values, recordRules: patch.rules })} /><p className="text-xs text-muted-foreground">Manage reusable profiles in Settings &gt; Access profiles. Empty selection grants no business access.</p></div>}
-      <FormField id={`${mode}-name`} label="Full name" error={errors.name}>
+    <div className="space-y-5">
+<SectionTabs scope="user-account-form" keepMounted validationErrors={errors} tabs={[
+{ value: "overview", label: "Personal details", content: <div className="grid gap-4 sm:grid-cols-2"><FormField id={`${mode}-name`} label="Full name" error={errors.name}>
         <Input
           id={`${mode}-name`}
           value={values.name}
@@ -57,7 +58,7 @@ export function UserFormFields({
           disabled={!canSelfEdit}
         />
       </FormField>
-      <FormField id={`${mode}-email`} label="Email" error={errors.email}>
+<FormField id={`${mode}-email`} label="Email" error={errors.email}>
         <Input
           id={`${mode}-email`}
           type="email"
@@ -66,7 +67,7 @@ export function UserFormFields({
           disabled={mode === "edit" && !canManage}
         />
       </FormField>
-      <FormField id={`${mode}-phone`} label="Mobile" error={errors.phone}>
+<FormField id={`${mode}-phone`} label="Mobile" error={errors.phone}>
         <Input
           id={`${mode}-phone`}
           type="tel"
@@ -75,7 +76,7 @@ export function UserFormFields({
           disabled={!canSelfEdit}
         />
       </FormField>
-      <FormField
+<FormField
         id={`${mode}-image`}
         label="Profile image URL"
         error={errors.image}
@@ -88,7 +89,7 @@ export function UserFormFields({
           disabled={!canSelfEdit}
         />
       </FormField>
-      <FormField
+<FormField
         id={`${mode}-dob`}
         label="Date of birth"
         error={errors.dateOfBirth}
@@ -101,7 +102,7 @@ export function UserFormFields({
           disabled={!canSelfEdit}
         />
       </FormField>
-      <FormField id={`${mode}-gender`} label="Gender" error={errors.gender}>
+<FormField id={`${mode}-gender`} label="Gender" error={errors.gender}>
         <select
           id={`${mode}-gender`}
           className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
@@ -113,8 +114,9 @@ export function UserFormFields({
             <option key={gender} value={gender}>{enumLabel(gender)}</option>
           ))}
         </select>
-      </FormField>
-      <FormField id={`${mode}-status`} label="Status" error={errors.status}>
+      </FormField></div> },
+{ value: "access", label: "Account and access", content: <div className="grid gap-4 sm:grid-cols-2">{mode === "create" && canManage && ["STAFF", "MANAGER"].includes(values.role) && <div className="space-y-4 sm:col-span-2"><ProfilePicker id="new-user-access-profiles" value={values.accessRoleIds || []} onChange={ids => update("accessRoleIds", ids)} /><RecordPolicyFields value={{ rules: values.recordRules ?? defaultRecordRules() }} onChange={patch => onChange({ ...values, recordRules: patch.rules })} /><p className="text-xs text-muted-foreground">Manage reusable profiles in Settings &gt; Access profiles. Empty selection grants no business access.</p></div>}
+<FormField id={`${mode}-status`} label="Status" error={errors.status}>
         <select
           id={`${mode}-status`}
           className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
@@ -127,7 +129,7 @@ export function UserFormFields({
           ))}
         </select>
       </FormField>
-      <FormField id={`${mode}-role`} label={external ? "Account type" : "Role"} error={errors.role}>
+<FormField id={`${mode}-role`} label={external ? "Account type" : "Role"} error={errors.role}>
         <select
           id={`${mode}-role`}
           className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
@@ -143,7 +145,7 @@ export function UserFormFields({
           ))}
         </select>
       </FormField>
-      <FormField
+<FormField
         id={`${mode}-password`}
         label={mode === "create" ? "Temporary password" : "Reset password (optional)"}
         error={errors.password}
@@ -156,8 +158,8 @@ export function UserFormFields({
           onChange={(event) => update("password", event.target.value)}
           disabled={mode === "edit" && !canManage}
         />
-      </FormField>
-      <div className="space-y-2 sm:col-span-2">
+      </FormField></div> },
+{ value: "address", label: "Address and preferences", content: <div className="grid gap-4 sm:grid-cols-2"><div className="space-y-2 sm:col-span-2">
         <Label>Address</Label>
         <div className="grid gap-3 sm:grid-cols-2">
           <Input
@@ -232,7 +234,7 @@ export function UserFormFields({
           )}
         </div>
       </div>
-      {values.role !== "STAFF" ? (
+{values.role !== "STAFF" ? (
         <div className="sm:col-span-2 flex items-center gap-2">
           <input
             id={`${mode}-marketing`}
@@ -243,7 +245,8 @@ export function UserFormFields({
           />
           <Label htmlFor={`${mode}-marketing`}>Marketing opt-in</Label>
         </div>
-      ) : null}
-    </div>
+      ) : null}</div> }
+]} />
+</div>
   )
 }

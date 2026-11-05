@@ -1,4 +1,5 @@
 "use client"
+import { SectionTabs } from "@/components/erp/section-tabs"
 
 import * as React from "react"
 import { useBusinessModules } from "@/platform/module-provider"
@@ -173,8 +174,7 @@ export default function StaffProfilePage() {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+    <div className="space-y-6"><div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-semibold">Staff eligibility</h1>
           <p className="text-sm text-muted-foreground">
@@ -189,10 +189,7 @@ export default function StaffProfilePage() {
             Save
           </Button>
         </div>
-      </div>
-
-      {currentRole !== "ADMIN" && <p className="text-sm text-muted-foreground">Staff profiles can only be changed by an administrator.</p>}
-      <fieldset disabled={currentRole !== "ADMIN"}>
+      </div>{currentRole !== "ADMIN" && <p className="text-sm text-muted-foreground">Staff profiles can only be changed by an administrator.</p>}<SectionTabs scope="staff-profile" keepMounted tabs={[{value:"overview",label:"Staff profile",content:<><fieldset disabled={currentRole !== "ADMIN"}>
       <StaffFormFields editScheduling={editScheduling}
         showEligibility={serviceAccess && user.role === "STAFF"}
         editEligibility={editEligibility}
@@ -205,8 +202,6 @@ export default function StaffProfilePage() {
         query={query}
         setQuery={setQuery}
       />
-      </fieldset>
-      {workplaceAccess && (user.staffProfile ? <StaffWorkplacePanel key={user.id} staffId={user.id} /> : <section aria-label="Staff workplace" className="space-y-2 rounded-xl border p-5"><h2 className="text-lg font-semibold">Workplace</h2><p className="text-sm text-muted-foreground">Save the staff profile above before assigning a workplace. Saving a profile does not assign an office or workplace.</p></section>)}
-    </div>
+      </fieldset></>},...(workplaceAccess?[{value:"workplaces",label:"Workplaces",content:<>{workplaceAccess && (user.staffProfile ? <StaffWorkplacePanel key={user.id} staffId={user.id} /> : <section aria-label="Staff workplace" className="space-y-2 rounded-xl border p-5"><h2 className="text-lg font-semibold">Workplace</h2><p className="text-sm text-muted-foreground">Save the staff profile above before assigning a workplace. Saving a profile does not assign an office or workplace.</p></section>)}</>}]:[])]}/></div>
   )
 }

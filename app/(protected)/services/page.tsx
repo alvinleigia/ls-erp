@@ -1,4 +1,5 @@
 "use client"
+import { SectionTabs } from "@/components/erp/section-tabs"
 import { useListState } from "@/components/erp/list-navigation"
 import { inclusiveTaxMinor,percentageMinor,sumRates } from "@/platform/tax/arithmetic"
 
@@ -653,10 +654,12 @@ export default function ServicesPage() {
         <TablePagination table={table} totalRows={totalRows} loading={loading} />
       </Surface>
       {viewing && <RecordPanel title={viewing.name} description={viewing.type === "PACKAGE" ? "Service package" : "Service details"} onClose={() => setViewing(null)} actions={canEdit ? <Button onClick={() => startEdit(viewing)}>Edit details</Button> : undefined}>
-        <Section title="Service details"><ReadOnlyFields fields={[{ label: "Category", value: viewing.category.name }, { label: "Type", value: viewing.type === "PACKAGE" ? "Package" : "Standard" }, { label: "Status", value: viewing.status === "ACTIVE" ? "Active" : "Inactive" }, { label: "Duration", value: `${viewing.durationMinutes} minutes` }, { label: "Description", value: viewing.description }]} /></Section>
-        <Section title="Pricing and taxes"><ReadOnlyFields fields={[{ label: "Price before tax", value: formatPrice(computeNetPriceCents(viewing)) }, { label: "Tax mode", value: viewing.taxMode === "INCLUSIVE" ? "Inclusive" : "Exclusive" }, { label: "Default taxes", value: taxSummary(viewing).label }, { label: "Tax amount", value: formatPrice(computeTaxCents(viewing)) }, { label: "Total with tax", value: formatPrice(computeTotalWithTax(viewing)) }]} /></Section>
-        {viewing.type === "PACKAGE" && <Section title="Package items"><ul className="space-y-2 text-sm">{viewing.packageItems?.map(item => <li key={item.itemService.id} className="rounded-lg border p-3">{item.itemService.name}</li>)}</ul>{!viewing.packageItems?.length && <p className="text-sm text-muted-foreground">No services in this package.</p>}</Section>}
-      </RecordPanel>}
+<SectionTabs scope="service-view" tabs={[
+{ value: "overview", label: "Details", content: <><Section title="Service details"><ReadOnlyFields fields={[{ label: "Category", value: viewing.category.name }, { label: "Type", value: viewing.type === "PACKAGE" ? "Package" : "Standard" }, { label: "Status", value: viewing.status === "ACTIVE" ? "Active" : "Inactive" }, { label: "Duration", value: `${viewing.durationMinutes} minutes` }, { label: "Description", value: viewing.description }]} /></Section></> },
+{ value: "pricing", label: "Pricing and taxes", content: <><Section title="Pricing and taxes"><ReadOnlyFields fields={[{ label: "Price before tax", value: formatPrice(computeNetPriceCents(viewing)) }, { label: "Tax mode", value: viewing.taxMode === "INCLUSIVE" ? "Inclusive" : "Exclusive" }, { label: "Default taxes", value: taxSummary(viewing).label }, { label: "Tax amount", value: formatPrice(computeTaxCents(viewing)) }, { label: "Total with tax", value: formatPrice(computeTotalWithTax(viewing)) }]} /></Section></> },
+...(viewing.type === "PACKAGE" ? [{ value: "package", label: "Package items", content: <>{viewing.type === "PACKAGE" && <Section title="Package items"><ul className="space-y-2 text-sm">{viewing.packageItems?.map(item => <li key={item.itemService.id} className="rounded-lg border p-3">{item.itemService.name}</li>)}</ul>{!viewing.packageItems?.length && <p className="text-sm text-muted-foreground">No services in this package.</p>}</Section>}</> }] : [])
+]} />
+</RecordPanel>}
       {deleteOpen && deleteTarget && <ConfirmAction title="Delete service" description={`Delete "${deleteTarget.name}"? Services linked to packages are made inactive instead.`} label="Delete" destructive busy={deleting} onCancel={() => { setDeleteOpen(false); setDeleteTarget(null) }} onConfirm={() => void confirmDelete()} />}
       {createOpen && <DraftPanel disabled={!canCreate} title="New service" description="Create a service or package." fingerprint={newService} error={formError} saving={saving} saveLabel="Create service" onClose={() => setCreateOpen(false)} onSubmit={() => void createService()}>
         <ServiceFormFields mode="create" values={newService} errors={createErrors} taxOptions={taxOptions} onChange={setNewService} />

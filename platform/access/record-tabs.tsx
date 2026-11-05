@@ -7,6 +7,7 @@ import { RecordTabs } from "@/components/erp/record-detail"
 export function AccessRecordTabs({ tabs, ...props }: {
   tabs: { value: string; label: string; content: ReactNode; permission?: Requirement }[];
   value: string; onChange: (value: string) => void;
+  keepMounted?: boolean;
 }) {
   const { can } = useBusinessModules()
   return <RecordTabs {...props} tabs={tabs.filter(tab => !tab.permission || can(tab.permission))} />

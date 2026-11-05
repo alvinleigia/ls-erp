@@ -1,4 +1,5 @@
 "use client"
+import { SectionTabs } from "@/components/erp/section-tabs"
 import { useListState } from "@/components/erp/list-navigation"
 
 import { SupplierView } from "@/modules/inventory/record-view"
@@ -313,7 +314,9 @@ export default function InventorySuppliersPage() {
       {viewing && <SupplierView item={viewing} onClose={() => setViewing(null)} onEdit={canEdit ? () => openEdit(viewing) : undefined} />}
 
       {formOpen && <DraftPanel error={formError} fingerprint={formValues} title={editing ? "Edit supplier" : "New supplier"} description="Update supplier details in the sections below." onClose={() => setFormOpen(false)} onSubmit={() => void save()} saving={saving} disabled={!(editing ? canEdit : canCreate)} saveLabel={editing ? "Save changes" : "Create supplier"}>
-          <div className="space-y-5"><Section title="Contact and ordering"><div className="grid gap-4">
+          <div className="space-y-5">
+<SectionTabs scope="supplier-editor" keepMounted validationErrors={errors} tabs={[
+{ value: "overview", label: "Contact and ordering", content: <><Section title="Contact and ordering"><div className="grid gap-4">
             <FormField id="sup-name" label="Name" error={errors.name}>
               <Input
                 id="sup-name"
@@ -380,7 +383,8 @@ export default function InventorySuppliersPage() {
                 </Select>
               </FormField>
             </div>
-            </div></Section><Section title="Tax registration"><div className="grid gap-4">
+            </div></Section></> },
+{ value: "tax", label: "Tax registration", content: <><Section title="Tax registration"><div className="grid gap-4">
             <div className="grid gap-3 sm:grid-cols-2">
               <FormField id="sup-tax-registered" label="Tax registered" error={errors.isTaxRegistered}>
                 <Select
@@ -443,7 +447,8 @@ export default function InventorySuppliersPage() {
                 />
               </FormField>
             </div>
-            </div></Section><Section title="Address"><div className="grid gap-4">
+            </div></Section></> },
+{ value: "address", label: "Address and notes", content: <><Section title="Address"><div className="grid gap-4">
             <div className="grid gap-3 md:grid-cols-2">
               <FormField id="sup-city" label="City" error={errors.city}>
                 <Input
@@ -507,7 +512,8 @@ export default function InventorySuppliersPage() {
                 </Select>
               </FormField>
             </div>
-            </div></Section><Section title="Notes">
+            </div></Section>
+<Section title="Notes">
             <FormField id="sup-notes" label="Notes" error={errors.notes}>
               <Textarea
                 id="sup-notes"
@@ -515,7 +521,9 @@ export default function InventorySuppliersPage() {
                 onChange={(event) => setFormValues((prev) => ({ ...prev, notes: event.target.value }))}
               />
             </FormField>
-          </Section></div>
+          </Section></> }
+]} />
+</div>
       </DraftPanel>}
     </div>
   )

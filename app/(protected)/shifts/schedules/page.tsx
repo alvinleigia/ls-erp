@@ -1,4 +1,5 @@
 "use client"
+import { SectionTabs } from "@/components/erp/section-tabs"
 import { useListState } from "@/components/erp/list-navigation"
 import { useCreationOfficeSnapshot } from "@/platform/companies/creation-snapshot"
 import { useCurrentResourceAction } from "@/platform/access/view-guard"
@@ -634,7 +635,13 @@ export default function ShiftSchedulesPage() {
     <div className={pageClass}>
       <PageHeader title={<> Shift schedules </>} description={<> Assign shift templates in repeating blocks with week off rules. </>} actions={<> <Button disabled={!canCreate} onClick={() => { setFormError(""); setCreateOpen(true) }}>New schedule</Button> </>} />
 
-      {viewing && <RecordPanel title={viewing.name || "Shift schedule"} description="Saved scheduling details." onClose={() => setViewing(null)} actions={<Button disabled={!canEdit || viewing.office?.active === false} onClick={() => { startEdit(viewing); setViewing(null) }}>Edit details</Button>}><Section title="Schedule details"><ReadOnlyFields fields={[{label:"Office",value:viewing.office ? `${viewing.office.companyName} / ${viewing.office.name}` : viewing.officeId},{label:"Start date",value:formatDate(viewing.startDate)},{label:"Default schedule",value:viewing.isDefault?"Yes":"No"},{label:"Week off day 1",value:viewing.weekOffDay1},{label:"Week off day 2",value:viewing.weekOffDay2},{label:"Second day weeks",value:viewing.weekOff2Weeks.join(", ")}]} /></Section><Section title="Repeating blocks">{viewing.blocks.map((block,index)=><p key={block.id||index}>{block.template?.name || templates.find(item=>item.id===block.templateId)?.name || "Shift template"}: {block.repeatDays} working days</p>)}</Section><Section title="Staff assignments">{viewing.assignments?.length?viewing.assignments.map(item=><p key={item.id}>{item.staffProfile?.user?.name || item.staffProfile?.user?.email}: {formatDate(item.startDate)} - {item.endDate?formatDate(item.endDate):"Open ended"}</p>):<p>No explicit assignments.</p>}</Section></RecordPanel>}
+      {viewing && <RecordPanel title={viewing.name || "Shift schedule"} description="Saved scheduling details." onClose={() => setViewing(null)} actions={<Button disabled={!canEdit || viewing.office?.active === false} onClick={() => { startEdit(viewing); setViewing(null) }}>Edit details</Button>}>
+<SectionTabs scope="shift-schedule-view" tabs={[
+{ value: "overview", label: "Details", content: <><Section title="Schedule details"><ReadOnlyFields fields={[{label:"Office",value:viewing.office ? `${viewing.office.companyName} / ${viewing.office.name}` : viewing.officeId},{label:"Start date",value:formatDate(viewing.startDate)},{label:"Default schedule",value:viewing.isDefault?"Yes":"No"},{label:"Week off day 1",value:viewing.weekOffDay1},{label:"Week off day 2",value:viewing.weekOffDay2},{label:"Second day weeks",value:viewing.weekOff2Weeks.join(", ")}]} /></Section></> },
+{ value: "blocks", label: "Repeating blocks", content: <><Section title="Repeating blocks">{viewing.blocks.map((block,index)=><p key={block.id||index}>{block.template?.name || templates.find(item=>item.id===block.templateId)?.name || "Shift template"}: {block.repeatDays} working days</p>)}</Section></> },
+{ value: "assignments", label: "Staff assignments", content: <><Section title="Staff assignments">{viewing.assignments?.length?viewing.assignments.map(item=><p key={item.id}>{item.staffProfile?.user?.name || item.staffProfile?.user?.email}: {formatDate(item.startDate)} - {item.endDate?formatDate(item.endDate):"Open ended"}</p>):<p>No explicit assignments.</p>}</Section></> }
+]} />
+</RecordPanel>}
       <Surface>
       <TableToolbar table={table} showSearch={false}>
         <div className="flex flex-wrap items-center gap-3">

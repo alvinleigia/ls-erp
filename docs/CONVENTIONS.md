@@ -52,7 +52,47 @@ This is the baseline for new modules (API + UI) in this codebase.
   label, native/Radix submission, custom-name/acronym, enquiry/pipeline, inventory
   and leave-form regressions against the synthetic component host.
 
+## Sales Order detail
+
+Sales Order detail uses the shared access-aware record tabs and URL-backed record
+view state. Keep the order reference, customer, date, value, source and immutable
+terms notice visible above the panels. Application composition owns module-gated
+documents, units and finance panels; domain UI must not import those modules.
+Inactive panels are unmounted, so their lists and refresh timers start only when
+opened. Keep confirmation requirements outside tabs. Quotation overview sections
+can be selected for composition without recalculating or rewriting saved values;
+ordinary quotation views retain every section by default. Run
+`npx.cmd playwright test --config playwright.sales-orders-ui.config.ts` for the
+isolated navigation, lazy loading, module/access, confirmation and mobile checks.
+
+## Focused page sections (P13K)
+
+- Audit the rendered view, not the number of sections in a source file: separate
+  dialogs, conditional steps and existing accordions are not one long page.
+  Keep paginated lists, calendars and short focused forms as they are.
+- Use `SectionTabs` for grouped settings, operational detail sheets and reports;
+  it reuses `RecordTabs` and URL-backed list state. Use the existing access-aware
+  record tabs for domain records. Give each independent group a stable scope.
+- Keep record identity, status, key totals, global filters, validation summaries,
+  classification/access notices and save/confirm/cancel actions outside panels.
+  Keep dependent module and record-access checks on their original content.
+- Editable panels must use `keepMounted`: changing tabs must not discard draft
+  fields, selected IDs or values included in `FormData`. Keep tab navigation
+  outside read-only fieldsets. The shared tabs reveal hidden invalid fields and
+  `FormField` server errors; ordinary field validation remains authoritative.
+- Retain mounted multi-step controls when grouping previously concurrent panels
+  (invoice document preparation and receivable receipts, for example). Continue
+  using lazy panels where the original record workflow already loads on demand.
+- A report KPI/drill-down must select its destination tab before scrolling to
+  the records. Filters, calculations, date bases and existing pagination scopes
+  must stay unchanged. Do not replace business handlers during layout work.
+- Run `npx.cmd playwright test --config playwright.organized-ui.config.ts` for
+  the synthetic UI regressions. It uses intercepted data and never writes to a
+  tenant database. The focused shared-tab checks also run through
+  `playwright.section-tabs.config.ts`.
+
 ## List API contract
+
 - Params: `page` (1-based), `pageSize`, `sort`, `order`, `q`
 - Response: `{ items, page, pageSize, total, totalPages }`
 - Shared type: `types/api.ts` -> `ListResponse<T>`

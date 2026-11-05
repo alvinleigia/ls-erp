@@ -52,24 +52,27 @@ test('statutory review, manual signing and credit preserve separate legal refere
   await json(a.context,`/api/sales-orders/${order.id}`,200,'PATCH',{action:'confirm',version:1})
   await json(a.context,`/api/sales-orders/${order.id}/receivables`,200,'POST',{dueDates:[null]})
   await a.page.setViewportSize({width:1440,height:1050});await a.page.goto(`/sales-orders/${order.id}`)
-  await a.page.getByRole('button',{name:'Create invoice draft',exact:true}).click();await a.page.getByLabel('Bill by',{exact:true}).selectOption('AMOUNT');await a.page.getByLabel('Invoice amount',{exact:true}).fill('50');await a.page.getByRole('button',{name:'Create draft',exact:true}).click();await expect(a.page).toHaveURL(/\/sales-orders\/invoices\//)
-  const invoiceId=a.page.url().split('/').pop()!;await expect(a.page.getByRole('heading',{name:'Frozen tax allocation',exact:true})).toBeVisible();await a.page.getByRole('button',{name:'Post invoice',exact:true}).click();await a.page.getByRole('button',{name:'Confirm posting',exact:true}).click();await expect(a.page.getByRole('heading',{name:/INV\//})).toBeVisible()
+  await a.page.getByRole('tab',{name:'Payments',exact:true}).click();await a.page.getByRole('button',{name:'Create invoice draft',exact:true}).click();await a.page.getByLabel('Bill by',{exact:true}).selectOption('AMOUNT');await a.page.getByLabel('Invoice amount',{exact:true}).fill('50');await a.page.getByRole('button',{name:'Create draft',exact:true}).click();await expect(a.page).toHaveURL(/\/sales-orders\/invoices\//)
+  const invoiceId=a.page.url().split('/').pop()!;await a.page.getByRole('tab',{name:'Tax allocations',exact:true}).click();await expect(a.page.getByRole('heading',{name:'Frozen tax allocation',exact:true})).toBeVisible();await a.page.getByRole('button',{name:'Post invoice',exact:true}).click();await a.page.getByRole('button',{name:'Confirm posting',exact:true}).click();await expect(a.page.getByRole('heading',{name:/INV\//})).toBeVisible()
   await a.page.getByRole('region',{name:'Frozen invoice tax allocation',exact:true}).screenshot({path:info.outputPath('invoice-tax-desktop.png'),animations:'disabled'})
 
   const endpoint='/api/customer-invoices/'+invoiceId+'/statutory'
   for(const providerKey of ['gst-tax-invoice','gst-credit-note']){const t=await json(a.context,'/api/document-templates?companyId='+companyId+'&providerKey='+providerKey);await json(a.context,'/api/document-templates',200,'PUT',{companyId,providerKey,version:t.version,content:{...t.content,enabled:true,useTenantLogo:false},reviewed:true})}
-  await a.page.getByText('Registration and financial-year numbering series',{exact:true}).click()
+  await a.page.getByRole('tab',{name:'Documents',exact:true}).click();await a.page.getByText('Registration and financial-year numbering series',{exact:true}).click()
   await a.page.locator('#stat-series-code').fill('TQ')
   await a.page.getByText(/^I reviewed this new code against this registration/).click()
   await a.page.getByRole('button',{name:'Create reviewed series',exact:true}).click()
   await expect(a.page.locator('#stat-series-code')).toHaveValue('')
   await expect(a.page.getByText(/^TQ.*Enabled$/)).toBeVisible()
   await a.page.getByText('Registration and financial-year numbering series',{exact:true}).click()
+  await a.page.getByRole('tab',{name:'Documents',exact:true}).click();
   await a.page.locator('#stat-series').scrollIntoViewIfNeeded()
   await a.page.locator('#stat-series').click();await a.page.getByRole('option',{name:'TQ',exact:true}).click()
   await a.page.getByLabel('Authorized signatory name / capacity',{exact:true}).fill('QA Authorized Signer')
+  await a.page.getByRole('tab',{name:'Actual supply',exact:true}).click();
   await a.page.locator('#stat-delivery-state').click();await a.page.getByRole('option',{name:'Karnataka',exact:true}).click()
   await a.page.getByLabel('Actual delivery address',{exact:true}).fill('QA customer street, Bengaluru 560001')
+  await a.page.getByRole('tab',{name:'Compliance review',exact:true}).click();
   await a.page.getByLabel('Domestic forward-charge / e-invoice / dynamic QR assessment basis',{exact:true}).fill('QA reviewed domestic forward-charge transaction; IRP and dynamic QR not required for this synthetic supply.')
   await a.page.getByLabel('Supply timing and document eligibility review',{exact:true}).fill('QA actual source supply and legal timing reviewed for synthetic acceptance.')
   await expect(a.page.getByRole('button',{name:'Save reviewed facts',exact:true})).toBeDisabled()
@@ -95,6 +98,6 @@ test('statutory review, manual signing and credit preserve separate legal refere
   expect((await json(a.context,endpoint)).items[0].status).toBe('ISSUED')
   await a.page.screenshot({path:info.outputPath('statutory-issued-mobile.png'),fullPage:true,animations:'disabled'})
   const crossStatutory=await a.context.request.post(endpoint+'/reserve',{headers:{origin:'https://untrusted.example.test'},data:{}});expect(crossStatutory.status()).toBe(403)
-  staff=await login(browser,f.origin,f.users.staff.email);await staff.page.goto('/sales-orders/invoices/'+invoiceId);await expect(staff.page.getByRole('heading',{name:'GST documents and signing',exact:true})).toBeVisible();await expect(staff.page.getByRole('button',{name:'Save reviewed facts',exact:true})).toHaveCount(0)
+  staff=await login(browser,f.origin,f.users.staff.email);await staff.page.goto('/sales-orders/invoices/'+invoiceId);await staff.page.getByRole('tab',{name:'Documents',exact:true}).click();await expect(staff.page.getByRole('heading',{name:'GST documents and signing',exact:true})).toBeVisible();await expect(staff.page.getByRole('button',{name:'Save reviewed facts',exact:true})).toHaveCount(0)
  }finally{await staff?.context.close().catch(()=>{});await a.context.close().catch(()=>{});await f.db.end()}
 })

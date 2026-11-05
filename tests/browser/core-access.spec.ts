@@ -35,7 +35,11 @@ test("tax editor cannot change active status or delete without archive permissio
  await expect(page.getByRole("button",{name:"Save changes",exact:true})).toBeEnabled()
  await page.screenshot({path:test.info().outputPath("tax-editor.png"),fullPage:true,animations:"disabled"})
 })
-test("staff cannot open administration even with a matching permission",async({page})=>{
+test("staff with business-settings read permission retains read-only settings",async({page})=>{
  const calls=await fixture(page,["businessSettings.read"]);await page.goto("/settings?role=STAFF")
- await expect(page.getByRole("heading",{name:"Access unavailable"})).toBeVisible();expect(calls).not.toContain("/api/settings")
+ await expect(page.getByRole("heading",{name:"Settings",exact:true})).toBeVisible()
+ await expect(page.getByRole("button",{name:"Save settings"})).toBeDisabled()
+ await page.getByRole("tab",{name:"Email delivery",exact:true}).click()
+ await expect(page.getByLabel("Enable app email notifications",{exact:true})).toBeDisabled()
+ expect(calls).toContain("/api/settings")
 })

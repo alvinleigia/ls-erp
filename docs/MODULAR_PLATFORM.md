@@ -1,3 +1,109 @@
+## P13K application-wide page organization (2026-11-05)
+
+The source audit covers all 117 page routes and their composed view components.
+Thirty-seven routes gain organization directly or through shared editors:
+inventory, services, appointments/coupons, leaves, shift templates/schedules and
+recurring plans, user/staff editing, office memberships, quotations, invoices,
+receivables, reports, dashboard and tenant/business configuration. Existing CRM
+and project record tabs, short focused forms, paginated lists, import steps and
+calendar workspaces retain their existing navigation. The route-by-route audit
+and unchanged-request comparison are in ignored `tmp/ui-audit/` artifacts.
+
+Shared `SectionTabs` reuses the record-tab interaction and URL state. Editable
+groups retain mounted controls so drafts, selected records and form submission
+values survive tab changes. Native invalid fields and marked server field errors
+select their panel. Read-only settings keep navigation outside disabled controls.
+Report totals, filters and date context remain visible; drill-down actions select
+their records panel. Invoice document preparation and receivable receipt controls
+retain their mounted state. Permissions and module gates remain on the original
+content; no business endpoint, accounting calculation or database schema changes
+are part of this UI work. All 88 existing fetch call sites in the 49 changed
+presentation files matched the prior source exactly.
+
+General settings separate locale/format, email, working hours and special hours.
+Company document templates separate wording, issuer details and PDF layout while
+keeping enablement, review, publication and feedback together. Module settings
+group sales, billing, operations and workforce with uniformly sized cards. Tenant
+provisioning separates tenant details, the initial administrator and modules.
+Organization member creation and the member list use separate panels. Tax
+configuration and statutory-fact inputs are grouped without changing issuance,
+review, numbering, signing or tax-eligibility controls. Destructive confirmations
+remain explicit. Seed/cleanup tools were reorganized but were not executed.
+
+The persistent local demo order was checked read-only after these changes: both
+issued letters, its allocated unit and order/snapshot responses were unchanged;
+zero business writes and zero browser errors. Browser verification is recorded
+separately from the source audit; this does not claim every authenticated route
+was visually opened or every backend business flow was rerun. No hosted writes,
+push, deployment or migration has been performed for this UI pass.
+
+Validation: all 61 relevant browser scenarios passed across the consolidated run
+and focused correction runs. These cover existing save payloads, discard/retry,
+module dependencies, read-only access, report figures/currencies and charts,
+publication, lazy order sections, mobile containment, keyboard navigation and
+hidden native/server field errors. Older intercepted fixtures were updated for
+the current pricing-preview, office-scoped stock, staff-choice and effective
+roster contracts. The synthetic host now provides route access to static detail
+routes as well as the catch-all view. Screenshots of the order, report charts,
+module dialog, document publication, product editor and native demo were
+inspected. Optimized webpack build, TypeScript and whitespace checks passed;
+changed-file lint has zero errors and one existing tenant-table dependency
+warning. Native write-enabled finance/document scenarios have navigation updates
+but were not rerun as part of this UI pass. Evidence: `tmp/ui-audit/` and
+`test-results/organized-ui/`; no claim of exhaustive backend workflow coverage.
+
+## P13K focused Sales Order detail (2026-11-05)
+
+Order details now use a persistent compact summary and the existing access-aware
+record tabs: Overview, Customers, Documents, Units, Payments and History. Units
+appear only for saved unique units with the required active module and access;
+generic service agreements retain the same shared composition without that tab.
+Receivables and commercial invoice controls remain independently gated. Saved
+instalments remain readable even without finance access. Only the selected panel
+mounts its related lists, and the selected tab survives refresh through shared
+URL state. Confirmation requirements and immutable-terms context stay visible.
+Quotation metadata and bank instructions/terms are expandable within Overview.
+Shared quotation summaries keep their existing complete default presentation.
+
+No API, financial calculation, authorization, issuance, archival or schema changes
+are introduced. Native local read-only verification exercised all six tabs on
+SO-000001, both issued-letter links, the allocated unit and the receivable review
+dialog; order/snapshot, document and reservation responses were unchanged, with
+zero business writes or browser errors. Desktop/mobile screenshots were inspected.
+Evidence is in ignored `tmp/local-demo/order-tabs/`. The isolated browser suite
+passed all four checks across the focused runs; TypeScript, changed-file lint
+and whitespace checks passed. Existing native workflow tests were updated to
+navigate the new tabs but their write-enabled suite was not rerun here. Hosted
+verification remains separate; this UI work remains local until explicitly released.
+
+## P13K isolated local Supabase Storage (2026-11-04)
+
+The persistent local demo now starts a separate Supabase Storage API, metadata
+database and loopback gateway using `compose.local-storage.yml`. Generated local
+credentials and persistent file/metadata volumes are independent of both hosted
+projects. The existing PDF/branding adapters are reused. A narrow development-only
+origin exception requires the dedicated local demo database; production and
+Vercel continue to require the existing HTTPS Supabase origin. Missing credentials
+with existing volumes and mismatched bucket privacy/limits fail explicitly.
+
+The private PDF bucket allows 10 MiB files; the public branding bucket allows
+512 KiB PNG/WebP assets. Gateway overhead does not reduce the PDF file limit.
+See [LOCAL_DEVELOPMENT.md](LOCAL_DEVELOPMENT.md) for startup and preservation.
+
+Verification: 16 local configuration/database-workflow checks and five existing
+storage/document regressions passed, along with TypeScript and changed-file lint.
+Real APIs in a separate local `storage-check` tenant created and confirmed a
+synthetic order, issued an acknowledgement, retried its immutable request and
+downloaded identical archived bytes twice. Unsigned private access, tampered
+tokens, cross-tenant downloads and duplicate object uploads were denied. Restarting
+all three storage services preserved the archive, metadata and subsequent native
+download. Branding upload/read, size/MIME rejection, exact 10 MiB PDF acceptance
+and oversized-file rejection passed. The user's SO-000001, its issued-document
+list and Booking Intimation template version 2 were unchanged. Local evidence is
+in ignored `tmp/local-demo/storage-verification.json`. No hosted operations,
+migrations, push or deployment were performed for this storage change. Email
+delivery remains outside this local setup.
+
 ## P13K quotation participants and company template publication
 
 The standard quotation PDF now uses the same saved participant document blocks

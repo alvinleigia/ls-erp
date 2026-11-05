@@ -144,8 +144,9 @@ function QuotationEditorBody({ id, opportunityId: initialOpportunityId, template
     {oldVersion && <p className="text-sm">This saved version is read-only. <Link className="underline" href={`/crm/quotations/${id}`}>Edit the latest version</Link>.</p>}
     {document && <Pagination page={document.revision} pageSize={1} total={document.version} label={term("salesDocuments.quotation.singular", "Document versions", "{label} versions")} onPageChange={number => router.push(`/crm/quotations/${id}?revision=${number}`)} />}
     <AccessRecordForm id="quotation-form" onSubmit={save} initialSection={template ? "Template configuration" : "Document details"} saving={saving} disabled={!editable} error={error} fingerprint={{ value, name, archived, templateId }} saveLabel={template ? "Save template" : "Save new version"}
-      overview={<QuotationSummary value={value} snapshot={document?.snapshot} section="overview" canEdit={editable} name={template ? name : undefined} archived={archived} />}
+      overview={<QuotationSummary value={value} snapshot={document?.snapshot} section="overview" overviewSections={["document", "context", "additional", "totals"]} canEdit={editable} name={template ? name : undefined} archived={archived} />}
       tabs={[
+        ...(document ? [{ value: "customers", label: "Customers", content: <QuotationSummary value={value} snapshot={document.snapshot} section="overview" overviewSections={["customers"]} canEdit={editable} /> }] : []),
         ...(document ? [{value:"tax",label:"Tax preparation",content:<SourceTaxInputs key={`${document.id}-${document.revision}`} endpoint={`/api/crm/quotations/${document.id}/tax-inputs`} revision={document.revision}/>}]:[]),
         { value: "pricing", label: "Pricing and charges", content: <QuotationSummary value={value} snapshot={document?.snapshot} section="pricing" canEdit={editable} /> },
         ...(plansEnabled || value.instalments.length ? [{ value: "payments", label: term("paymentPlans.paymentPlan.singular", "Payment plan"), content: <QuotationSummary value={value} snapshot={document?.snapshot} section="payments" canEdit={editable} /> }] : []),

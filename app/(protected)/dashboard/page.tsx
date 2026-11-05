@@ -1,4 +1,5 @@
 "use client"
+import { SectionTabs } from "@/components/erp/section-tabs"
 import { useListState } from "@/components/erp/list-navigation"
 
 import * as React from "react"
@@ -331,22 +332,16 @@ export default function DashboardPage() {
         </div>
         {!modulesLoading && hasPeriod && <p className="text-sm text-muted-foreground">{rangeText || "Choose a period to view metrics."}</p>}
       </Surface>
-      {loading || modulesLoading ? <p role="status" className="text-sm text-muted-foreground">Loading metrics...</p> : error ? <Surface><p role="alert" className="text-sm text-destructive">{error}</p></Surface> : summary && <>
-        {!hasSales && !Object.values(summary.visibility).some(Boolean) && <Surface>
+      {loading || modulesLoading ? <p role="status" className="text-sm text-muted-foreground">Loading metrics...</p> : error ? <Surface><p role="alert" className="text-sm text-destructive">{error}</p></Surface> : summary && <>{!hasSales && !Object.values(summary.visibility).some(Boolean) && <Surface>
           <p className="font-medium">No dashboard summaries available for your current modules.</p>
           <p className="text-sm text-muted-foreground">Open a module from the sidebar to get started.</p>
-        </Surface>}
-
-        {summary.salesFilters.omitted.map(message => <p key={message} role="status" className="text-sm text-muted-foreground">{message}</p>)}
-        {hasSales && <SalesWidgets data={summary.sales} settings={settings} context={summary.salesFilters} />}
-        {headerCards.length > 0 && <div className="grid gap-3 sm:grid-cols-[repeat(auto-fit,minmax(14rem,1fr))]">
+        </Surface>}{summary.salesFilters.omitted.map(message => <p key={message} role="status" className="text-sm text-muted-foreground">{message}</p>)}<SectionTabs scope="dashboard-sections" keepMounted tabs={[...(summary.sales.enquiries || summary.sales.opportunities || summary.sales.activities?[{value:"sales",label:"CRM and sales",content:<><SalesWidgets data={summary.sales} settings={settings} context={summary.salesFilters} section="crm"/></>}]:[]),...(summary.sales.projects?[{value:"projects",label:"Projects",content:<><SalesWidgets data={summary.sales} settings={settings} context={summary.salesFilters} section="projects"/></>}]:[]),...(summary.sales.quotations || summary.sales.paymentPlans?[{value:"documents",label:"Sales documents",content:<><SalesWidgets data={summary.sales} settings={settings} context={summary.salesFilters} section="documents"/></>}]:[]),...(Object.values(summary.visibility).some(Boolean)?[{value:"operations",label:"Operations",content:<>{headerCards.length > 0 && <div className="grid gap-3 sm:grid-cols-[repeat(auto-fit,minmax(14rem,1fr))]">
           {headerCards.map(card => <Surface key={card.label}>
             <div className="flex items-center justify-between gap-2 text-sm text-muted-foreground"><span>{card.label}</span><card.icon className="size-4" aria-hidden="true" /></div>
             <p className="text-2xl font-semibold">{card.value}</p><p className="text-xs text-muted-foreground">{card.hint}</p>
           </Surface>)}
         </div>}
-
-      {summary.visibility.appointments && <section className="grid gap-6 lg:grid-cols-[1.7fr_1fr]">
+{summary.visibility.appointments && <section className="grid gap-6 lg:grid-cols-[1.7fr_1fr]">
         <Section title="Revenue trend" description="Revenue and booking volume by day"><div className="h-64 w-full">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={revenueSeries}>
@@ -409,8 +404,7 @@ export default function DashboardPage() {
             ))}
           </div></Section>
       </section>}
-
-      {summary.visibility.appointments && <section className="grid gap-6 lg:grid-cols-[1.2fr_1fr]">
+{summary.visibility.appointments && <section className="grid gap-6 lg:grid-cols-[1.2fr_1fr]">
         <Section title="Daily bookings" description="Booking count by day"><div className="h-64 min-w-0">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart
@@ -452,8 +446,7 @@ export default function DashboardPage() {
             )}
           </div></Section>
       </section>}
-
-      {(summary.visibility.appointments || summary.visibility.inventory) && <section className={`grid gap-6 ${summary.visibility.appointments && summary.visibility.inventory ? "xl:grid-cols-3" : ""}`}>
+{(summary.visibility.appointments || summary.visibility.inventory) && <section className={`grid gap-6 ${summary.visibility.appointments && summary.visibility.inventory ? "xl:grid-cols-3" : ""}`}>
         {summary.visibility.appointments && <Section title="Upcoming appointments" description="Next confirmed/scheduled slots" className={summary.visibility.inventory ? "xl:col-span-2" : undefined}><div className="overflow-x-auto">
             <table className="min-w-[32rem] w-full text-sm">
               <thead className="text-xs uppercase text-muted-foreground">
@@ -507,8 +500,7 @@ export default function DashboardPage() {
             )}
           </div></Section>}
       </section>}
-
-      {summary.visibility.appointments && summary.visibility.services && <Section title="Top services" description="Revenue leaders in selected range"><div className="overflow-x-auto">
+{summary.visibility.appointments && summary.visibility.services && <Section title="Top services" description="Revenue leaders in selected range"><div className="overflow-x-auto">
           <table className="min-w-[32rem] w-full text-sm">
             <thead className="text-xs uppercase text-muted-foreground">
               <tr className="border-b">
@@ -533,8 +525,7 @@ export default function DashboardPage() {
               )}
             </tbody>
           </table>
-        </div></Section>}
-      </>}
+        </div></Section>}</>}]:[])]}/></>}
     </div>
   )
 }
