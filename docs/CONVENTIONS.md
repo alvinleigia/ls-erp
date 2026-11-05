@@ -2,6 +2,11 @@
 
 ## Shared PDF presentation (P13L)
 
+- Document fields keep booking, order and issue dates separate. `order.booking-date`
+  reads the accepted quotation's `content.bookingDate`; `order.date` remains the
+  saved sales-order date. An absent optional booking date prints `Not supplied`,
+  without inventing a date. Republish affected tenant layouts explicitly; never
+  rewrite an issued document or silently reinterpret an existing field key.
 - Save reusable issuing address, contact, website, footer, signatory caption and
   payment instructions on the issuing company under Companies and offices.
   Company writes retain administrator authorization, optimistic version checks

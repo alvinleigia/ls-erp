@@ -229,3 +229,20 @@ test('company setting edits invalidate prepared letters while issued snapshots a
  assert.equal((await crm.getQuotation(f.quote.id)).snapshot.content.bank.accountNumber,'ACCEPTED-111');assert.equal((await orders.get(f.order.id)).snapshot.content.bank.accountNumber,'ACCEPTED-111')
  await docs().download(f.order.id,issued.id,ACK)
 })
+
+test('accepted booking date stays separate from order date and later quotation/company edits do not rewrite issued letters',async()=>{
+ const {formatDateForDisplay}=require('../lib/date.ts'),{createCompanyService}=require('../platform/companies/service.ts')
+ const f=await fixture([],true,{bookingDate:'2025-12-25'}),current=await templates().get(company.id,ACK),layout=structuredClone(current.content.layout)
+ layout.content.unshift({type:'paragraph',content:[{type:'text',text:'Booking date: '},{type:'documentField',attrs:{key:'order.booking-date'}},{type:'text',text:' | Order date: '},{type:'documentField',attrs:{key:'order.date'}}]})
+ await publish(ACK,{layout})
+ const first=await docs().prepare(f.order.id,{providerKey:ACK}),runs=first.payload.body[0].runs
+ assert.equal(runs[1].text,formatDateForDisplay('2025-12-25',f.order.snapshot.dateFormat));assert.equal(runs[3].text,formatDateForDisplay('2026-01-01',f.order.snapshot.dateFormat));assert.notEqual(runs[1].text,runs[3].text)
+ const issued=await docs().issue(f.order.id,input(first)),archive=Buffer.from(objects.get(issued.archive.path)),original=structuredClone(issued.snapshot)
+ await crm.saveQuotation(f.deal.id,{version:1,content:{...f.order.snapshot.content,bookingDate:'2026-02-01'}},f.quote.id)
+ const directory=createCompanyService(db,identity(admin)),before=await directory.getCompany(company.id)
+ await directory.updateCompany(company.id,{version:before.version,name:'QA Consistent Company Name'})
+ const replacement=await docs().prepare(f.order.id,{providerKey:ACK,supersedesId:issued.id,reason:'QA name correction'})
+ assert.equal(replacement.payload.company.name,'QA Consistent Company Name');assert.equal(replacement.payload.body[0].runs[1].text,runs[1].text)
+ await docs().download(f.order.id,issued.id,ACK);assert.deepEqual(objects.get(issued.archive.path),archive)
+ assert.deepEqual((await root.salesOrderDocument.findUniqueOrThrow({where:{tenantId_id:{tenantId:tenant,id:issued.id}}})).snapshot,original)
+})

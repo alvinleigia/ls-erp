@@ -9,7 +9,8 @@ export const orderTemplateCatalog: TemplateCatalog = {
   fields: [
     { key: "document.reference", label: "Document reference" }, { key: "document.date", label: "Issue date" },
     { key: "company.name", label: "Issuing company name" }, { key: "company.address", label: "Company address" }, { key: "company.contact", label: "Company contact details" },
-    { key: "customer.name", label: "Customer name" }, { key: "order.reference", label: "Booking / order reference" }, { key: "order.date", label: "Booking / order date" },
+    { key: "customer.name", label: "Customer name" }, { key: "order.reference", label: "Booking / order reference" }, { key: "order.date", label: "Order date" },
+    { key: "order.booking-date", label: "Booking date (saved quotation)" },
     { key: "order.consideration", label: "Consideration" }, { key: "order.extras", label: "Known extra charges" }, { key: "order.total", label: "Total known amount" },
     { key: "template.opening", label: "Opening wording" }, { key: "template.terms", label: "Approved terms" },
     { key: "bank.name", label: "Bank name" }, { key: "bank.account-name", label: "Bank account name" }, { key: "bank.account-number", label: "Bank account number" }, { key: "bank.routing-code", label: "Bank routing code" },
@@ -27,6 +28,7 @@ export function orderTemplateValues(context: OrderDocumentContext, content: Docu
     "document.reference": reference, "document.date": formatDateForDisplay(context.date, context.snapshot.dateFormat),
     "company.name": context.company.name, "company.address": content.address, "company.contact": content.contact,
     "customer.name": context.snapshot.customer.name, "order.reference": context.order.reference!, "order.date": formatDateForDisplay(context.order.orderedOn!.toISOString().slice(0, 10), context.snapshot.dateFormat),
+    "order.booking-date": context.snapshot.content.bookingDate ? formatDateForDisplay(context.snapshot.content.bookingDate, context.snapshot.dateFormat) : "Not supplied",
     "order.consideration": money(context.snapshot.calculation.consideration), "order.extras": money(context.snapshot.calculation.extras), "order.total": money(context.snapshot.calculation.totalKnown),
     "template.opening": content.opening, "template.terms": content.terms,
     "bank.name":context.snapshot.content.bank.bankName,"bank.account-name":context.snapshot.content.bank.accountName,"bank.account-number":context.snapshot.content.bank.accountNumber,"bank.routing-code":context.snapshot.content.bank.routingCode,

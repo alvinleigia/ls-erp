@@ -1,5 +1,11 @@
 ## P13L shared company document defaults (2026-11-05)
 
+Document fields distinguish the accepted quotation booking date from the sales
+order date and letter issue date. The booking starter uses `order.booking-date`;
+`order.date` retains its original order-date meaning. Missing optional booking
+dates print `Not supplied`. Existing tenant layouts require explicit versioned
+publication to adopt the new field; issued snapshots and archived PDFs stay fixed.
+
 Company administration now includes reusable document address, contact, website,
 signatory caption, footer and bank instructions. The settings are company scoped
 and apply across that company's projects. New quotation defaults derive the issuer

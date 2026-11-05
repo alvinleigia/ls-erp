@@ -1,12 +1,31 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
 const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('fs'),{PDFDocument}=require('pdf-lib')
 const {documentLayoutSchema,starterDocumentLayout,validateDocumentLayout,resolveDocumentLayout}=require('../platform/documents/layout.ts')
-const {orderTemplateCatalog}=require('../modules/sales-orders/document-template.ts')
+const {orderTemplateCatalog,orderTemplateValues}=require('../modules/sales-orders/document-template.ts')
 const {sampleDocument}=require('../modules/sales-orders/document-template-sample.ts')
 const {renderBusinessDocument}=require('../platform/documents/pdf.ts')
 const {orderAcknowledgement}=require('../modules/sales-orders/document-provider.ts')
 const catalog=orderTemplateCatalog,content={...orderAcknowledgement.defaults,title:'QA Editable Booking',opening:'Accepted opening.',terms:'Approved sample terms.'}
 const field=key=>({type:'documentField',attrs:{key}}),paragraph=(...content)=>({type:'paragraph',content})
+test('booking, order and issue dates resolve independently from the accepted source',()=>{
+ const context={date:'2026-11-05',company:{name:'Example Company'},order:{reference:'SO-000001',currency:'INR',orderedOn:new Date('2026-10-05T00:00:00Z')},snapshot:{dateFormat:'dd/MM/yyyy',timeZone:'America/Los_Angeles',customer:{name:'Example Applicant'},content:{bookingDate:'2026-09-25',bank:{}},calculation:{consideration:'100',extras:'0',totalKnown:'100'}}}
+ const before=JSON.stringify(context),values=orderTemplateValues(context,content,'SO-000001/BI/001')
+ assert.equal(values['order.booking-date'],'25/09/2026');assert.equal(values['order.date'],'05/10/2026');assert.equal(values['document.date'],'05/11/2026')
+ const layout=starterDocumentLayout(catalog);layout.content.unshift(paragraph({type:'text',text:'Booking date: '},field('order.booking-date')))
+ const body=resolveDocumentLayout(layout,catalog,values,[]);assert.equal(body[0].runs.map(run=>run.text).join(''),'Booking date: 25/09/2026')
+ assert.equal(JSON.stringify(context),before)
+})
+test('a missing booking date is explicit and never replaced with the order date',()=>{
+ const context={date:'2026-11-05',company:{name:'Example Company'},order:{reference:'SO-1',currency:'INR',orderedOn:new Date('2026-10-05T00:00:00Z')},snapshot:{dateFormat:'MM/dd/yyyy',customer:{name:'Example Applicant'},content:{bookingDate:'',bank:{}},calculation:{consideration:'100',extras:'0',totalKnown:'100'}}}
+ const values=orderTemplateValues(context,content,'SO-1/BI/001');assert.equal(values['order.booking-date'],'Not supplied');assert.equal(values['order.date'],'10/05/2026')
+})
+test('the booking starter uses the booking field and sample previews distinguish it from order date',()=>{
+ const {realEstateOrderDocuments}=require('../modules/real-estate/order-documents.ts'),provider=realEstateOrderDocuments(async()=>({})).find(p=>p.key==='real-estate.booking-intimation')
+ const layout=starterDocumentLayout(provider.templateCatalog),row=layout.content.find(n=>n.content?.some(r=>r.type==='text'&&r.text==='Booking date: '))
+ assert.equal(row.content.find(r=>r.type==='documentField').attrs.key,'order.booking-date')
+ const sample=sampleDocument({...provider.defaults,layout},provider.templateCatalog,{id:'example',name:'Example Company'}),date=sample.body.find(n=>n.type==='paragraph'&&n.runs.some(r=>r.text==='Booking date: '))
+ assert.equal(date.runs.map(r=>r.text).join(''),'Booking date: 25/12/2025');assert.equal(sample.date,'2026-01-01')
+})
 test('starter contains each required source section once; unknown/duplicate/deleted sections fail closed',()=>{
  const layout=starterDocumentLayout(catalog);assert.deepEqual(validateDocumentLayout(layout,catalog),layout)
  const bad=[{...layout,content:layout.content.filter(n=>n.attrs?.key!=='participants')},{...layout,content:[...layout.content,{type:'documentSection',attrs:{key:'participants'}}]},{...layout,content:[...layout.content,{type:'documentSection',attrs:{key:'real-estate-secret'}}]}]

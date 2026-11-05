@@ -22,7 +22,7 @@ const bookingTemplateCatalog:TemplateCatalog={...orderTemplateCatalog,sections:[
   {type:"documentSection",attrs:{key:"participants",compact:true}},
   {type:"paragraph",content:[{type:"documentField",attrs:{key:"template.opening"}}]},
   {type:"documentSection",attrs:{key:"property-units",compact:true}},
-  {type:"paragraph",content:[{type:"text",text:"Booking date: "},{type:"documentField",attrs:{key:"order.date"}}]},
+  {type:"paragraph",content:[{type:"text",text:"Booking date: "},{type:"documentField",attrs:{key:"order.booking-date"}}]},
   {type:"paragraph",content:[{type:"text",text:"Booking / order reference: "},{type:"documentField",attrs:{key:"order.reference"}}]},
   {type:"paragraph",content:[{type:"documentField",attrs:{key:"template.terms"}}]},
 ]}}
