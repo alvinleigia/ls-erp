@@ -7,6 +7,35 @@ const {renderBusinessDocument}=require('../platform/documents/pdf.ts')
 const {orderAcknowledgement}=require('../modules/sales-orders/document-provider.ts')
 const catalog=orderTemplateCatalog,content={...orderAcknowledgement.defaults,title:'QA Editable Booking',opening:'Accepted opening.',terms:'Approved sample terms.'}
 const field=key=>({type:'documentField',attrs:{key}}),paragraph=(...content)=>({type:'paragraph',content})
+
+test('individual property fields replace their section only as a complete, registered set',()=>{
+ const {realEstateOrderDocuments}=require('../modules/real-estate/order-documents.ts'),{propertyDocumentFields}=require('../modules/real-estate/document-fields.ts')
+ for(const provider of realEstateOrderDocuments(async()=>({}))){
+  const catalog=provider.templateCatalog,old=starterDocumentLayout(catalog),before=JSON.stringify(old)
+  assert.deepEqual(validateDocumentLayout(old,catalog),old)
+  const scalar={...old,content:old.content.filter(n=>n.attrs?.key!=='property-units')}
+  assert.throws(()=>validateDocumentLayout(scalar,catalog),/Property units/)
+  scalar.content.push(...propertyDocumentFields.map(f=>paragraph({type:'text',text:f.label+': ',marks:[{type:'bold'}]},field(f.key))))
+  assert.deepEqual(validateDocumentLayout(scalar,catalog),scalar)
+  assert.throws(()=>validateDocumentLayout({...scalar,content:scalar.content.slice(0,-1)},catalog),/Property units/)
+  const sample=provider.sample({...provider.defaults,layout:scalar},catalog,{id:'qa',name:'QA Company'})
+  const text=sample.body.filter(n=>'runs' in n).flatMap(n=>n.runs).map(r=>r.text).join(' ')
+  assert.match(text,/Example Gardens/);assert.match(text,/SAMPLE-PLOT-106/);assert.match(text,/250/);assert.match(text,/sq m/)
+  assert.equal(JSON.stringify(old),before)
+ }
+})
+
+test('property scalar values preserve accepted evidence and never select the first of multiple units',()=>{
+ const {propertyDocumentValues}=require('../modules/real-estate/document-fields.ts')
+ const unit={ref:{code:'P-106',name:'Accepted unit'},property:{project:{name:'Phase A',location:'',parent:{name:'Accepted Gardens',location:'Accepted Goa'}},area:'250.25',areaUnit:'SQ_M'}}
+ const before=JSON.stringify(unit),values=propertyDocumentValues([unit])
+ assert.deepEqual(values,{'property.project-name':'Accepted Gardens / Phase A','property.unit-code':'P-106','property.unit-name':'Accepted unit','property.area':'250.25','property.area-unit':'sq m','property.location':'Accepted Goa'})
+ assert.equal(JSON.stringify(unit),before);assert.deepEqual(propertyDocumentValues([]),{});assert.deepEqual(propertyDocumentValues([unit,unit]),{})
+ const {realEstateOrderDocuments}=require('../modules/real-estate/order-documents.ts'),catalog=realEstateOrderDocuments(async()=>({}))[0].templateCatalog,layout=starterDocumentLayout(catalog)
+ layout.content.unshift(paragraph(field('property.project-name')))
+ assert.throws(()=>resolveDocumentLayout(layout,catalog,propertyDocumentValues([unit,unit]),[]),e=>e.status===409&&/exactly one saved property unit/.test(e.message))
+ const absent=propertyDocumentValues([{...unit,property:{...unit.property,area:null}}]);assert.equal(absent['property.area'],'Not supplied');assert.equal(absent['property.area-unit'],'')
+})
 test('booking, order and issue dates resolve independently from the accepted source',()=>{
  const context={date:'2026-11-05',company:{name:'Example Company'},order:{reference:'SO-000001',currency:'INR',orderedOn:new Date('2026-10-05T00:00:00Z')},snapshot:{dateFormat:'dd/MM/yyyy',timeZone:'America/Los_Angeles',customer:{name:'Example Applicant'},content:{bookingDate:'2026-09-25',bank:{}},calculation:{consideration:'100',extras:'0',totalKnown:'100'}}}
  const before=JSON.stringify(context),values=orderTemplateValues(context,content,'SO-000001/BI/001')

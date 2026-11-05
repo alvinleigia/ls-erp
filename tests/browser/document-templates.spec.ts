@@ -2,13 +2,14 @@ import { test, expect, type Page } from "@playwright/test"
 import { orderTemplateCatalog } from "../../modules/sales-orders/document-template"
 import { starterDocumentLayout } from "../../platform/documents/layout"
 import type { DocumentContent } from "../../platform/documents/validation"
+import { propertyDocumentFields, propertyUnitsSection } from "../../modules/real-estate/document-fields"
 import { defaultDocumentAppearance } from "../../platform/documents/appearance"
 
 const company = { id: "qa-company", name: "QA Demo Business", archived: false }
 const booking = "real-estate.booking-intimation"
 const acknowledgement = "order-acknowledgement"
 const providers = [{ key: booking, name: "Booking intimation letter" }, { key: acknowledgement, name: "Order acknowledgement" }]
-const catalog = { ...orderTemplateCatalog, sections: [...orderTemplateCatalog.sections, { key: "property-units", label: "Property units", required: true }] }
+const catalog = { ...orderTemplateCatalog, fields: [...orderTemplateCatalog.fields, ...propertyDocumentFields], sections: [...orderTemplateCatalog.sections, propertyUnitsSection] }
 const draft = (title: string): DocumentContent => ({
   title, opening: "Saved opening wording", terms: "Saved reviewed terms", address: "Saved office address",
   contact: "office@example.test", signatory: "Authorised signatory", useTenantLogo: false, enabled: true,
@@ -235,4 +236,103 @@ test("saved company details control the letterhead and footer without disabling 
   await download
   expect(state.previews.at(-1)?.useCompanyDetails).toBe(true)
   expect(state.publications).toBe(0); expect(unexpected).toEqual([])
+})
+
+test("field panel preserves insertion position through search and keyboard insertion, bold and undo", async ({ page }) => {
+  const { state, unexpected } = await fixture(page)
+  await page.getByRole("tab", { name: "PDF layout", exact: true }).click()
+  const editor = page.getByRole("textbox", { name: "Document layout", exact: true })
+  // Insert a field in the middle, rather than replacing the current paragraph or appending it.
+  await editor.locator("p").first().click()
+  await page.keyboard.press("Home"); await page.keyboard.type("Dear , remaining wording")
+  await page.keyboard.press("Home"); for (let i = 0; i < 5; i++) await page.keyboard.press("ArrowRight")
+  const search = page.getByRole("textbox", { name: "Find fields or sections", exact: true })
+  await search.fill("Customer")
+  await page.getByRole("button", { name: "Insert Customer name", exact: true }).focus()
+  await page.keyboard.press("Enter")
+  await expect(editor.locator("p").first()).toContainText("Dear Customer name, remaining wording")
+  // Selecting the fixed label can be formatted independently from the inserted value.
+  await page.keyboard.press("Control+Home"); await page.keyboard.press("Home")
+  for (let i = 0; i < 4; i++) await page.keyboard.press("Shift+ArrowRight")
+  await page.getByRole("button", { name: "Bold", exact: true }).click()
+  await expect(editor.locator("strong").first()).toHaveText("Dear")
+  await page.keyboard.press("Control+z")
+  await expect(editor.locator("strong")).toHaveCount(0)
+  await search.fill("impossible-match")
+  await expect(page.getByText("No matching fields or sections.", { exact: true })).toBeVisible()
+  await search.fill("Property")
+  await expect(page.getByRole("button", { name: "Insert Project / phase name", exact: true })).toBeVisible()
+  expect(state.previews).toHaveLength(0); expect(state.publications).toBe(0)
+  const download = page.waitForEvent("download")
+  await page.getByRole("button", { name: "Download sample preview", exact: true }).click(); await download
+  expect(JSON.stringify(state.previews.at(-1)?.layout)).toContain('"customer.name"')
+  await page.getByRole("tab", { name: "Wording", exact: true }).click()
+  await page.getByRole("tab", { name: "PDF layout", exact: true }).click()
+  await expect(editor.locator("p").first()).toContainText("Dear Customer name, remaining wording")
+  expect(state.publications).toBe(0); expect(unexpected).toEqual([])
+  await page.screenshot({ path: test.info().outputPath("dynamic-field-panel-desktop.png"), fullPage: true, animations: "disabled" })
+})
+
+test("mobile field panel is contained and read-only fields cannot insert or mutate the draft", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  const { state } = await fixture(page, { canPublish: false })
+  const before = JSON.stringify(state.templates[booking].content.layout)
+  await page.getByRole("tab", { name: "PDF layout", exact: true }).click()
+  const search = page.getByRole("textbox", { name: "Find fields or sections", exact: true })
+  await search.fill("Property")
+  await expect(page.getByRole("button", { name: "Insert Unit code", exact: true })).toBeDisabled()
+  await expect(page.getByRole("button", { name: "Insert section: Property units", exact: true })).toBeDisabled()
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+  expect(JSON.stringify(state.templates[booking].content.layout)).toBe(before)
+  expect(state.attempts).toHaveLength(0); expect(state.previews).toHaveLength(0)
+  await page.getByRole("complementary", { name: "Insert dynamic content" }).scrollIntoViewIfNeeded()
+  await page.screenshot({ path: test.info().outputPath("dynamic-field-panel-mobile.png"), animations: "disabled" })
+})
+
+test("fixed labels and dynamic values retain bold independently and blank paragraphs survive preview", async ({ page }) => {
+  const { state } = await fixture(page)
+  await page.getByRole("tab", { name: "PDF layout", exact: true }).click()
+  const editor = page.getByRole("textbox", { name: "Document layout", exact: true })
+  await editor.locator("p").first().click(); await page.keyboard.press("Control+Home")
+  await page.getByRole("button", { name: "Bold", exact: true }).click()
+  await expect(editor).toBeFocused()
+  await page.keyboard.type("Project: ")
+  await page.getByRole("button", { name: "Bold", exact: true }).click()
+  await expect(editor).toBeFocused()
+  await page.getByRole("textbox", { name: "Find fields or sections", exact: true }).fill("Project")
+  await page.getByRole("button", { name: "Insert Project / phase name", exact: true }).click()
+  await expect(editor).toBeFocused()
+  await expect(editor.locator("p").first()).toContainText("Project: Project / phase name")
+  await editor.getByText("Project / phase name", { exact: true }).click()
+  await page.getByRole("button", { name: "Bold", exact: true }).click()
+  await expect(editor).toBeFocused()
+  await page.keyboard.press("ArrowRight"); await page.keyboard.press("Enter"); await page.keyboard.press("Enter")
+  const download = page.waitForEvent("download")
+  await page.getByRole("button", { name: "Download sample preview", exact: true }).click(); await download
+  const nodes = state.previews.at(-1)!.layout!.content
+  const first = nodes[0]
+  expect(first.type).toBe("paragraph")
+  if (first.type !== "paragraph") throw Error("Expected formatted paragraph")
+  expect(first.content?.find(n => n.type === "text" && n.text === "Project: ")?.marks).toContainEqual({ type: "bold" })
+  expect(first.content?.find(n => n.type === "documentField" && n.attrs.key === "property.project-name")?.marks).toContainEqual({ type: "bold" })
+  expect(nodes.some(n => n.type === "paragraph" && !n.content?.length)).toBe(true)
+  expect(state.publications).toBe(0)
+})
+
+test("adding a paragraph preserves a selected required source section", async ({ page }) => {
+  const { state } = await fixture(page)
+  await page.getByRole("tab", { name: "PDF layout", exact: true }).click()
+  const editor = page.getByRole("textbox", { name: "Document layout", exact: true })
+  await editor.getByText("Section: Customers and correspondence", { exact: true }).click()
+  await page.getByRole("button", { name: "Insert Customer name", exact: true }).click()
+  await expect(editor.getByText("Section: Customers and correspondence", { exact: true })).toBeVisible()
+  await editor.getByText("Section: Customers and correspondence", { exact: true }).click()
+  await page.getByRole("button", { name: "Add paragraph", exact: true }).click()
+  await page.keyboard.type("Additional approved wording")
+  const download = page.waitForEvent("download")
+  await page.getByRole("button", { name: "Download sample preview", exact: true }).click(); await download
+  const nodes = state.previews.at(-1)!.layout!.content
+  for (const section of catalog.sections.filter(s => s.required)) expect(nodes.filter(n => n.type === "documentSection" && n.attrs.key === section.key)).toHaveLength(1)
+  await expect(editor.locator("p").last()).toHaveText("Additional approved wording")
+  expect(state.publications).toBe(0)
 })

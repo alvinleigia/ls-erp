@@ -1,5 +1,30 @@
 # Base Conventions
 
+## Document field panel (P13M)
+
+- Reuse `DocumentLayoutEditor` for company templates and quotation layouts. The
+  searchable field panel inserts at the retained editor selection, including after
+  keyboard navigation or searching. Insertion after a selected generated block
+  preserves that block; Add paragraph retains its append behaviour. Search and
+  tab changes do not save drafts or
+  trigger PDF generation. Preserve read-only controls and explicit reviewed publication.
+- Catalogues own available fields, groups and sections; templates store only the
+  existing bounded node format. Fixed text and marked field tokens remain separate.
+  Do not add arbitrary HTML/CSS, expressions, remote assets or a second PDF engine.
+- Providers may return scalar `values` alongside their authorised blocks. Source
+  owners merge them with shared values, with shared identity/financial keys taking
+  precedence. Resolve only registered fields and freeze the resulting text in the
+  issued payload; archived downloads never re-resolve current data.
+- A provider can declare a required section's `alternativeFields`. Every registered
+  alternative must appear to replace that section. This does not weaken other
+  section requirements. Real Estate scalar fields use exactly one authorised,
+  accepted unit; multiple units require the repeating section and must never fall
+  back to the first unit. Keep these fields and examples in the Real Estate addon.
+- Run the document layout/PDF/appearance/quotation suites, native order/receipt/
+  invoice checks and `playwright.document-templates.config.ts`. Review desktop,
+  mobile and rendered PDF screenshots, and exercise missing/ambiguous values,
+  stale review, access revocation and unchanged archived downloads.
+
 ## Shared PDF presentation (P13L)
 
 - Blank lines inside wording fields and separate editor paragraphs use the same

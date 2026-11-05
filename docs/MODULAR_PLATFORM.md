@@ -1,3 +1,36 @@
+## P13M document field panel (2026-11-05)
+
+The shared rich-text editor now has a searchable, grouped insertion panel rather
+than separate field/section dropdowns. It retains cursor/selection through search
+and keyboard insertion, supports fixed labels and marked dynamic tokens, and
+keeps paragraph, alignment and page-break tools. Desktop uses a side panel;
+mobile stacks a bounded panel above the editor. Preview and publication remain
+explicit, and read-only access retains inspection without insertion.
+
+Real Estate provides project/phase, unit code/name, area/unit and location scalar
+fields from authorised accepted evidence. Its required property section may be
+replaced only by the complete individual-field set. Scalar fields require one
+unit; multiple units fail clearly and use the repeating section instead. Accepted
+customers, payments, calculations and independent Read checks remain authoritative.
+The shared document contract carries provider-owned values for orders, receipts
+and commercial invoices/credits, without placing industry rules in the renderer.
+
+Regression verification includes the native quotation and order-document browser
+workflows, generic order/property issuance and immutable archives, receipts and
+commercial invoice/credit replacements, Unicode/long-table PDFs, independent
+label/token marks, insertion after selected source blocks and draft-only previews.
+All tests use synthetic local records or the isolated staging fixture; never the
+pilot customer's live records.
+
+Local checks: 34 unit/PDF/layout/quotation checks, 47 native order/receipt/invoice
+checks, 17 synthetic editor browser scenarios and four real application browser
+workflows passed. Desktop/mobile editor and PDF screenshots were inspected.
+
+No migration or saved-template rewrite is required. Existing published layouts
+and archived PDFs retain their behaviour. This work must be verified on staging
+before any production release; Ewissen's unpublished browser draft must not be
+published, discarded or overwritten as part of testing.
+
 ## P13L shared company document defaults (2026-11-05)
 
 Document fields distinguish the accepted quotation booking date from the sales

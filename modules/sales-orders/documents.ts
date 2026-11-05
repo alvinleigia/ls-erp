@@ -43,9 +43,9 @@ export function createOrderDocumentService(db:PrismaClient,identity:DocumentIden
       const previous=await tx.salesOrderDocument.findFirst({where:{tenantId:actor.tenantId,orderId:order.id,providerKey:provider.key},orderBy:{version:"desc"}})
       if((previous?.id??null)!==input.supersedesId)throw new BusinessError(409,"The issued version changed. Reload before preparing its replacement.")
       const version=(previous?.version??0)+1,reference=`${order.reference}/${provider.code}/${String(version).padStart(3,"0")}`
-      const {blocks,evidence}=await provider.blocks(tx,actor,context)
+      const {blocks,evidence,values}=await provider.blocks(tx,actor,context)
       const payload={format:1 as const,title:content.title,reference,date:context.date,sourceReference:order.reference,company:{id:company.id,name:company.name},issuer:{address:content.address,contact:content.contact,signatory:content.signatory},opening:content.opening,terms:content.terms,...(content.appearance?{appearance:content.appearance}:{}),branding:content.useTenantLogo?await readDocumentBranding(tx,actor.tenantId):null,blocks}
-      const body=content.layout?resolveDocumentLayout(content.layout,provider.templateCatalog,orderTemplateValues(context,content,reference),orderTemplateBlocks(context,blocks)):undefined
+      const body=content.layout?resolveDocumentLayout(content.layout,provider.templateCatalog,{...values,...orderTemplateValues(context,content,reference)},orderTemplateBlocks(context,blocks)):undefined
       const composed={...payload,...(body?{body}:{})}
       validateDocumentSize(composed)
       const prepared={providerKey:provider.key,templateVersion:template.version,version,supersedesId:input.supersedesId,payload:composed,evidence}

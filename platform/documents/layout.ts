@@ -20,24 +20,28 @@ export const documentLayoutSchema = z.object({ type: z.literal("doc"), content: 
   if (JSON.stringify(value).length > 60000) ctx.addIssue({ code: "custom", message: "Keep the layout under 60,000 characters." })
 })
 export type DocumentLayout = z.infer<typeof documentLayoutSchema>
-export type TemplateCatalog = { fields: { key: string; label: string }[]; sections: { key: string; label: string; required: boolean }[]; starter?: DocumentLayout }
+export type TemplateField = { key: string; label: string; group?: string; help?: string }
+export type TemplateCatalog = { fields: TemplateField[]; sections: { key: string; label: string; required: boolean; alternativeFields?: string[] }[]; starter?: DocumentLayout }
 export type DocumentRun = { text: string; bold?: boolean; italic?: boolean }
 export type DocumentFlow = ({ type: "paragraph" | "heading"; level?: number; align: "left" | "center" | "right"; runs: DocumentRun[] } | { type: "section"; blocks: DocumentBlock[]; compact?: boolean } | { type: "pageBreak" })[]
 
 // Only registered fields/sections can enter the stored layout. This is data,
 // never HTML, a property-path evaluator, a formula or an executable template.
 export function validateDocumentLayout(value: unknown, catalog: TemplateCatalog): DocumentLayout {
-  const layout = documentLayoutSchema.parse(value), fields = new Set(catalog.fields.map(row => row.key)), sections = new Set(catalog.sections.map(row => row.key)), seen = new Set<string>()
+  const layout = documentLayoutSchema.parse(value), fields = new Set(catalog.fields.map(row => row.key)), sections = new Set(catalog.sections.map(row => row.key)), seen = new Set<string>(), usedFields = new Set<string>()
   for (const node of layout.content) {
     if (node.type === "documentSection") {
       if (!sections.has(node.attrs.key) || seen.has(node.attrs.key)) throw new BusinessError(400, "Choose each registered document section only once.")
       seen.add(node.attrs.key)
     } else if (node.type !== "documentPageBreak") {
-      for (const item of node.content ?? []) if (item.type === "documentField" && !fields.has(item.attrs.key)) throw new BusinessError(400, "This layout contains an unavailable document field.")
+      for (const item of node.content ?? []) if (item.type === "documentField") {
+        if (!fields.has(item.attrs.key)) throw new BusinessError(400, "This layout contains an unavailable document field.")
+        usedFields.add(item.attrs.key)
+      }
     }
   }
-  const missing = catalog.sections.filter(row => row.required && !seen.has(row.key))
-  if (missing.length) throw new BusinessError(400, `Restore required sections: ${missing.map(row => row.label).join(", ")}.`)
+  const missing = catalog.sections.filter(row => row.required && !seen.has(row.key) && !(row.alternativeFields?.length && row.alternativeFields.every(key => fields.has(key) && usedFields.has(key))))
+  if (missing.length) throw new BusinessError(400, `Restore required sections: ${missing.map(row => row.label + (row.alternativeFields?.length ? " (or insert every individual field listed in the field panel)" : "")).join(", ")}.`)
   return layout
 }
 export function starterDocumentLayout(catalog: TemplateCatalog): DocumentLayout {
@@ -54,7 +58,10 @@ export function resolveDocumentLayout(value: unknown, catalog: TemplateCatalog, 
     return { type: node.type, ...(node.type === "heading" ? { level: node.attrs.level } : {}), align: node.attrs?.textAlign ?? "left", runs: (node.content ?? []).map(item => {
       if (item.type === "hardBreak") return { text: "\n" }
       if (item.type === "documentField") {
-        if (!Object.hasOwn(values, item.attrs.key)) throw new BusinessError(409, "A selected document field has no accepted value. Review the source before issuing.")
+        if (!Object.hasOwn(values, item.attrs.key)) {
+          const field = catalog.fields.find(field => field.key === item.attrs.key)!
+          throw new BusinessError(409, `The selected field "${field.label}" has no unambiguous accepted value. ${field.help ?? "Review the source before issuing."}`)
+        }
         return { text: values[item.attrs.key], bold: item.marks?.some(mark=>mark.type==="bold"), italic: item.marks?.some(mark=>mark.type==="italic") }
       }
       return { text: item.text, bold: item.marks?.some(mark => mark.type === "bold"), italic: item.marks?.some(mark => mark.type === "italic") }

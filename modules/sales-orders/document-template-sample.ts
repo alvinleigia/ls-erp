@@ -3,11 +3,12 @@ import type { DocumentContent } from "@/platform/documents/validation"
 import { resolveDocumentLayout, starterDocumentLayout, type TemplateCatalog } from "@/platform/documents/layout"
 
 // Explicit sample data only: previews never browse customers, orders or payments.
-export function sampleDocument(content: DocumentContent, catalog: TemplateCatalog, company: { id: string; name: string }, examples: DocumentBlock[] = []): DocumentPayload {
+export function sampleDocument(content: DocumentContent, catalog: TemplateCatalog, company: { id: string; name: string }, examples: DocumentBlock[] = [], sampleValues: Record<string, string> = {}): DocumentPayload {
   const money = "INR 100,000.00"
   const values: Record<string, string> = { "document.reference": "SAMPLE/001", "document.date": "01/01/2026", "company.name": company.name, "company.address": content.address, "company.contact": content.contact, "customer.name": "Sample Customer", "order.reference": "SAMPLE-ORDER-001", "order.date": "01/01/2026", "order.consideration": money, "order.extras": "INR 0.00", "order.total": money, "template.opening": content.opening, "template.terms": content.terms }
   Object.assign(values,{"bank.name":"Sample Bank","bank.account-name":"Sample Company","bank.account-number":"0000000000","bank.routing-code":"SAMPLE00000"})
   values["order.booking-date"] = "25/12/2025"
+  Object.assign(values, sampleValues)
   const blocks:DocumentBlock[] = catalog.sections.flatMap(section => {
     const supplied=examples.filter(block=>block.key===section.key)
     if(supplied.length)return structuredClone(supplied)

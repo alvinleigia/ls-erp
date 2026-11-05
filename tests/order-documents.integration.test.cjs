@@ -246,3 +246,31 @@ test('accepted booking date stays separate from order date and later quotation/c
  await docs().download(f.order.id,issued.id,ACK);assert.deepEqual(objects.get(issued.archive.path),archive)
  assert.deepEqual((await root.salesOrderDocument.findUniqueOrThrow({where:{tenantId_id:{tenantId:tenant,id:issued.id}}})).snapshot,original)
 })
+
+test('provider scalar fields use authorised accepted property facts, reject multi-unit ambiguity and freeze issued documents',async()=>{
+ const {propertyDocumentFields}=require('../modules/real-estate/document-fields.ts')
+ const current=await templates().get(company.id,BI),layout=structuredClone(current.content.layout)
+ layout.content=layout.content.filter(node=>node.attrs?.key!=='property-units')
+ layout.content.push(...propertyDocumentFields.map(field=>({type:'paragraph',content:[{type:'text',text:field.label+': ',marks:[{type:'bold'}]},{type:'documentField',attrs:{key:field.key}}]})))
+ try{
+  await publish(BI,{layout})
+  const single=await propertyFixture(1);await holdAll(single)
+  const prepared=await docs().prepare(single.order.id,{providerKey:BI}),rows=prepared.payload.body.filter(n=>n.type==='paragraph'&&n.runs[0]?.bold)
+  assert.equal(rows.length,propertyDocumentFields.length)
+  assert.equal(rows.find(n=>n.runs[0].text==='Unit code: ').runs[1].text,single.items[0].code)
+  assert.equal(rows.find(n=>n.runs[0].text==='Project / phase name: ').runs[1].text,project.name)
+  assert.equal(rows.find(n=>n.runs[0].text==='Area: ').runs[1].text,'1200')
+  assert.equal(prepared.payload.body.some(n=>n.type==='section'&&n.blocks.some(b=>b.key==='property-units')),false)
+  await assert.rejects(docs(staff).prepare(single.order.id,{providerKey:BI}),status(404))
+  const multi=await propertyFixture(2);await holdAll(multi)
+  const uploads=calls.uploads
+  await assert.rejects(docs().prepare(multi.order.id,{providerKey:BI}),e=>e.status===409&&/exactly one saved property unit/.test(e.message))
+  assert.equal(calls.uploads,uploads)
+  const issued=await docs().issue(single.order.id,input(prepared)),saved=structuredClone(issued.snapshot),bytes=Buffer.from(objects.get(issued.archive.path))
+  await publish(BI,current.content)
+  const repeated=await docs().prepare(multi.order.id,{providerKey:BI})
+  assert.equal(repeated.payload.body.find(n=>n.type==='section'&&n.blocks.some(b=>b.key==='property-units')).blocks[0].table.rows.length,2)
+  await docs().download(single.order.id,issued.id,BI);assert.deepEqual(objects.get(issued.archive.path),bytes)
+  assert.deepEqual((await root.salesOrderDocument.findUniqueOrThrow({where:{tenantId_id:{tenantId:tenant,id:issued.id}}})).snapshot,saved)
+ }finally{await publish(BI,current.content)}
+})
