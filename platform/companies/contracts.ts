@@ -1,11 +1,12 @@
 import { z } from "zod"
+import { companyDocumentSettingsSchema, type CompanyDocumentSettings } from "./document-settings"
 
 const id = z.string().trim().min(1).max(200)
 const name = z.string().trim().min(1).max(160)
 const code = z.string().trim().toUpperCase().regex(/^[A-Z0-9][A-Z0-9_-]{0,31}$/, "Use up to 32 letters, numbers, underscores or hyphens.")
 const parentId = id.nullable()
-export const companyCreateSchema = z.object({ name, code, parentId: parentId.default(null) }).strict()
-export const companyUpdateSchema = z.object({ name: name.optional(), parentId: parentId.optional(), archived: z.boolean().optional(), version: z.number().int().positive() }).strict()
+export const companyCreateSchema = z.object({ name, code, parentId: parentId.default(null), documentSettings: companyDocumentSettingsSchema.optional() }).strict()
+export const companyUpdateSchema = z.object({ name: name.optional(), parentId: parentId.optional(), archived: z.boolean().optional(), documentSettings: companyDocumentSettingsSchema.optional(), version: z.number().int().positive() }).strict()
 export const officeCreateSchema = z.object({ name, code, companyId: id }).strict()
 export const officeUpdateSchema = z.object({ name: name.optional(), archived: z.boolean().optional(), version: z.number().int().positive() }).strict()
 export const structureQuerySchema = z.object({
@@ -19,6 +20,7 @@ export const structureQuerySchema = z.object({
 }).strict()
 
 export type Company = {
+  documentSettings?: CompanyDocumentSettings;
   id: string; code: string; name: string; parentId: string | null;
   isInitial: boolean; archived: boolean; version: number;
   parent: { id: string; code: string; name: string } | null;

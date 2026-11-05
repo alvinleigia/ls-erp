@@ -2,6 +2,19 @@
 
 ## Shared PDF presentation (P13L)
 
+- Save reusable issuing address, contact, website, footer, signatory caption and
+  payment instructions on the issuing company under Companies and offices.
+  Company writes retain administrator authorization, optimistic version checks
+  and protected audit history. The company is determined by the record's saved
+  source office, never the current office selector or a project-name match.
+- New quotation defaults copy the company's bank instructions. Applying a reusable
+  quotation template preserves the quotation's bank instructions. Accepted
+  revisions and orders keep their saved bank values. Letter, receipt and commercial
+  invoice templates can opt into saved company document details; preparation copies
+  those details into the frozen payload and company version invalidates stale
+  previews. Issued downloads never resolve live company settings. Statutory tax
+  issuer/signature details remain governed by their approved tax profiles.
+
 - Company templates and custom quotation layouts use the bounded presentation
   schema in `platform/documents/appearance.ts`. Reuse `DocumentAppearanceControls`
   for editing. Presets change styling only; wording, accepted values and company

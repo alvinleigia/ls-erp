@@ -60,6 +60,7 @@ import { TeamEditor } from '@/platform/teams/controls';
 import { CustomFieldEditor } from '@/modules/crm/components/custom-field-configuration';
 import { QuotationEditor } from '@/modules/sales-documents/components/quotations';
 import { DocumentTemplateControls } from '@/platform/documents/template-controls';
+import { CompanyStructureEditor, CompanyStructureList } from '@/platform/companies/controls';
 import { SalesOrderDetail } from '@/application/sales-orders/detail';
 import { LeadSourceList } from '@/modules/crm/components/lead-source-list';
 import { LostReasonList } from '@/modules/crm/components/lost-reason-list';
@@ -81,6 +82,7 @@ function Preview(){
  if(path[1]==='help-fixture')return <InfoHelpPreview/>;
  if(path[1]==='navigation-fixture')return <ListNavigationPreview/>;
  if(path[1]==='dropdown-labels-fixture')return <DropdownLabelsPreview/>;
+ if(path[1]==='settings' && path[2]==='companies')return path[3]?<CompanyStructureEditor kind="company" id={path[3]}/>:<CompanyStructureList kind="company"/>;
  if(path[1]==='settings' && path[2]==='documents')return <DocumentTemplateControls/>;
  if(path[1]==='crm' && key==='sales')return <BusinessModuleProvider><ApplicationAccessProvider><SalesReports initialView={query.get('view')==='team'?'team':'sales'}/></ApplicationAccessProvider></BusinessModuleProvider>;
  if(path[1]==='dashboard' || path[1]==='settings' && (!path[2] || path[2]==='taxes'))return <BusinessModuleProvider><CoreViewGuard role={query.get('role')||'MANAGER'} userId='manager'>{path[1]==='dashboard'?<Dashboard/>:path[2]==='taxes'?<Taxes/>:<Settings/>}</CoreViewGuard></BusinessModuleProvider>;

@@ -1,3 +1,4 @@
+import { resolveCompanyDocumentContent } from "@/platform/companies/document-settings"
 import type { OrderReceipt,Prisma,PrismaClient } from '@prisma/client'
 import { createDocumentService,validateDocumentSize,type DocumentOwner } from '@/platform/documents/service'
 import type { DocumentIdentity,DocumentStorage,DocumentPayload } from '@/platform/documents/contracts'
@@ -37,7 +38,7 @@ export function createReceiptDocumentService(db:PrismaClient,identity:DocumentId
    if(c.office.archived||c.company.archived)throw new BusinessError(409,'Restore the issuing company and office before issuing a new receipt.')
    const template=await tx.businessDocumentTemplate.findFirst({where:{tenantId:actor.tenantId,companyId:c.company.id,providerKey:KEY},orderBy:{version:'desc'}})
    if(!template)throw new BusinessError(409,'Ask a tenant administrator to publish a payment receipt template for this company.')
-   const content=documentContentSchema.parse(template.content);if(!content.enabled)throw new BusinessError(409,'This company\'s payment receipt template is disabled.')
+   const content=resolveCompanyDocumentContent(documentContentSchema.parse(template.content),c.company.documentSettings??{});if(!content.enabled)throw new BusinessError(409,'This company\'s payment receipt template is disabled.')
    const previous=await tx.orderReceiptDocument.findFirst({where:{tenantId:actor.tenantId,paymentId:c.payment.id},orderBy:{version:'desc'}})
    if((previous?.id??null)!==input.supersedesId)throw new BusinessError(409,'The issued receipt changed. Reload before preparing its replacement.')
    const [{number}]=previous?[{number:previous.sequence}]:await tx.$queryRaw<{number:number}[]>`SELECT app.receipt_document_next(${actor.tenantId},${c.payment.id}) AS number`

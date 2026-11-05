@@ -1,4 +1,5 @@
 import { documentAppearanceSchema } from "@/platform/documents/appearance"
+import { officeDocumentDefaults } from "@/platform/companies/document-settings"
 import { recordActionAccess } from "@/platform/access/record-actions"
 import { documentLayoutSchema } from "@/platform/documents/layout"
 import { z } from "zod"
@@ -51,7 +52,7 @@ export function createQuotationService({ run: checkedRun, audit, opportunityScop
     if (!enabled && (content.instalments.length || previous?.instalments.length)) throw new BusinessError(403, "Enable Payment Plans before saving a document or template with an instalment schedule. Saved versions remain available.")
   }
   async function opportunity(tx: Tx, actor: BusinessActor, id: string) {
-    const row = await tx.crmOpportunity.findFirst({ where: { ...opportunityScope(actor), id }, select: { id: true, title: true, currency: true, amount: true, participantInformation: true, contact: { select: { id: true, tenantId: true, name: true, email: true, phone: true, archived: true, version: true } }, account: { select: { id: true, tenantId: true, name: true, version: true } } } })
+    const row = await tx.crmOpportunity.findFirst({ where: { ...opportunityScope(actor), id }, select: { id: true, officeId: true, title: true, currency: true, amount: true, participantInformation: true, contact: { select: { id: true, tenantId: true, name: true, email: true, phone: true, archived: true, version: true } }, account: { select: { id: true, tenantId: true, name: true, version: true } } } })
     if (!row) throw new BusinessError(404, termText("crm.opportunity.singular", "Opportunity not found.", "{label} not found."))
     return row
   }
@@ -70,10 +71,10 @@ export function createQuotationService({ run: checkedRun, audit, opportunityScop
     quotationDefaults(opportunityId: string) {
       return run("quotations.create", async (tx, actor, paymentPlans) => {
         const row = await opportunity(tx, actor, opportunityId)
-        const tenant = await readDocumentBranding(tx, actor.tenantId)
+        const company = await officeDocumentDefaults(tx, actor.tenantId, row.officeId)
         const term = createTermResolver(await readTerms?.(tx, actor) || {})
         const context = await documentContext?.(tx, actor, row.id, term) || []
-        return { paymentPlansEnabled: paymentPlans, opportunity: row.title, context, content: { ...emptyQuotationContent, title: term("salesDocuments.quotation.singular", emptyQuotationContent.title), supplierName: tenant.name, currency: row.currency, lines: [{ description: row.title, quantity: "1", unit: "", rate: row.amount.toString() }] } }
+        return { paymentPlansEnabled: paymentPlans, opportunity: row.title, context, content: { ...emptyQuotationContent, title: term("salesDocuments.quotation.singular", emptyQuotationContent.title), supplierName: company.name, website: company.settings.website, bank: company.settings.bank, currency: row.currency, lines: [{ description: row.title, quantity: "1", unit: "", rate: row.amount.toString() }] } }
       })
     },
     listQuotationTemplates(input: unknown) {

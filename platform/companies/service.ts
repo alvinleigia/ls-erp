@@ -35,7 +35,7 @@ export function createCompanyService(db: PrismaClient, identity: Identity) {
     if (!row) throw new BusinessError(400, "Choose an active company in this workspace.")
   }
   async function company(tx: Prisma.TransactionClient, id: string) {
-    const row = await tx.businessCompany.findFirst({ where: { tenantId: identity.tenantId, id }, select: companySelect })
+    const row = await tx.businessCompany.findFirst({ where: { tenantId: identity.tenantId, id }, select: { ...companySelect, documentSettings: true } })
     if (!row) throw new BusinessError(404, "Company not found.")
     return row
   }

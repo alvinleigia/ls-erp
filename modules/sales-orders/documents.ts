@@ -1,4 +1,5 @@
 import type { Prisma, PrismaClient, SalesOrder } from "@prisma/client"
+import { resolveCompanyDocumentContent } from "@/platform/companies/document-settings"
 import { salesOrderRecordScope } from "@/platform/access/record-scope"
 import { recordActionAccess } from "@/platform/access/record-actions"
 import { authorizeBusinessOperation } from "@/platform/access/operation"
@@ -16,7 +17,7 @@ import { documentHash } from "@/platform/documents/hash"
 import { documentContentSchema } from "@/platform/documents/validation"
 import { resolveDocumentLayout } from "@/platform/documents/layout"
 import { orderTemplateValues,orderTemplateBlocks } from "./document-template"
-export type OrderDocumentContext={order:SalesOrder;snapshot:QuotationSnapshot;date:string;office:{id:string;version:number;archived:boolean};company:{id:string;name:string;version:number;archived:boolean}}
+export type OrderDocumentContext={order:SalesOrder;snapshot:QuotationSnapshot;date:string;office:{id:string;version:number;archived:boolean};company:{id:string;name:string;version:number;archived:boolean;documentSettings?:unknown}}
 const json=(value:unknown)=>JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue
 export function createOrderDocumentService(db:PrismaClient,identity:DocumentIdentity,providers:readonly DocumentProvider<OrderDocumentContext>[],storage:DocumentStorage,render?:Parameters<typeof createDocumentService<OrderDocumentContext>>[4]) {
   const owner:DocumentOwner<OrderDocumentContext>={
@@ -37,7 +38,7 @@ export function createOrderDocumentService(db:PrismaClient,identity:DocumentIden
       await provider.authorizeDownload(tx,actor,context,undefined)
       const template=await tx.businessDocumentTemplate.findFirst({where:{tenantId:actor.tenantId,companyId:company.id,providerKey:provider.key},orderBy:{version:"desc"}})
       if(!template)throw new BusinessError(409,"Ask a tenant administrator to publish a template for this issuing company.")
-      const content=documentContentSchema.parse(template.content)
+      const content=resolveCompanyDocumentContent(documentContentSchema.parse(template.content),company.documentSettings??{})
       if(!content.enabled)throw new BusinessError(409,"This company's document template is disabled.")
       const previous=await tx.salesOrderDocument.findFirst({where:{tenantId:actor.tenantId,orderId:order.id,providerKey:provider.key},orderBy:{version:"desc"}})
       if((previous?.id??null)!==input.supersedesId)throw new BusinessError(409,"The issued version changed. Reload before preparing its replacement.")

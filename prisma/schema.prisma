@@ -955,6 +955,7 @@ model Tenant {
 
 // Operating structure within a tenant. Platform Organization remains separate.
 model BusinessCompany {
+  documentSettings Json @default("{}")
   taxRegistrations CompanyTaxRegistration[]
   taxProfiles CompanyTaxProfile[]
   documentTemplates BusinessDocumentTemplate[]

@@ -1,3 +1,25 @@
+## P13L shared company document defaults (2026-11-05)
+
+Company administration now includes reusable document address, contact, website,
+signatory caption, footer and bank instructions. The settings are company scoped
+and apply across that company's projects. New quotation defaults derive the issuer
+from the opportunity's saved office, and reusable quotation templates retain the
+current quotation's bank instructions. Saved revisions, accepted orders and issued
+files are never rewritten when settings change.
+
+General order/property letters, payment receipts and commercial invoice/credit
+templates can opt into company details. Preparing a new document resolves these
+details and freezes them into its payload. A company settings edit increments the
+company version, invalidating stale preparations. Statutory issuer identity and
+signatures continue to use reviewed tax evidence. The shared renderer remains
+industry independent; no customer address or reference-specific account is seeded.
+
+Migration 20261105000100_company_document_settings adds an empty JSON settings
+object to each company, retains existing directory RLS, extends the protected
+source-issuer projection and introduces a tenant/office-checked defaults reader.
+No existing customer, quotation, order, template or document snapshot is migrated.
+Hosted rollout and verification status must be recorded after validation.
+
 ## P13L lightweight shared document styling (2026-11-05)
 
 The existing PDF engine now accepts bounded, tenant-template presentation data:

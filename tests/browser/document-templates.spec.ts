@@ -219,3 +219,20 @@ test("compact section presentation preserves required sections and publishes the
   expect(nodes.some(node => node.type === "documentSection" && node.attrs.key === "payment-schedule" && node.attrs.compact)).toBe(true)
   for (const section of catalog.sections.filter(section => section.required)) expect(nodes.filter(node => node.type === "documentSection" && node.attrs.key === section.key)).toHaveLength(1)
 })
+
+test("saved company details control the letterhead and footer without disabling other style controls", async ({ page }) => {
+  const { state, unexpected } = await fixture(page, { styled: true })
+  await page.getByRole("tab", { name: "Company", exact: true }).click()
+  await page.getByLabel("Use saved company document details", { exact: true }).check()
+  await expect(page.getByLabel("Issuing company address", { exact: true })).toHaveCount(0)
+  await expect(page.getByRole("link", { name: "Edit company details", exact: true })).toHaveAttribute("href", "/settings/companies/qa-company")
+  await page.getByRole("tab", { name: "PDF style", exact: true }).click()
+  await page.getByRole("tab", { name: "Tables and footer", exact: true }).click()
+  await expect(page.getByLabel("Repeating footer", { exact: true })).toBeDisabled()
+  await expect(page.getByLabel("Table style", { exact: true })).toBeEnabled()
+  const download = page.waitForEvent("download")
+  await page.getByRole("button", { name: "Download sample preview", exact: true }).click()
+  await download
+  expect(state.previews.at(-1)?.useCompanyDetails).toBe(true)
+  expect(state.publications).toBe(0); expect(unexpected).toEqual([])
+})

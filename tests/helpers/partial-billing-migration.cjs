@@ -7,7 +7,7 @@ async function historical(db,url){
  try{
   const tenantId='p12_history_'+randomUUID();await root.tenant.create({data:{id:tenantId,slug:tenantId,name:'QA P12 historical invoice'}})
   const user=await fixtureUser(root,{data:{tenantId,role:'ADMIN',name:'QA prior issuer',email:randomUUID()+'@example.test'}})
-  const company=await root.businessCompany.findFirst({where:{tenantId}})||await root.businessCompany.create({data:{tenantId,code:'QA-P12',name:'QA prior company'}})
+  const company=await root.businessCompany.findFirst({where:{tenantId},select:{id:true}})||await root.businessCompany.create({data:{tenantId,code:'QA-P12',name:'QA prior company'},select:{id:true}})
   const office=await root.businessOffice.findFirst({where:{tenantId,companyId:company.id}})||await root.businessOffice.create({data:{tenantId,companyId:company.id,code:'QA-P12',name:'QA prior office'}})
   await root.businessOfficePolicy.upsert({where:{tenantId_userId:{tenantId,userId:user.id}},create:{tenantId,userId:user.id,creationOfficeId:office.id},update:{}})
   await root.tenantModule.createMany({data:['crm','salesDocuments','salesOrders','receivables','paymentPlans','invoicing'].map(key=>({tenantId,key,allowed:true,enabled:true}))})

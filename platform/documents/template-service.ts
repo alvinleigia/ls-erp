@@ -11,7 +11,8 @@ import type { DocumentContent } from "./validation"
 import type { DocumentIdentity,DocumentPayload } from "./contracts"
 import { starterDocumentLayout, validateDocumentLayout, type TemplateCatalog } from "./layout"
 import { readDocumentBranding } from "../branding/read"
-export type DocumentTypeInfo = { key: string; name: string; modules: readonly BusinessModuleKey[]; defaults: DocumentContent; templateCatalog: TemplateCatalog; sample: (content:DocumentContent,catalog:TemplateCatalog,company:{id:string;name:string})=>DocumentPayload }
+import { resolveCompanyDocumentContent } from "../companies/document-settings"
+export type DocumentTypeInfo = { companyDetails?: boolean; key: string; name: string; modules: readonly BusinessModuleKey[]; defaults: DocumentContent; templateCatalog: TemplateCatalog; sample: (content:DocumentContent,catalog:TemplateCatalog,company:{id:string;name:string})=>DocumentPayload }
 export function createDocumentTemplateService(db: PrismaClient, identity: DocumentIdentity, providers: readonly DocumentTypeInfo[]) {
   const registry=new Map(providers.map(row=>[row.key,row]))
   async function run<T>(write: boolean, operation: (tx: Prisma.TransactionClient,actor:BusinessActor) => Promise<T>) {
@@ -45,7 +46,7 @@ export function createDocumentTemplateService(db: PrismaClient, identity: Docume
         const [company]=await tx.$queryRaw<{id:string;name:string;archived:boolean}[]>`SELECT * FROM app.document_template_companies(${identity.tenantId}) WHERE id=${companyId}`
         if(!company)throw new BusinessError(404,"Issuing company not found.")
         const content=(current?.content??provider.defaults) as DocumentContent
-        return {company,providerKey,version:current?.version??0,content:{...content,layout:content.layout??starterDocumentLayout(provider.templateCatalog)},templateCatalog:provider.templateCatalog}
+        return {company,providerKey,version:current?.version??0,content:{...content,layout:content.layout??starterDocumentLayout(provider.templateCatalog)},templateCatalog:provider.templateCatalog,companyDetailsAvailable:provider.companyDetails!==false}
       })
     },
     async preview(input:unknown) {
@@ -53,11 +54,13 @@ export function createDocumentTemplateService(db: PrismaClient, identity: Docume
       if(!provider)throw new BusinessError(400,"Choose a registered document type.")
       const payload=await run(true,async tx=>{
         await authorizeBusinessOperation(tx,identity,["documentTemplates.read","documentTemplates.edit"],provider.modules)
-        const company=await tx.businessCompany.findFirst({where:{tenantId:identity.tenantId,id:data.companyId,archived:false},select:{id:true,name:true}})
+        const company=await tx.businessCompany.findFirst({where:{tenantId:identity.tenantId,id:data.companyId,archived:false},select:{id:true,name:true,documentSettings:true}})
         if(!company)throw new BusinessError(404,"Choose an active issuing company.")
         const latest=await tx.businessDocumentTemplate.findFirst({where:{tenantId:identity.tenantId,companyId:company.id,providerKey:provider.key},orderBy:{version:"desc"},select:{version:true}})
         if((latest?.version??0)!==data.version)throw new BusinessError(409,"This template changed. Reload before previewing; your draft is retained.")
-        return {...provider.sample(data.content,provider.templateCatalog,company),branding:data.content.useTenantLogo?await readDocumentBranding(tx,identity.tenantId):null}
+        if(provider.companyDetails===false&&data.content.useCompanyDetails)throw new BusinessError(400,"This document uses its approved tax issuer details.")
+        const content=resolveCompanyDocumentContent(data.content,company.documentSettings)
+        return {...provider.sample(content,provider.templateCatalog,company),branding:data.content.useTenantLogo?await readDocumentBranding(tx,identity.tenantId):null}
       })
       const {renderBusinessDocument}=await import("./pdf")
       return renderBusinessDocument(payload,true)
@@ -65,6 +68,7 @@ export function createDocumentTemplateService(db: PrismaClient, identity: Docume
     publish(input:unknown) {
       const data=documentTemplateSchema.parse(input),provider=registry.get(data.providerKey)
       if(!provider)throw new BusinessError(400,"Choose a registered document type.")
+      if(provider.companyDetails===false&&data.content.useCompanyDetails)throw new BusinessError(400,"This document uses its approved tax issuer details.")
       if(data.content.layout)validateDocumentLayout(data.content.layout,provider.templateCatalog)
       return run(true,async tx=>{
         await authorizeBusinessOperation(tx,identity,["documentTemplates.read","documentTemplates.edit"],provider.modules)

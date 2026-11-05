@@ -128,7 +128,7 @@ function QuotationEditorBody({ id, opportunityId: initialOpportunityId, template
   }
   async function applyTemplate() {
     setConfirm(null); setSaving(true); setError("")
-    try { const row = await request<Template>(`/api/crm/quotation-templates/${templateId}`); if (!plansEnabled && row.content.instalments.length) throw new Error(term("paymentPlans.paymentPlan.singular", "This template contains a payment plan.", "This template contains a {label}.") + " " + term("salesDocuments.quotation.singular", "Enable Payment Plans or choose a quotation-only template.", "Enable Payment Plans or choose a {label}-only template.")); setValue({ ...row.content, currency: value.currency, bookingDate: value.bookingDate, validUntil: value.validUntil }) } catch (error) { setError((error as Error).message) } finally { setSaving(false) }
+    try { const row = await request<Template>(`/api/crm/quotation-templates/${templateId}`); if (!plansEnabled && row.content.instalments.length) throw new Error(term("paymentPlans.paymentPlan.singular", "This template contains a payment plan.", "This template contains a {label}.") + " " + term("salesDocuments.quotation.singular", "Enable Payment Plans or choose a quotation-only template.", "Enable Payment Plans or choose a {label}-only template.")); setValue({ ...row.content, bank: value.bank, currency: value.currency, bookingDate: value.bookingDate, validUntil: value.validUntil }) } catch (error) { setError((error as Error).message) } finally { setSaving(false) }
   }
   async function previewLayout(){
     if(!value.layout)return

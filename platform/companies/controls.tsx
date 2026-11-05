@@ -13,6 +13,8 @@ import { PageHeader, FormActions, Surface, pageClass } from "@/components/erp/pa
 import { TablePagination } from "@/components/erp/pagination"
 import { RecordSelect } from "@/components/erp/record-select"
 import type { ListResponse } from "@/types/api"
+import { CompanyDocumentSettingsFields } from "./document-settings-fields"
+import { companyDocumentSettingsSchema, emptyCompanyDocumentSettings } from "./document-settings"
 import type { Company, Office } from "./contracts"
 
 type Kind = "company" | "office"
@@ -41,7 +43,7 @@ export function CompanyStructureList({ kind }: { kind: Kind }) {
     { accessorKey: "name", header: path.singular, meta: { label: path.singular }, cell: ({ row }) => <Link href={`${path.page}/${row.original.id}`} className="underline">{row.original.name}</Link> },
     { accessorKey: "code", header: "Code", meta: { label: "Code" } },
     { id: "parent", header: kind === "company" ? "Parent company" : "Company", meta: { label: kind === "company" ? "Parent company" : "Company" }, cell: ({ row }) => ("company" in row.original ? row.original.company.name : row.original.parent?.name) || "Independent company" },
-    { id: "status", header: "Status", meta: { label: "Status" }, cell: ({ row }) => row.original.archived ? "Archived" : row.original.isInitial ? "Active · Initial" : "Active" },
+    { id: "status", header: "Status", meta: { label: "Status" }, cell: ({ row }) => row.original.archived ? "Archived" : row.original.isInitial ? "Active Â· Initial" : "Active" },
   ], [kind, path])
   // eslint-disable-next-line react-hooks/incompatible-library
   const table = useReactTable({ data: data.items, columns, getCoreRowModel: getCoreRowModel(), manualPagination: true, rowCount: data.total, state: { pagination: { pageIndex: query.page - 1, pageSize: query.pageSize } }, onPaginationChange: updater => setQuery(previous => { const next = typeof updater === "function" ? updater({ pageIndex: previous.page - 1, pageSize: previous.pageSize }) : updater; return { ...previous, page: next.pageSize !== previous.pageSize ? 1 : next.pageIndex + 1, pageSize: next.pageSize } }) })
@@ -58,21 +60,22 @@ export function CompanyStructureList({ kind }: { kind: Kind }) {
 export function CompanyStructureEditor({ kind, id }: { kind: Kind; id: string }) {
   const router = useRouter(), path = paths[kind], creating = id === "new"
   const [record, setRecord] = React.useState<Company | Office | null>(null)
+  const [documentSettings, setDocumentSettings] = React.useState(emptyCompanyDocumentSettings)
   const [form, setForm] = React.useState({ name: "", code: "", parentId: "", companyId: "", archived: false })
   const [loading, setLoading] = React.useState(!creating), [saving, setSaving] = React.useState(false), [error, setError] = React.useState("")
   React.useEffect(() => {
     if (creating) return
     const controller = new AbortController()
     request<Company | Office>(`${path.api}/${id}`, { signal: controller.signal }).then(row => {
-      setRecord(row); setForm({ name: row.name, code: row.code, archived: row.archived, parentId: "parentId" in row ? row.parentId || "" : "", companyId: "companyId" in row ? row.companyId : "" })
+      setRecord(row); if (kind === "company") setDocumentSettings(companyDocumentSettingsSchema.parse((row as Company).documentSettings ?? {})); setForm({ name: row.name, code: row.code, archived: row.archived, parentId: "parentId" in row ? row.parentId || "" : "", companyId: "companyId" in row ? row.companyId : "" })
     }).catch(error => { if (!controller.signal.aborted) setError(error.message) }).finally(() => { if (!controller.signal.aborted) setLoading(false) })
     return () => controller.abort()
-  }, [creating, id, path.api])
+  }, [creating, id, kind, path.api])
   async function save(event: React.FormEvent) {
     event.preventDefault(); setSaving(true); setError("")
     try {
-      const body = creating ? { name: form.name, code: form.code, ...(kind === "company" ? { parentId: form.parentId || null } : { companyId: form.companyId }) }
-        : { name: form.name, archived: form.archived, version: record!.version, ...(kind === "company" ? { parentId: form.parentId || null } : {}) }
+      const body = creating ? { name: form.name, code: form.code, ...(kind === "company" ? { parentId: form.parentId || null, documentSettings } : { companyId: form.companyId }) }
+        : { name: form.name, archived: form.archived, version: record!.version, ...(kind === "company" ? { parentId: form.parentId || null, documentSettings } : {}) }
       await request(creating ? path.api : `${path.api}/${id}`, { method: creating ? "POST" : "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
       router.push(path.page)
     } catch (error) { setError((error as Error).message) } finally { setSaving(false) }
@@ -85,6 +88,7 @@ export function CompanyStructureEditor({ kind, id }: { kind: Kind; id: string })
       {kind === "company" ? <FormField id="structure-parent" label="Parent company"><RecordSelect id="structure-parent" endpoint="/api/companies" showCode value={form.parentId} selected={record && "parent" in record && record.parent ? { value: record.parent.id, label: record.parent.name } : undefined} onChange={parentId => setForm({ ...form, parentId })} placeholder="Independent company" />{form.parentId && <Button type="button" size="sm" variant="link" onClick={() => setForm({ ...form, parentId: "" })}>Clear parent company</Button>}</FormField>
         : <FormField id="structure-company" label="Company"><RecordSelect id="structure-company" endpoint="/api/companies" showCode value={form.companyId} selected={record && "company" in record ? { value: record.company.id, label: record.company.name } : undefined} disabled={!creating} onChange={companyId => setForm({ ...form, companyId })} placeholder="Choose company" /><p className="text-xs text-muted-foreground">An office stays with the company it was created for.</p></FormField>}
       {!creating && <FormField id="structure-archived" label="Archived"><Checkbox id="structure-archived" disabled={record?.isInitial} checked={form.archived} onChange={event => setForm({ ...form, archived: event.target.checked })} />{record?.isInitial && <p className="text-xs text-muted-foreground">The initial {kind} must remain active.</p>}</FormField>}
+      {kind === "company" && <div className="md:col-span-2"><CompanyDocumentSettingsFields value={documentSettings} onChange={setDocumentSettings} /></div>}
     </fieldset></form></Surface>}
   </div>
 }

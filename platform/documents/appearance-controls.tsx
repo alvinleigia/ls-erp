@@ -5,9 +5,9 @@ import { Select, Checkbox, Textarea } from "@/components/erp/controls"
 import { SectionTabs } from "@/components/erp/section-tabs"
 import { defaultDocumentAppearance, documentStylePresets, type DocumentAppearance } from "./appearance"
 
-export function DocumentAppearanceControls({ value, disabled, onChange }: { value?: DocumentAppearance; disabled: boolean; onChange: (value: DocumentAppearance | undefined) => void }) {
+export function DocumentAppearanceControls({ value, disabled, footerReadOnly = false, onChange }: { value?: DocumentAppearance; disabled: boolean; footerReadOnly?: boolean; onChange: (value: DocumentAppearance | undefined) => void }) {
   const style = value ?? defaultDocumentAppearance
-  const footerError = style.footer.split("\n").length > 3 ? "Keep the footer to three text lines." : undefined
+  const footerError = !footerReadOnly && style.footer.split("\n").length > 3 ? "Keep the footer to three text lines." : undefined
   function change<K extends keyof DocumentAppearance>(key: K, next: DocumentAppearance[K]) { onChange({ ...style, [key]: next }) }
   function choice<K extends keyof DocumentAppearance>(key: K, label: string, options: [string, string][], numeric = false) {
     return <FormField id={`pdf-style-${key}`} label={label}><Select id={`pdf-style-${key}`} value={String(style[key])} onValueChange={next => change(key, (numeric ? Number(next) : next) as DocumentAppearance[K])}>{options.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</Select></FormField>
@@ -31,7 +31,7 @@ export function DocumentAppearanceControls({ value, disabled, onChange }: { valu
       <div className="grid gap-3 sm:grid-cols-2">{([['companyHeading', 'Show company name above the title'], ['repeatLogo', 'Repeat logo on later pages'], ['watermark', 'Use the selected document logo as a watermark']] as const).map(([key, label]) => <label key={key} className="flex items-start gap-2"><Checkbox checked={style[key]} onChange={event => change(key, event.target.checked)} />{label}</label>)}</div>
       </fieldset> }, { value: "footer", label: "Tables and footer", content: <fieldset disabled={disabled} className="space-y-4">
         {choice("tableStyle", "Table style", [["shaded", "Shaded header"], ["grid", "Bordered grid"], ["minimal", "Minimal lines"]])}
-        <FormField id="pdf-style-footer" label="Repeating footer" error={footerError} help="Up to 300 characters across three text lines. Page numbers and the document reference remain visible. Logo options use the selected document logo; no additional upload is needed."><Textarea id="pdf-style-footer" rows={3} maxLength={300} value={style.footer} onChange={event => change("footer", event.target.value)} /></FormField>
+        <FormField id="pdf-style-footer" label="Repeating footer" error={footerError} help="Up to 300 characters across three text lines. Page numbers and the document reference remain visible. Logo options use the selected document logo; no additional upload is needed."><Textarea id="pdf-style-footer" disabled={footerReadOnly} rows={3} maxLength={300} value={style.footer} onChange={event => change("footer", event.target.value)} /></FormField>
       </fieldset> }]} />
     </>}
   </div>

@@ -201,3 +201,31 @@ test('editable layouts preview sample data without writes, freeze accepted field
   assert.deepEqual((await root.salesOrderDocument.findUnique({where:{tenantId_id:{tenantId:tenant,id:row.id}}})).snapshot.payload.body,frozen)
  }finally{await publish(ACK,current.content)}
 })
+
+test('company settings follow the saved issuing office across projects, with native tenant and office isolation',async()=>{
+ const {createCompanyService}=require('../platform/companies/service.ts'),{companyDocumentSettingsSchema,officeDocumentDefaults}=require('../platform/companies/document-settings.ts'),directory=createCompanyService(db,identity(admin))
+ const a=await directory.createCompany({name:'Company A',code:'A-'+randomUUID().slice(0,6),documentSettings:{address:'Office A',bank:{accountNumber:'1111'}}}),b=await directory.createCompany({name:'Company B',code:'B-'+randomUUID().slice(0,6),documentSettings:{address:'Office B',bank:{accountNumber:'2222'}}})
+ for(const target of [a,b]){
+  const office=await directory.createOffice({name:'Source office',code:randomUUID().slice(0,8),companyId:target.id})
+  const deal=await root.crmOpportunity.create({data:{tenantId:tenant,officeId:office.id,title:'Company defaults source',contactId:contact.id,assignedUserId:admin.id,pipelineId:pipeline.id,stageId:stage.id,amount:'300',currency:'INR',probability:10,expectedCloseOn:new Date('2027-01-01T00:00:00Z')}})
+  const defaults=await crm.quotationDefaults(deal.id);assert.equal(defaults.content.supplierName,target.name);assert.equal(defaults.content.bank.accountNumber,target.id===a.id?'1111':'2222')
+  assert.deepEqual(await runWithDatabaseActor(outsider.id,()=>db.$queryRaw`SELECT * FROM app.office_document_defaults(${tenant},${office.id})`),[])
+  assert.deepEqual(await runWithDatabaseActor(foreign.id,()=>foreignDb.$queryRaw`SELECT * FROM app.office_document_defaults(${tenant},${office.id})`),[])
+  await assert.rejects(createCompanyService(db,identity(staff)).updateCompany(target.id,{version:1,documentSettings:companyDocumentSettingsSchema.parse({})}),status(403))
+ }
+ const current=await directory.getCompany(a.id);await directory.updateCompany(a.id,{version:current.version,documentSettings:companyDocumentSettingsSchema.parse({address:'Changed A'})})
+ await assert.rejects(directory.updateCompany(a.id,{version:current.version,documentSettings:companyDocumentSettingsSchema.parse({})}),status(409))
+ await assert.rejects(runWithDatabaseActor(outsider.id,()=>officeDocumentDefaults(db,tenant,'missing-office')),status(404))
+})
+
+test('company setting edits invalidate prepared letters while issued snapshots and accepted quotation bank details stay fixed',async()=>{
+ const {createCompanyService}=require('../platform/companies/service.ts'),{companyDocumentSettingsSchema}=require('../platform/companies/document-settings.ts'),directory=createCompanyService(db,identity(admin)),f=await fixture([],true,{bank:{accountName:'Accepted company account',accountNumber:'ACCEPTED-111',accountType:'Current',bankName:'Test Bank',branch:'Test office',routingCode:'TEST'}})
+ async function settings(address){const current=await directory.getCompany(company.id);await directory.updateCompany(company.id,{version:current.version,documentSettings:companyDocumentSettingsSchema.parse({address,contact:'office@example.test',footer:'Shared company footer',bank:{accountNumber:'NEW-222'}})})}
+ await settings('First issuing address');await publish(ACK,{useCompanyDetails:true})
+ const first=await docs().prepare(f.order.id,{providerKey:ACK});assert.equal(first.payload.issuer.address,'First issuing address');assert.equal(first.payload.appearance.footer,'Shared company footer')
+ await settings('Second issuing address');await assert.rejects(docs().issue(f.order.id,input(first)),status(409))
+ const prepared=await docs().prepare(f.order.id,{providerKey:ACK}),issued=await docs().issue(f.order.id,input(prepared)),before=await root.salesOrderDocument.findUniqueOrThrow({where:{tenantId_id:{tenantId:tenant,id:issued.id}}})
+ await settings('Third issuing address');const after=await root.salesOrderDocument.findUniqueOrThrow({where:{tenantId_id:{tenantId:tenant,id:issued.id}}});assert.deepEqual(after.snapshot,before.snapshot);assert.equal(after.snapshot.payload.issuer.address,'Second issuing address')
+ assert.equal((await crm.getQuotation(f.quote.id)).snapshot.content.bank.accountNumber,'ACCEPTED-111');assert.equal((await orders.get(f.order.id)).snapshot.content.bank.accountNumber,'ACCEPTED-111')
+ await docs().download(f.order.id,issued.id,ACK)
+})
