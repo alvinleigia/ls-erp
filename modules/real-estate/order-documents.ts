@@ -13,7 +13,19 @@ import { salesOrderRecordScope } from "@/platform/access/record-scope"
 import { recordLimits } from "@/platform/access/rules"
 import { orderTemplateCatalog } from "@/modules/sales-orders/document-template"
 import { sampleDocument } from "@/modules/sales-orders/document-template-sample"
+import type { TemplateCatalog } from "@/platform/documents/layout"
 const roles={CUSTOMER:"Primary applicant",ADDITIONAL_CUSTOMER:"Co-applicant",REPRESENTATIVE:"Representative"}
+
+// A booking intimation identifies the accepted customers and reserved property.
+// Commercial schedules remain available to include, without forcing them into a welcome letter.
+const bookingTemplateCatalog:TemplateCatalog={...orderTemplateCatalog,sections:[...orderTemplateCatalog.sections.map(section=>({...section,required:section.key==="participants"})),{key:"property-units",label:"Property units",required:true}],starter:{type:"doc",content:[
+  {type:"documentSection",attrs:{key:"participants",compact:true}},
+  {type:"paragraph",content:[{type:"documentField",attrs:{key:"template.opening"}}]},
+  {type:"documentSection",attrs:{key:"property-units",compact:true}},
+  {type:"paragraph",content:[{type:"text",text:"Booking date: "},{type:"documentField",attrs:{key:"order.date"}}]},
+  {type:"paragraph",content:[{type:"text",text:"Booking / order reference: "},{type:"documentField",attrs:{key:"order.reference"}}]},
+  {type:"paragraph",content:[{type:"documentField",attrs:{key:"template.terms"}}]},
+]}}
 type FinancialReader=(tx:Prisma.TransactionClient,actor:BusinessActor,id:string)=>Promise<ReceivableDocumentEvidence>
 function savedUnits(context:OrderDocumentContext) {
   const refs=context.snapshot.items?.filter(row=>row.kind==="UNIT")??[]
@@ -50,7 +62,7 @@ async function propertyBlocks(tx:Prisma.TransactionClient,actor:BusinessActor,co
 export function realEstateOrderDocuments(readFinancial:FinancialReader):DocumentProvider<OrderDocumentContext>[] {
   const base={address:"",contact:"",signatory:"Authorised signatory",terms:"",useTenantLogo:false,enabled:false}
   return [
-    {sample:sampleDocument,templateCatalog:{...orderTemplateCatalog,sections:[...orderTemplateCatalog.sections,{key:"property-units",label:"Property units",required:true}]},key:"real-estate.booking-intimation",name:"Booking intimation letter",code:"BI",modules:["realEstate","catalog"],requirements:["projects.read","catalogItems.read","unitReservations.read"],defaults:{...base,title:"Booking intimation letter",opening:"We confirm that the following booking has been recorded. Unit allocation is recorded separately."},
+    {sample:sampleDocument,templateCatalog:bookingTemplateCatalog,key:"real-estate.booking-intimation",name:"Booking intimation letter",code:"BI",modules:["realEstate","catalog"],requirements:["projects.read","catalogItems.read","unitReservations.read"],defaults:{...base,title:"Booking intimation letter",opening:"We confirm that the following booking has been recorded. Unit allocation is recorded separately."},
       async authorizeDownload(tx,actor,context){await authorizeProperties(tx,actor,context)},
       async blocks(tx,actor,context){const property=await propertyBlocks(tx,actor,context,false);return {blocks:[...orderDocumentBlocks(context,roles),...property.blocks],evidence:property.evidence}},
     },

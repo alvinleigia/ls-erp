@@ -22,7 +22,13 @@ The font family stays fixed; only the required face variants are embedded, with 
 bounded warm-process cache for the existing font files. Branding images are embedded
 once per PDF and reused across pages.
 
-Local validation: 33 document/layout/quotation/storage/recovery checks passed.
+Booking intimation has a concise starter with accepted customers, property details,
+booking date/reference and reviewed wording. Customer/property sections remain
+mandatory; the other registered commercial sections are optional for this document
+type. Existing saved layouts remain intact. Allotment, receipt and invoice section
+requirements retain their existing rules.
+
+Local validation: 34 document/layout/quotation/storage/recovery checks passed.
 All ten editor scenarios passed across the main run and focused recheck, including
 draft-only styling, explicit preview, fresh review, immutable publication,
 read-only/mobile controls and required compact sections. Five-page stress-test

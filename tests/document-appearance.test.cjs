@@ -11,6 +11,7 @@ const {orderTemplateCatalog}=require('../modules/sales-orders/document-template.
 const {paymentReceiptProvider}=require('../modules/receivables/receipt-template.ts')
 const {invoiceDocumentProviders}=require('../modules/customer-invoices/document-provider.ts')
 const {statutoryTemplateTypes}=require('../platform/tax/localizations/india-statutory-pdf.ts')
+const {realEstateOrderDocuments}=require('../modules/real-estate/order-documents.ts')
 const appearance=(preset='standard',patch={})=>({...defaultDocumentAppearance,...documentStylePresets[preset],...patch})
 const base=()=>({format:1,title:'BOOKING INTIMATION LETTER',reference:'SAMPLE/BOOKING/001',date:'05 Nov 2026',sourceReference:'SAMPLE-ORDER',company:{id:'example',name:'Example Property Company'},issuer:{address:'Example Office, Goa, India',contact:'',signatory:'Authorised signatory'},opening:'Dear Customer,\nWe welcome you and confirm the saved booking described below.',terms:'Example terms for layout review only.',branding:null,blocks:[{title:'Sample Customer',paragraphs:['Primary applicant','Example address, Goa, India','customer@example.test']},{title:'Sample Additional Customer',paragraphs:['Co-applicant','Example correspondence address']},{title:'Unit details',table:{headings:['Detail','Saved value'],widths:[1,2],rows:[['Project','Example Gardens'],['Unit','PLOT-106'],['Area','277 sq m'],['Booking date','05 Nov 2026']]}}]})
 function capture(t){const calls=[],draw=PDFPage.prototype.drawText;t.mock.method(PDFPage.prototype,'drawText',function(text,options){calls.push({page:this,text,...options});return draw.call(this,text,options)});return calls}
@@ -66,4 +67,15 @@ test('styled letter sample needs no industry-specific renderer and retains valid
  const payload=sampleDocument({...orderAcknowledgement.defaults,title:'Example Company Letter',opening:'Accepted value: INR ₹100,000.00.',appearance:appearance('letter',{footer:'Example Business | example.test'})},orderTemplateCatalog,{id:'example',name:'Example Business'})
  const bytes=await renderBusinessDocument(payload,true);assert.equal(Buffer.from(bytes).subarray(0,5).toString(),'%PDF-')
  fs.mkdirSync('tmp/pdfs/p13l',{recursive:true});fs.writeFileSync('tmp/pdfs/p13l/shared-letter-sample.pdf',bytes)
+})
+
+test('booking intimation has a concise starter while customer/property identity and allotment requirements stay enforced',()=>{
+ const {validateDocumentLayout}=require('../platform/documents/layout.ts'),[booking,allotment]=realEstateOrderDocuments(()=>{throw Error('Sample must not read a ledger')})
+ const catalog=booking.templateCatalog,layout=starterDocumentLayout(catalog),sections=layout.content.filter(n=>n.type==='documentSection').map(n=>n.attrs.key)
+ assert.deepEqual(sections,['participants','property-units'])
+ const previous=starterDocumentLayout({...catalog,starter:undefined});assert.deepEqual(validateDocumentLayout(previous,catalog),previous)
+ for(const key of sections)assert.throws(()=>validateDocumentLayout({...layout,content:layout.content.filter(n=>n.attrs?.key!==key)},catalog))
+ for(const key of ['payment-schedule','commercial-lines','financial-position','receivable-schedule'])assert.equal(allotment.templateCatalog.sections.find(s=>s.key===key).required,true)
+ const sample=booking.sample({...booking.defaults,appearance:appearance('letter')},catalog,{id:'example',name:'Example Business'})
+ assert(!sample.body.some(n=>n.type==='section'&&n.blocks.some(b=>b.key==='payment-schedule')))
 })
