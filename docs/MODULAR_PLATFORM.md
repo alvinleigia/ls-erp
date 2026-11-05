@@ -1,3 +1,17 @@
+## P13O compact document editor toolbar (2026-11-06)
+
+The shared company-template and quotation layout editor uses two compact icon
+rows attached to the document canvas. History, text styles, alignment, lists,
+spacing and insertion actions are grouped with separators. Accessible names,
+keyboard/hover tooltips and selected-state indicators identify each action.
+The existing commands, dynamic-content panel, draft review and publication
+workflow are retained; no content schema, PDF output or saved data is changed.
+
+All 26 existing editor/company browser scenarios passed. Additional visual checks
+covered light/dark themes, keyboard tooltips, retained text selection, active
+states and viewport containment from 320 to 1536 pixels. TypeScript, targeted
+lint and whitespace checks passed. No dependency or migration is required.
+
 ## P13N digital and preprinted letterhead PDFs (2026-11-06)
 
 Companies and offices > Company > Letterhead printing can enable physical
