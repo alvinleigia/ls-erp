@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/erp/controls"
 import { Input } from "@/components/ui/input"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
-import { starterDocumentLayout, type DocumentLayout, type TemplateCatalog } from "./layout"
+import { documentValueKey, inlineDocumentWording, starterDocumentLayout, type DocumentLayout, type TemplateCatalog } from "./layout"
 
 function TokenView({ node, selected, extension }: NodeViewProps) {
   const catalog = extension.options.catalog as TemplateCatalog
@@ -34,23 +34,23 @@ const DynamicSection = Field.extend({
   renderHTML: ({ HTMLAttributes }) => ["div", mergeAttributes(HTMLAttributes, { "data-document-section": "" }), HTMLAttributes.key],
 })
 const PageBreak = Node.create({
-  name: "documentPageBreak", group: "block", atom: true, selectable: true,
+  name: "documentPageBreak", priority: 1000, group: "block", atom: true, selectable: true,
   parseHTML: () => [{ tag: "hr[data-document-page-break]" }],
   renderHTML: () => ["hr", { "data-document-page-break": "", "aria-label": "Page break", class: "my-6 border-dashed border-t-2" }],
 })
 
-export function DocumentLayoutEditor({ value, catalog, disabled, onChange }: { value: DocumentLayout; catalog: TemplateCatalog; disabled: boolean; onChange: (value: DocumentLayout) => void }) {
+export function DocumentLayoutEditor({ value, catalog, disabled, onChange, starterWording }: { value: DocumentLayout; catalog: TemplateCatalog; disabled: boolean; onChange: (value: DocumentLayout) => void; starterWording?: { opening: string; terms: string } }) {
   const [search, setSearch] = useState(""), [reset, setReset] = useState(false)
   const editor = useEditor({
     immediatelyRender: false,
-    extensions: [StarterKit.configure({ blockquote: false, bulletList: false, orderedList: false, listItem: false, listKeymap: false, code: false, codeBlock: false, horizontalRule: false, link: false, strike: false, underline: false, trailingNode: false, heading: { levels: [1, 2, 3] } }), TextAlign.configure({ types: ["heading", "paragraph"], alignments: ["left", "center", "right"] }), Field.configure({ catalog }), DynamicSection.configure({ catalog }), PageBreak],
+    extensions: [StarterKit.configure({ blockquote: false, bulletList: false, orderedList: false, listItem: false, listKeymap: false, code: false, codeBlock: false, link: false, strike: false, trailingNode: false, heading: { levels: [1, 2, 3] } }), TextAlign.configure({ types: ["heading", "paragraph"], alignments: ["left", "center", "right"] }), Field.configure({ catalog }), DynamicSection.configure({ catalog }), PageBreak],
     content: value, editable: !disabled,
-    editorProps: { attributes: { role: "textbox", "aria-label": "Document layout", "aria-multiline": "true", class: "min-h-80 p-4 outline-none [&_h1]:text-2xl [&_h1]:font-semibold [&_h2]:text-xl [&_h2]:font-semibold [&_h3]:text-lg [&_h3]:font-semibold [&_p]:my-2" } },
+    editorProps: { attributes: { role: "textbox", "aria-label": "Document layout", "aria-multiline": "true", class: "min-h-80 whitespace-pre-wrap p-4 outline-none [&_h1]:text-2xl [&_h1]:font-semibold [&_h2]:text-xl [&_h2]:font-semibold [&_h3]:text-lg [&_h3]:font-semibold [&_p]:my-2 [&_hr]:my-4 [&_hr]:border-t" } },
     onUpdate: ({ editor }) => onChange(editor.getJSON() as DocumentLayout),
   })
-  const active = useEditorState({ editor, selector: ({ editor }) => ({ bold: editor?.isActive("bold") ?? false, italic: editor?.isActive("italic") ?? false, section: editor?.isActive("documentSection") ?? false, compact: editor?.getAttributes("documentSection").compact === true }) })
+  const active = useEditorState({ editor, selector: ({ editor }) => ({ bold: editor?.isActive("bold") ?? false, italic: editor?.isActive("italic") ?? false, underline: editor?.isActive("underline") ?? false, undo: editor?.can().undo() ?? false, redo: editor?.can().redo() ?? false, section: editor?.isActive("documentSection") ?? false, compact: editor?.getAttributes("documentSection").compact === true }) })
   useEffect(() => { editor?.setEditable(!disabled, false) }, [editor, disabled])
-  useEffect(() => { if (editor && JSON.stringify(editor.getJSON()) !== JSON.stringify(value)) editor.commands.setContent(value, { emitUpdate: false }) }, [editor, value])
+  useEffect(() => { if (editor && documentValueKey(editor.getJSON()) !== documentValueKey(value)) editor.commands.setContent(value, { emitUpdate: false }) }, [editor, value])
   const busy = disabled || !editor
   function insertDynamic(key: string, section = false) {
     if (!editor || disabled) return
@@ -67,6 +67,7 @@ export function DocumentLayoutEditor({ value, catalog, disabled, onChange }: { v
   const groupNames: Record<string, string> = { document: "Document", company: "Company", customer: "Customer", order: "Booking and order", bank: "Bank details", template: "Wording", payment: "Payment", invoice: "Invoice", credit: "Credit note", quote: "Quotation", supplier: "Supplier" }
   const groups: Record<string, TemplateCatalog["fields"]> = {}
   for (const field of catalog.fields) {
+    if (starterWording && ["template.opening", "template.terms"].includes(field.key)) continue
     const group = field.group ?? groupNames[field.key.split(".")[0]] ?? "Other fields"
     if (!`${field.label} ${group}`.toLowerCase().includes(query)) continue
     ;(groups[group] ??= []).push(field)
@@ -76,12 +77,16 @@ export function DocumentLayoutEditor({ value, catalog, disabled, onChange }: { v
 
     <div className="flex flex-wrap items-center gap-2">
       <div className="flex items-center gap-2"><span className="text-sm font-medium">Layout tools</span><InfoHelp title="Document layout">Click in the document, then insert a field or section from the side panel. Select text or a field to make it bold or italic. Enter adds a paragraph; Shift + Enter adds a line break. Empty paragraphs add spacing. Use the PDF preview to check page breaks. Select a section to cut/paste it elsewhere. Required sections must appear once; empty optional data adds no rows. Company branding, document reference and page numbers are included automatically.</InfoHelp></div>
-      <Button type="button" size="sm" variant="outline" aria-label="Bold" aria-pressed={active?.bold} disabled={busy} onClick={() => editor?.chain().focus().toggleBold().run()}>Bold</Button>
-      <Button type="button" size="sm" variant="outline" aria-label="Italic" aria-pressed={active?.italic} disabled={busy} onClick={() => editor?.chain().focus().toggleItalic().run()}>Italic</Button>
+      <Button type="button" size="sm" variant="outline" aria-label="Bold" aria-pressed={active?.bold} onMouseDown={event=>event.preventDefault()} disabled={busy} onClick={() => editor?.chain().focus().toggleBold().run()}>Bold</Button>
+      <Button type="button" size="sm" variant="outline" aria-label="Italic" aria-pressed={active?.italic} onMouseDown={event=>event.preventDefault()} disabled={busy} onClick={() => editor?.chain().focus().toggleItalic().run()}>Italic</Button>
+      <Button type="button" size="sm" variant="outline" aria-label="Underline" aria-pressed={active?.underline} onMouseDown={event=>event.preventDefault()} disabled={busy} onClick={() => editor?.chain().focus().toggleUnderline().run()}>Underline</Button>
+      <Button type="button" size="sm" variant="outline" disabled={busy || !active?.undo} onClick={() => editor?.chain().focus().undo().run()}>Undo</Button>
+      <Button type="button" size="sm" variant="outline" disabled={busy || !active?.redo} onClick={() => editor?.chain().focus().redo().run()}>Redo</Button>
       <Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => editor?.chain().focus().insertContentAt(editor.state.doc.content.size, { type: "paragraph" }).run()}>Add paragraph</Button>
       <Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => editor?.chain().focus().toggleHeading({ level: 2 }).run()}>Heading</Button>
       {(["left", "center", "right"] as const).map(align => <Button key={align} type="button" size="sm" variant="outline" disabled={busy} onClick={() => editor?.chain().focus().setTextAlign(align).run()}>{align[0].toUpperCase() + align.slice(1)}</Button>)}
       <Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => editor?.chain().focus().insertContent({ type: "documentPageBreak" }).run()}>Page break</Button>
+      <Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => { if(!editor)return;const selection=editor.state.selection;editor.chain().focus().insertContentAt(isNodeSelection(selection)&&selection.node.isBlock?selection.to:selection.from,{type:"horizontalRule"}).run();editor.view.focus() }}>Separator</Button>
       <Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => setReset(true)}>Use starter layout</Button>
     </div>
     <div className="grid min-w-0 items-start gap-4 xl:grid-cols-[minmax(0,1fr)_18rem]">
@@ -106,6 +111,6 @@ export function DocumentLayoutEditor({ value, catalog, disabled, onChange }: { v
       </aside>
     </div>
 
-    <Dialog open={reset} onOpenChange={setReset}><DialogContent><DialogHeader><DialogTitle>Use the starter layout?</DialogTitle><DialogDescription>This replaces the unsaved layout. Company details and approved wording are retained. Published versions and issued PDFs stay unchanged.</DialogDescription></DialogHeader><DialogFooter><Button type="button" variant="outline" onClick={() => setReset(false)}>Cancel</Button><Button type="button" onClick={() => { onChange(starterDocumentLayout(catalog)); setReset(false) }}>Replace layout</Button></DialogFooter></DialogContent></Dialog>
+    <Dialog open={reset} onOpenChange={setReset}><DialogContent><DialogHeader><DialogTitle>Use the starter layout?</DialogTitle><DialogDescription>{starterWording?"This replaces the document body, including edited wording and formatting, with the starter content. The document title, company details and PDF style are retained.":"This replaces the unsaved layout. Company details and approved wording are retained."} Published versions and issued PDFs stay unchanged.</DialogDescription></DialogHeader><DialogFooter><Button type="button" variant="outline" onClick={() => setReset(false)}>Cancel</Button><Button type="button" onClick={() => { const layout=starterDocumentLayout(catalog);onChange(starterWording?inlineDocumentWording(layout,starterWording):layout);setReset(false) }}>Replace layout</Button></DialogFooter></DialogContent></Dialog>
   </div>
 }

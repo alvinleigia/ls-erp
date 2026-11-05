@@ -8,6 +8,26 @@ const {orderAcknowledgement}=require('../modules/sales-orders/document-provider.
 const catalog=orderTemplateCatalog,content={...orderAcknowledgement.defaults,title:'QA Editable Booking',opening:'Accepted opening.',terms:'Approved sample terms.'}
 const field=key=>({type:'documentField',attrs:{key}}),paragraph=(...content)=>({type:'paragraph',content})
 
+test('inline wording expands literal text without changing source values, marks, alignment or repeated records',()=>{
+ const {inlineDocumentWording,documentValueKey}=require('../platform/documents/layout.ts')
+ const layout=starterDocumentLayout(catalog),before=JSON.stringify(layout),words={opening:'Dear Sample,\n\nWelcome <b>literally</b>.',terms:'Terms\nLine 2'}
+ layout.content[0]={type:'paragraph',attrs:{textAlign:'right'},content:[{type:'text',text:'Prefix '},{...field('template.opening'),marks:[{type:'bold'},{type:'underline'}]},{type:'text',text:' suffix'}]}
+ const original=JSON.stringify(layout),expanded=inlineDocumentWording(layout,words),values={'template.opening':words.opening,'template.terms':words.terms},blocks=[{key:'participants',title:'First'},{key:'participants',title:'Second'}]
+ assert.deepEqual(resolveDocumentLayout(expanded,catalog,values,blocks),resolveDocumentLayout(layout,catalog,values,blocks))
+ assert.equal(JSON.stringify(layout),original);assert.notEqual(original,before)
+ assert.equal(expanded.content[0].content[1].text,words.opening);assert.equal(expanded.content[0].content[1].marks[1].type,'underline')
+ assert.equal(documentValueKey({a:1,b:{y:2,x:3}}),documentValueKey({b:{x:3,y:2},a:1}))
+ assert.notEqual(documentValueKey([1,2]),documentValueKey([2,1]))
+ const empty=inlineDocumentWording(starterDocumentLayout(catalog),{opening:'',terms:''});assert.equal(empty.content[0].content,undefined)
+})
+
+test('underline and separators are bounded shared document nodes, not arbitrary HTML or styling',()=>{
+ const layout=starterDocumentLayout(catalog);layout.content.unshift(paragraph({...field('customer.name'),marks:[{type:'underline'}]}),{type:'horizontalRule'})
+ const body=resolveDocumentLayout(layout,catalog,{'customer.name':'Example','template.opening':'','template.terms':''},[])
+ assert.equal(body[0].runs[0].underline,true);assert.equal(body[1].type,'rule')
+ for(const bad of [{type:'horizontalRule',attrs:{style:'position:fixed'}},{type:'paragraph',content:[{type:'text',text:'Bad',marks:[{type:'fontSize',attrs:{size:100}}]}]}])assert.equal(documentLayoutSchema.safeParse({type:'doc',content:[bad]}).success,false)
+})
+
 test('individual property fields replace their section only as a complete, registered set',()=>{
  const {realEstateOrderDocuments}=require('../modules/real-estate/order-documents.ts'),{propertyDocumentFields}=require('../modules/real-estate/document-fields.ts')
  for(const provider of realEstateOrderDocuments(async()=>({}))){

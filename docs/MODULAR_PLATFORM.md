@@ -1,3 +1,28 @@
+## P13N unified document content (2026-11-05)
+
+Company document templates combine title, wording and layout in one Content tab.
+Existing opening/terms tokens expand into editable literal text in the client
+view, preserving marks, newlines and alignment without any stored rewrite or
+publication. Retained plain wording seeds an explicitly confirmed starter reset;
+the current rich body controls printed wording. Preview/publication remain
+explicit and old issued PDFs remain archived bytes.
+
+The installed open-source editor now exposes underline, undo/redo and horizontal
+separators alongside existing text, heading, alignment, tag and section tools.
+The bounded shared layout schema and PDF renderer support underlined runs and
+rules without arbitrary HTML/CSS, extra fonts, paid plugins or external rendering.
+Custom page breaks retain parsing priority. These controls are shared with
+quotation layouts; required sections, accepted values and access checks remain
+unchanged. No database migration or tenant-specific override is introduced.
+
+Local validation: 37 unit/PDF/layout checks, 47 native order/receipt/invoice
+checks and four real application browser workflows passed. Twenty editor browser
+scenarios passed across the main run and focused selection recheck. Rendered
+PDF and desktop/mobile editor screenshots were inspected. Staging deployment
+and hosted preservation checks are recorded separately.
+Production and Ewissen's published template/unpublished browser draft remain
+outside this implementation rollout.
+
 ## P13M document field panel (2026-11-05)
 
 The shared rich-text editor now has a searchable, grouped insertion panel rather

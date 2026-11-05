@@ -1,5 +1,24 @@
 # Base Conventions
 
+## Unified document content (P13N)
+
+- Company templates use one Content tab for title and the rich document body.
+  Expand existing opening/terms tokens into literal editable text only in the
+  unsaved client view. Keep their marks, alignment, newlines and source data.
+  Opening a template never publishes or rewrites stored versions. The active
+  layout is authoritative; retained plain wording supplies starter reset content.
+- Compare drafts structurally, ignoring JSON object key order. Normalise editor
+  default attributes so reverting or undoing changes restores the published state.
+  Formatting must retain selection; insertion must preserve selected source blocks.
+- Use the installed open-source Tiptap features for bold, italic, underline,
+  headings, alignment, undo/redo, separators and page breaks. Underline and rules
+  must pass the shared bounded schema and renderer. Preserve custom page-break
+  parsing priority when generic horizontal rules are enabled.
+- Keep company and PDF style controls separate, mounted and draft-safe. Starter
+  reset must warn that body wording/formatting will be replaced. Retain explicit
+  preview, review, optimistic publication and immutable issued downloads. Never
+  duplicate plain opening/terms when a rich document body exists.
+
 ## Document field panel (P13M)
 
 - Reuse `DocumentLayoutEditor` for company templates and quotation layouts. The

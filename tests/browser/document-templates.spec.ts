@@ -1,6 +1,6 @@
 import { test, expect, type Page } from "@playwright/test"
 import { orderTemplateCatalog } from "../../modules/sales-orders/document-template"
-import { starterDocumentLayout } from "../../platform/documents/layout"
+import { inlineDocumentWording, starterDocumentLayout } from "../../platform/documents/layout"
 import type { DocumentContent } from "../../platform/documents/validation"
 import { propertyDocumentFields, propertyUnitsSection } from "../../modules/real-estate/document-fields"
 import { defaultDocumentAppearance } from "../../platform/documents/appearance"
@@ -51,6 +51,8 @@ async function fixture(page: Page, options: { version?: number; canPublish?: boo
   return { state, unexpected }
 }
 
+const opening = (page: Page) => page.getByRole("textbox", { name: "Document layout", exact: true }).locator("p").first()
+const terms = (page: Page) => page.getByRole("textbox", { name: "Document layout", exact: true }).locator("p").last()
 const review = (page: Page) => page.getByLabel("I have reviewed the wording, company details and enablement for this version.", { exact: true })
 const publish = (page: Page) => page.getByRole("button", { name: "Publish template version", exact: true })
 
@@ -58,7 +60,7 @@ test.beforeEach(({ baseURL }) => test.skip(baseURL !== "http://127.0.0.1:3012", 
 
 test("publishing confirms the saved version in place and cannot republish unchanged content", async ({ page }) => {
   const { state, unexpected } = await fixture(page, { rejectRefreshAfterPublish: true })
-  const layout = JSON.stringify(state.templates[booking].content.layout)
+  const layout = inlineDocumentWording(state.templates[booking].content.layout!, state.templates[booking].content)
   await expect(page.getByRole("button", { name: "Published version 2", exact: true })).toBeDisabled()
   await expect(review(page)).toHaveCount(0)
   await page.getByRole("tab", { name: "Company", exact: true }).click()
@@ -72,19 +74,19 @@ test("publishing confirms the saved version in place and cannot republish unchan
   await expect(page.getByText("All changes are published. Edit the template to create a new version.", { exact: true })).toBeVisible()
   await expect(review(page)).toHaveCount(0)
   expect(state.reads).toBe(1); expect(state.attempts).toHaveLength(1); expect(state.publications).toBe(1)
-  expect(JSON.stringify(state.templates[booking].content.layout)).toBe(layout)
+  expect(state.templates[booking].content.layout).toEqual(layout)
   expect(unexpected).toEqual([])
 })
 
 test("editing requires a fresh review and reverting changes restores the published state", async ({ page }) => {
   const { state } = await fixture(page)
-  const terms = page.getByLabel("Terms and notes", { exact: true })
-  await terms.fill("Updated wording")
+  const wording = terms(page)
+  await wording.fill("Updated wording")
   await review(page).check(); await expect(publish(page)).toBeEnabled()
-  await terms.fill("Updated wording again")
+  await wording.fill("Updated wording again")
   await expect(review(page)).not.toBeChecked(); await expect(publish(page)).toBeDisabled()
   await expect(page.getByText("Unpublished changes. Publishing will create version 3.", { exact: true })).toBeVisible()
-  await terms.fill("Saved reviewed terms")
+  await wording.fill("Saved reviewed terms")
   await expect(review(page)).toHaveCount(0)
   await expect(page.getByRole("button", { name: "Published version 2", exact: true })).toBeDisabled()
   await expect(page.getByLabel("Document type", { exact: true })).toBeEnabled()
@@ -93,11 +95,11 @@ test("editing requires a fresh review and reverting changes restores the publish
 
 test("a failed publication keeps the draft and review and can retry without a false success", async ({ page }) => {
   const { state } = await fixture(page)
-  await page.getByLabel("Opening paragraph", { exact: true }).fill("Unsaved booking wording")
+  await opening(page).fill("Unsaved booking wording")
   await review(page).check(); state.failNext = true; await publish(page).click()
   await expect(page.getByRole("main").getByRole("alert")).toHaveText("Unable to publish this version. Try again.")
   await expect(page.getByRole("status")).toHaveCount(0)
-  await expect(page.getByLabel("Opening paragraph", { exact: true })).toHaveValue("Unsaved booking wording")
+  await expect(opening(page)).toHaveText("Unsaved booking wording")
   await expect(review(page)).toBeChecked(); await expect(publish(page)).toBeEnabled()
   expect(state.publications).toBe(0)
   await publish(page).click()
@@ -108,19 +110,19 @@ test("a failed publication keeps the draft and review and can retry without a fa
 
 test("a stale version retains edits until the user explicitly discards and reloads", async ({ page }) => {
   const { state } = await fixture(page)
-  await page.getByLabel("Terms and notes", { exact: true }).fill("My pending changes")
+  await terms(page).fill("My pending changes")
   await review(page).check()
   state.templates[booking] = { version: 4, content: { ...state.templates[booking].content, terms: "Another administrator's saved version" } }
   await publish(page).click()
   await expect(page.getByRole("main").getByRole("alert")).toContainText("This template changed.")
-  await expect(page.getByLabel("Terms and notes", { exact: true })).toHaveValue("My pending changes")
+  await expect(terms(page)).toHaveText("My pending changes")
   await expect(page.getByRole("status")).toHaveCount(0)
   await page.getByRole("button", { name: "Reload saved details", exact: true }).click()
   await page.getByRole("button", { name: "Keep editing", exact: true }).click()
-  await expect(page.getByLabel("Terms and notes", { exact: true })).toHaveValue("My pending changes")
+  await expect(terms(page)).toHaveText("My pending changes")
   await page.getByRole("button", { name: "Reload saved details", exact: true }).click()
   await page.getByRole("button", { name: "Discard and reload", exact: true }).click()
-  await expect(page.getByLabel("Terms and notes", { exact: true })).toHaveValue("Another administrator's saved version")
+  await expect(terms(page)).toHaveText("Another administrator's saved version")
   await expect(page.getByRole("button", { name: "Published version 4", exact: true })).toBeDisabled()
   await expect(review(page)).toHaveCount(0)
   expect(state.publications).toBe(0)
@@ -140,7 +142,7 @@ test("an unchanged starter can be published once and disabled issuance is stated
 test("published templates remain read-only without publication authority", async ({ page }) => {
   const { state } = await fixture(page, { canPublish: false })
   await expect(page.getByLabel("Document title", { exact: true })).toBeDisabled()
-  await page.getByRole("tab", { name: "PDF layout", exact: true }).click()
+  await page.getByRole("tab", { name: "Content", exact: true }).click()
   await expect(page.getByRole("button", { name: "Add paragraph", exact: true })).toBeDisabled()
   await expect(publish(page)).toHaveCount(0); await expect(review(page)).toHaveCount(0)
   expect(state.attempts).toHaveLength(0)
@@ -162,7 +164,7 @@ test("mobile success stays beside the actions and selecting another document cle
   await page.screenshot({ path: test.info().outputPath("published-template-desktop.png"), animations: "disabled" })
   await page.getByLabel("Document type", { exact: true }).click()
   await page.getByRole("menuitemradio", { name: "Order acknowledgement", exact: true }).click()
-  await page.getByRole("tab", { name: "Wording", exact: true }).click()
+  await page.getByRole("tab", { name: "Content", exact: true }).click()
   await expect(page.getByLabel("Document title", { exact: true })).toHaveValue("Order acknowledgement")
   await expect(status).toHaveCount(0)
   await expect(page.getByRole("button", { name: "Published version 2", exact: true })).toBeDisabled()
@@ -211,7 +213,7 @@ test("read-only styling remains inspectable and mobile styling stays within its 
 
 test("compact section presentation preserves required sections and publishes their display choice", async ({ page }) => {
   const { state } = await fixture(page)
-  await page.getByRole("tab", { name: "PDF layout", exact: true }).click()
+  await page.getByRole("tab", { name: "Content", exact: true }).click()
   const layout = page.getByRole("textbox", { name: "Document layout", exact: true })
   await layout.getByText("Section: Payment schedule", { exact: true }).click()
   await page.getByLabel("Show table rows in this section as compact labelled details", { exact: true }).check()
@@ -240,7 +242,7 @@ test("saved company details control the letterhead and footer without disabling 
 
 test("field panel preserves insertion position through search and keyboard insertion, bold and undo", async ({ page }) => {
   const { state, unexpected } = await fixture(page)
-  await page.getByRole("tab", { name: "PDF layout", exact: true }).click()
+  await page.getByRole("tab", { name: "Content", exact: true }).click()
   const editor = page.getByRole("textbox", { name: "Document layout", exact: true })
   // Insert a field in the middle, rather than replacing the current paragraph or appending it.
   await editor.locator("p").first().click()
@@ -252,8 +254,8 @@ test("field panel preserves insertion position through search and keyboard inser
   await page.keyboard.press("Enter")
   await expect(editor.locator("p").first()).toContainText("Dear Customer name, remaining wording")
   // Selecting the fixed label can be formatted independently from the inserted value.
-  await page.keyboard.press("Control+Home"); await page.keyboard.press("Home")
-  for (let i = 0; i < 4; i++) await page.keyboard.press("Shift+ArrowRight")
+  await editor.locator("p").first().dblclick({ position: { x: 10, y: 8 } })
+  await expect.poll(() => page.evaluate(() => getSelection()?.toString().trim())).toBe("Dear")
   await page.getByRole("button", { name: "Bold", exact: true }).click()
   await expect(editor.locator("strong").first()).toHaveText("Dear")
   await page.keyboard.press("Control+z")
@@ -266,8 +268,8 @@ test("field panel preserves insertion position through search and keyboard inser
   const download = page.waitForEvent("download")
   await page.getByRole("button", { name: "Download sample preview", exact: true }).click(); await download
   expect(JSON.stringify(state.previews.at(-1)?.layout)).toContain('"customer.name"')
-  await page.getByRole("tab", { name: "Wording", exact: true }).click()
-  await page.getByRole("tab", { name: "PDF layout", exact: true }).click()
+  await page.getByRole("tab", { name: "Content", exact: true }).click()
+  await page.getByRole("tab", { name: "Content", exact: true }).click()
   await expect(editor.locator("p").first()).toContainText("Dear Customer name, remaining wording")
   expect(state.publications).toBe(0); expect(unexpected).toEqual([])
   await page.screenshot({ path: test.info().outputPath("dynamic-field-panel-desktop.png"), fullPage: true, animations: "disabled" })
@@ -277,7 +279,7 @@ test("mobile field panel is contained and read-only fields cannot insert or muta
   await page.setViewportSize({ width: 390, height: 844 })
   const { state } = await fixture(page, { canPublish: false })
   const before = JSON.stringify(state.templates[booking].content.layout)
-  await page.getByRole("tab", { name: "PDF layout", exact: true }).click()
+  await page.getByRole("tab", { name: "Content", exact: true }).click()
   const search = page.getByRole("textbox", { name: "Find fields or sections", exact: true })
   await search.fill("Property")
   await expect(page.getByRole("button", { name: "Insert Unit code", exact: true })).toBeDisabled()
@@ -291,7 +293,7 @@ test("mobile field panel is contained and read-only fields cannot insert or muta
 
 test("fixed labels and dynamic values retain bold independently and blank paragraphs survive preview", async ({ page }) => {
   const { state } = await fixture(page)
-  await page.getByRole("tab", { name: "PDF layout", exact: true }).click()
+  await page.getByRole("tab", { name: "Content", exact: true }).click()
   const editor = page.getByRole("textbox", { name: "Document layout", exact: true })
   await editor.locator("p").first().click(); await page.keyboard.press("Control+Home")
   await page.getByRole("button", { name: "Bold", exact: true }).click()
@@ -321,7 +323,7 @@ test("fixed labels and dynamic values retain bold independently and blank paragr
 
 test("adding a paragraph preserves a selected required source section", async ({ page }) => {
   const { state } = await fixture(page)
-  await page.getByRole("tab", { name: "PDF layout", exact: true }).click()
+  await page.getByRole("tab", { name: "Content", exact: true }).click()
   const editor = page.getByRole("textbox", { name: "Document layout", exact: true })
   await editor.getByText("Section: Customers and correspondence", { exact: true }).click()
   await page.getByRole("button", { name: "Insert Customer name", exact: true }).click()
@@ -334,5 +336,88 @@ test("adding a paragraph preserves a selected required source section", async ({
   const nodes = state.previews.at(-1)!.layout!.content
   for (const section of catalog.sections.filter(s => s.required)) expect(nodes.filter(n => n.type === "documentSection" && n.attrs.key === section.key)).toHaveLength(1)
   await expect(editor.locator("p").last()).toHaveText("Additional approved wording")
+  expect(state.publications).toBe(0)
+})
+
+test("content combines title, editable wording, underline and separators without saving on open", async ({ page }) => {
+  const { state, unexpected } = await fixture(page)
+  const original = JSON.stringify(state.templates[booking].content)
+  const editor = page.getByRole("textbox", { name: "Document layout", exact: true })
+  await expect(opening(page)).toHaveText("Saved opening wording")
+  await expect(terms(page)).toHaveText("Saved reviewed terms")
+  await expect(page.getByLabel("Opening paragraph", { exact: true })).toHaveCount(0)
+  await expect(page.getByRole("button", { name: "Insert Opening wording", exact: true })).toHaveCount(0)
+  expect(state.previews).toHaveLength(0); expect(state.publications).toBe(0)
+  expect(JSON.stringify(state.templates[booking].content)).toBe(original)
+  await page.getByLabel("Document title", { exact: true }).fill("Reviewed booking letter")
+  await opening(page).fill("Welcome customer")
+  await opening(page).dblclick({ position: { x: 25, y: 8 } })
+  await expect.poll(() => page.evaluate(() => getSelection()?.toString().trim())).toBe("Welcome")
+  await page.getByRole("button", { name: "Underline", exact: true }).click()
+  await expect(editor.locator("u")).toHaveCount(1)
+  await editor.getByText("Section: Customers and correspondence", { exact: true }).click()
+  await page.getByRole("button", { name: "Separator", exact: true }).click()
+  await expect(editor.locator("hr:not([data-document-page-break])")).toHaveCount(1)
+  await expect(editor.getByText("Section: Customers and correspondence", { exact: true })).toBeVisible()
+  await page.getByRole("button", { name: "Undo", exact: true }).click()
+  await expect(editor.locator("hr:not([data-document-page-break])")).toHaveCount(0)
+  await page.getByRole("button", { name: "Redo", exact: true }).click()
+  await expect(editor.locator("hr:not([data-document-page-break])")).toHaveCount(1)
+  await page.getByRole("tab", { name: "Company", exact: true }).click()
+  await page.getByRole("tab", { name: "Content", exact: true }).click()
+  await expect(opening(page)).toHaveText("Welcome customer")
+  const download = page.waitForEvent("download")
+  await page.getByRole("button", { name: "Download sample preview", exact: true }).click(); await download
+  const preview = state.previews.at(-1)!
+  expect(preview.title).toBe("Reviewed booking letter")
+  expect(JSON.stringify(preview.layout)).toContain('"underline"')
+  expect(preview.layout!.content.some(n => n.type === "horizontalRule")).toBe(true)
+  expect(JSON.stringify(preview.layout)).not.toContain('"template.opening"')
+  expect(state.publications).toBe(0)
+  await review(page).check(); await publish(page).click()
+  await expect(page.getByRole("status")).toContainText("Version 3 published successfully.")
+  expect(state.templates[booking].content.layout).toEqual(preview.layout)
+  await page.screenshot({ path: test.info().outputPath("unified-document-editor-desktop.png"), fullPage: true, animations: "disabled" })
+  await page.setViewportSize({ width: 390, height: 844 })
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+  await page.getByRole("complementary", { name: "Insert dynamic content" }).scrollIntoViewIfNeeded()
+  await page.screenshot({ path: test.info().outputPath("unified-document-editor-mobile.png"), animations: "disabled" })
+  expect(unexpected).toEqual([])
+})
+
+test("starter reset warns about replacing body wording and can cancel without losing edits", async ({ page }) => {
+  const { state } = await fixture(page)
+  await opening(page).fill("My unsaved wording")
+  await page.getByRole("button", { name: "Use starter layout", exact: true }).click()
+  await expect(page.getByRole("dialog")).toContainText("including edited wording and formatting")
+  await page.getByRole("button", { name: "Cancel", exact: true }).click()
+  await expect(opening(page)).toHaveText("My unsaved wording")
+  await page.getByRole("button", { name: "Use starter layout", exact: true }).click()
+  await page.getByRole("button", { name: "Replace layout", exact: true }).click()
+  await expect(opening(page)).toHaveText("Saved opening wording")
+  await expect(page.getByRole("button", { name: "Published version 2", exact: true })).toBeDisabled()
+  expect(state.publications).toBe(0)
+})
+
+test("pasting supported formatting keeps page breaks distinct from separators and strips executable HTML", async ({ page }) => {
+  const { state } = await fixture(page)
+  const editor = page.getByRole("textbox", { name: "Document layout", exact: true })
+  await page.getByRole("button", { name: "Add paragraph", exact: true }).click()
+  await expect(editor).toBeFocused()
+  await editor.evaluate(el => {
+    const data = new DataTransfer()
+    data.setData("text/html", '<p>Approved <u>wording</u></p><hr data-document-page-break=""><p>Next page</p><hr><script>window.untrustedTemplateScript=true</script>')
+    el.dispatchEvent(new ClipboardEvent("paste", { clipboardData: data, bubbles: true, cancelable: true }))
+  })
+  await expect(editor.locator("hr[data-document-page-break]")).toHaveCount(1)
+  await expect(editor.locator("hr:not([data-document-page-break])")).toHaveCount(1)
+  await expect(editor.locator("u")).toHaveText("wording")
+  expect(await page.evaluate(() => "untrustedTemplateScript" in window)).toBe(false)
+  const download = page.waitForEvent("download")
+  await page.getByRole("button", { name: "Download sample preview", exact: true }).click(); await download
+  const nodes = state.previews.at(-1)!.layout!.content
+  expect(nodes.filter(n => n.type === "documentPageBreak")).toHaveLength(1)
+  expect(nodes.filter(n => n.type === "horizontalRule")).toHaveLength(1)
+  expect(JSON.stringify(nodes)).not.toContain("script")
   expect(state.publications).toBe(0)
 })

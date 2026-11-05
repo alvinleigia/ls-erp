@@ -16,6 +16,20 @@ const appearance=(preset='standard',patch={})=>({...defaultDocumentAppearance,..
 const base=()=>({format:1,title:'BOOKING INTIMATION LETTER',reference:'SAMPLE/BOOKING/001',date:'05 Nov 2026',sourceReference:'SAMPLE-ORDER',company:{id:'example',name:'Example Property Company'},issuer:{address:'Example Office, Goa, India',contact:'',signatory:'Authorised signatory'},opening:'Dear Customer,\nWe welcome you and confirm the saved booking described below.',terms:'Example terms for layout review only.',branding:null,blocks:[{title:'Sample Customer',paragraphs:['Primary applicant','Example address, Goa, India','customer@example.test']},{title:'Sample Additional Customer',paragraphs:['Co-applicant','Example correspondence address']},{title:'Unit details',table:{headings:['Detail','Saved value'],widths:[1,2],rows:[['Project','Example Gardens'],['Unit','PLOT-106'],['Area','277 sq m'],['Booking date','05 Nov 2026']]}}]})
 function capture(t){const calls=[],draw=PDFPage.prototype.drawText;t.mock.method(PDFPage.prototype,'drawText',function(text,options){calls.push({page:this,text,...options});return draw.call(this,text,options)});return calls}
 
+test('inline wording retains PDF geometry and underline/rules render above protected footers',async t=>{
+ const {inlineDocumentWording}=require('../platform/documents/layout.ts'),layout=starterDocumentLayout(orderTemplateCatalog),content={...orderAcknowledgement.defaults,opening:'Welcome customer.\n\nA second paragraph.',terms:'Terms remain literal.'},calls=capture(t)
+ const original=sampleDocument({...content,layout},orderTemplateCatalog,{id:'qa',name:'QA Company'})
+ await renderBusinessDocument(original,true);const middle=calls.length
+ const expanded=sampleDocument({...content,layout:inlineDocumentWording(layout,content)},orderTemplateCatalog,{id:'qa',name:'QA Company'})
+ await renderBusinessDocument(expanded,true)
+ const geometry=rows=>rows.map(({text,x,y,size})=>({text,x,y,size}));assert.deepEqual(geometry(calls.slice(0,middle)),geometry(calls.slice(middle)))
+ const lines=[],draw=PDFPage.prototype.drawLine;t.mock.method(PDFPage.prototype,'drawLine',function(value){lines.push(value);return draw.call(this,value)})
+ const styled=structuredClone(expanded);styled.body.unshift({type:'paragraph',align:'left',runs:[{text:'Underlined applicant',underline:true}]},{type:'rule'})
+ const bytes=await renderBusinessDocument(styled,true);assert(lines.some(l=>l.thickness===.6&&l.end.x-l.start.x===511))
+ const underlined=calls.find(r=>r.text==='Underlined');assert(underlined);assert(lines.some(l=>l.start.x===underlined.x&&l.start.y===underlined.y-2))
+ assert(lines.every(l=>l.start.y>34));fs.mkdirSync('tmp/pdfs',{recursive:true});fs.writeFileSync('tmp/pdfs/p13n-formatting.pdf',bytes)
+})
+
 test('presentation is bounded data and does not introduce arbitrary URLs, fonts, code or hidden text colours',()=>{
  assert.deepEqual(documentAppearanceSchema.parse(defaultDocumentAppearance),defaultDocumentAppearance)
  for(const patch of [{fontSize:1},{fontSize:40},{titleSize:50},{margins:-5},{colour:'#ffffff'},{fontUrl:'https://outside.test/font'},{footer:'a\nb\nc\nd'},{footer:'x'.repeat(301)},{watermark:'https://outside.test/image'},{css:'position:fixed'}])assert.equal(documentAppearanceSchema.safeParse(appearance('letter',patch)).success,false)

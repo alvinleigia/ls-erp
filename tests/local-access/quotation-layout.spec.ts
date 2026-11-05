@@ -21,6 +21,8 @@ test('quotation layout edits preview without saving and persist only in a new im
   await expect(editor).toBeVisible()
   await dialog.getByRole('button',{name:'Add paragraph',exact:true}).click();await page.keyboard.type('Dear ')
   await dialog.getByRole('button',{name:'Insert Customer name',exact:true}).click();await expect(editor.getByText('Customer name',{exact:true})).toBeVisible()
+  await editor.getByText('Customer name',{exact:true}).click();await dialog.getByRole('button',{name:'Underline',exact:true}).click();await expect(editor.locator('u')).toHaveCount(1)
+  await dialog.getByRole('button',{name:'Separator',exact:true}).click();await expect(editor.locator('hr:not([data-document-page-break])')).toHaveCount(1)
   const downloading=page.waitForEvent('download');await dialog.getByRole('button',{name:'Download layout sample',exact:true}).click();await(await downloading).saveAs(test.info().outputPath('p9-layout-sample.pdf'))
   expect((await json(context,`/api/crm/quotations/${quote.id}`)).revision).toBe(1)
   await page.setViewportSize({width:390,height:844});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true)
