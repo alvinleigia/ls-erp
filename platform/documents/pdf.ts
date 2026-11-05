@@ -1,4 +1,4 @@
-import { PDFDocument, rgb, type PDFFont, type PDFImage } from "pdf-lib"
+import { PDFDocument, PDFName, PDFString, rgb, type PDFFont, type PDFImage } from "pdf-lib"
 import fontkit from "@pdf-lib/fontkit"
 import { readFile } from "node:fs/promises"
 import path from "node:path"
@@ -8,6 +8,7 @@ import type { DocumentPayload } from "./contracts"
 import type { PrintableDocument } from "./contracts"
 import QRCode from "qrcode"
 import type { DocumentFlow } from "./layout"
+import { documentLinkSchema } from "./layout"
 import { defaultDocumentAppearance, documentAppearanceSchema } from "./appearance"
 
 // A fixed, bounded font set is shared by warm requests; PDF font objects remain per document.
@@ -75,26 +76,44 @@ export async function renderBusinessDocument(document: PrintableDocument, previe
   function paragraph(value: string, size = style.fontSize, color = ink, align: "left" | "center" | "right" = "left", trailing = after) { if (!value) return; for (const line of wrap(value,width,size)) { if(!line){ensure(after);y-=after;continue}ensure(size+7); const used=font.widthOfTextAtSize(line,size),x=margin+(align==="center"?(width-used)/2:align==="right"?width-used:0);page.drawText(line,{x,y,size,font,color}); y-=size+gap }; y-=trailing }
   function formatted(node:Extract<DocumentFlow[number],{runs:unknown}>) {
     const size=node.type==="heading"?node.level===1?style.fontSize+7:node.level===3?style.fontSize+1:style.fontSize+3:style.fontSize
+    const indent = (node.indent ?? 0) * 24 + (node.marker ? Math.max(0,font.widthOfTextAtSize(node.marker,size)+6-24) : 0), available = width - indent
+    const leading = node.lineSpacing ? size * ({ single: 1.2, "one-and-half": 1.5, double: 2 }[node.lineSpacing]) : size + gap
+    const trailing = node.paragraphSpacing ? { compact: 3, normal: 9, relaxed: 15 }[node.paragraphSpacing] : after
     // Keep a template heading with the first line of the following content.
-    if(node.type==="heading")ensure(Math.min(240,wrap(node.runs.map(run=>run.text).join(""),width,size).length*(size+gap)+35))
-    type Piece={text:string;font:PDFFont;width:number;underline:boolean}
-    let line:Piece[]=[],used=0
-    function flush(){ensure(size+7);let x=margin+(node.align==="center"?(width-used)/2:node.align==="right"?width-used:0);for(const piece of line){page.drawText(piece.text,{x,y,size,font:piece.font,color:ink});if(piece.underline&&piece.width)page.drawLine({start:{x,y:y-2},end:{x:x+piece.width,y:y-2},thickness:Math.max(.5,size/18),color:ink});x+=piece.width}y-=size+gap;line=[];used=0}
-    function add(text:string,f:PDFFont,underline:boolean){const w=f.widthOfTextAtSize(text,size);line.push({text,font:f,width:w,underline});used+=w}
+    if(node.type==="heading")ensure(Math.min(240,wrap(node.runs.map(run=>run.text).join(""),available,size).length*leading+35))
+    type Piece={text:string;font:PDFFont;width:number;underline:boolean;size:number;shift:number;href?:string}
+    let line:Piece[]=[],used=0,marker=node.marker
+    function flush(){
+      ensure(Math.max(size+7,leading));let x=margin+indent+(node.align==="center"?(available-used)/2:node.align==="right"?available-used:0)
+      if(marker){page.drawText(marker,{x:margin+indent-6-font.widthOfTextAtSize(marker,size),y,size,font,color:ink});marker=undefined}
+      let link: { href:string; x:number; end:number; low:number; high:number } | undefined
+      function finishLink(){if(!link)return;const annotation=pdf.context.obj({Type:"Annot",Subtype:"Link",Rect:[link.x,link.low,link.end,link.high],Border:[0,0,0],A:{Type:"Action",S:"URI",URI:PDFString.of(link.href)}});const ref=pdf.context.register(annotation);const annotations=page.node.Annots();if(annotations)annotations.push(ref);else page.node.set(PDFName.of("Annots"),pdf.context.obj([ref]));link=undefined}
+      for(const piece of line){
+        const baseline=y+piece.shift
+        page.drawText(piece.text,{x,y:baseline,size:piece.size,font:piece.font,color:ink})
+        if(piece.underline&&piece.width)page.drawLine({start:{x,y:baseline-2},end:{x:x+piece.width,y:baseline-2},thickness:Math.max(.5,piece.size/18),color:ink})
+        if(piece.href){if(link?.href!==piece.href)finishLink();if(!link)link={href:piece.href,x,end:x,low:baseline-3,high:baseline+piece.size};link.end=x+piece.width;link.low=Math.min(link.low,baseline-3);link.high=Math.max(link.high,baseline+piece.size)}else finishLink()
+        x+=piece.width
+      }
+      finishLink();y-=leading;line=[];used=0
+    }
+    function add(text:string,f:PDFFont,underline:boolean,runSize:number,shift:number,href?:string){const w=f.widthOfTextAtSize(text,runSize);line.push({text,font:f,width:w,underline,size:runSize,shift,href});used+=w}
     for(const run of node.runs){
       const f=run.bold||node.type==="heading"?run.italic?variants.BoldItalic:variants.Bold:run.italic?variants.Italic:font
+      const runSize=run.script?size*.7:size,shift=run.script==="super"?size*.35:run.script==="sub"?-size*.2:0
+      const href=run.href?new URL(documentLinkSchema.parse(run.href)).href:undefined
       const clean=run.text.replace(/\r/g,"").replace(/\t/g," ").replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g,"")
       if([...clean].some(c=>c!=="\n"&&!supported.has(c.codePointAt(0)!)))throw new BusinessError(400,"The PDF font cannot render some characters. Ask your administrator about language support.")
       for(const word of clean.match(/\n|[^\S\n]+|[^\s]+/g)??[]){
-        if(word==="\n"){if(line.length)flush();else{ensure(after);y-=after}continue}
-        const w=f.widthOfTextAtSize(word,size)
-        if(used+w>width&&line.length)flush()
+        if(word==="\n"){if(line.length)flush();else{ensure(trailing);y-=trailing}continue}
+        const w=f.widthOfTextAtSize(word,runSize)
+        if(used+w>available&&line.length)flush()
         if(!line.length&&/^\s+$/.test(word))continue
-        if(w<=width){add(word,f,!!run.underline);continue}
-        for(const char of word){if(used+f.widthOfTextAtSize(char,size)>width&&line.length)flush();add(char,f,!!run.underline)}
+        if(w<=available){add(word,f,!!run.underline||!!href,runSize,shift,href);continue}
+        for(const char of word){if(used+f.widthOfTextAtSize(char,runSize)>available&&line.length)flush();add(char,f,!!run.underline||!!href,runSize,shift,href)}
       }
     }
-    if(line.length)flush();y-=after
+    if(line.length)flush();else if(marker){ensure(size+7);page.drawText(marker,{x:margin+indent-6-font.widthOfTextAtSize(marker,size),y,size,font,color:ink});y-=leading}y-=trailing
   }
   function section(title: string, following=49) { const before=style.spacing==="compact"?6:10;ensure(before+wrap(title,width,style.fontSize+1).length*(style.fontSize+1+gap)+3+following);y-=before;paragraph(title,style.fontSize+1,ink,"left",3); }
   function table(headings: string[], rows: string[][], weights: number[]) {

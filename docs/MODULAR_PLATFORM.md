@@ -1,5 +1,23 @@
 ## P13N unified document content (2026-11-05)
 
+Standard formatting also provides bullets/numbered lists, paragraph and line
+spacing, safe website/email links, superscript/subscript and clear formatting.
+Paste keeps supported semantic styles and removes external fonts, colours,
+images and unsupported markup. The editor and PDF engine share bounded styles;
+links are literal addresses, never remote rendering inputs. Required source
+sections remain outside lists, registered fields inside lists retain validation,
+and lists have at most three levels within the existing 120-block/60 KB budget.
+Defaults retain the previous PDF geometry. Existing issued files remain archived
+bytes; no migration, additional dependency or saved-template rewrite is needed.
+
+Standard-formatting verification: 39 unit/PDF checks, 47 native order/receipt/
+invoice checks, 25 editor scenarios (24 in the main run plus the nested-list
+check) and four application browser flows passed. The selected-source clearing
+and nesting checks also passed together on focused recheck. Build/TypeScript,
+targeted lint and whitespace checks passed; desktop, mobile and two-page PDF
+screenshots were reviewed. Hosted staging evidence is recorded separately;
+production and Ewissen's saved templates/unpublished browser draft stay unchanged.
+
 Company document templates combine title, wording and layout in one Content tab.
 Existing opening/terms tokens expand into editable literal text in the client
 view, preserving marks, newlines and alignment without any stored rewrite or

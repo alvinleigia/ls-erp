@@ -2,6 +2,17 @@
 
 ## Unified document content (P13N)
 
+- Standard formatting uses the same bounded document model and existing editor:
+  lists (three levels, 120 total blocks), paragraph/line spacing, safe literal
+  http/https/mailto links and mutually exclusive superscript/subscript marks.
+  Keep the default PDF geometry when no spacing override is set. Numbered lists
+  retain their start and hanging indentation; wrapped links use one annotation
+  per line. Links never resolve remote content or open while editing.
+- Paste retains supported semantic formatting while dropping external fonts,
+  colours, images, scripts and unsupported CSS. Normalize pasted list numbering
+  to decimal. Clear formatting retains dynamic fields, required source sections
+  and list structure. Null spacing attributes are the unmodified document default.
+  Required-section and field validation must traverse nested list paragraphs too.
 - Company templates use one Content tab for title and the rich document body.
   Expand existing opening/terms tokens into literal editable text only in the
   unsaved client view. Keep their marks, alignment, newlines and source data.
