@@ -76,3 +76,33 @@ test("tenant creation exposes module choices and row actions expose the same mod
   await expect(page.getByRole("button", { name: "Allow CRM", exact: true })).toBeVisible()
   await page.screenshot({ path: test.info().outputPath("tenant-module-dialog.png"), fullPage: true, animations: "disabled" })
 })
+
+test("platform module cards stay aligned inside the mobile dialog across every group", async ({ page }) => {
+  const writes: string[] = []
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.route("**/api/**", async route => {
+    if (route.request().method() !== "GET") writes.push(route.request().method())
+    const path = new URL(route.request().url()).pathname
+    if (path === "/api/tenants") return route.fulfill({ json: { items: [{ id: "business", name: "Example business", slug: "example", status: "ACTIVE", userCount: 1, createdAt: "2026-09-30T00:00:00Z" }], total: 1, page: 1, totalPages: 1 } })
+    if (path.endsWith("/modules")) return route.fulfill({ json: { modules: moduleSettings([]) } })
+    return route.fulfill({ json: { items: [] } })
+  })
+  await page.goto("/settings/tenants")
+  await page.getByRole("button", { name: "Actions for Example business" }).click()
+  await page.getByRole("menuitem", { name: "Manage modules" }).click()
+  const dialog = page.getByRole("dialog")
+  for (const name of ["CRM and sales", "Billing", "Operations", "Workforce"]) {
+    await dialog.getByRole("tab", { name, exact: true }).click()
+    await expect(dialog.getByRole("tabpanel").locator("section[aria-label]").first()).toBeVisible()
+    const layout = await dialog.evaluate(element => {
+      const dialog = element.getBoundingClientRect()
+      const cards = Array.from(element.querySelectorAll('[role="tabpanel"]:not([hidden]) section[aria-label]')).map(card => card.getBoundingClientRect())
+      return { dialogWidth: dialog.width, widths: cards.map(card => card.width), contained: cards.every(card => card.left >= dialog.left && card.right <= dialog.right) }
+    })
+    expect(layout.dialogWidth).toBeLessThanOrEqual(390)
+    expect(layout.contained).toBe(true)
+    expect(Math.max(...layout.widths) - Math.min(...layout.widths)).toBeLessThan(1)
+  }
+  expect(writes).toEqual([])
+  await dialog.screenshot({ path: test.info().outputPath("platform-module-dialog-mobile.png"), animations: "disabled" })
+})

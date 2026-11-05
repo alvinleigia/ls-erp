@@ -55,7 +55,7 @@ export function ModuleControls({ tenantId }: { tenantId?: string }) {
     } catch (error) { toast.error((error as Error).message); await load().catch(() => {}) }
     finally { setSaving(false) }
   }
-  return <div className="space-y-4">
+  return <div className="min-w-0 space-y-4">
     {loading && <p>Loading modules...</p>}
     {error && <p role="alert" className="text-destructive">{error}</p>}
     {modules.length > 0 && <SectionTabs scope={tenantId ? `tenant-modules-${tenantId}` : "business-modules"} tabs={moduleGroups.map(group => ({ value: group.value, label: group.label, content: <div className="space-y-4">{modules.filter(module => group.keys.includes(module.key)).sort((a, b) => group.keys.indexOf(a.key) - group.keys.indexOf(b.key)).map(module => {
