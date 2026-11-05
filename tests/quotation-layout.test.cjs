@@ -16,6 +16,15 @@ function capturePdfText(t){
  return text
 }
 function standardSample(){const s=quotationLayoutSample(starterDocumentLayout(catalog));delete s.content.layout;return s}
+
+test('custom quotation styling is validated and frozen with its accepted revision',async()=>{
+ const {defaultDocumentAppearance,documentStylePresets}=require('../platform/documents/appearance.ts')
+ const snapshot=quotationLayoutSample(starterDocumentLayout(catalog));snapshot.content.appearance={...defaultDocumentAppearance,...documentStylePresets.letter,footer:'Sample Supplier | example.test'}
+ assert(quotationContentSchema.safeParse(snapshot.content).success)
+ const before=JSON.stringify(snapshot),payload=quotationLayoutDocument(record(snapshot));assert.deepEqual(payload.appearance,snapshot.content.appearance)
+ const bytes=await buildQuotationPdf(record(snapshot),true);assert.equal(Buffer.from(bytes).subarray(0,5).toString(),'%PDF-');assert.equal(JSON.stringify(snapshot),before)
+ const standard=structuredClone(snapshot.content);delete standard.layout;assert.equal(quotationContentSchema.safeParse(standard).success,false)
+})
 test('source-specific starter has no order-only fields and resets independently of other drafts',()=>{
  const a=starterDocumentLayout(catalog),b=starterDocumentLayout(catalog);a.content.reverse();assert.notDeepEqual(a,b);assert.deepEqual(validateDocumentLayout(b,catalog),b)
  const sample=quotationLayoutSample(b);for(const key of ['order.reference','customer.password']){const bad=structuredClone(sample.content);bad.layout.content.unshift({type:'paragraph',content:[{type:'documentField',attrs:{key}}]});assert.equal(quotationContentSchema.safeParse(bad).success,false)}

@@ -13,7 +13,7 @@ const alignment = z.enum(["left", "center", "right"]).nullable().optional()
 const node = z.discriminatedUnion("type", [
   z.object({ type: z.literal("paragraph"), attrs: z.object({ textAlign: alignment }).strict().optional(), content: z.array(inline).max(250).optional() }).strict(),
   z.object({ type: z.literal("heading"), attrs: z.object({ level: z.union([z.literal(1), z.literal(2), z.literal(3)]), textAlign: alignment }).strict(), content: z.array(inline).max(250).optional() }).strict(),
-  z.object({ type: z.literal("documentSection"), attrs: z.object({ key }).strict() }).strict(),
+  z.object({ type: z.literal("documentSection"), attrs: z.object({ key, compact: z.boolean().optional() }).strict() }).strict(),
   z.object({ type: z.literal("documentPageBreak") }).strict(),
 ])
 export const documentLayoutSchema = z.object({ type: z.literal("doc"), content: z.array(node).min(1).max(120) }).strict().superRefine((value, ctx) => {
@@ -22,7 +22,7 @@ export const documentLayoutSchema = z.object({ type: z.literal("doc"), content: 
 export type DocumentLayout = z.infer<typeof documentLayoutSchema>
 export type TemplateCatalog = { fields: { key: string; label: string }[]; sections: { key: string; label: string; required: boolean }[]; starter?: DocumentLayout }
 export type DocumentRun = { text: string; bold?: boolean; italic?: boolean }
-export type DocumentFlow = ({ type: "paragraph" | "heading"; level?: number; align: "left" | "center" | "right"; runs: DocumentRun[] } | { type: "section"; blocks: DocumentBlock[] } | { type: "pageBreak" })[]
+export type DocumentFlow = ({ type: "paragraph" | "heading"; level?: number; align: "left" | "center" | "right"; runs: DocumentRun[] } | { type: "section"; blocks: DocumentBlock[]; compact?: boolean } | { type: "pageBreak" })[]
 
 // Only registered fields/sections can enter the stored layout. This is data,
 // never HTML, a property-path evaluator, a formula or an executable template.
@@ -50,7 +50,7 @@ export function resolveDocumentLayout(value: unknown, catalog: TemplateCatalog, 
   if (blocks.some(block => !block.key || !catalog.sections.some(section => section.key === block.key))) throw new Error("Unregistered document section")
   return layout.content.map(node => {
     if (node.type === "documentPageBreak") return { type: "pageBreak" }
-    if (node.type === "documentSection") return { type: "section", blocks: blocks.filter(block => block.key === node.attrs.key) }
+    if (node.type === "documentSection") return { type: "section", blocks: blocks.filter(block => block.key === node.attrs.key), ...(node.attrs.compact ? { compact: true } : {}) }
     return { type: node.type, ...(node.type === "heading" ? { level: node.attrs.level } : {}), align: node.attrs?.textAlign ?? "left", runs: (node.content ?? []).map(item => {
       if (item.type === "hardBreak") return { text: "\n" }
       if (item.type === "documentField") {

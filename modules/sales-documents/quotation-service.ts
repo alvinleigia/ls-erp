@@ -1,3 +1,4 @@
+import { documentAppearanceSchema } from "@/platform/documents/appearance"
 import { recordActionAccess } from "@/platform/access/record-actions"
 import { documentLayoutSchema } from "@/platform/documents/layout"
 import { z } from "zod"
@@ -61,9 +62,10 @@ export function createQuotationService({ run: checkedRun, audit, opportunityScop
   }
   return {
     async previewQuotationLayout(input:unknown){
-      const {layout}=z.object({layout:documentLayoutSchema}).strict().parse(input)
+      const {layout,appearance}=z.object({layout:documentLayoutSchema,appearance:documentAppearanceSchema.optional()}).strict().parse(input)
       const paymentPlans=await run({any:["quotationTemplates.create","quotationTemplates.edit","quotations.create","quotations.edit"]},async(_tx,_actor,paymentPlans)=>paymentPlans)
-      return buildQuotationPdf({id:"SAMPLE",revision:1,revisionCreatedAt:"2026-01-01",snapshot:quotationLayoutSample(layout,paymentPlans)},true)
+      const snapshot=quotationLayoutSample(layout,paymentPlans);if(appearance)snapshot.content.appearance=appearance
+      return buildQuotationPdf({id:"SAMPLE",revision:1,revisionCreatedAt:"2026-01-01",snapshot},true)
     },
     quotationDefaults(opportunityId: string) {
       return run("quotations.create", async (tx, actor, paymentPlans) => {

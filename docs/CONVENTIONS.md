@@ -1,5 +1,24 @@
 # Base Conventions
 
+## Shared PDF presentation (P13L)
+
+- Company templates and custom quotation layouts use the bounded presentation
+  schema in `platform/documents/appearance.ts`. Reuse `DocumentAppearanceControls`
+  for editing. Presets change styling only; wording, accepted values and company
+  assets remain separate. Keep the existing fixed font family and optimized logos.
+- Carry presentation through samples and prepared document snapshots. Continue
+  serving issued PDFs from their archived bytes. Styling must never recalculate
+  payments, change authorization, remove required sections or rewrite old versions.
+- A section's `compact` option prints every accepted table cell as labelled details;
+  source headings, participant identities and paragraphs remain intact. It changes
+  presentation only. Provider field/section registries remain authoritative.
+- Preview generation is explicit. Do not introduce browser-based rendering, remote
+  fonts/images, arbitrary HTML/CSS, or generation on editor keystrokes. Changes to
+  shared pagination need long-row, repeated-header/footer and Unicode checks.
+- Run the document appearance/layout/PDF/quotation unit suites and
+  `playwright.document-templates.config.ts` for styling, review/publication,
+  read-only navigation, mobile containment and compact-section regressions.
+
 This is the baseline for new modules (API + UI) in this codebase.
 
 ## Optional UI guidance (P13H)

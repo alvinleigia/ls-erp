@@ -2,6 +2,7 @@ import { test, expect, type Page } from "@playwright/test"
 import { orderTemplateCatalog } from "../../modules/sales-orders/document-template"
 import { starterDocumentLayout } from "../../platform/documents/layout"
 import type { DocumentContent } from "../../platform/documents/validation"
+import { defaultDocumentAppearance } from "../../platform/documents/appearance"
 
 const company = { id: "qa-company", name: "QA Demo Business", archived: false }
 const booking = "real-estate.booking-intimation"
@@ -14,9 +15,9 @@ const draft = (title: string): DocumentContent => ({
   layout: starterDocumentLayout(catalog),
 })
 
-async function fixture(page: Page, options: { version?: number; canPublish?: boolean; rejectRefreshAfterPublish?: boolean } = {}) {
-  const templates = Object.fromEntries(providers.map(provider => [provider.key, { version: options.version ?? 2, content: { ...draft(provider.name), enabled: options.version !== 0 } }]))
-  const state = { templates, attempts: [] as { companyId: string; providerKey: string; version: number; content: DocumentContent; reviewed: boolean }[], publications: 0, reads: 0, failNext: false }
+async function fixture(page: Page, options: { version?: number; canPublish?: boolean; rejectRefreshAfterPublish?: boolean; styled?: boolean } = {}) {
+  const templates = Object.fromEntries(providers.map(provider => [provider.key, { version: options.version ?? 2, content: { ...draft(provider.name), enabled: options.version !== 0, ...(options.styled ? { appearance: { ...defaultDocumentAppearance } } : {}) } }]))
+  const state = { templates, attempts: [] as { companyId: string; providerKey: string; version: number; content: DocumentContent; reviewed: boolean }[], previews: [] as DocumentContent[], publications: 0, reads: 0, failNext: false }
   const unexpected: string[] = []
   await page.route("**/api/**", async route => {
     const request = route.request(), url = new URL(request.url()), method = request.method()
@@ -36,6 +37,10 @@ async function fixture(page: Page, options: { version?: number; canPublish?: boo
       templates[input.providerKey] = { version: input.version + 1, content: input.content }
       state.publications++
       return json({ version: input.version + 1 })
+    }
+    if (url.pathname === "/api/document-templates/preview" && method === "POST") {
+      state.previews.push(request.postDataJSON().content)
+      return route.fulfill({ body: "%PDF-1.7\nSynthetic download fixture", contentType: "application/pdf" })
     }
     unexpected.push(`${method} ${url.pathname}`)
     return json({ error: "Unexpected synthetic API request" }, 500)
@@ -161,4 +166,56 @@ test("mobile success stays beside the actions and selecting another document cle
   await expect(status).toHaveCount(0)
   await expect(page.getByRole("button", { name: "Published version 2", exact: true })).toBeDisabled()
   expect(state.publications).toBe(1); expect(unexpected).toEqual([])
+})
+
+test("styling is an unsaved draft until explicit preview and reviewed publication", async ({ page }) => {
+  const { state, unexpected } = await fixture(page)
+  await page.getByRole("tab", { name: "PDF style", exact: true }).click()
+  await page.getByLabel("Customise document styling", { exact: true }).check()
+  await page.getByRole("tab", { name: "Tables and footer", exact: true }).click()
+  await page.getByLabel("Repeating footer", { exact: true }).fill("Example Business | example.test")
+  await page.getByRole("button", { name: "Letter style", exact: true }).click()
+  await page.getByRole("tab", { name: "Letterhead", exact: true }).click()
+  await page.getByLabel("Repeat logo on later pages", { exact: true }).check()
+  await page.getByLabel("Use the selected document logo as a watermark", { exact: true }).check()
+  await page.getByRole("tab", { name: "Tables and footer", exact: true }).click()
+  await expect(page.getByLabel("Repeating footer", { exact: true })).toHaveValue("Example Business | example.test")
+  expect(state.previews).toHaveLength(0); expect(state.attempts).toHaveLength(0)
+  const download = page.waitForEvent("download")
+  await page.getByRole("button", { name: "Download sample preview", exact: true }).click(); await download
+  expect(state.previews).toHaveLength(1); expect(state.publications).toBe(0)
+  await review(page).check()
+  await page.getByRole("button", { name: "Compact style", exact: true }).click()
+  await expect(review(page)).not.toBeChecked(); await expect(publish(page)).toBeDisabled()
+  await review(page).check(); await publish(page).click()
+  const saved = state.templates[booking].content
+  expect(saved.appearance).toMatchObject({ fontSize: 9, margins: "narrow", tableStyle: "grid", repeatLogo: true, watermark: true, footer: "Example Business | example.test" })
+  expect(saved.opening).toBe("Saved opening wording"); expect(saved.terms).toBe("Saved reviewed terms")
+  expect(state.publications).toBe(1); expect(unexpected).toEqual([])
+})
+
+test("read-only styling remains inspectable and mobile styling stays within its panel", async ({ page }) => {
+  const { state } = await fixture(page, { canPublish: false, styled: true })
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.getByRole("tab", { name: "PDF style", exact: true }).click()
+  await expect(page.getByLabel("Customise document styling", { exact: true })).toBeDisabled()
+  await page.getByRole("tab", { name: "Letterhead", exact: true }).click()
+  await expect(page.getByLabel("Repeat logo on later pages", { exact: true })).toBeDisabled()
+  await page.getByRole("tab", { name: "Tables and footer", exact: true }).click()
+  await expect(page.getByLabel("Repeating footer", { exact: true })).toBeDisabled()
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+  expect(state.attempts).toHaveLength(0); expect(state.previews).toHaveLength(0)
+  await page.screenshot({ path: test.info().outputPath("document-styling-mobile.png"), fullPage: true, animations: "disabled" })
+})
+
+test("compact section presentation preserves required sections and publishes their display choice", async ({ page }) => {
+  const { state } = await fixture(page)
+  await page.getByRole("tab", { name: "PDF layout", exact: true }).click()
+  const layout = page.getByRole("textbox", { name: "Document layout", exact: true })
+  await layout.getByText("Section: Payment schedule", { exact: true }).click()
+  await page.getByLabel("Show table rows in this section as compact labelled details", { exact: true }).check()
+  await review(page).check(); await publish(page).click()
+  const nodes = state.templates[booking].content.layout!.content
+  expect(nodes.some(node => node.type === "documentSection" && node.attrs.key === "payment-schedule" && node.attrs.compact)).toBe(true)
+  for (const section of catalog.sections.filter(section => section.required)) expect(nodes.filter(node => node.type === "documentSection" && node.attrs.key === section.key)).toHaveLength(1)
 })

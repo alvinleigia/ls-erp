@@ -1,3 +1,4 @@
+import { documentAppearanceSchema } from "@/platform/documents/appearance"
 import { z } from "zod"
 import { documentLayoutSchema,validateDocumentLayout } from "@/platform/documents/layout"
 import { quotationLayoutCatalog } from "./quotation-layout-catalog"
@@ -23,7 +24,9 @@ export const quotationContentSchema = z.object({
   bank: z.object({ accountName: text(200), accountNumber: text(100), accountType: text(100), bankName: text(200), branch: text(200), routingCode: text(100) }).strict(),
   terms: text(10000),
   layout: documentLayoutSchema.optional(),
+  appearance: documentAppearanceSchema.optional(),
 }).strict().superRefine((data, ctx) => {
+  if(data.appearance&&!data.layout)ctx.addIssue({code:"custom",path:["appearance"],message:"Choose a custom PDF layout before styling it."})
   if(data.layout)try{validateDocumentLayout(data.layout,quotationLayoutCatalog)}catch(error){ctx.addIssue({code:"custom",path:["layout"],message:(error as Error).message})}
   if (data.instalments.some(item => !/^\d{1,12}(\.\d{1,4})?$/.test(item.percent))) return
   const total = data.instalments.reduce((sum, item) => { const [whole, decimal = ""] = item.percent.split("."); return sum + BigInt(whole) * BigInt(10000) + BigInt(decimal.padEnd(4, "0")) }, BigInt(0))

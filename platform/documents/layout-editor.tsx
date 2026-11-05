@@ -6,7 +6,7 @@ import { EditorContent, NodeViewWrapper, ReactNodeViewRenderer, useEditor, useEd
 import StarterKit from "@tiptap/starter-kit"
 import TextAlign from "@tiptap/extension-text-align"
 import { Button } from "@/components/ui/button"
-import { Select } from "@/components/erp/controls"
+import { Select, Checkbox } from "@/components/erp/controls"
 import { FormField } from "@/components/form-field"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
 import { starterDocumentLayout, type DocumentLayout, type TemplateCatalog } from "./layout"
@@ -29,7 +29,7 @@ const Field = Node.create({
 })
 const DynamicSection = Field.extend({
   name: "documentSection", group: "block", inline: false, draggable: true,
-  addAttributes: () => ({ key: { default: "" } }),
+  addAttributes: () => ({ key: { default: "" }, compact: { default: false } }),
   parseHTML: () => [{ tag: "div[data-document-section]" }],
   renderHTML: ({ HTMLAttributes }) => ["div", mergeAttributes(HTMLAttributes, { "data-document-section": "" }), HTMLAttributes.key],
 })
@@ -48,7 +48,7 @@ export function DocumentLayoutEditor({ value, catalog, disabled, onChange }: { v
     editorProps: { attributes: { role: "textbox", "aria-label": "Document layout", "aria-multiline": "true", class: "min-h-80 p-4 outline-none [&_h1]:text-2xl [&_h1]:font-semibold [&_h2]:text-xl [&_h2]:font-semibold [&_h3]:text-lg [&_h3]:font-semibold [&_p]:my-2" } },
     onUpdate: ({ editor }) => onChange(editor.getJSON() as DocumentLayout),
   })
-  const active = useEditorState({ editor, selector: ({ editor }) => ({ bold: editor?.isActive("bold") ?? false, italic: editor?.isActive("italic") ?? false }) })
+  const active = useEditorState({ editor, selector: ({ editor }) => ({ bold: editor?.isActive("bold") ?? false, italic: editor?.isActive("italic") ?? false, section: editor?.isActive("documentSection") ?? false, compact: editor?.getAttributes("documentSection").compact === true }) })
   useEffect(() => { editor?.setEditable(!disabled, false) }, [editor, disabled])
   useEffect(() => { if (editor && JSON.stringify(editor.getJSON()) !== JSON.stringify(value)) editor.commands.setContent(value, { emitUpdate: false }) }, [editor, value])
   const busy = disabled || !editor
@@ -71,6 +71,7 @@ export function DocumentLayoutEditor({ value, catalog, disabled, onChange }: { v
       <Button type="button" variant="outline" disabled={busy || !section} onClick={() => editor?.chain().focus().insertContent({ type: "documentSection", attrs: { key: section } }).run()}>Insert section</Button>
     </div>
     <div className="rounded-lg border bg-background"><EditorContent editor={editor} /></div>
+    {active?.section && <label className="flex items-start gap-2"><Checkbox checked={active.compact} disabled={busy} onChange={event => editor?.chain().focus().updateAttributes("documentSection", { compact: event.target.checked }).run()} />Show table rows in this section as compact labelled details</label>}
 
     <Dialog open={reset} onOpenChange={setReset}><DialogContent><DialogHeader><DialogTitle>Use the starter layout?</DialogTitle><DialogDescription>This replaces the unsaved layout. Company details and approved wording are retained. Published versions and issued PDFs stay unchanged.</DialogDescription></DialogHeader><DialogFooter><Button type="button" variant="outline" onClick={() => setReset(false)}>Cancel</Button><Button type="button" onClick={() => { onChange(starterDocumentLayout(catalog)); setReset(false) }}>Replace layout</Button></DialogFooter></DialogContent></Dialog>
   </div>

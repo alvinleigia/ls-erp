@@ -1,4 +1,4 @@
-import { PDFDocument, rgb, type PDFFont } from "pdf-lib"
+import { PDFDocument, rgb, type PDFFont, type PDFImage } from "pdf-lib"
 import fontkit from "@pdf-lib/fontkit"
 import { readFile } from "node:fs/promises"
 import path from "node:path"
@@ -8,21 +8,52 @@ import type { DocumentPayload } from "./contracts"
 import type { PrintableDocument } from "./contracts"
 import QRCode from "qrcode"
 import type { DocumentFlow } from "./layout"
+import { defaultDocumentAppearance, documentAppearanceSchema } from "./appearance"
+
+// A fixed, bounded font set is shared by warm requests; PDF font objects remain per document.
+const fontFiles = new Map<string, Promise<Buffer>>()
+function fontBytes(name: string) {
+  let bytes = fontFiles.get(name)
+  if (!bytes) { bytes = readFile(path.join(process.cwd(), `public/assets/fonts/NotoSans-${name}.ttf`)); fontFiles.set(name, bytes); bytes.catch(() => fontFiles.delete(name)) }
+  return bytes
+}
 
 // Registered providers supply plain text and tables. No HTML, expressions,
 // arbitrary image URLs or industry-specific fields enter this renderer.
 export async function renderBusinessDocument(document: PrintableDocument, preview = false) {
   const pdf = await PDFDocument.create(); pdf.registerFontkit(fontkit)
-  const font = await pdf.embedFont(await readFile(path.join(process.cwd(), "public/assets/fonts/NotoSans-Regular.ttf")), { subset: true })
+  const style = document.appearance ? documentAppearanceSchema.parse(document.appearance) : defaultDocumentAppearance
+  const font = await pdf.embedFont(await fontBytes("Regular"), { subset: true })
   const variants: Record<string,PDFFont> = { regular:font }
-  if(document.body)for(const name of ["Bold","Italic","BoldItalic"])variants[name]=await pdf.embedFont(await readFile(path.join(process.cwd(),`public/assets/fonts/NotoSans-${name}.ttf`)),{subset:true})
-  const supported = new Set(font.getCharacterSet()), ink = rgb(.1,.15,.2), muted = rgb(.36,.4,.44), pale = rgb(.94,.96,.97)
-  const width = 511, margin = 42, bottom = 65
-  let page = pdf.addPage([595,842]), y = 795
+  const requiredFonts = new Set<string>()
+  for (const node of document.body ?? []) if ("runs" in node) for (const run of node.runs) {
+    const bold = run.bold || node.type === "heading"
+    if (bold || run.italic) requiredFonts.add(bold ? run.italic ? "BoldItalic" : "Bold" : "Italic")
+  }
+  for (const name of requiredFonts) variants[name] = await pdf.embedFont(await fontBytes(name), { subset: true })
+  const supported = new Set(font.getCharacterSet()), ink = style.colour === "black" ? rgb(.08,.08,.08) : style.colour === "teal" ? rgb(.04,.28,.3) : rgb(.1,.15,.2), muted = style.colour === "black" ? rgb(.3,.3,.3) : rgb(.36,.4,.44), pale = style.colour === "black" ? rgb(.95,.95,.95) : rgb(.94,.96,.97)
+  const margin = { standard: 42, narrow: 32, wide: 54 }[style.margins], width = 595 - margin * 2, top = 842 - margin - 5
+  const gap = style.spacing === "compact" ? 3 : 6, after = style.spacing === "compact" ? 4 : 6
+  const tableSize = style.fontSize - 1, tableLeading = tableSize + (style.spacing === "compact" ? 3 : 5), padding = style.spacing === "compact" ? 8 : 12
+  let page = pdf.addPage([595,842]), y = top, logo: PDFImage | undefined
   const pages = [page]
-  function nextPage() { if (pages.length >= 100) throw new BusinessError(413, "This document exceeds 100 pages. Shorten the template or saved details."); page = pdf.addPage([595,842]); pages.push(page); y = 795 }
+  const [logoWidth, logoHeight] = { small: [110,40], medium: [145,55], large: [180,68] }[style.logoSize]
+  if(document.logoDataUrl&&(!/^data:image\/png;base64,[A-Za-z0-9+/]+=*$/.test(document.logoDataUrl)||document.logoDataUrl.length>400000))throw new BusinessError(400,"Use a bounded PNG document logo.")
+  if (document.logoDataUrl || document.branding?.logo) logo = await pdf.embedPng(document.logoDataUrl ? Buffer.from(document.logoDataUrl.split(',')[1], 'base64') : await downloadDocumentLogo(document.branding!.logo!.path))
+  function drawLogo() {
+    if (!logo) return
+    const scaled = logo.scale(Math.min(logoWidth/logo.width,logoHeight/logo.height))
+    const x = margin + (style.logoAlign === "center" ? (width-scaled.width)/2 : style.logoAlign === "right" ? width-scaled.width : 0)
+    page.drawImage(logo,{x,y:y-scaled.height,width:scaled.width,height:scaled.height}); y-=logoHeight+13
+  }
+  function watermark() {
+    if (!logo || !style.watermark) return
+    const scaled = logo.scale(Math.min(300/logo.width,160/logo.height))
+    page.drawImage(logo,{x:(595-scaled.width)/2,y:(842-scaled.height)/2,width:scaled.width,height:scaled.height,opacity:.07})
+  }
+  function nextPage() { if (pages.length >= 100) throw new BusinessError(413, "This document exceeds 100 pages. Shorten the template or saved details."); page = pdf.addPage([595,842]); pages.push(page); y = top; watermark(); if(style.repeatLogo)drawLogo() }
   function ensure(height: number) { if (y-height < bottom) nextPage() }
-  function wrap(value: string, maxWidth: number, size = 10) {
+  function wrap(value: string, maxWidth: number, size = style.fontSize) {
     const rows: string[] = []
     const clean = value.replace(/\r/g,"").replace(/\t/g," ").replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g,"")
     if ([...clean].some(c => c !== "\n" && !supported.has(c.codePointAt(0)!))) throw new BusinessError(400, "The PDF font cannot render some characters. Ask your administrator about language support.")
@@ -38,14 +69,17 @@ export async function renderBusinessDocument(document: PrintableDocument, previe
     }
     return rows
   }
-  function paragraph(value: string, size = 10, color = ink) { if (!value) return; for (const line of wrap(value,width,size)) { ensure(size+7); page.drawText(line,{x:margin,y,size,font,color}); y-=size+6 }; y-=6 }
+  const footerLines = style.footer ? wrap(style.footer,width,8) : []
+  if (footerLines.length > 6) throw new BusinessError(400,"The footer is too long for these margins. Shorten it before previewing.")
+  const bottom = Math.max(margin+23, footerLines.length ? footerLines.length*10+64 : 0)
+  function paragraph(value: string, size = style.fontSize, color = ink, align: "left" | "center" | "right" = "left") { if (!value) return; for (const line of wrap(value,width,size)) { ensure(size+7); const used=font.widthOfTextAtSize(line,size),x=margin+(align==="center"?(width-used)/2:align==="right"?width-used:0);page.drawText(line,{x,y,size,font,color}); y-=size+gap }; y-=after }
   function formatted(node:Extract<DocumentFlow[number],{runs:unknown}>) {
-    const size=node.type==="heading"?node.level===1?17:node.level===3?11:13:10
+    const size=node.type==="heading"?node.level===1?style.fontSize+7:node.level===3?style.fontSize+1:style.fontSize+3:style.fontSize
     // Keep a template heading with the first line of the following content.
-    if(node.type==="heading")ensure(Math.min(240,wrap(node.runs.map(run=>run.text).join(""),width,size).length*(size+6)+35))
+    if(node.type==="heading")ensure(Math.min(240,wrap(node.runs.map(run=>run.text).join(""),width,size).length*(size+gap)+35))
     type Piece={text:string;font:PDFFont;width:number}
     let line:Piece[]=[],used=0
-    function flush(){ensure(size+7);let x=margin+(node.align==="center"?(width-used)/2:node.align==="right"?width-used:0);for(const piece of line){page.drawText(piece.text,{x,y,size,font:piece.font,color:ink});x+=piece.width}y-=size+6;line=[];used=0}
+    function flush(){ensure(size+7);let x=margin+(node.align==="center"?(width-used)/2:node.align==="right"?width-used:0);for(const piece of line){page.drawText(piece.text,{x,y,size,font:piece.font,color:ink});x+=piece.width}y-=size+gap;line=[];used=0}
     function add(text:string,f:PDFFont){const w=f.widthOfTextAtSize(text,size);line.push({text,font:f,width:w});used+=w}
     for(const run of node.runs){
       const f=run.bold||node.type==="heading"?run.italic?variants.BoldItalic:variants.Bold:run.italic?variants.Italic:font
@@ -60,56 +94,66 @@ export async function renderBusinessDocument(document: PrintableDocument, previe
         for(const char of word){if(used+f.widthOfTextAtSize(char,size)>width&&line.length)flush();add(char,f)}
       }
     }
-    if(line.length)flush();y-=6
+    if(line.length)flush();y-=after
   }
-  function section(title: string, following=49) { ensure(wrap(title,width,12).length*18+following); y-=7; paragraph(title,12); }
+  function section(title: string, following=49) { ensure(wrap(title,width,style.fontSize+2).length*(style.fontSize+2+gap)+following); y-=style.spacing==="compact"?3:7; paragraph(title,style.fontSize+2); }
   function table(headings: string[], rows: string[][], weights: number[]) {
     if (!headings.length || headings.length !== weights.length || weights.some(value => value <= 0) || rows.some(row => row.length !== headings.length)) throw new Error("Invalid document table")
     const total = weights.reduce((a,b)=>a+b,0), widths = weights.map(value=>width*value/total)
     function cells(lines: string[][], header: boolean) {
-      const height = Math.max(...lines.map(value=>value.length),1)*14+12
-      if (header) page.drawRectangle({x:margin,y:y-height+8,width,height,color:pale})
+      const height = Math.max(...lines.map(value=>value.length),1)*tableLeading+padding
+      if (header && style.tableStyle === "shaded") page.drawRectangle({x:margin,y:y-height+8,width,height,color:pale})
       let x=margin
-      lines.forEach((cell,index)=>{ cell.forEach((line,i)=>page.drawText(line,{x:x+6,y:y-i*14-4,size:9,font,color:header?muted:ink}));x+=widths[index] })
-      y-=height;page.drawLine({start:{x:margin,y:y+7},end:{x:margin+width,y:y+7},color:rgb(.85,.88,.9),thickness:.4})
+      lines.forEach((cell,index)=>{ cell.forEach((line,i)=>page.drawText(line,{x:x+6,y:y-i*tableLeading-4,size:tableSize,font,color:header?muted:ink})); if(style.tableStyle==="grid")page.drawRectangle({x,y:y-height+8,width:widths[index],height,borderColor:muted,borderWidth:.4});x+=widths[index] })
+      y-=height;if(style.tableStyle!=="grid")page.drawLine({start:{x:margin,y:y+7},end:{x:margin+width,y:y+7},color:rgb(.85,.88,.9),thickness:.4})
     }
-    const headers = headings.map((value,i)=>wrap(value,widths[i]-12,9)), headerHeight = Math.max(...headers.map(lines=>lines.length))*14+12
-    ensure(headerHeight+36);cells(headers,true)
+    const headers = headings.map((value,i)=>wrap(value,widths[i]-12,tableSize)), headerHeight = Math.max(...headers.map(lines=>lines.length))*tableLeading+padding
+    const freshTop = top - (style.repeatLogo && logo ? logoHeight+13 : 0)
+    if(headerHeight+tableLeading+padding>freshTop-bottom)throw new BusinessError(413,"Table headings are too tall. Shorten them or use compact details.")
+    const firstLines=rows[0]?.map((value,i)=>wrap(value,widths[i]-12,tableSize).length)??[1]
+    ensure(headerHeight+Math.min(Math.max(...firstLines)*tableLeading+padding,freshTop-bottom-headerHeight));cells(headers,true)
     for (const row of rows) {
-      const lines=row.map((value,i)=>wrap(value,widths[i]-12,9));let offset=0,remaining=Math.max(...lines.map(value=>value.length),1)
+      const lines=row.map((value,i)=>wrap(value,widths[i]-12,tableSize));let offset=0,remaining=Math.max(...lines.map(value=>value.length),1)
       // Keep ordinary rows together; split only a cell taller than a fresh page.
-      const freshCapacity=Math.floor((795-headerHeight-bottom-12)/14)
-      if(remaining<=freshCapacity && y-(remaining*14+12)<bottom){nextPage();cells(headers,true)}
+      const freshCapacity=Math.floor((freshTop-headerHeight-bottom-padding)/tableLeading)
+      if(remaining<=freshCapacity && y-(remaining*tableLeading+padding)<bottom){nextPage();cells(headers,true)}
       while (remaining>0) {
-        let capacity=Math.floor((y-bottom-12)/14)
-        if (capacity<1) { nextPage();cells(headers,true);capacity=Math.floor((y-bottom-12)/14) }
+        let capacity=Math.floor((y-bottom-padding)/tableLeading)
+        if (capacity<1) { nextPage();cells(headers,true);capacity=Math.floor((y-bottom-padding)/tableLeading) }
         const count=Math.min(capacity,remaining)
         cells(lines.map(value=>value.slice(offset,offset+count)),false);offset+=count;remaining-=count
       }
     }
-    y-=13
+    y-=style.spacing==="compact"?8:13
   }
-  if(document.logoDataUrl&&(!/^data:image\/png;base64,[A-Za-z0-9+/]+=*$/.test(document.logoDataUrl)||document.logoDataUrl.length>400000))throw new BusinessError(400,"Use a bounded PNG document logo.")
-  if (document.logoDataUrl||document.branding?.logo) {
-    const logo=await pdf.embedPng(document.logoDataUrl?Buffer.from(document.logoDataUrl.split(',')[1],'base64'):await downloadDocumentLogo(document.branding!.logo!.path)),scaled=logo.scale(Math.min(145/logo.width,55/logo.height))
-    page.drawImage(logo,{x:margin,y:y-scaled.height,width:scaled.width,height:scaled.height});y-=68
-  }
-  paragraph(document.company.name,17);paragraph(document.title,20)
-  paragraph(`${document.reference} | ${document.date}`,9,muted)
+  watermark();drawLogo()
+  if(style.companyHeading)paragraph(document.company.name,style.fontSize+7)
+  paragraph(document.title,style.titleSize,ink,style.titleAlign)
+  if(style.referenceLayout==="split"){
+    const left=wrap(document.reference,width*.65-8,9),right=wrap(document.date,width*.35,9)
+    for(let i=0;i<Math.max(left.length,right.length);i++){ensure(16);if(left[i])page.drawText(left[i],{x:margin,y,size:9,font,color:muted});if(right[i])page.drawText(right[i],{x:margin+width-font.widthOfTextAtSize(right[i],9),y,size:9,font,color:muted});y-=9+gap}y-=after
+  }else paragraph(`${document.reference} | ${document.date}`,9,muted)
   if (preview) paragraph("DRAFT PREVIEW - NOT ISSUED",10,muted)
   if (document.issuer.address) paragraph(document.issuer.address,9,muted)
-  async function drawBlocks(blocks:DocumentPayload["blocks"]){for (const block of blocks) {
+  async function drawBlocks(blocks:DocumentPayload["blocks"],compact=false){for (const block of blocks) {
     let following=49
-    if(block.table&&!block.paragraphs?.length){const t=block.table,total=t.widths.reduce((a,b)=>a+b,0),count=(row:string[])=>Math.max(...row.map((value,i)=>wrap(value,width*t.widths[i]/total-12,9).length),1);following=Math.min(240,(count(t.headings)+count(t.rows[0]??t.headings))*14+30)}
-    section(block.title,following);for (const text of block.paragraphs??[]) paragraph(text);if (block.table) table(block.table.headings,block.table.rows,block.table.widths)
+    if(block.table&&!block.paragraphs?.length&&!compact){const t=block.table,total=t.widths.reduce((a,b)=>a+b,0),count=(row:string[])=>Math.max(...row.map((value,i)=>wrap(value,width*t.widths[i]/total-12,tableSize).length),1);following=Math.min(240,(count(t.headings)+count(t.rows[0]??t.headings))*tableLeading+30)}
+    section(block.title,following);for (const text of block.paragraphs??[]) paragraph(text);if (block.table) {
+      if(compact){const t=block.table;for(const row of t.rows)paragraph(row.length===2?`${row[0]}: ${row[1]}`:row.map((cell,i)=>`${t.headings[i]}: ${cell}`).join(" | "));if(!t.rows.length)paragraph(t.headings.join(" | "))}
+      else table(block.table.headings,block.table.rows,block.table.widths)
+    }
     if(block.qrCode){if(block.qrCode.length>1000||!/^https?:\/\//.test(block.qrCode))throw new BusinessError(400,"Invalid document registration link.");ensure(90);const image=await pdf.embedPng(await QRCode.toBuffer(block.qrCode,{width:240,margin:2,errorCorrectionLevel:'M'}));page.drawImage(image,{x:margin,y:y-80,width:80,height:80});y-=92}
   }}
-  if(document.body){for(const node of document.body){if(node.type==="section")await drawBlocks(node.blocks);else if(node.type==="pageBreak")nextPage();else formatted(node)}}
+  if(document.body){for(const node of document.body){if(node.type==="section")await drawBlocks(node.blocks,node.compact);else if(node.type==="pageBreak")nextPage();else formatted(node)}}
   else{paragraph(document.opening);await drawBlocks(document.blocks);if (document.terms) { section("Terms and notes");paragraph(document.terms) }}
   if(document.showSignatory!==false){section("Issued by");paragraph(document.company.name);paragraph(document.issuer.signatory)}
   if (document.issuer.contact) paragraph(document.issuer.contact,9,muted)
   if(document.notice)paragraph(document.notice,9,muted)
-  pages.forEach((p,i)=>p.drawText(`${preview?"DRAFT | ":""}${document.reference} | Page ${i+1} / ${pages.length}`,{x:margin,y:34,size:8,font,color:muted}))
+  pages.forEach((p,i)=>{
+    if(footerLines.length){const ruleY=50+footerLines.length*10+4;p.drawLine({start:{x:margin,y:ruleY},end:{x:margin+width,y:ruleY},thickness:.4,color:muted});footerLines.forEach((line,index)=>p.drawText(line,{x:margin+(width-font.widthOfTextAtSize(line,8))/2,y:50+(footerLines.length-1-index)*10,size:8,font,color:muted}))}
+    // References can be long; retain the complete identity even with narrow pages.
+    const label=`${preview?"DRAFT | ":""}${document.reference} | Page ${i+1} / ${pages.length}`,size=Math.min(8,width/font.widthOfTextAtSize(label,1));p.drawText(label,{x:margin,y:34,size,font,color:muted})
+  })
   pdf.setTitle(document.title);pdf.setAuthor(document.company.name);pdf.setSubject(document.reference)
   return pdf.save()
 }

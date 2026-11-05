@@ -1,3 +1,37 @@
+## P13L lightweight shared document styling (2026-11-05)
+
+The existing PDF engine now accepts bounded, tenant-template presentation data:
+standard/letter/compact presets, text/title size, spacing, margins, dark colour
+palettes, table treatment, title/reference alignment, logo placement/size,
+repeating logos, a low-opacity logo watermark and a bounded repeating footer.
+The editor groups these controls into focused panels and generates a preview only
+on an explicit action. No additional rendering dependency, remote service, font
+asset, database table or schema migration is introduced.
+
+Order/property letters, payment receipts, commercial invoices/credits and statutory
+document preparation carry this data from the reviewed template into the frozen
+document payload. Custom quotation layouts use the same controls, renderer and
+accepted revision metadata. Standard quotations retain their existing path.
+Document-type required sections and all financial/access/signing rules remain in
+force. Existing issued PDFs continue to download their archived bytes.
+
+Selected layout sections can print their tables as compact labelled details. This
+retains source titles, all repeated applicants, every accepted cell and pending
+notices. It does not introduce formulas, arbitrary HTML/CSS or new customer fields.
+The font family stays fixed; only the required face variants are embedded, with a
+bounded warm-process cache for the existing font files. Branding images are embedded
+once per PDF and reused across pages.
+
+Local validation: 33 document/layout/quotation/storage/recovery checks passed.
+All ten editor scenarios passed across the main run and focused recheck, including
+draft-only styling, explicit preview, fresh review, immutable publication,
+read-only/mobile controls and required compact sections. Five-page stress-test
+files were approximately 22 KB; Unicode, long rows and repeated letterhead/footer
+placement passed and rendered samples were inspected. These fixture measurements
+are not a general production performance benchmark. Ewissen template wording and
+identity-field expansion are separate configuration/work items; no production
+settings or client records were changed during implementation.
+
 ## P13K application-wide page organization (2026-11-05)
 
 The source audit covers all 117 page routes and their composed view components.
