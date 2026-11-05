@@ -28,6 +28,13 @@ Hosted rollout and verification status must be recorded after validation.
 
 ## P13L lightweight shared document styling (2026-11-05)
 
+PDF paragraph spacing is consistent between multiline wording and editor nodes.
+Compact source details and the sign-off have deliberate group spacing, and the
+watermark is subdued. Sample correspondence and property details demonstrate a
+populated layout without reading or writing customer records. This changes newly
+rendered previews/documents only; it never rewrites published template content,
+unpublished browser drafts or archived issued files.
+
 The existing PDF engine now accepts bounded, tenant-template presentation data:
 standard/letter/compact presets, text/title size, spacing, margins, dark colour
 palettes, table treatment, title/reference alignment, logo placement/size,

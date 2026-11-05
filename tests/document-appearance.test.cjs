@@ -46,6 +46,22 @@ test('unconfigured and explicit standard presentation produce identical text geo
  assert.deepEqual(geometry(calls.slice(0,middle)),geometry(calls.slice(middle)))
 })
 
+test('blank lines in wording use the same paragraph rhythm as editor paragraphs',async t=>{
+ const calls=capture(t),runs=text=>({type:'paragraph',align:'left',runs:[{text}]})
+ const common={...base(),blocks:[],showSignatory:false,appearance:appearance('letter')}
+ await renderBusinessDocument({...common,body:[runs('FIRST\n\nSECOND')]},true);const middle=calls.length
+ await renderBusinessDocument({...common,body:[runs('FIRST'),runs('SECOND')]},true)
+ const gap=rows=>rows.find(r=>r.text==='FIRST').y-rows.find(r=>r.text==='SECOND').y
+ assert.equal(gap(calls.slice(0,middle)),gap(calls.slice(middle)));assert(gap(calls.slice(middle))>16)
+})
+
+test('sign-off keeps company, signature caption and contact together above the footer',async t=>{
+ const calls=capture(t),document={...base(),appearance:appearance('letter',{footer:'Example footer'}),issuer:{address:'',contact:'office@example.test',signatory:'Authorised signatory'},body:[{type:'paragraph',align:'left',runs:[{text:Array.from({length:48},(_,i)=>'LINE_'+i).join('\n')}]}]}
+ await renderBusinessDocument(document,true)
+ const issued=calls.find(r=>r.text==='Issued by'),name=calls.find(r=>r.text===document.company.name),caption=calls.find(r=>r.text==='Authorised signatory'),contact=calls.find(r=>r.text==='office@example.test')
+ assert.equal(issued.page,name.page);assert.equal(name.page,caption.page);assert.equal(caption.page,contact.page);assert(issued.size<name.size);assert(name.y-caption.y>=25);assert(contact.y>70)
+})
+
 test('letter and compact themes paginate long tables with repeated branding, protected footers and no lost rows',async t=>{
  const calls=capture(t),imageCalls=[],drawImage=PDFPage.prototype.drawImage;t.mock.method(PDFPage.prototype,'drawImage',function(image,options){imageCalls.push(options);return drawImage.call(this,image,options)})
  const logo=await require('sharp')({create:{width:400,height:120,channels:4,background:'#e58524'}}).png().toBuffer()
@@ -78,4 +94,7 @@ test('booking intimation has a concise starter while customer/property identity 
  for(const key of ['payment-schedule','commercial-lines','financial-position','receivable-schedule'])assert.equal(allotment.templateCatalog.sections.find(s=>s.key===key).required,true)
  const sample=booking.sample({...booking.defaults,appearance:appearance('letter')},catalog,{id:'example',name:'Example Business'})
  assert(!sample.body.some(n=>n.type==='section'&&n.blocks.some(b=>b.key==='payment-schedule')))
+  assert.equal(sample.blocks.filter(block=>block.key==='participants').length,2)
+  assert(sample.blocks.find(block=>block.key==='participants').paragraphs.some(p=>p.includes('Example address')))
+  assert(sample.blocks.find(block=>block.key==='property-units').table.rows.some(row=>row.includes('SAMPLE-PLOT-106')))
 })

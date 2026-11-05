@@ -33,7 +33,7 @@ export async function renderBusinessDocument(document: PrintableDocument, previe
   for (const name of requiredFonts) variants[name] = await pdf.embedFont(await fontBytes(name), { subset: true })
   const supported = new Set(font.getCharacterSet()), ink = style.colour === "black" ? rgb(.08,.08,.08) : style.colour === "teal" ? rgb(.04,.28,.3) : rgb(.1,.15,.2), muted = style.colour === "black" ? rgb(.3,.3,.3) : rgb(.36,.4,.44), pale = style.colour === "black" ? rgb(.95,.95,.95) : rgb(.94,.96,.97)
   const margin = { standard: 42, narrow: 32, wide: 54 }[style.margins], width = 595 - margin * 2, top = 842 - margin - 5
-  const gap = style.spacing === "compact" ? 3 : 6, after = style.spacing === "compact" ? 4 : 6
+  const gap = style.spacing === "compact" ? 3 : 6, after = style.spacing === "compact" ? 6 : 9
   const tableSize = style.fontSize - 1, tableLeading = tableSize + (style.spacing === "compact" ? 3 : 5), padding = style.spacing === "compact" ? 8 : 12
   let page = pdf.addPage([595,842]), y = top, logo: PDFImage | undefined
   const pages = [page]
@@ -49,7 +49,7 @@ export async function renderBusinessDocument(document: PrintableDocument, previe
   function watermark() {
     if (!logo || !style.watermark) return
     const scaled = logo.scale(Math.min(300/logo.width,160/logo.height))
-    page.drawImage(logo,{x:(595-scaled.width)/2,y:(842-scaled.height)/2,width:scaled.width,height:scaled.height,opacity:.07})
+    page.drawImage(logo,{x:(595-scaled.width)/2,y:(842-scaled.height)/2,width:scaled.width,height:scaled.height,opacity:.035})
   }
   function nextPage() { if (pages.length >= 100) throw new BusinessError(413, "This document exceeds 100 pages. Shorten the template or saved details."); page = pdf.addPage([595,842]); pages.push(page); y = top; watermark(); if(style.repeatLogo)drawLogo() }
   function ensure(height: number) { if (y-height < bottom) nextPage() }
@@ -72,7 +72,7 @@ export async function renderBusinessDocument(document: PrintableDocument, previe
   const footerLines = style.footer ? wrap(style.footer,width,8) : []
   if (footerLines.length > 6) throw new BusinessError(400,"The footer is too long for these margins. Shorten it before previewing.")
   const bottom = Math.max(margin+23, footerLines.length ? footerLines.length*10+64 : 0)
-  function paragraph(value: string, size = style.fontSize, color = ink, align: "left" | "center" | "right" = "left") { if (!value) return; for (const line of wrap(value,width,size)) { ensure(size+7); const used=font.widthOfTextAtSize(line,size),x=margin+(align==="center"?(width-used)/2:align==="right"?width-used:0);page.drawText(line,{x,y,size,font,color}); y-=size+gap }; y-=after }
+  function paragraph(value: string, size = style.fontSize, color = ink, align: "left" | "center" | "right" = "left", trailing = after) { if (!value) return; for (const line of wrap(value,width,size)) { if(!line){ensure(after);y-=after;continue}ensure(size+7); const used=font.widthOfTextAtSize(line,size),x=margin+(align==="center"?(width-used)/2:align==="right"?width-used:0);page.drawText(line,{x,y,size,font,color}); y-=size+gap }; y-=trailing }
   function formatted(node:Extract<DocumentFlow[number],{runs:unknown}>) {
     const size=node.type==="heading"?node.level===1?style.fontSize+7:node.level===3?style.fontSize+1:style.fontSize+3:style.fontSize
     // Keep a template heading with the first line of the following content.
@@ -86,7 +86,7 @@ export async function renderBusinessDocument(document: PrintableDocument, previe
       const clean=run.text.replace(/\r/g,"").replace(/\t/g," ").replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g,"")
       if([...clean].some(c=>c!=="\n"&&!supported.has(c.codePointAt(0)!)))throw new BusinessError(400,"The PDF font cannot render some characters. Ask your administrator about language support.")
       for(const word of clean.match(/\n|[^\S\n]+|[^\s]+/g)??[]){
-        if(word==="\n"){flush();continue}
+        if(word==="\n"){if(line.length)flush();else{ensure(after);y-=after}continue}
         const w=f.widthOfTextAtSize(word,size)
         if(used+w>width&&line.length)flush()
         if(!line.length&&/^\s+$/.test(word))continue
@@ -96,7 +96,7 @@ export async function renderBusinessDocument(document: PrintableDocument, previe
     }
     if(line.length)flush();y-=after
   }
-  function section(title: string, following=49) { ensure(wrap(title,width,style.fontSize+2).length*(style.fontSize+2+gap)+following); y-=style.spacing==="compact"?3:7; paragraph(title,style.fontSize+2); }
+  function section(title: string, following=49) { const before=style.spacing==="compact"?6:10;ensure(before+wrap(title,width,style.fontSize+1).length*(style.fontSize+1+gap)+3+following);y-=before;paragraph(title,style.fontSize+1,ink,"left",3); }
   function table(headings: string[], rows: string[][], weights: number[]) {
     if (!headings.length || headings.length !== weights.length || weights.some(value => value <= 0) || rows.some(row => row.length !== headings.length)) throw new Error("Invalid document table")
     const total = weights.reduce((a,b)=>a+b,0), widths = weights.map(value=>width*value/total)
@@ -138,15 +138,16 @@ export async function renderBusinessDocument(document: PrintableDocument, previe
   async function drawBlocks(blocks:DocumentPayload["blocks"],compact=false){for (const block of blocks) {
     let following=49
     if(block.table&&!block.paragraphs?.length&&!compact){const t=block.table,total=t.widths.reduce((a,b)=>a+b,0),count=(row:string[])=>Math.max(...row.map((value,i)=>wrap(value,width*t.widths[i]/total-12,tableSize).length),1);following=Math.min(240,(count(t.headings)+count(t.rows[0]??t.headings))*tableLeading+30)}
-    section(block.title,following);for (const text of block.paragraphs??[]) paragraph(text);if (block.table) {
-      if(compact){const t=block.table;for(const row of t.rows)paragraph(row.length===2?`${row[0]}: ${row[1]}`:row.map((cell,i)=>`${t.headings[i]}: ${cell}`).join(" | "));if(!t.rows.length)paragraph(t.headings.join(" | "))}
+    section(block.title,following);for (const text of block.paragraphs??[]) paragraph(text,style.fontSize,ink,"left",compact?2:after);if (block.table) {
+      if(compact){const t=block.table;for(const row of t.rows)paragraph(row.length===2?`${row[0]}: ${row[1]}`:row.map((cell,i)=>`${t.headings[i]}: ${cell}`).join(" | "),style.fontSize,ink,"left",2);if(!t.rows.length)paragraph(t.headings.join(" | "))}
       else table(block.table.headings,block.table.rows,block.table.widths)
     }
+    if(compact)y-=after-2
     if(block.qrCode){if(block.qrCode.length>1000||!/^https?:\/\//.test(block.qrCode))throw new BusinessError(400,"Invalid document registration link.");ensure(90);const image=await pdf.embedPng(await QRCode.toBuffer(block.qrCode,{width:240,margin:2,errorCorrectionLevel:'M'}));page.drawImage(image,{x:margin,y:y-80,width:80,height:80});y-=92}
   }}
   if(document.body){for(const node of document.body){if(node.type==="section")await drawBlocks(node.blocks,node.compact);else if(node.type==="pageBreak")nextPage();else formatted(node)}}
   else{paragraph(document.opening);await drawBlocks(document.blocks);if (document.terms) { section("Terms and notes");paragraph(document.terms) }}
-  if(document.showSignatory!==false){section("Issued by");paragraph(document.company.name);paragraph(document.issuer.signatory)}
+  if(document.showSignatory!==false){const contactHeight=document.issuer.contact?wrap(document.issuer.contact,width,9).length*(9+gap)+after:0;const height=6+9+gap+3+(wrap(document.company.name,width).length+wrap(document.issuer.signatory,width).length)*(style.fontSize+gap)+after*2+12+contactHeight;ensure(height);y-=6;paragraph("Issued by",9,muted,"left",3);paragraph(document.company.name);y-=12;paragraph(document.issuer.signatory)}
   if (document.issuer.contact) paragraph(document.issuer.contact,9,muted)
   if(document.notice)paragraph(document.notice,9,muted)
   pages.forEach((p,i)=>{

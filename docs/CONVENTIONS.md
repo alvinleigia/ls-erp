@@ -2,6 +2,11 @@
 
 ## Shared PDF presentation (P13L)
 
+- Blank lines inside wording fields and separate editor paragraphs use the same
+  vertical rhythm. Compact source sections group their accepted details, and the
+  sign-off keeps its company, caption and contact together above the footer.
+  Sample previews use explicit example correspondence; industry examples remain
+  owned by their provider and never create tenant business records.
 - Document fields keep booking, order and issue dates separate. `order.booking-date`
   reads the accepted quotation's `content.bookingDate`; `order.date` remains the
   saved sales-order date. An absent optional booking date prints `Not supplied`,

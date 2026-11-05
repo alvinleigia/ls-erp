@@ -14,6 +14,7 @@ import { recordLimits } from "@/platform/access/rules"
 import { orderTemplateCatalog } from "@/modules/sales-orders/document-template"
 import { sampleDocument } from "@/modules/sales-orders/document-template-sample"
 import type { TemplateCatalog } from "@/platform/documents/layout"
+import type { DocumentContent } from "@/platform/documents/validation"
 const roles={CUSTOMER:"Primary applicant",ADDITIONAL_CUSTOMER:"Co-applicant",REPRESENTATIVE:"Representative"}
 
 // A booking intimation identifies the accepted customers and reserved property.
@@ -27,6 +28,9 @@ const bookingTemplateCatalog:TemplateCatalog={...orderTemplateCatalog,sections:[
   {type:"paragraph",content:[{type:"documentField",attrs:{key:"template.terms"}}]},
 ]}}
 type FinancialReader=(tx:Prisma.TransactionClient,actor:BusinessActor,id:string)=>Promise<ReceivableDocumentEvidence>
+function samplePropertyDocument(content:DocumentContent,catalog:TemplateCatalog,company:{id:string;name:string}) {
+  return sampleDocument(content,catalog,company,[{key:'property-units',title:'Property details',table:{headings:['Detail','Value'],widths:[1,2],rows:[['Project','Example Gardens'],['Unit','SAMPLE-PLOT-106'],['Area','250 sq m'],['Location','Example City, Goa, India']]}}])
+}
 function savedUnits(context:OrderDocumentContext) {
   const refs=context.snapshot.items?.filter(row=>row.kind==="UNIT")??[]
   if(!refs.length)throw new BusinessError(404,"No saved property units are available for this document.")
@@ -62,11 +66,11 @@ async function propertyBlocks(tx:Prisma.TransactionClient,actor:BusinessActor,co
 export function realEstateOrderDocuments(readFinancial:FinancialReader):DocumentProvider<OrderDocumentContext>[] {
   const base={address:"",contact:"",signatory:"Authorised signatory",terms:"",useTenantLogo:false,enabled:false}
   return [
-    {sample:sampleDocument,templateCatalog:bookingTemplateCatalog,key:"real-estate.booking-intimation",name:"Booking intimation letter",code:"BI",modules:["realEstate","catalog"],requirements:["projects.read","catalogItems.read","unitReservations.read"],defaults:{...base,title:"Booking intimation letter",opening:"We confirm that the following booking has been recorded. Unit allocation is recorded separately."},
+    {sample:samplePropertyDocument,templateCatalog:bookingTemplateCatalog,key:"real-estate.booking-intimation",name:"Booking intimation letter",code:"BI",modules:["realEstate","catalog"],requirements:["projects.read","catalogItems.read","unitReservations.read"],defaults:{...base,title:"Booking intimation letter",opening:"We confirm that the following booking has been recorded. Unit allocation is recorded separately."},
       async authorizeDownload(tx,actor,context){await authorizeProperties(tx,actor,context)},
       async blocks(tx,actor,context){const property=await propertyBlocks(tx,actor,context,false);return {blocks:[...orderDocumentBlocks(context,roles),...property.blocks],evidence:property.evidence}},
     },
-    {sample:sampleDocument,templateCatalog:{...orderTemplateCatalog,sections:[...orderTemplateCatalog.sections,{key:"property-units",label:"Property units",required:true},{key:"financial-position",label:"Financial position",required:true},{key:"receivable-schedule",label:"Receivable schedule",required:true}]},key:"real-estate.unit-allotment",name:"Unit allotment letter",code:"UA",modules:["realEstate","catalog","receivables"],requirements:["projects.read","catalogItems.read","unitReservations.read","receivables.read","orderPayments.read"],defaults:{...base,title:"Unit allotment letter",opening:"This letter records the confirmed unit allocation and the commercial terms below."},
+    {sample:samplePropertyDocument,templateCatalog:{...orderTemplateCatalog,sections:[...orderTemplateCatalog.sections,{key:"property-units",label:"Property units",required:true},{key:"financial-position",label:"Financial position",required:true},{key:"receivable-schedule",label:"Receivable schedule",required:true}]},key:"real-estate.unit-allotment",name:"Unit allotment letter",code:"UA",modules:["realEstate","catalog","receivables"],requirements:["projects.read","catalogItems.read","unitReservations.read","receivables.read","orderPayments.read"],defaults:{...base,title:"Unit allotment letter",opening:"This letter records the confirmed unit allocation and the commercial terms below."},
       async authorizeDownload(tx,actor,context){await authorizeProperties(tx,actor,context);await readFinancial(tx,actor,context.order.id)},
       async blocks(tx,actor,context){
         const property=await propertyBlocks(tx,actor,context,true),financial=await readFinancial(tx,actor,context.order.id),money=(value:string)=>formatDecimalCurrency(value,context.order.currency,context.snapshot)
