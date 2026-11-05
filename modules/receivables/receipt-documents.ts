@@ -1,3 +1,4 @@
+import { archivedLetterheadAvailable, type DocumentVariant } from "@/platform/documents/letterhead"
 import { resolveCompanyDocumentContent } from "@/platform/companies/document-settings"
 import type { OrderReceipt,Prisma,PrismaClient } from '@prisma/client'
 import { createDocumentService,validateDocumentSize,type DocumentOwner } from '@/platform/documents/service'
@@ -59,15 +60,15 @@ export function createReceiptDocumentService(db:PrismaClient,identity:DocumentId
  }
  const service=createDocumentService(db,identity,owner,storage,render)
  return {...service,
-  download(id:string,documentId:string,providerKey:string,acknowledgeReversal=false){
+  download(id:string,documentId:string,providerKey:string,acknowledgeReversal=false,variant:DocumentVariant="digital"){
    const guarded={...paymentReceiptProvider,async authorizeDownload(_tx:Prisma.TransactionClient,_actor:Parameters<DocumentOwner<ReceiptDocumentContext>['context']>[1],c:ReceiptDocumentContext){if(c.payment.status==='REVERSED'&&!acknowledgeReversal)throw new BusinessError(409,'This payment was reversed. Explicitly acknowledge that you are downloading an original historical receipt.')}}
-   return createDocumentService(db,identity,{...owner,providers:[guarded]},storage,render).download(id,documentId,providerKey)
+   return createDocumentService(db,identity,{...owner,providers:[guarded]},storage,render).download(id,documentId,providerKey,variant)
   },
   async list(id:string,page=1){return db.$transaction(async tx=>{
    const actor=await authorizeBusinessOperation(tx,identity,['paymentDocuments.read','orderPayments.read','receivables.read','salesOrders.read'],['salesOrders','receivables']),c=await owner.context(tx,actor,id),where={tenantId:actor.tenantId,paymentId:id}
-   const [items,total]=await Promise.all([tx.orderReceiptDocument.findMany({where,select:{id:true,providerKey:true,version:true,reference:true,templateVersion:true,supersedesId:true,reason:true,createdAt:true},orderBy:[{createdAt:'desc'},{id:'asc'}],skip:(page-1)*10,take:10}),tx.orderReceiptDocument.count({where})]),latest=await tx.orderReceiptDocument.findFirst({where,orderBy:{version:'desc'},select:{id:true,providerKey:true,version:true,reference:true}})
+   const [items,total]=await Promise.all([tx.orderReceiptDocument.findMany({where,select:{id:true,providerKey:true,version:true,reference:true,templateVersion:true,supersedesId:true,reason:true,createdAt:true,archive:true},orderBy:[{createdAt:'desc'},{id:'asc'}],skip:(page-1)*10,take:10}),tx.orderReceiptDocument.count({where})]),latest=await tx.orderReceiptDocument.findFirst({where,orderBy:{version:'desc'},select:{id:true,providerKey:true,version:true,reference:true}})
    const recordAccess=await recordActionAccess(actor,'paymentDocuments',id,tx,action=>tx.salesOrder.findFirst({where:{AND:[salesOrderRecordScope({...actor,operation:{resource:'paymentDocuments',action}},'paymentDocuments'),{id:c.order.id}]},select:{id:true}}))
-   return {items:items.map(row=>({...row,isLatest:row.id===latest?.id})),latest:latest?[latest]:[],total,page,pageSize:10,totalPages:Math.max(1,Math.ceil(total/10)),providers:[{key:KEY,name:'Payment receipt'}],recordAccess,canIssue:c.payment.status==='POSTED'&&c.order.status==='CONFIRMED'&&!!recordAccess.permissions['paymentDocuments.create']&&!!recordAccess.permissions['paymentDocuments.export'],historical:c.payment.status==='REVERSED',notice:c.payment.status==='REVERSED'?'This payment was reversed. Original receipts remain historical evidence and do not confirm a current payment.':''}
+   return {items:items.map(({archive,...row})=>({...row,letterheadAvailable:archivedLetterheadAvailable(archive),isLatest:row.id===latest?.id})),latest:latest?[latest]:[],total,page,pageSize:10,totalPages:Math.max(1,Math.ceil(total/10)),providers:[{key:KEY,name:'Payment receipt'}],recordAccess,canIssue:c.payment.status==='POSTED'&&c.order.status==='CONFIRMED'&&!!recordAccess.permissions['paymentDocuments.create']&&!!recordAccess.permissions['paymentDocuments.export'],historical:c.payment.status==='REVERSED',notice:c.payment.status==='REVERSED'?'This payment was reversed. Original receipts remain historical evidence and do not confirm a current payment.':''}
   },{maxWait:20000,timeout:20000})},
  }
 }

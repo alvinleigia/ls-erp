@@ -13,7 +13,7 @@ const tenant='documents_'+randomUUID(),foreignTenant='documents_'+randomUUID(),p
 function client(tenantId,root=false){const u=new URL(url);if(!root){u.username='crm_test_runtime';u.password=''}const pool=new Pool({connectionString:u.toString(),max:6});pools.push(pool);const db=new PrismaClient({adapter:new TenantPgAdapter(pool,{tenantId,bypass:root})});clients.push(db);return db}
 const root=client(undefined,true),db=client(tenant),foreignDb=client(foreignTenant),identity=u=>({tenantId:u.tenantId,userId:u.id}),status=code=>e=>e.status===code
 const ACK='order-acknowledgement',BI='real-estate.booking-intimation',UA='real-estate.unit-allotment',objects=new Map(),calls={uploads:0,removals:0,urls:0}
-const storage={async upload(t,source,id,bytes){calls.uploads++;const path=`${t}/orders/${source}/${id}/${randomUUID()}.pdf`;objects.set(path,Buffer.from(bytes));return {path,bytes:bytes.length,sha256:createHash('sha256').update(bytes).digest('hex')}},async remove(path){calls.removals++;objects.delete(path)},async url(path){calls.urls++;assert(objects.has(path));return 'https://documents.example.test/'+path}}
+const storage={async read(archive){assert(objects.has(archive.path));return Buffer.from(objects.get(archive.path))},async upload(t,source,id,bytes){calls.uploads++;const path=`${t}/orders/${source}/${id}/${randomUUID()}.pdf`;objects.set(path,Buffer.from(bytes));return {path,bytes:bytes.length,sha256:createHash('sha256').update(bytes).digest('hex')}},async remove(path){calls.removals++;objects.delete(path)},async url(path){calls.urls++;assert(objects.has(path));return 'https://documents.example.test/'+path}}
 const fakeRender=async()=>Buffer.from('%PDF-synthetic')
 let admin,staff,outsider,foreign,crm,orders,catalog,reservations,finance,company,project,category,contact,additional,secondApplicant,pipeline,stage
 const docs=(user=admin,options={},connection=db)=>applicationOrderDocuments(connection,identity(user),{storage,render:fakeRender,...options})
@@ -273,4 +273,22 @@ test('provider scalar fields use authorised accepted property facts, reject mult
   await docs().download(single.order.id,issued.id,BI);assert.deepEqual(objects.get(issued.archive.path),bytes)
   assert.deepEqual((await root.salesOrderDocument.findUniqueOrThrow({where:{tenantId_id:{tenantId:tenant,id:issued.id}}})).snapshot,saved)
  }finally{await publish(BI,current.content)}
+})
+
+test('letterhead copies use frozen issued bytes with no extra upload and preserve access checks',async()=>{
+ const previous=await root.businessCompany.findUniqueOrThrow({where:{id:company.id}}),s=docs(admin,{render:renderBusinessDocument});await publish(ACK)
+ const old=await fixture(),oldPrepared=await s.prepare(old.order.id,{providerKey:ACK}),oldIssued=await s.issue(old.order.id,input(oldPrepared))
+ await assert.rejects(s.download(old.order.id,oldIssued.id,ACK,'letterhead'),status(409))
+ try{
+  await root.businessCompany.update({where:{id:company.id},data:{documentSettings:{...previous.documentSettings,letterhead:{enabled:true,topMm:65,bottomMm:25}},version:{increment:1}}})
+  const f=await fixture(),p=await s.prepare(f.order.id,{providerKey:ACK});assert.equal(p.payload.appearance.letterhead.topMm,65)
+  const preview=await s.preview(f.order.id,{providerKey:ACK,previewHash:p.fingerprint,variant:'letterhead'});assert.equal(Buffer.from(preview).subarray(0,5).toString(),'%PDF-')
+  const row=await s.issue(f.order.id,input(p)),before=Buffer.from(objects.get(row.archive.path)),uploads=calls.uploads;assert.equal(row.archive.letterhead,true)
+  const listed=await s.list(f.order.id);assert.equal(listed.items[0].letterheadAvailable,true);assert.equal(Object.hasOwn(listed.items[0],'archive'),false)
+  const print=await s.download(f.order.id,row.id,ACK,'letterhead');assert.equal(Buffer.from(print).subarray(0,5).toString(),'%PDF-');assert.equal(calls.uploads,uploads)
+  await root.businessCompany.update({where:{id:company.id},data:{documentSettings:{letterhead:{enabled:false,topMm:80,bottomMm:50}},version:{increment:1}}})
+  assert.deepEqual(await s.download(f.order.id,row.id,ACK,'letterhead'),print);assert.deepEqual(objects.get(row.archive.path),before);assert.match(await s.download(f.order.id,row.id,ACK),/^https:/)
+  await assert.rejects(docs(outsider).download(f.order.id,row.id,ACK,'letterhead'),status(404));await assert.rejects(docs(foreign,{},foreignDb).download(f.order.id,row.id,ACK,'letterhead'),status(403))
+  assert.equal(await root.salesOrderDocument.count({where:{tenantId:tenant,orderId:f.order.id}}),1)
+ }finally{await root.businessCompany.update({where:{id:company.id},data:{documentSettings:previous.documentSettings,version:{increment:1}}})}
 })

@@ -12,6 +12,8 @@ import type { DocumentIdentity, DocumentPayload, DocumentProvider, DocumentStora
 import type { ArchivedPdf } from "../storage/documents"
 import type { renderBusinessDocument } from "./pdf"
 import { documentHash } from "./hash"
+import { letterheadPdf } from "./letterhead-pdf"
+import type { DocumentVariant } from "./letterhead"
 
 type Tx = Prisma.TransactionClient
 export type DocumentOwner<C> = {
@@ -23,7 +25,7 @@ export type DocumentOwner<C> = {
   save: (tx: Tx, actor: BusinessActor, sourceId: string, data: { id: string; requestKey: string; requestHash: string; prepared: PreparedDocument; archive: ArchivedPdf; reason: string }) => Promise<StoredDocument>
 }
 export function createDocumentService<C>(db: PrismaClient, identity: DocumentIdentity, owner: DocumentOwner<C>, storage: DocumentStorage, renderer?: typeof renderBusinessDocument) {
-  const render=renderer??(async(payload:DocumentPayload,preview:boolean)=>{const pdf=await import("./pdf");return pdf.renderBusinessDocument(payload,preview)})
+  const render=renderer??(async(payload:DocumentPayload,preview:boolean,variant:DocumentVariant="digital")=>{const pdf=await import("./pdf");return pdf.renderBusinessDocument(payload,preview,variant)})
   const providers = new Map(owner.providers.map(provider => [provider.key, provider]))
   if(providers.size!==owner.providers.length||new Set(owner.providers.map(row=>row.code)).size!==owner.providers.length||owner.providers.some(row=>! /^[A-Z0-9]{2,8}$/.test(row.code)))throw new Error("Invalid document provider registration")
   const providerFor = (key: string) => { const provider = providers.get(key); if (!provider) throw new BusinessError(400, "Choose a registered document type."); return provider }
@@ -53,10 +55,10 @@ export function createDocumentService<C>(db: PrismaClient, identity: DocumentIde
   return {
     prepare,
     async preview(sourceId: string, input: unknown) {
-      const { previewHash, ...data } = documentPreviewSchema.parse(input)
+      const { previewHash, variant, ...data } = documentPreviewSchema.parse(input)
       const prepared = await prepare(sourceId, data)
       if (prepared.fingerprint !== previewHash) throw new BusinessError(409, "The document facts changed. Prepare and review a new preview.")
-      return render(prepared.payload, true)
+      return render(prepared.payload, true, variant)
     },
     async issue(sourceId: string, input: unknown) {
       const data = documentIssueSchema.parse(input), provider = providerFor(data.providerKey), requestHash = documentHash(data)
@@ -78,7 +80,7 @@ export function createDocumentService<C>(db: PrismaClient, identity: DocumentIde
             if (existing) { if (existing.requestHash !== requestHash) throw new BusinessError(409, "This request was already used for another document."); await provider.authorizeDownload(tx, actor, context, existing.snapshot); return existing }
             const current = await owner.prepare(tx, actor, context, provider, data)
             if (current.fingerprint !== prepared.fingerprint) throw new BusinessError(409, "The document facts changed during generation. Prepare and review a new preview.")
-            return await owner.save(tx, actor, sourceId, { id, requestKey: data.requestKey, requestHash, prepared, archive: { ...candidate, issuedAt: new Date().toISOString(), issuedBy: actor.userId }, reason: data.reason })
+            return await owner.save(tx, actor, sourceId, { id, requestKey: data.requestKey, requestHash, prepared, archive: { ...candidate, issuedAt: new Date().toISOString(), issuedBy: actor.userId, ...(prepared.payload.appearance?.letterhead ? { letterhead: true } : {}) }, reason: data.reason })
           } catch (error) { knownRollback = true; throw error }
         })
       } catch (error) {
@@ -90,7 +92,7 @@ export function createDocumentService<C>(db: PrismaClient, identity: DocumentIde
       if (committed.archive.path !== candidate.path) await storage.remove(candidate.path).catch(() => {})
       return committed
     },
-    async download(sourceId: string, id: string, providerKey: string) {
+    async download(sourceId: string, id: string, providerKey: string, variant: DocumentVariant = "digital") {
       const provider = providerFor(providerKey)
       const row = await run(sourceId, provider, "export", async (tx, actor, context) => {
         const stored = await owner.find(tx, actor, sourceId, { id })
@@ -98,6 +100,10 @@ export function createDocumentService<C>(db: PrismaClient, identity: DocumentIde
         await provider.authorizeDownload(tx, actor, context, stored.snapshot)
         return stored
       })
+      if (variant === "letterhead") {
+        if (!row.archive.letterhead || !storage.read) throw new BusinessError(409, "Letterhead printing is unavailable for this issued version. Use its original PDF or prepare a reviewed replacement.")
+        return letterheadPdf(await storage.read(row.archive))
+      }
       return storage.url(row.archive.path, `${row.reference.replace(/[^a-zA-Z0-9_-]/g, "-")}.pdf`)
     },
   }

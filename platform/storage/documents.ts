@@ -4,7 +4,15 @@ import { storageClient } from "./client"
 
 export const DOCUMENT_BUCKET = "tenant-documents"
 export const DOCUMENT_LIMIT = 10 * 1024 * 1024
-export type ArchivedPdf = { path: string; bytes: number; sha256: string; issuedAt: string; issuedBy: string }
+export type ArchivedPdf = { path: string; bytes: number; sha256: string; issuedAt: string; issuedBy: string; letterhead?: boolean }
+export async function readArchivedDocumentPdf(archive: ArchivedPdf) {
+  if (!Number.isInteger(archive.bytes) || archive.bytes <= 0 || archive.bytes > DOCUMENT_LIMIT) throw new BusinessError(409, "Invalid archived PDF size.")
+  const { data, error } = await storageClient().storage.from(DOCUMENT_BUCKET).download(validPath(archive.path))
+  if (error || !data) throw new BusinessError(503, "The archived PDF is unavailable. Please try again.")
+  const bytes = new Uint8Array(await data.arrayBuffer())
+  if (bytes.length !== archive.bytes || createHash("sha256").update(bytes).digest("hex") !== archive.sha256) throw new BusinessError(409, "The archived PDF failed its integrity check.")
+  return bytes
+}
 function validPath(path: string) {
   if (!/^[a-zA-Z0-9_-]+\/(?:quotations\/[a-zA-Z0-9_-]+\/[1-9][0-9]*|(?:orders|receipts|invoices)\/[a-zA-Z0-9_-]+\/[a-f0-9-]{36})\/[a-f0-9-]{36}\.pdf$/.test(path)) throw new Error("Invalid archived document path")
   return path

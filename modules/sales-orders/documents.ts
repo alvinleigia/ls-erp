@@ -1,3 +1,4 @@
+import { archivedLetterheadAvailable } from "@/platform/documents/letterhead"
 import type { Prisma, PrismaClient, SalesOrder } from "@prisma/client"
 import { resolveCompanyDocumentContent } from "@/platform/companies/document-settings"
 import { salesOrderRecordScope } from "@/platform/access/record-scope"
@@ -74,11 +75,11 @@ export function createOrderDocumentService(db:PrismaClient,identity:DocumentIden
           try{await provider.authorizeDownload(tx,actor,context,undefined);allowed.push(provider)}catch(error){if(!(error instanceof BusinessError)||![403,404].includes(error.status))throw error}
         }
         const where={tenantId:actor.tenantId,orderId:id,providerKey:{in:allowed.map(provider=>provider.key)}}
-        const [items,total]=await Promise.all([tx.salesOrderDocument.findMany({where,select:{id:true,providerKey:true,version:true,reference:true,templateVersion:true,supersedesId:true,reason:true,createdAt:true},orderBy:[{createdAt:"desc"},{id:"asc"}],skip:(page-1)*10,take:10}),tx.salesOrderDocument.count({where})])
+        const [items,total]=await Promise.all([tx.salesOrderDocument.findMany({where,select:{id:true,providerKey:true,version:true,reference:true,templateVersion:true,supersedesId:true,reason:true,createdAt:true,archive:true},orderBy:[{createdAt:"desc"},{id:"asc"}],skip:(page-1)*10,take:10}),tx.salesOrderDocument.count({where})])
         const maxima=await tx.salesOrderDocument.groupBy({by:["providerKey"],where,_max:{version:true}})
         const latest=maxima.length?await tx.salesOrderDocument.findMany({where:{...where,OR:maxima.map(row=>({providerKey:row.providerKey,version:row._max.version!}))},select:{id:true,providerKey:true,version:true,reference:true}}):[]
         const recordAccess=await recordActionAccess(actor,"orderDocuments",id,tx,action=>tx.salesOrder.findFirst({where:{AND:[salesOrderRecordScope({...actor,operation:{resource:"orderDocuments",action}},"orderDocuments"),{id}]},select:{id:true}}))
-        return {items:items.map(row=>({...row,isLatest:latest.some(current=>current.id===row.id)})),latest,total,page,pageSize:10,totalPages:Math.max(1,Math.ceil(total/10)),providers:potential.map(({key,name})=>({key,name})),recordAccess,canIssue:context.order.status==="CONFIRMED"&&!!context.order.reference&&!!context.order.orderedOn&&!!recordAccess.permissions["orderDocuments.create"]&&!!recordAccess.permissions["orderDocuments.export"]}
+        return {items:items.map(({archive,...row})=>({...row,letterheadAvailable:archivedLetterheadAvailable(archive),isLatest:latest.some(current=>current.id===row.id)})),latest,total,page,pageSize:10,totalPages:Math.max(1,Math.ceil(total/10)),providers:potential.map(({key,name})=>({key,name})),recordAccess,canIssue:context.order.status==="CONFIRMED"&&!!context.order.reference&&!!context.order.orderedOn&&!!recordAccess.permissions["orderDocuments.create"]&&!!recordAccess.permissions["orderDocuments.export"]}
       },{isolationLevel:"Serializable",maxWait:20000,timeout:20000})
     },
   }

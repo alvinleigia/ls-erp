@@ -1,4 +1,4 @@
-import { PDFDocument, PDFName, PDFString, rgb, type PDFFont, type PDFImage } from "pdf-lib"
+import { PDFDocument, PDFName, PDFString, PDFOperator, PDFOperatorNames, rgb, type PDFPage, type PDFFont, type PDFImage } from "pdf-lib"
 import fontkit from "@pdf-lib/fontkit"
 import { readFile } from "node:fs/promises"
 import path from "node:path"
@@ -10,6 +10,8 @@ import QRCode from "qrcode"
 import type { DocumentFlow } from "./layout"
 import { documentLinkSchema } from "./layout"
 import { defaultDocumentAppearance, documentAppearanceSchema } from "./appearance"
+import type { DocumentVariant } from "./letterhead"
+import { brandingLayer, letterheadPdf, markLetterheadPdf } from "./letterhead-pdf"
 
 // A fixed, bounded font set is shared by warm requests; PDF font objects remain per document.
 const fontFiles = new Map<string, Promise<Buffer>>()
@@ -21,9 +23,12 @@ function fontBytes(name: string) {
 
 // Registered providers supply plain text and tables. No HTML, expressions,
 // arbitrary image URLs or industry-specific fields enter this renderer.
-export async function renderBusinessDocument(document: PrintableDocument, preview = false) {
+export async function renderBusinessDocument(document: PrintableDocument, preview = false, variant: DocumentVariant = "digital") {
   const pdf = await PDFDocument.create(); pdf.registerFontkit(fontkit)
   const style = document.appearance ? documentAppearanceSchema.parse(document.appearance) : defaultDocumentAppearance
+  const profile = style.letterhead
+  if (variant === "letterhead" && !profile) throw new BusinessError(409, "Enable letterhead printing in the issuing company's document settings first.")
+  if (profile) markLetterheadPdf(pdf)
   const font = await pdf.embedFont(await fontBytes("Regular"), { subset: true })
   const variants: Record<string,PDFFont> = { regular:font }
   const requiredFonts = new Set<string>()
@@ -33,11 +38,14 @@ export async function renderBusinessDocument(document: PrintableDocument, previe
   }
   for (const name of requiredFonts) variants[name] = await pdf.embedFont(await fontBytes(name), { subset: true })
   const supported = new Set(font.getCharacterSet()), ink = style.colour === "black" ? rgb(.08,.08,.08) : style.colour === "teal" ? rgb(.04,.28,.3) : rgb(.1,.15,.2), muted = style.colour === "black" ? rgb(.3,.3,.3) : rgb(.36,.4,.44), pale = style.colour === "black" ? rgb(.95,.95,.95) : rgb(.94,.96,.97)
-  const margin = { standard: 42, narrow: 32, wide: 54 }[style.margins], width = 595 - margin * 2, top = 842 - margin - 5
+  const margin = { standard: 42, narrow: 32, wide: 54 }[style.margins], width = 595 - margin * 2, pageTop = 842 - margin - 5, top = profile ? Math.min(pageTop,842-profile.topMm*72/25.4) : pageTop
   const gap = style.spacing === "compact" ? 3 : 6, after = style.spacing === "compact" ? 6 : 9
   const tableSize = style.fontSize - 1, tableLeading = tableSize + (style.spacing === "compact" ? 3 : 5), padding = style.spacing === "compact" ? 8 : 12
-  let page = pdf.addPage([595,842]), y = top, logo: PDFImage | undefined
+  let page = pdf.addPage([595,842]), y = pageTop, logo: PDFImage | undefined, brandingDepth = 0
   const pages = [page]
+  const beginBranding = (p: PDFPage) => p.pushOperators(PDFOperator.of(PDFOperatorNames.BeginMarkedContent,[brandingLayer]))
+  const endBranding = (p: PDFPage) => p.pushOperators(PDFOperator.of(PDFOperatorNames.EndMarkedContent))
+  function branding(operation: () => void) { if (!profile) return operation(); const first = brandingDepth++ === 0; if(first)beginBranding(page);try{operation()}finally{brandingDepth--;if(first)endBranding(page)} }
   const [logoWidth, logoHeight] = { small: [110,40], medium: [145,55], large: [180,68] }[style.logoSize]
   if(document.logoDataUrl&&(!/^data:image\/png;base64,[A-Za-z0-9+/]+=*$/.test(document.logoDataUrl)||document.logoDataUrl.length>400000))throw new BusinessError(400,"Use a bounded PNG document logo.")
   if (document.logoDataUrl || document.branding?.logo) logo = await pdf.embedPng(document.logoDataUrl ? Buffer.from(document.logoDataUrl.split(',')[1], 'base64') : await downloadDocumentLogo(document.branding!.logo!.path))
@@ -45,14 +53,14 @@ export async function renderBusinessDocument(document: PrintableDocument, previe
     if (!logo) return
     const scaled = logo.scale(Math.min(logoWidth/logo.width,logoHeight/logo.height))
     const x = margin + (style.logoAlign === "center" ? (width-scaled.width)/2 : style.logoAlign === "right" ? width-scaled.width : 0)
-    page.drawImage(logo,{x,y:y-scaled.height,width:scaled.width,height:scaled.height}); y-=logoHeight+13
+    branding(()=>page.drawImage(logo!,{x,y:y-scaled.height,width:scaled.width,height:scaled.height})); y-=logoHeight+13
   }
   function watermark() {
     if (!logo || !style.watermark) return
     const scaled = logo.scale(Math.min(300/logo.width,160/logo.height))
-    page.drawImage(logo,{x:(595-scaled.width)/2,y:(842-scaled.height)/2,width:scaled.width,height:scaled.height,opacity:.035})
+    branding(()=>page.drawImage(logo!,{x:(595-scaled.width)/2,y:(842-scaled.height)/2,width:scaled.width,height:scaled.height,opacity:.035}))
   }
-  function nextPage() { if (pages.length >= 100) throw new BusinessError(413, "This document exceeds 100 pages. Shorten the template or saved details."); page = pdf.addPage([595,842]); pages.push(page); y = top; watermark(); if(style.repeatLogo)drawLogo() }
+  function nextPage() { if (pages.length >= 100) throw new BusinessError(413, "This document exceeds 100 pages. Shorten the template or saved details.");if(profile&&brandingDepth)endBranding(page); page = pdf.addPage([595,842]); pages.push(page); y = pageTop;if(profile&&brandingDepth)beginBranding(page); watermark(); if(style.repeatLogo)drawLogo();if(profile){if(y<top)throw new BusinessError(400,"Increase the reserved header space to fit the company logo.");y=top} }
   function ensure(height: number) { if (y-height < bottom) nextPage() }
   function wrap(value: string, maxWidth: number, size = style.fontSize) {
     const rows: string[] = []
@@ -72,7 +80,8 @@ export async function renderBusinessDocument(document: PrintableDocument, previe
   }
   const footerLines = style.footer ? wrap(style.footer,width,8) : []
   if (footerLines.length > 6) throw new BusinessError(400,"The footer is too long for these margins. Shorten it before previewing.")
-  const bottom = Math.max(margin+23, footerLines.length ? footerLines.length*10+64 : 0)
+  const pageLabelY = profile ? Math.max(profile.bottomMm*72/25.4+4, footerLines.length ? footerLines.length*10+64 : 34) : 34
+  const bottom = Math.max(margin+23, footerLines.length ? footerLines.length*10+64 : 0, profile ? pageLabelY+16 : 0)
   function paragraph(value: string, size = style.fontSize, color = ink, align: "left" | "center" | "right" = "left", trailing = after) { if (!value) return; for (const line of wrap(value,width,size)) { if(!line){ensure(after);y-=after;continue}ensure(size+7); const used=font.widthOfTextAtSize(line,size),x=margin+(align==="center"?(width-used)/2:align==="right"?width-used:0);page.drawText(line,{x,y,size,font,color}); y-=size+gap }; y-=trailing }
   function formatted(node:Extract<DocumentFlow[number],{runs:unknown}>) {
     const size=node.type==="heading"?node.level===1?style.fontSize+7:node.level===3?style.fontSize+1:style.fontSize+3:style.fontSize
@@ -127,7 +136,7 @@ export async function renderBusinessDocument(document: PrintableDocument, previe
       y-=height;if(style.tableStyle!=="grid")page.drawLine({start:{x:margin,y:y+7},end:{x:margin+width,y:y+7},color:rgb(.85,.88,.9),thickness:.4})
     }
     const headers = headings.map((value,i)=>wrap(value,widths[i]-12,tableSize)), headerHeight = Math.max(...headers.map(lines=>lines.length))*tableLeading+padding
-    const freshTop = top - (style.repeatLogo && logo ? logoHeight+13 : 0)
+    const freshTop = top - (style.repeatLogo && logo && !profile ? logoHeight+13 : 0)
     if(headerHeight+tableLeading+padding>freshTop-bottom)throw new BusinessError(413,"Table headings are too tall. Shorten them or use compact details.")
     const firstLines=rows[0]?.map((value,i)=>wrap(value,widths[i]-12,tableSize).length)??[1]
     ensure(headerHeight+Math.min(Math.max(...firstLines)*tableLeading+padding,freshTop-bottom-headerHeight));cells(headers,true)
@@ -146,14 +155,15 @@ export async function renderBusinessDocument(document: PrintableDocument, previe
     y-=style.spacing==="compact"?8:13
   }
   watermark();drawLogo()
-  if(style.companyHeading)paragraph(document.company.name,style.fontSize+7)
+  if(style.companyHeading)branding(()=>paragraph(document.company.name,style.fontSize+7))
+  if(profile){if(document.issuer.address)branding(()=>paragraph(document.issuer.address,9,muted));if(y<top)throw new BusinessError(400,"Increase the reserved header space or shorten the company's digital header before previewing.");y=top}
   paragraph(document.title,style.titleSize,ink,style.titleAlign)
   if(style.referenceLayout==="split"){
     const left=wrap(document.reference,width*.65-8,9),right=wrap(document.date,width*.35,9)
     for(let i=0;i<Math.max(left.length,right.length);i++){ensure(16);if(left[i])page.drawText(left[i],{x:margin,y,size:9,font,color:muted});if(right[i])page.drawText(right[i],{x:margin+width-font.widthOfTextAtSize(right[i],9),y,size:9,font,color:muted});y-=9+gap}y-=after
   }else paragraph(`${document.reference} | ${document.date}`,9,muted)
   if (preview) paragraph("DRAFT PREVIEW - NOT ISSUED",10,muted)
-  if (document.issuer.address) paragraph(document.issuer.address,9,muted)
+  if (document.issuer.address && !profile) paragraph(document.issuer.address,9,muted)
   async function drawBlocks(blocks:DocumentPayload["blocks"],compact=false){for (const block of blocks) {
     let following=49
     if(block.table&&!block.paragraphs?.length&&!compact){const t=block.table,total=t.widths.reduce((a,b)=>a+b,0),count=(row:string[])=>Math.max(...row.map((value,i)=>wrap(value,width*t.widths[i]/total-12,tableSize).length),1);following=Math.min(240,(count(t.headings)+count(t.rows[0]??t.headings))*tableLeading+30)}
@@ -167,13 +177,14 @@ export async function renderBusinessDocument(document: PrintableDocument, previe
   if(document.body){for(const node of document.body){if(node.type==="section")await drawBlocks(node.blocks,node.compact);else if(node.type==="pageBreak")nextPage();else if(node.type==="rule"){ensure(20);y-=6;page.drawLine({start:{x:margin,y},end:{x:margin+width,y},thickness:.6,color:muted});y-=14}else formatted(node)}}
   else{paragraph(document.opening);await drawBlocks(document.blocks);if (document.terms) { section("Terms and notes");paragraph(document.terms) }}
   if(document.showSignatory!==false){const contactHeight=document.issuer.contact?wrap(document.issuer.contact,width,9).length*(9+gap)+after:0;const height=6+9+gap+3+(wrap(document.company.name,width).length+wrap(document.issuer.signatory,width).length)*(style.fontSize+gap)+after*2+12+contactHeight;ensure(height);y-=6;paragraph("Issued by",9,muted,"left",3);paragraph(document.company.name);y-=12;paragraph(document.issuer.signatory)}
-  if (document.issuer.contact) paragraph(document.issuer.contact,9,muted)
+  if (document.issuer.contact) branding(()=>paragraph(document.issuer.contact,9,muted))
   if(document.notice)paragraph(document.notice,9,muted)
   pages.forEach((p,i)=>{
-    if(footerLines.length){const ruleY=50+footerLines.length*10+4;p.drawLine({start:{x:margin,y:ruleY},end:{x:margin+width,y:ruleY},thickness:.4,color:muted});footerLines.forEach((line,index)=>p.drawText(line,{x:margin+(width-font.widthOfTextAtSize(line,8))/2,y:50+(footerLines.length-1-index)*10,size:8,font,color:muted}))}
+    if(footerLines.length){if(profile)beginBranding(p);const ruleY=50+footerLines.length*10+4;p.drawLine({start:{x:margin,y:ruleY},end:{x:margin+width,y:ruleY},thickness:.4,color:muted});footerLines.forEach((line,index)=>p.drawText(line,{x:margin+(width-font.widthOfTextAtSize(line,8))/2,y:50+(footerLines.length-1-index)*10,size:8,font,color:muted}));if(profile)endBranding(p)}
     // References can be long; retain the complete identity even with narrow pages.
-    const label=`${preview?"DRAFT | ":""}${document.reference} | Page ${i+1} / ${pages.length}`,size=Math.min(8,width/font.widthOfTextAtSize(label,1));p.drawText(label,{x:margin,y:34,size,font,color:muted})
+    const label=`${preview?"DRAFT | ":""}${document.reference} | Page ${i+1} / ${pages.length}`,size=Math.min(8,width/font.widthOfTextAtSize(label,1));p.drawText(label,{x:margin,y:pageLabelY,size,font,color:muted})
   })
   pdf.setTitle(document.title);pdf.setAuthor(document.company.name);pdf.setSubject(document.reference)
-  return pdf.save()
+  const bytes = await pdf.save()
+  return variant === "letterhead" ? letterheadPdf(bytes) : bytes
 }

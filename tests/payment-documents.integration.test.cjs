@@ -9,7 +9,7 @@ const url=new URL(process.env.CRM_TEST_DATABASE_URL||'http://invalid');if(!['loc
 const tenant='receipt_'+randomUUID(),foreignTenant='receipt_'+randomUUID(),pools=[],clients=[],objects=new Map(),calls={uploads:0,removed:0}
 function client(tenantId,bypass=false){const u=new URL(url);if(!bypass){u.username='crm_test_runtime';u.password=''}const pool=new Pool({connectionString:u.toString(),max:5});pools.push(pool);const c=new PrismaClient({adapter:new TenantPgAdapter(pool,{tenantId,bypass})});clients.push(c);return c}
 const root=client(undefined,true),db=client(tenant),foreignDb=client(foreignTenant),identity=u=>({tenantId:u.tenantId,userId:u.id}),status=n=>e=>e.status===n
-const storage={async upload(t,p,id,bytes){calls.uploads++;const path=`${t}/receipts/${p}/${id}/${randomUUID()}.pdf`;objects.set(path,Buffer.from(bytes));return{path,bytes:bytes.length,sha256:createHash('sha256').update(bytes).digest('hex')}},async remove(path){calls.removed++;objects.delete(path)},async url(path){assert(objects.has(path));return 'https://receipts.example.test/'+path}}
+const storage={async read(archive){assert(objects.has(archive.path));return Buffer.from(objects.get(archive.path))},async upload(t,p,id,bytes){calls.uploads++;const path=`${t}/receipts/${p}/${id}/${randomUUID()}.pdf`;objects.set(path,Buffer.from(bytes));return{path,bytes:bytes.length,sha256:createHash('sha256').update(bytes).digest('hex')}},async remove(path){calls.removed++;objects.delete(path)},async url(path){assert(objects.has(path));return 'https://receipts.example.test/'+path}}
 let admin,staff,manager,outsider,foreign,crm,orders,finance,company,contact,pipeline,stage
 const docs=(user=admin,options={},connection=db)=>applicationPaymentDocuments(connection,identity(user),{storage,render:async()=>Buffer.from('%PDF-synthetic'),...options})
 const request=(p,extra={})=>({providerKey:'payment-receipt',supersedesId:p.supersedesId,reason:'',previewHash:p.fingerprint,requestKey:randomUUID(),...extra})
@@ -95,4 +95,17 @@ test('real receipt rendering uses the shared layout engine and source-owned paym
  const issued=await s.issue(f.payment.id,request(p));assert.equal(objects.get(issued.archive.path).subarray(0,5).toString(),'%PDF-');assert.equal(issued.snapshot.evidence.amount,'30')
  const raw=await root.orderReceiptDocument.findUnique({where:{tenantId_id:{tenantId:tenant,id:issued.id}}}),id=randomUUID(),reference=raw.reference.replace('/V1','/V2'),snapshot=structuredClone(raw.snapshot);snapshot.payload.reference=reference;snapshot.evidence.amount='999'
  await assert.rejects(root.orderReceiptDocument.create({data:{...raw,id,version:2,reference,supersedesId:raw.id,reason:'QA invalid amount',requestKey:randomUUID(),snapshot,archive:{...raw.archive,path:`${tenant}/receipts/${f.payment.id}/${id}/${randomUUID()}.pdf`}}}),/exact posted payment evidence/)
+})
+
+test('receipt letterhead print retains reversal acknowledgements and frozen payment values',async()=>{
+ const previous=await root.businessCompany.findUniqueOrThrow({where:{id:company.id}})
+ try{
+  await root.businessCompany.update({where:{id:company.id},data:{documentSettings:{...previous.documentSettings,letterhead:{enabled:true,topMm:65,bottomMm:25}},version:{increment:1}}})
+  const f=await fixture(),s=docs(admin,{render:renderBusinessDocument}),p=await s.prepare(f.payment.id,{providerKey:'payment-receipt'}),row=await s.issue(f.payment.id,request(p)),before=Buffer.from(objects.get(row.archive.path)),uploads=calls.uploads
+  assert.equal((await s.list(f.payment.id)).items[0].letterheadAvailable,true)
+  const print=await s.download(f.payment.id,row.id,'payment-receipt',false,'letterhead');assert.equal(Buffer.from(print).subarray(0,5).toString(),'%PDF-')
+  const state=await finance.get(f.order.id);await finance.reverse(f.order.id,f.payment.id,{requestKey:randomUUID(),version:state.account.version,kind:'REFUND',reason:'QA refund',reference:'QA-PRINT',effectiveOn:'2026-01-01'})
+  await assert.rejects(s.download(f.payment.id,row.id,'payment-receipt',false,'letterhead'),status(409));assert.deepEqual(await s.download(f.payment.id,row.id,'payment-receipt',true,'letterhead'),print)
+  assert.equal(calls.uploads,uploads);assert.deepEqual(objects.get(row.archive.path),before)
+ }finally{await root.businessCompany.update({where:{id:company.id},data:{documentSettings:previous.documentSettings,version:{increment:1}}})}
 })

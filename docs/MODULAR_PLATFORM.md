@@ -1,3 +1,31 @@
+## P13N digital and preprinted letterhead PDFs (2026-11-06)
+
+Companies and offices > Company > Letterhead printing can enable physical
+letterhead and set reserved header/footer space. Company template samples and
+prepared order/receipt/commercial invoice documents expose both output modes.
+One issue creates one reference and one archived digital file. The print action
+derives an unbranded copy from those exact archived bytes, preserving body
+coordinates, pages, links and document identity without reading live source or
+branding data. Its archive size and SHA-256 are verified before transformation.
+
+Settings are opt-in and frozen when preparing the document. Existing digital
+layouts and issued PDFs remain unchanged; only versions issued with letterhead
+enabled offer the print action. Reversed receipt and credited-original guards,
+current module/export permissions, immutable replacements and company-version
+fingerprints remain authoritative. Statutory print/signature controls are unchanged.
+No migration, extra rendering dependency or second archived PDF is required.
+
+Local verification: 45 unit/PDF/storage checks, 50 native order/receipt/invoice
+checks, 26 editor/company browser checks and five application browser workflows
+passed. Frozen print downloads, default PDFs, header-space errors, archive size/
+hash validation, export/tenant boundaries and historical acknowledgements were
+covered. An initial foreign-tenant expectation and cache-header assertion were
+aligned with existing module/no-store behavior; the final native suites passed.
+Build/TypeScript, targeted lint and whitespace checks passed. Digital/print PDF
+pages and mobile forms were reviewed. Hosted staging evidence is recorded
+separately; no production release or client-data configuration is part of this
+increment.
+
 ## P13N unified document content (2026-11-05)
 
 Standard formatting also provides bullets/numbered lists, paragraph and line

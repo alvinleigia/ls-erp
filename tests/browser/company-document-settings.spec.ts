@@ -19,11 +19,16 @@ test("company details and bank instructions survive tab changes and save togethe
   await page.getByRole("tab", { name: "Bank instructions", exact: true }).click()
   await page.getByLabel("Account name", { exact: true }).fill("Example Industries")
   await page.getByLabel("Account number", { exact: true }).fill("TEST-1234")
+  await page.getByRole("tab", { name: "Letterhead printing", exact: true }).click()
+  await page.getByLabel("Enable printing on preprinted letterhead", { exact: true }).check()
+  await page.getByLabel("Reserved header space (mm)", { exact: true }).fill("55")
+  await page.getByLabel("Reserved footer space (mm)", { exact: true }).fill("30")
   await page.getByRole("tab", { name: "Document details", exact: true }).click()
   await expect(page.getByLabel("Document address", { exact: true })).toHaveValue("Example office, Goa")
   await page.getByRole("button", { name: "Save changes", exact: true }).click()
   await expect.poll(() => writes.length).toBe(1)
   expect(writes[0].version).toBe(7); expect(writes[0].documentSettings.address).toBe("Example office, Goa"); expect(writes[0].documentSettings.bank.accountNumber).toBe("TEST-1234")
+  expect(writes[0].documentSettings.letterhead).toEqual({ enabled: true, topMm: 55, bottomMm: 30 })
 })
 
 test("company settings fit a mobile viewport without dropping bank or contact fields", async ({ page }) => {

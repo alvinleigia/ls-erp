@@ -17,9 +17,9 @@ const draft = (title: string): DocumentContent => ({
   layout: starterDocumentLayout(catalog),
 })
 
-async function fixture(page: Page, options: { version?: number; canPublish?: boolean; rejectRefreshAfterPublish?: boolean; styled?: boolean } = {}) {
+async function fixture(page: Page, options: { version?: number; canPublish?: boolean; rejectRefreshAfterPublish?: boolean; styled?: boolean; letterhead?: boolean } = {}) {
   const templates = Object.fromEntries(providers.map(provider => [provider.key, { version: options.version ?? 2, content: { ...draft(provider.name), enabled: options.version !== 0, ...(options.styled ? { appearance: { ...defaultDocumentAppearance } } : {}) } }]))
-  const state = { templates, attempts: [] as { companyId: string; providerKey: string; version: number; content: DocumentContent; reviewed: boolean }[], previews: [] as DocumentContent[], publications: 0, reads: 0, failNext: false }
+  const state = { templates, attempts: [] as { companyId: string; providerKey: string; version: number; content: DocumentContent; reviewed: boolean }[], previews: [] as DocumentContent[], previewVariants: [] as string[], publications: 0, reads: 0, failNext: false }
   const unexpected: string[] = []
   await page.route("**/api/**", async route => {
     const request = route.request(), url = new URL(request.url()), method = request.method()
@@ -29,7 +29,7 @@ async function fixture(page: Page, options: { version?: number; canPublish?: boo
       state.reads++
       if (options.rejectRefreshAfterPublish && state.publications) return json({ error: "Refresh is temporarily unavailable." }, 503)
       const providerKey = url.searchParams.get("providerKey") || booking
-      return json({ company, providerKey, ...templates[providerKey], templateCatalog: catalog })
+      return json({ company, providerKey, ...templates[providerKey], templateCatalog: catalog, letterheadAvailable: !!options.letterhead })
     }
     if (url.pathname === "/api/document-templates" && method === "PUT") {
       const input = request.postDataJSON(); state.attempts.push(input)
@@ -42,6 +42,7 @@ async function fixture(page: Page, options: { version?: number; canPublish?: boo
     }
     if (url.pathname === "/api/document-templates/preview" && method === "POST") {
       state.previews.push(request.postDataJSON().content)
+      state.previewVariants.push(request.postDataJSON().variant ?? "digital")
       return route.fulfill({ body: "%PDF-1.7\nSynthetic download fixture", contentType: "application/pdf" })
     }
     unexpected.push(`${method} ${url.pathname}`)
@@ -168,6 +169,18 @@ test("spacing reset and undo restore the published state", async ({ page }) => {
 })
 
 test.beforeEach(({ baseURL }) => test.skip(baseURL !== "http://127.0.0.1:3012", "Synthetic component host only."))
+
+test("digital and letterhead sample actions use the same draft without publishing or changing content", async ({ page }) => {
+  const { state, unexpected } = await fixture(page, { letterhead: true })
+  await opening(page).fill("One shared body for both copies")
+  await page.getByRole("button", { name: "Download sample preview", exact: true }).click()
+  await page.getByRole("button", { name: "Preview letterhead PDF", exact: true }).click()
+  await expect.poll(() => state.previews.length).toBe(2)
+  expect(state.previewVariants).toEqual(["digital", "letterhead"])
+  expect(state.previews[0]).toEqual(state.previews[1]); expect(state.publications).toBe(0)
+  await expect(opening(page)).toHaveText("One shared body for both copies")
+  expect(unexpected).toEqual([])
+})
 
 test("publishing confirms the saved version in place and cannot republish unchanged content", async ({ page }) => {
   const { state, unexpected } = await fixture(page, { rejectRefreshAfterPublish: true })

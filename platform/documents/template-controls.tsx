@@ -17,7 +17,8 @@ import { documentContentSchema,type DocumentContent } from "./validation"
 import { DocumentAppearanceControls } from "./appearance-controls"
 import { DocumentLayoutEditor } from "./layout-editor"
 import { documentValueKey,inlineDocumentWording,starterDocumentLayout,validateDocumentLayout,type TemplateCatalog } from "./layout"
-type Template={company:{id:string;name:string;archived:boolean};providerKey:string;version:number;content:DocumentContent;templateCatalog:TemplateCatalog;companyDetailsAvailable?:boolean}
+import type { DocumentVariant } from "./letterhead"
+type Template={company:{id:string;name:string;archived:boolean};providerKey:string;version:number;content:DocumentContent;templateCatalog:TemplateCatalog;companyDetailsAvailable?:boolean;letterheadAvailable?:boolean}
 type Catalog={items:{id:string;name:string}[];total:number;providers:{key:string;name:string}[];canPublish:boolean}
 const textFields=[['title','Document title'],['opening','Opening paragraph'],['terms','Terms and notes'],['address','Issuing company address'],['contact','Office contact details'],['signatory','Signatory caption']] as const
 export function DocumentTemplateControls(){
@@ -51,13 +52,13 @@ export function DocumentTemplateControls(){
     }catch(e){setError((e as Error).message)}finally{setOperation(null)}
   }
   async function reload(){if(busy)return;setOperation('reload');setError('');try{await load()}catch(e){setError((e as Error).message)}finally{setOperation(null)}}
-  async function preview(){
+  async function preview(variant:DocumentVariant="digital"){
     if(!row||!content||busy||readOnly)return
     setOperation('preview');setError('')
     try{
-      const r=await fetch('/api/document-templates/preview',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({companyId,providerKey,version:row.version,content})})
+      const r=await fetch('/api/document-templates/preview',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({companyId,providerKey,version:row.version,content,...(variant==="letterhead"?{variant}:{})})})
       if(!r.ok){const data=await r.json();setErrorsFromResponse(data);throw Error(data.error)}
-      const url=URL.createObjectURL(await r.blob()),link=document.createElement('a');link.href=url;link.download='template-sample-preview.pdf';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000)
+      const url=URL.createObjectURL(await r.blob()),link=document.createElement('a');link.href=url;link.download=variant==="letterhead"?'template-letterhead-preview.pdf':'template-sample-preview.pdf';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000)
     }catch(e){setError((e as Error).message)}finally{setOperation(null)}
   }
   return <div className={pageClass}><AccessPageHeader title="Company document templates" description="Publish reviewed wording for the company that issues the order. Earlier versions and issued files remain fixed."/>
@@ -71,7 +72,7 @@ export function DocumentTemplateControls(){
         <label className="flex items-center gap-2"><Checkbox checked={content.enabled} disabled={busy||readOnly} onChange={e=>change('enabled',e.target.checked)}/>Enable new issuance with this version</label>
         <p id={statusId} className="text-sm text-muted-foreground">{hasDraft?`Review the wording, company details and enablement before publishing version ${row.version+1}.`:'All changes are published. Edit the template to create a new version.'}</p>
         {hasDraft&&<label className="flex items-start gap-2"><Checkbox checked={reviewed} disabled={busy} onChange={e=>setReviewed(e.target.checked)}/>I have reviewed the wording, company details and enablement for this version.</label>}
-        <div className="flex flex-wrap gap-3"><Button variant="outline" loading={operation==='preview'} loadingText="Preparing sample..." disabled={busy} onClick={preview}>Download sample preview</Button><Button loading={operation==='publish'} loadingText="Publishing..." disabled={busy||!hasDraft||!reviewed} aria-describedby={statusId} onClick={publish}>{hasDraft?'Publish template version':`Published version ${row.version}`}</Button>{dirty?<ReloadDraft disabled={busy} onReload={()=>void reload()}/>:<Button variant="outline" loading={operation==='reload'} loadingText="Refreshing..." disabled={busy} onClick={()=>void reload()}>Refresh template</Button>}</div>
+        <div className="flex flex-wrap gap-3"><Button variant="outline" loading={operation==='preview'} loadingText="Preparing sample..." disabled={busy} onClick={()=>void preview()}>Download sample preview</Button>{row.letterheadAvailable&&<Button variant="outline" disabled={busy} onClick={()=>void preview("letterhead")}>Preview letterhead PDF</Button>}<Button loading={operation==='publish'} loadingText="Publishing..." disabled={busy||!hasDraft||!reviewed} aria-describedby={statusId} onClick={publish}>{hasDraft?'Publish template version':`Published version ${row.version}`}</Button>{dirty?<ReloadDraft disabled={busy} onReload={()=>void reload()}/>:<Button variant="outline" loading={operation==='reload'} loadingText="Refreshing..." disabled={busy} onClick={()=>void reload()}>Refresh template</Button>}</div>
       </div>}
 </Section>}
   </div>

@@ -3,8 +3,8 @@ import type { DocumentIdentity,DocumentStorage } from '@/platform/documents/cont
 import { createCustomerInvoiceService } from '@/modules/customer-invoices/service'
 import { createInvoiceDocumentService } from '@/modules/customer-invoices/documents'
 import { createStatutoryInvoiceService } from '@/modules/customer-invoices/statutory'
-import { uploadInvoiceDocumentPdf,removeUnusedPdf,archivedPdfUrl } from '@/platform/storage/documents'
-const storage:DocumentStorage={upload:uploadInvoiceDocumentPdf,remove:removeUnusedPdf,url:archivedPdfUrl}
+import { uploadInvoiceDocumentPdf,removeUnusedPdf,archivedPdfUrl,readArchivedDocumentPdf } from '@/platform/storage/documents'
+const storage:DocumentStorage={upload:uploadInvoiceDocumentPdf,remove:removeUnusedPdf,url:archivedPdfUrl,read:readArchivedDocumentPdf}
 export const applicationCustomerInvoices=(db:PrismaClient,identity:DocumentIdentity)=>createCustomerInvoiceService(db,identity)
 export const applicationInvoiceDocuments=(db:PrismaClient,identity:DocumentIdentity,options?:{storage?:DocumentStorage;render?:Parameters<typeof createInvoiceDocumentService>[3]})=>createInvoiceDocumentService(db,identity,options?.storage??storage,options?.render)
 export const applicationStatutoryInvoices=(db:PrismaClient,identity:DocumentIdentity,options?:{storage?:DocumentStorage;render?:Parameters<typeof createStatutoryInvoiceService>[3]})=>createStatutoryInvoiceService(db,identity,options?.storage??storage,options?.render)

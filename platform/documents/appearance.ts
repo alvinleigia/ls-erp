@@ -1,4 +1,5 @@
 import { z } from "zod"
+import { letterheadProfileSchema } from "./letterhead"
 
 // Bounded presentation data only. No CSS, URLs, remote fonts or executable templates.
 export const documentAppearanceSchema = z.object({
@@ -16,6 +17,7 @@ export const documentAppearanceSchema = z.object({
   repeatLogo: z.boolean(),
   watermark: z.boolean(),
   footer: z.string().trim().max(300).refine(text => text.split("\n").length <= 3, "Keep the footer to three text lines."),
+  letterhead: letterheadProfileSchema.optional(),
 }).strict()
 export type DocumentAppearance = z.infer<typeof documentAppearanceSchema>
 export const defaultDocumentAppearance: DocumentAppearance = {

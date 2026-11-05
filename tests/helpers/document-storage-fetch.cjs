@@ -11,5 +11,7 @@ global.fetch=async(input,init={})=>{
  if(method==='POST'&&path.startsWith('sign/tenant-documents/')){const key=path.slice('sign/tenant-documents/'.length);return objects.has(key)?reply({signedURL:`/object/sign/tenant-documents/${key}?token=local-test`}):reply({message:'Missing object'},404)}
  if(method==='DELETE'&&path==='tenant-documents'){for(const key of JSON.parse(init.body).prefixes)objects.delete(key);return reply([])}
  if(method==='POST'&&path.startsWith('tenant-documents/')){const key=path.slice('tenant-documents/'.length);if(objects.has(key))return reply({message:'Already exists'},409);objects.set(key,Buffer.from(await new Response(init.body).arrayBuffer()));return reply({Key:key})}
+ if(method==='GET'&&path.startsWith('authenticated/tenant-documents/')){const bytes=objects.get(path.slice('authenticated/tenant-documents/'.length));return bytes?new Response(bytes,{headers:{'Content-Type':'application/pdf'}}):reply({message:'Missing object'},404)}
+ if(method==='GET'&&path.startsWith('tenant-documents/')){const bytes=objects.get(path.slice('tenant-documents/'.length));return bytes?new Response(bytes,{headers:{'Content-Type':'application/pdf'}}):reply({message:'Missing object'},404)}
  return reply({message:'Unsupported local storage operation'},400)
 }

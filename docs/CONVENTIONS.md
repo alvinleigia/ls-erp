@@ -1,5 +1,28 @@
 # Base Conventions
 
+## Digital and preprinted letterhead PDFs (P13N)
+
+- Company document settings opt into letterhead printing and bound the reserved
+  top/bottom space in millimetres. Resolve it from the source issuing company,
+  independently of template wording. Freeze it through existing company-version
+  checks and prepared presentation; never apply current settings to an archive.
+- Digital and print copies share body coordinates, page breaks, links, required
+  notices, reference and page numbers. Mark automatic company branding only in
+  the shared PDF renderer. Keep references above the physical footer reservation.
+  Insufficient space fails clearly before issuance; absent settings preserve the
+  existing layout exactly.
+- Archive one digital PDF. Its immutable metadata records letterhead capability.
+  Printing verifies the private archive size/hash and removes its marked branding
+  layer on demand, without font/branding/source lookups or a second storage object.
+  Files without this capability retain their original download; never rewrite them.
+  Signed/AcroForm PDFs cannot use this transformation. Statutory print/signature
+  controls stay separate.
+- Use the shared source-document actions for order letters, receipts and commercial
+  invoices/credits. Print downloads repeat all export/source/provider checks and
+  historical reversal/credit acknowledgements. Return no-store PDF responses;
+  never expose archive paths in list rows. Variant choice does not issue another
+  reference or change idempotency/replacement rules.
+
 ## Unified document content (P13N)
 
 - Standard formatting uses the same bounded document model and existing editor:

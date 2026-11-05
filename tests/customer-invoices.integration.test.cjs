@@ -9,7 +9,7 @@ const url=new URL(process.env.CRM_TEST_DATABASE_URL||'http://invalid');if(!['loc
 const tenant='invoice_'+randomUUID(),foreignTenant='invoice_'+randomUUID(),pools=[],clients=[],objects=new Map(),calls={uploads:0,removed:0}
 function client(tenantId,bypass=false){const u=new URL(url);if(!bypass){u.username='crm_test_runtime';u.password=''}const pool=new Pool({connectionString:u.toString(),max:5});pools.push(pool);const c=new PrismaClient({adapter:new TenantPgAdapter(pool,{tenantId,bypass})});clients.push(c);return c}
 const root=client(undefined,true),db=client(tenant),foreignDb=client(foreignTenant),identity=u=>({tenantId:u.tenantId,userId:u.id}),status=n=>e=>e.status===n
-const storage={async upload(t,p,id,bytes){calls.uploads++;const path=`${t}/invoices/${p}/${id}/${randomUUID()}.pdf`;objects.set(path,Buffer.from(bytes));return{path,bytes:bytes.length,sha256:createHash('sha256').update(bytes).digest('hex')}},async remove(path){calls.removed++;objects.delete(path)},async url(path){assert(objects.has(path));return 'https://invoices.example.test/'+path}}
+const storage={async read(archive){assert(objects.has(archive.path));return Buffer.from(objects.get(archive.path))},async upload(t,p,id,bytes){calls.uploads++;const path=`${t}/invoices/${p}/${id}/${randomUUID()}.pdf`;objects.set(path,Buffer.from(bytes));return{path,bytes:bytes.length,sha256:createHash('sha256').update(bytes).digest('hex')}},async remove(path){calls.removed++;objects.delete(path)},async url(path){assert(objects.has(path));return 'https://invoices.example.test/'+path}}
 let admin,staff,manager,outsider,foreign,crm,orders,finance,company,contact,pipeline,stage
 const docs=(user=admin,options={},connection=db)=>applicationInvoiceDocuments(connection,identity(user),{storage,render:async()=>Buffer.from('%PDF-synthetic'),...options})
 async function fixture(amount='30',officeId,opened=true,overrides={}){
@@ -142,4 +142,15 @@ test('native read-committed writers cannot exceed the contract while waiting on 
 test('currency precision, invalid selections and zero-price source lines keep positive exact invoice totals',async()=>{
  const f=await fixture('0',undefined,true,{currency:'JPY'});await assert.rejects(draft(f,{billing:{mode:'AMOUNT',value:'0.01'}}),status(409));await assert.rejects(draft(f,{billing:{mode:'PERCENT',value:'101'}}),status(409));await assert.rejects(draft(f,{billing:{mode:'LINES',lines:[{lineIndex:0,quantity:'1'},{lineIndex:0,quantity:'1'}]}}),status(409));assert.equal((await draft(f,{billing:{mode:'PERCENT',value:'33.3333'}})).billing.amount,'33');assert.equal((await draft(f,{billing:{mode:'BALANCE'}})).billing.amount,'67')
  const g=await fixture('0',undefined,true,{lines:[{description:'Unpriced first item',quantity:'1',unit:'each',rate:'0'},{description:'Unpriced second item',quantity:'1',unit:'each',rate:'0'}],charges:[{label:'Agreed charge',group:'',kind:'FIXED',value:'100',basis:'BASE',included:true,due:''}]}),a=await draft(g,{billing:{mode:'LINES',lines:[{lineIndex:0,quantity:'1'}]}}),b=await draft(g,{billing:{mode:'BALANCE'}});assert.equal(Number(a.billing.amount),50);assert.equal(Number(b.billing.amount),50);assert.equal(Number((await invoices().list(g.order.id)).statement.available),0)
+})
+
+test('commercial invoice letterhead copies retain credited-original acknowledgement and exact archived facts',async()=>{
+ const previous=await root.businessCompany.findUniqueOrThrow({where:{id:company.id}})
+ try{
+  await root.businessCompany.update({where:{id:company.id},data:{documentSettings:{...previous.documentSettings,letterhead:{enabled:true,topMm:65,bottomMm:25}},version:{increment:1}}})
+  const f=await fixture(),p=await posted(f),s=docs(admin,{render:renderBusinessDocument}),prepared=await s.prepare(p.id,{providerKey:'commercial-invoice'}),row=await s.issue(p.id,documentInput(prepared)),before=Buffer.from(objects.get(row.archive.path)),uploads=calls.uploads
+  const print=await s.download(p.id,row.id,'commercial-invoice',false,'letterhead');assert.equal(Buffer.from(print).subarray(0,5).toString(),'%PDF-');assert.equal((await s.list(p.id)).items[0].letterheadAvailable,true)
+  await credit(p);await assert.rejects(s.download(p.id,row.id,'commercial-invoice',false,'letterhead'),status(409));assert.deepEqual(await s.download(p.id,row.id,'commercial-invoice',true,'letterhead'),print)
+  assert.equal(calls.uploads,uploads);assert.deepEqual(objects.get(row.archive.path),before)
+ }finally{await root.businessCompany.update({where:{id:company.id},data:{documentSettings:previous.documentSettings,version:{increment:1}}})}
 })

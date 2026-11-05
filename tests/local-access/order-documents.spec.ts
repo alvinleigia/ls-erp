@@ -126,3 +126,26 @@ test('two-unit Real Estate letters preserve repeatable applicants and require al
   await page.setViewportSize({width:390,height:844});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.screenshot({path:test.info().outputPath('property-document-history-mobile.png'),fullPage:true,animations:'disabled'})
  }finally{await context.close();await f.db.end()}
 })
+
+test('letterhead previews and issued print downloads reuse one document and retain its original after company changes',async({browser})=>{
+ test.setTimeout(180000)
+ const f=await seed(),{page,context}=await login(browser,f.origin,f.users.admin.email)
+ try{
+  await modules(f,['salesOrders'])
+  const company=(await json(context,'/api/document-templates/catalog')).items[0],details=await json(context,'/api/companies/'+company.id)
+  await json(context,'/api/companies/'+company.id,200,'PATCH',{name:details.name,archived:false,parentId:details.parentId,version:details.version,documentSettings:{...details.documentSettings,letterhead:{enabled:true,topMm:65,bottomMm:25}}})
+  await publish(context,company.id,'order-acknowledgement')
+  await page.goto('/settings/documents');await expect(page.getByRole('button',{name:'Preview letterhead PDF',exact:true})).toBeVisible()
+  const templateDownload=page.waitForEvent('download');await page.getByRole('button',{name:'Preview letterhead PDF',exact:true}).click();await(await templateDownload).saveAs(test.info().outputPath('template-letterhead.pdf'))
+  const order=await source(context,f.users.admin.id),endpoint='/api/sales-orders/'+order.id+'/documents'
+  await page.goto('/sales-orders/'+order.id);await page.getByRole('tab',{name:'Documents',exact:true}).click();await page.getByRole('button',{name:'Prepare document',exact:true}).click()
+  await expect(page.getByRole('button',{name:'Preview letterhead PDF',exact:true})).toBeVisible()
+  const draft=page.waitForEvent('download');await page.getByRole('button',{name:'Preview letterhead PDF',exact:true}).click();await(await draft).saveAs(test.info().outputPath('order-letterhead-draft.pdf'))
+  await page.getByRole('button',{name:'Issue document',exact:true}).click();await page.getByRole('button',{name:'Confirm issuance',exact:true}).click()
+  await expect(page.getByRole('link',{name:'Download digital PDF',exact:true})).toHaveCount(1);const print=page.getByRole('link',{name:'Print on letterhead',exact:true});await expect(print).toHaveCount(1)
+  const href=await print.getAttribute('href'),response=await context.request.get(href!,{maxRedirects:0});expect(response.status()).toBe(200);expect(response.headers()['cache-control']).toContain('no-store');const bytes=await response.body();expect(bytes.subarray(0,5).toString()).toBe('%PDF-')
+  const current=await json(context,'/api/companies/'+company.id);await json(context,'/api/companies/'+company.id,200,'PATCH',{name:current.name,archived:false,parentId:current.parentId,version:current.version,documentSettings:{...current.documentSettings,letterhead:{enabled:false,topMm:80,bottomMm:50}}})
+  expect(await(await context.request.get(href!)).body()).toEqual(bytes);expect((await json(context,endpoint)).total).toBe(1)
+  await page.setViewportSize({width:390,height:844});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.screenshot({path:test.info().outputPath('letterhead-download-mobile.png'),fullPage:true})
+ }finally{await context.close();await f.db.end()}
+})
