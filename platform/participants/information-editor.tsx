@@ -12,7 +12,7 @@ import { correspondenceSchema, informationFields, informationPartyKey, type Corr
 import { defaultInformation, type ParticipantInformationView } from "./requirements"
 import type { ParticipantInformation } from "./validation"
 
-const records = (data: ParticipantInformationView): ParticipantInformation["records"] => [...new Map(data.participants.map(row => [informationPartyKey(row.party), { party: { kind: row.party.kind, id: row.party.id }, values: defaultInformation(row) }])).values()]
+const records = (data: ParticipantInformationView, prefill = false): ParticipantInformation["records"] => [...new Map(data.participants.map(row => [informationPartyKey(row.party), { party: { kind: row.party.kind, id: row.party.id }, values: prefill && !row.information ? data.defaults?.find(item => informationPartyKey(item.party) === informationPartyKey(row.party))?.values ?? defaultInformation(row) : defaultInformation(row) }])).values()]
 export function ParticipantInformationEditor({ endpoint, sourceVersion, onSaved }: { endpoint: string; sourceVersion: number; onSaved: () => Promise<void> }) {
   const [data, setData] = React.useState<ParticipantInformationView>(), [draft, setDraft] = React.useState<ParticipantInformation["records"]>([])
   const [editing, setEditing] = React.useState(false), [saving, setSaving] = React.useState(false), [conflict, setConflict] = React.useState(false), [reload, setReload] = React.useState(0)
@@ -50,7 +50,7 @@ export function ParticipantInformationEditor({ endpoint, sourceVersion, onSaved 
     } catch (e) { setError((e as Error).message) } finally { setSaving(false) }
   }
   return <Section title={data?.configuration.definition.title || "Customer details"} description="Correspondence for this transaction. Saving here does not change the contact or business directory."
-    actions={data?.canEdit && <Button variant="outline" onClick={() => { setDraft(records(data)); setEditing(true); setConflict(false); setError(""); setErrors({}) }}>Edit customer details</Button>} help={(data) && <div><p className="font-medium">Participant details</p>Drafts may be incomplete. Required fields are checked against the saved quotation when an order is confirmed.</div>}>
+    actions={data?.canEdit && <Button variant="outline" onClick={() => { setDraft(records(data, true)); setEditing(true); setConflict(false); setError(""); setErrors({}) }}>Edit customer details</Button>} help={(data) && <div><p className="font-medium">Participant details</p>Drafts may be incomplete. Required fields are checked against the saved quotation when an order is confirmed.</div>}>
     {!editing && error && <p role="alert" className="text-sm text-destructive">{error}<Button variant="link" onClick={() => setReload(v => v + 1)}>Retry</Button></p>}
     {!data && !error && <p>Loading customer details...</p>}
     {data && <>
@@ -59,6 +59,7 @@ export function ParticipantInformationEditor({ endpoint, sourceVersion, onSaved 
     </>}
     {data && editing && <EditPanel open title="Edit customer details" description="Names and participant identities stay linked to the saved selections. Enter correspondence for this transaction." onClose={close} onSubmit={save} saving={saving} dirty={dirty} error={error} disabled={!dirty || conflict} saveLabel="Save customer details"
       footerActions={conflict && <ReloadDraft disabled={saving} onReload={() => { close(); setReload(v => v + 1) }} />}>
+      {data.defaults?.length ? <p role="status" className="rounded-md border bg-muted/30 p-3 text-sm">Contact details have been prefilled for participants without saved correspondence. Review and save to keep an independent copy for this transaction.</p> : null}
       {draft.map((row, i) => {
         const participant = data.participants.find(item => informationPartyKey(item.party) === informationPartyKey(row.party))!
         const needed = new Set(data.participants.filter(item => informationPartyKey(item.party) === informationPartyKey(row.party)).flatMap(item => data.configuration.definition.required[item.role]))

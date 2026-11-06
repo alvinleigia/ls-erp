@@ -1,5 +1,22 @@
 # Base Conventions
 
+## Initial customer correspondence (P13P)
+
+- CRM seeds transaction correspondence from readable, active contacts when an
+  opportunity is created or a new person is added. Use the shared participant
+  information initializer, preserving each saved row in full, including explicit
+  blanks. A directory change must never synchronize into a saved CIF.
+- Require current contact Read permission and the canonical contact record scope
+  before copying defaults. Source opportunity access alone does not grant directory
+  disclosure. Copy only registered correspondence fields, sanitize invalid old
+  values independently, and never infer a buying company's address from its person.
+- Existing sources without saved correspondence may offer authorized defaults in
+  their edit draft. Reads and Cancel never persist them; explicit review/Save uses
+  the existing version/configuration checks and audit. Retained participants do
+  not refresh during reorder. Prune removed identities and seed genuinely new ones.
+- Quotation revisions, orders and issued files continue using their accepted
+  snapshots. No data backfill, stored-document rewrite or migration is needed.
+
 ## Digital and preprinted letterhead PDFs (P13N)
 
 - Company document settings opt into letterhead printing and bound the reserved

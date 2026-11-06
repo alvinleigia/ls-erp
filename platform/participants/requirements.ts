@@ -1,6 +1,6 @@
 import { z } from "zod"
 import { correspondenceSchema, informationFields, informationLabels, type InformationField } from "./information"
-import { participantRoleSchema, participantRoleLabels, participantSnapshotSchema, type ParticipantRole, type ParticipantSnapshot } from "./validation"
+import { participantRoleSchema, participantRoleLabels, participantSnapshotSchema, type ParticipantInformation, type ParticipantRole, type ParticipantSnapshot } from "./validation"
 
 const field = z.enum(informationFields)
 const fields = z.array(field).max(informationFields.length).refine(value => new Set(value).size === value.length, "Choose each field once.")
@@ -36,7 +36,7 @@ export function participantConfirmationProof(snapshot: unknown, configuration: P
 }
 export type ParticipantConfirmationProof = ReturnType<typeof participantConfirmationProof>["proof"]
 export const participantRoles = participantRoleSchema.options
-export type ParticipantInformationView = { version: number; configuration: ParticipantFormConfiguration; participants: ParticipantSnapshot["participants"]; canEdit: boolean; missing: MissingParticipantInformation[] }
+export type ParticipantInformationView = { version: number; configuration: ParticipantFormConfiguration; participants: ParticipantSnapshot["participants"]; canEdit: boolean; missing: MissingParticipantInformation[]; defaults?: ParticipantInformation["records"] }
 export function defaultInformation(row: ParticipantSnapshot["participants"][number]) {
   return row.information ?? { email: row.party.email ?? "", phone: row.party.phone ?? "", addressLine1: "", addressLine2: "", city: "", region: "", postalCode: "", country: "" }
 }

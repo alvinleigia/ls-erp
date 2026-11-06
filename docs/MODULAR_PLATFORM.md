@@ -1,3 +1,29 @@
+## P13P initial customer correspondence (2026-11-06)
+
+Enquiry conversion and direct opportunity creation now copy permitted contact
+correspondence into a transaction snapshot. Adding a new person uses that
+person's permitted details; participant reorder and later directory changes
+never refresh saved correspondence. Saved rows, including deliberately blank
+values, remain authoritative. Business addresses are not inferred from a person.
+
+Existing sources without saved correspondence offer prefilled edit drafts for
+review and explicit Save. Read and Cancel perform no business writes. Current
+contact permission, record sharing and source Edit authority govern suggested
+defaults; source access does not grant directory access. Existing version,
+configuration and audit protections remain in effect.
+
+This is shared participant functionality with a CRM directory adapter, independent
+of industry. Existing quotation/order snapshots and issued files remain fixed.
+No migration, backfill, new dependency or production data change is required.
+
+Local verification: 23 unit checks, 61 native participant/quotation/document checks
+and five application browser workflows passed, including the focused prefill
+save/cancel/reload case. Pipeline fixtures, unordered default assertions and
+Customers-tab navigation were aligned with current contracts. Build/TypeScript,
+targeted lint and whitespace checks passed. The user's existing local test
+opportunity was inspected without saving changes; desktop/mobile prefilled
+drafts were visually reviewed. Hosted environments are unchanged by this fix.
+
 ## P13O compact document editor toolbar (2026-11-06)
 
 The shared company-template and quotation layout editor uses two compact icon

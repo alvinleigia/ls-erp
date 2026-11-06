@@ -1,7 +1,8 @@
 import { readParticipantConfiguration, type ParticipantPresetReader } from "@/platform/participants/configuration"
 import { genericParticipantPreset, missingParticipantInformation } from "@/platform/participants/requirements"
 import { informationPartyKey } from "@/platform/participants/information"
-import { pruneParticipantInformation } from "@/platform/participants/source-information"
+import { initializeParticipantInformation, pruneParticipantInformation } from "@/platform/participants/source-information"
+import { contactInformationDefaults } from "./participant-defaults"
 import { participantInformationSaveSchema } from "@/platform/participants/validation"
 import { crmSourceParticipants } from "./participant-source"
 import type { PermissionRun } from "@/platform/access/server"
@@ -53,7 +54,8 @@ export function createOpportunityParticipantService({ run, runLocked, audit }: C
     const snapshot = await crmSourceParticipants(tx, id, { tenantId: actor.tenantId, person: row.contact, business: row.account, information: row.participantInformation })
     const config = await configuration(tx, actor)
     const canEdit = permits(actor, "opportunities.edit") && !!await tx.crmOpportunity.findFirst({ where: { ...opportunityScope(actor, "edit"), id }, select: { id: true } })
-    return { version: row.version, configuration: config, participants: snapshot.participants, canEdit, missing: missingParticipantInformation(snapshot, config.definition) }
+    const defaults = canEdit ? await contactInformationDefaults(tx, actor, snapshot.participants.filter(item => !item.information).map(item => item.party)) : undefined
+    return { version: row.version, configuration: config, participants: snapshot.participants, canEdit, missing: missingParticipantInformation(snapshot, config.definition), ...(defaults?.records.length ? { defaults: defaults.records } : {}) }
   }
   return {
     getOpportunityParticipantInformation(id: string) { return run("opportunities.read", (tx, actor) => informationView(tx, actor, id)) },
@@ -117,7 +119,10 @@ export function createOpportunityParticipantService({ run, runLocked, audit }: C
           return { role: item.role, party: { kind: item.party.kind, id: party.id, name: party.name, email: person?.email ?? null, phone: person?.phone ?? null, sourceVersion: party.version } }
         })
         const accepted = combineParticipants({ tenantId: actor.tenantId, person: row.contact, business: row.account }, rows)
-        const updated = await tx.crmOpportunity.updateMany({ where: { ...opportunityScope(actor, "edit"), id, version: data.version }, data: { participantInformation: pruneParticipantInformation(row.participantInformation, accepted), version: { increment: 1 } } })
+        const retainedInformation = pruneParticipantInformation(row.participantInformation, accepted)
+        const defaults = await contactInformationDefaults(tx, actor, changed.map(item => item.party))
+        const participantInformation = defaults.records.length ? initializeParticipantInformation(retainedInformation, defaults) : retainedInformation
+        const updated = await tx.crmOpportunity.updateMany({ where: { ...opportunityScope(actor, "edit"), id, version: data.version }, data: { participantInformation, version: { increment: 1 } } })
         if (!updated.count) throw new BusinessError(409, "This opportunity changed. Reload participants before saving.")
         await tx.crmOpportunityParticipant.deleteMany({ where: { tenantId: actor.tenantId, opportunityId: id } })
         if (rows.length) await tx.crmOpportunityParticipant.createMany({ data: rows.map((item, position) => ({ id: retained.get(participantKey(item))?.id, tenantId: actor.tenantId, opportunityId: id, role: item.role, contactId: item.party.kind === "PERSON" ? item.party.id : null, accountId: item.party.kind === "BUSINESS" ? item.party.id : null, position, details: evidence(item) })) })

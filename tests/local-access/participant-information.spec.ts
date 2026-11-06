@@ -12,6 +12,47 @@ async function fixture(context: Awaited<ReturnType<typeof login>>["context"], us
 }
 const content = () => ({ ...structuredClone(emptyQuotationContent), title: "Customer detail agreement", supplierName: "QA Generic Industries", currency: "INR", lines: [{ description: "Shared service", quantity: "1", unit: "hour", rate: "100" }] })
 
+test("contact addresses copy on conversion; existing empty CIF prefills only its reviewed draft and preserves saved overrides",async({browser})=>{
+  test.setTimeout(180_000)
+  const f=await seed(),admin=await login(browser,f.origin,f.users.admin.email),{page,context}=admin
+  try{
+    const enquiry=await json(context,"/api/crm/enquiries",201,"POST",{title:"Address conversion enquiry",assignedUserId:f.users.admin.id,newContact:{name:"QA Address Buyer",email:"address-buyer@example.test",addressLine1:"Test House, Demo Road",city:"Panaji",region:"Goa",postalCode:"403001",country:"India"}})
+    const pipeline=await json(context,"/api/crm/pipelines",201,"POST",{name:"Address conversion",stages:[{name:"Open",kind:"OPEN",probability:10,color:"#123456"},{name:"Won",kind:"WON",probability:100,color:"#00aa00"},{name:"Lost",kind:"LOST",probability:0,color:"#aa0000"}]})
+    const deal=await json(context,"/api/crm/opportunities",201,"POST",{title:"Address conversion opportunity",enquiryId:enquiry.id,enquiryVersion:enquiry.version,contactId:enquiry.contact.id,assignedUserId:f.users.admin.id,pipelineId:pipeline.id,stageId:pipeline.stages[0].id,amount:"100",currency:"INR",expectedCloseOn:"2027-01-01"})
+    const endpoint=`/api/crm/opportunities/${deal.id}/information`
+    await page.goto(`/crm/opportunities/${deal.id}`);await page.getByRole("tab",{name:"Customer details",exact:true}).click()
+    await expect(page.getByText("Test House, Demo Road",{exact:true})).toBeVisible()
+    await expect(page.getByText("Panaji",{exact:true})).toBeVisible()
+    // Simulate an existing source with no saved CIF, without a data migration.
+    await f.db.query('UPDATE "CrmOpportunity" SET "participantInformation"=NULL WHERE id=$1 AND "tenantId"=$2',[deal.id,f.slug])
+    await page.reload();await page.getByRole("tab",{name:"Customer details",exact:true}).click()
+    await page.getByRole("button",{name:"Edit customer details",exact:true}).click()
+    const dialog=page.getByRole("dialog",{name:"Edit customer details",exact:true})
+    await expect(dialog.getByRole("status")).toContainText("prefilled")
+    await expect(dialog.getByLabel("Address line 1 for QA Address Buyer",{exact:true})).toHaveValue("Test House, Demo Road")
+    await expect(dialog.getByLabel("City for QA Address Buyer",{exact:true})).toHaveValue("Panaji")
+    await dialog.getByRole("button",{name:"Cancel",exact:true}).click()
+    await page.getByRole("dialog",{name:"Discard unsaved changes?",exact:true}).getByRole("button",{name:"Discard changes",exact:true}).click()
+    await expect(dialog).toHaveCount(0)
+    expect((await json(context,endpoint)).participants[0].information).toBeUndefined()
+    expect((await json(context,endpoint)).version).toBe(deal.version)
+    await page.getByRole("button",{name:"Edit customer details",exact:true}).click()
+    await dialog.getByLabel("City for QA Address Buyer",{exact:true}).fill("Transaction town")
+    await page.setViewportSize({width:390,height:844})
+    expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true)
+    await page.screenshot({path:test.info().outputPath("cif-prefill-mobile.png"),animations:"disabled"})
+    await dialog.getByRole("button",{name:"Save customer details",exact:true}).click();await expect(dialog).toHaveCount(0)
+    expect((await json(context,`/api/crm/contacts/${enquiry.contact.id}`)).city).toBe("Panaji")
+    await f.db.query('UPDATE "CrmContact" SET city=\'Later directory town\',version=version+1 WHERE id=$1 AND "tenantId"=$2',[enquiry.contact.id,f.slug])
+    await page.reload();await page.getByRole("tab",{name:"Customer details",exact:true}).click()
+    await expect(page.getByText("Transaction town",{exact:true})).toBeVisible()
+    await page.getByRole("button",{name:"Edit customer details",exact:true}).click()
+    await expect(dialog.getByLabel("City for QA Address Buyer",{exact:true})).toHaveValue("Transaction town")
+    await expect(dialog.getByRole("status")).toHaveCount(0)
+    await expect(dialog.getByRole("button",{name:"Save customer details",exact:true})).toBeDisabled()
+  }finally{await context.close();await f.db.end()}
+})
+
 test("generic correspondence, scoped impact publication, confirmation requirements and frozen order details", async ({ browser }) => {
   test.setTimeout(180_000)
   const f=await seed(),admin=await login(browser,f.origin,f.users.admin.email),{page,context}=admin
@@ -63,6 +104,7 @@ test("generic correspondence, scoped impact publication, confirmation requiremen
     await json(context,`/api/crm/quotations/${quote.id}`,200,"PUT",{content:content(),version:1})
     const replacement=await json(context,"/api/sales-orders",200,"POST",{quotationId:quote.id,revision:2})
     await page.goto(`/sales-orders/${replacement.id}`)
+    await page.getByRole("tab",{name:"Customers",exact:true}).click()
     await expect(page.getByText("Pune",{exact:true})).toBeVisible()
     await page.getByRole("button",{name:"Confirm sales order",exact:true}).click()
     await page.getByRole("button",{name:"Confirm agreement",exact:true}).click()

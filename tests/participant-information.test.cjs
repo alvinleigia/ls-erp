@@ -3,8 +3,9 @@ const {test}=require('node:test'),assert=require('node:assert/strict')
 const {correspondenceSchema,emptyCorrespondence}=require('../platform/participants/information.ts')
 const {defaultParticipantDefinition,missingParticipantInformation,participantFormDefinitionSchema,participantConfirmationProof,genericParticipantPreset}=require('../platform/participants/requirements.ts')
 const {participantInformationSchema}=require('../platform/participants/validation.ts')
-const {withParticipantInformation,pruneParticipantInformation}=require('../platform/participants/source-information.ts')
+const {withParticipantInformation,pruneParticipantInformation,initializeParticipantInformation}=require('../platform/participants/source-information.ts')
 const {crmContactSchema}=require('../modules/crm/validation.ts')
+const {contactInformationDefaults}=require('../modules/crm/participant-defaults.ts')
 const person={role:'CUSTOMER',party:{kind:'PERSON',id:'person-a',name:'Customer A',email:'existing@example.test',phone:null,sourceVersion:1}}
 const snapshot={format:1,participants:[person]}
 test('correspondence normalizes identically to CRM entry/import validation',()=>{
@@ -52,4 +53,27 @@ test('pruning removes details only for removed identities, preserving a party in
  const input={format:1,records:[{party:{kind:'PERSON',id:'person-a'},values:emptyCorrespondence},{party:{kind:'PERSON',id:'removed'},values:emptyCorrespondence}]}
  assert.deepEqual(pruneParticipantInformation(input,snapshot).records.map(x=>x.party.id),['person-a'])
  assert.equal(pruneParticipantInformation(null,snapshot),undefined)
+})
+
+test('initial correspondence copies missing identities once and preserves complete saved rows, including explicit blanks',()=>{
+ const defaults={format:1,records:[{party:{kind:'PERSON',id:'person-a'},values:{...emptyCorrespondence,addressLine1:'Directory address',city:'Panaji'}},{party:{kind:'PERSON',id:'person-b'},values:{...emptyCorrespondence,city:'Pune'}}]}
+ const initial=initializeParticipantInformation(null,defaults)
+ defaults.records[0].values.city='Changed later'
+ assert.equal(initial.records[0].values.city,'Panaji')
+ const cleared={format:1,records:[{party:{kind:'PERSON',id:'person-a'},values:{...emptyCorrespondence}}]}
+ const result=initializeParticipantInformation(cleared,defaults)
+ assert.deepEqual(result.records[0].values,emptyCorrespondence)
+ assert.equal(result.records[1].values.city,'Pune')
+ assert.deepEqual(initializeParticipantInformation(result,defaults),result)
+})
+
+test('directory defaults use only people and valid correspondence; missing directory permission performs no lookup',async()=>{
+ const actor={tenantId:'tenant-a',userId:'admin-a',role:'ADMIN'},queries=[]
+ const tx={crmContact:{findMany:async query=>{queries.push(query);return [{id:'person-a',email:'old invalid value',phone:'123',addressLine1:'Valid address',city:'Panaji',country:'India'}]}}}
+ const parties=[{kind:'PERSON',id:'person-a'},{kind:'BUSINESS',id:'business-a'},{kind:'PERSON',id:'person-a'}]
+ const result=await contactInformationDefaults(tx,actor,parties)
+ assert.equal(queries.length,1);assert.deepEqual(queries[0].where.id.in,['person-a']);assert.equal(queries[0].where.archived,false)
+ assert.equal(result.records[0].values.email,'');assert.equal(result.records[0].values.phone,'');assert.equal(result.records[0].values.addressLine1,'Valid address')
+ assert.deepEqual(await contactInformationDefaults(tx,{...actor,permissions:['opportunities.read','opportunities.edit']},parties),{format:1,records:[]})
+ assert.deepEqual(await contactInformationDefaults(tx,actor,[{kind:'BUSINESS',id:'business-a'}]),{format:1,records:[]});assert.equal(queries.length,1)
 })
