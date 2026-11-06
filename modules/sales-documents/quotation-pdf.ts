@@ -9,7 +9,7 @@ import { formatDateForDisplay } from "@/lib/date"
 import { formatDecimalCurrency } from "@/lib/formatting"
 import type { QuotationSnapshot } from "./quotation-service"
 import { BusinessError } from "@/platform/policy"
-import { participantDocumentBlocks } from "@/platform/participants/document-blocks"
+import { participantDocumentBlocks, participantAddressBlocks } from "@/platform/participants/document-blocks"
 
 export async function buildQuotationPdf(record: { id: string; revision: number; revisionCreatedAt: Date | string; snapshot: QuotationSnapshot }, preview = false) {
   if(record.snapshot.content.layout){const [{quotationLayoutDocument},{renderBusinessDocument}]=await Promise.all([import("./quotation-layout"),import("@/platform/documents/pdf")]);return renderBusinessDocument(quotationLayoutDocument(record),preview)}
@@ -17,7 +17,7 @@ export async function buildQuotationPdf(record: { id: string; revision: number; 
   const font = await pdf.embedFont(await readFile(path.join(process.cwd(), "public/assets/fonts/NotoSans-Regular.ttf")), { subset: true })
   const supportedCharacters = new Set(font.getCharacterSet())
   const { content: c, calculation: calc } = record.snapshot
-  const customers = record.snapshot.participants ? participantDocumentBlocks(record.snapshot.participants) : null
+  const customers = record.snapshot.participants ? [...participantDocumentBlocks(record.snapshot.participants), ...participantAddressBlocks(record.snapshot.participants)] : null
   const labels = record.snapshot.labels ?? quotationDocumentLabels()
   const money = (value: string) => formatDecimalCurrency(value, c.currency, record.snapshot)
   const date = (value: string) => formatDateForDisplay(value, record.snapshot.dateFormat)

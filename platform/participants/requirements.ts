@@ -36,7 +36,7 @@ export function participantConfirmationProof(snapshot: unknown, configuration: P
 }
 export type ParticipantConfirmationProof = ReturnType<typeof participantConfirmationProof>["proof"]
 export const participantRoles = participantRoleSchema.options
-export type ParticipantInformationView = { version: number; configuration: ParticipantFormConfiguration; participants: ParticipantSnapshot["participants"]; canEdit: boolean; missing: MissingParticipantInformation[]; defaults?: ParticipantInformation["records"] }
+export type ParticipantInformationView = { version: number; configuration: ParticipantFormConfiguration; participants: ParticipantSnapshot["participants"]; canEdit: boolean; missing: MissingParticipantInformation[]; defaults?: ParticipantInformation["records"]; addressBooks?: { party: { kind: "PERSON" | "BUSINESS"; id: string }; endpoint: string }[] }
 export function defaultInformation(row: ParticipantSnapshot["participants"][number]) {
   return row.information ?? { email: row.party.email ?? "", phone: row.party.phone ?? "", addressLine1: "", addressLine2: "", city: "", region: "", postalCode: "", country: "" }
 }

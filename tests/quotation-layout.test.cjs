@@ -17,6 +17,20 @@ function capturePdfText(t){
 }
 function standardSample(){const s=quotationLayoutSample(starterDocumentLayout(catalog));delete s.content.layout;return s}
 
+test('standard and custom PDFs use accepted billing and delivery copies without directory lookups',async t=>{
+ const text=capturePdfText(t),snapshot=standardSample(),participant=snapshot.participants.participants[0]
+ participant.addresses={billing:{...emptyCorrespondence,addressLine1:'Accepted billing road',city:'Billing town',country:'India'},delivery:{...emptyCorrespondence,addressLine1:'Accepted delivery site',city:'Site town',country:'India'}}
+ const before=JSON.stringify(snapshot)
+ await buildQuotationPdf(record(snapshot),true)
+ for(const value of ['Accepted billing road','Billing town','Accepted delivery site','Site town'])assert(text.join('\n').includes(value),value)
+ assert.equal(JSON.stringify(snapshot),before)
+ snapshot.content.layout=starterDocumentLayout(catalog)
+ snapshot.content.layout.content.push(...['billing-addresses','delivery-addresses'].map(key=>({type:'documentSection',attrs:{key}})))
+ const layout=quotationLayoutDocument(record(snapshot))
+ assert.match(JSON.stringify(layout.body),/Accepted billing road/);assert.match(JSON.stringify(layout.body),/Accepted delivery site/)
+ const bytes=await buildQuotationPdf(record(snapshot),true);assert.equal(Buffer.from(bytes).subarray(0,5).toString(),'%PDF-')
+})
+
 test('custom quotation styling is validated and frozen with its accepted revision',async()=>{
  const {defaultDocumentAppearance,documentStylePresets}=require('../platform/documents/appearance.ts')
  const snapshot=quotationLayoutSample(starterDocumentLayout(catalog));snapshot.content.appearance={...defaultDocumentAppearance,...documentStylePresets.letter,footer:'Sample Supplier | example.test'}

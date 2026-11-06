@@ -2,11 +2,15 @@ import { participantSnapshotSchema, participantRoleLabels, type ParticipantRole 
 import { defaultInformation } from "./requirements"
 import type { DocumentBlock } from "../documents/contracts"
 import { BusinessError } from "../policy"
-export function participantDocumentBlocks(value: unknown, captions?: Record<ParticipantRole,string>): DocumentBlock[] {
+export const participantAddressSections = [{ key: "billing-addresses", label: "Saved billing addresses", required: false }, { key: "delivery-addresses", label: "Saved delivery / site addresses", required: false }]
+export function participantAddressBlocks(value: unknown, captions?: Record<ParticipantRole,string>): DocumentBlock[] {
+  return (["billing", "delivery"] as const).flatMap(purpose => participantDocumentBlocks(value, captions, purpose).map(block => ({ ...block, key: `${purpose}-addresses`, title: `${purpose === "billing" ? "Billing" : "Delivery / site"}: ${block.title}` })))
+}
+export function participantDocumentBlocks(value: unknown, captions?: Record<ParticipantRole,string>, purpose: "correspondence" | "billing" | "delivery" = "correspondence"): DocumentBlock[] {
   const parsed=participantSnapshotSchema.safeParse(value)
   if(!parsed.success)throw new BusinessError(409,"This saved revision has no complete participant evidence. Correct the source and use a replacement quotation/order.")
   const roleLabels=captions??parsed.data.presentation?.roleLabels??participantRoleLabels
   const grouped=new Map<string,{name:string;roles:Set<string>;information:ReturnType<typeof defaultInformation>}>()
-  for(const row of parsed.data.participants){const key=JSON.stringify([row.party.kind,row.party.id]),previous=grouped.get(key);if(previous){previous.roles.add(roleLabels[row.role]);continue}grouped.set(key,{name:row.party.name,roles:new Set([roleLabels[row.role]]),information:row.information??defaultInformation(row)})}
+  for(const row of parsed.data.participants){const information=purpose==="correspondence"?row.information??defaultInformation(row):row.addresses?.[purpose];if(!information)continue;const key=JSON.stringify([row.party.kind,row.party.id]),previous=grouped.get(key);if(previous){previous.roles.add(roleLabels[row.role]);continue}grouped.set(key,{name:row.party.name,roles:new Set([roleLabels[row.role]]),information})}
   return [...grouped.values()].map(row=>({title:row.name,paragraphs:[[...row.roles].join(", "),[row.information.addressLine1,row.information.addressLine2,[row.information.city,row.information.region,row.information.postalCode].filter(Boolean).join(", "),row.information.country].filter(Boolean).join("\n"),[row.information.email,row.information.phone].filter(Boolean).join(" | ")].filter(Boolean)}))
 }

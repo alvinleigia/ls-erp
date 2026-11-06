@@ -244,6 +244,7 @@ model TenantModule {
 }
 
 model CrmContact {
+  addresses PartyAddress[]
   taxIdentities PartyTaxIdentity[]
   participantRoles CrmOpportunityParticipant[]
   sharingPolicyId String?
@@ -287,6 +288,7 @@ model CrmContact {
 }
 
 model CrmAccount {
+  addresses PartyAddress[]
   taxIdentities PartyTaxIdentity[]
   participantRoles CrmOpportunityParticipant[]
   sharingPolicyId String?
@@ -858,6 +860,7 @@ model Organization {
 }
 
 model Tenant {
+  partyAddresses PartyAddress[]
   documentTemplates BusinessDocumentTemplate[]
   salesOrderSequence SalesOrderSequence?
   receiptDocumentSequence ReceiptDocumentSequence?
@@ -3643,4 +3646,25 @@ model TaxStatutoryDocumentEvent {
  createdAt DateTime @default(now())
  source TaxStatutoryDocument @relation(fields:[tenantId,documentId],references:[tenantId,id],onDelete:Restrict)
  @@id([tenantId,documentId,version])
+}
+
+model PartyAddress {
+  id String @id @default(cuid())
+  tenantId String
+  contactId String?
+  accountId String?
+  name String
+  purposes String[]
+  values Json
+  defaultCorrespondence Boolean @default(false)
+  defaultBilling Boolean @default(false)
+  defaultDelivery Boolean @default(false)
+  archived Boolean @default(false)
+  version Int @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  contact CrmContact? @relation(fields: [tenantId, contactId], references: [tenantId, id], onDelete: Restrict)
+  account CrmAccount? @relation(fields: [tenantId, accountId], references: [tenantId, id], onDelete: Restrict)
+  @@unique([tenantId, id])
 }

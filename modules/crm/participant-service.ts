@@ -2,8 +2,8 @@ import { readParticipantConfiguration, type ParticipantPresetReader } from "@/pl
 import { genericParticipantPreset, missingParticipantInformation } from "@/platform/participants/requirements"
 import { informationPartyKey } from "@/platform/participants/information"
 import { initializeParticipantInformation, pruneParticipantInformation } from "@/platform/participants/source-information"
-import { contactInformationDefaults } from "./participant-defaults"
-import { participantInformationSaveSchema } from "@/platform/participants/validation"
+import { contactInformationDefaults, participantAddressBooks, resolveParticipantAddressSelections } from "./participant-defaults"
+import { participantInformationSaveSchema, participantInformationSchema } from "@/platform/participants/validation"
 import { crmSourceParticipants } from "./participant-source"
 import type { PermissionRun } from "@/platform/access/server"
 import { z } from "zod"
@@ -55,7 +55,8 @@ export function createOpportunityParticipantService({ run, runLocked, audit }: C
     const config = await configuration(tx, actor)
     const canEdit = permits(actor, "opportunities.edit") && !!await tx.crmOpportunity.findFirst({ where: { ...opportunityScope(actor, "edit"), id }, select: { id: true } })
     const defaults = canEdit ? await contactInformationDefaults(tx, actor, snapshot.participants.filter(item => !item.information).map(item => item.party)) : undefined
-    return { version: row.version, configuration: config, participants: snapshot.participants, canEdit, missing: missingParticipantInformation(snapshot, config.definition), ...(defaults?.records.length ? { defaults: defaults.records } : {}) }
+    const addressBooks = canEdit ? await participantAddressBooks(tx, actor, snapshot.participants.map(item => item.party)) : []
+    return { version: row.version, configuration: config, participants: snapshot.participants, canEdit, addressBooks, missing: missingParticipantInformation(snapshot, config.definition), ...(defaults?.records.length ? { defaults: defaults.records } : {}) }
   }
   return {
     getOpportunityParticipantInformation(id: string) { return run("opportunities.read", (tx, actor) => informationView(tx, actor, id)) },
@@ -68,7 +69,8 @@ export function createOpportunityParticipantService({ run, runLocked, audit }: C
         const snapshot = await crmSourceParticipants(tx, id, { tenantId: actor.tenantId, person: row.contact, business: row.account })
         const allowed = new Set(snapshot.participants.map(item => informationPartyKey(item.party)))
         if (data.information.records.some(item => !allowed.has(informationPartyKey(item.party)))) throw new BusinessError(409, "Save details only for this opportunity's current participants.")
-        const updated = await tx.crmOpportunity.updateMany({ where: { ...opportunityScope(actor, "edit"), id, version: data.version }, data: { participantInformation: data.information, version: { increment: 1 } } })
+        const information = await resolveParticipantAddressSelections(tx, actor, data.information, row.participantInformation === null ? undefined : participantInformationSchema.parse(row.participantInformation))
+        const updated = await tx.crmOpportunity.updateMany({ where: { ...opportunityScope(actor, "edit"), id, version: data.version }, data: { participantInformation: information, version: { increment: 1 } } })
         if (!updated.count) throw new BusinessError(409, "This opportunity changed. Reload before saving.")
         await audit(tx, actor, "crm.opportunity.information.updated", id, { version: data.version }, { version: data.version + 1, configurationVersion: config.version, parties: data.information.records.map(item => item.party) })
         await tx.crmOpportunityActivity.createMany({ data: { tenantId: actor.tenantId, opportunityId: id, actorUserId: actor.userId, event: "crm.opportunity.information.updated", message: "Customer correspondence details updated." } })

@@ -12,10 +12,10 @@ export function initializeParticipantInformation(input: unknown, defaults: Parti
 export function withParticipantInformation(snapshot: ParticipantSnapshot, input: unknown): ParticipantSnapshot {
   if (input === null || input === undefined) return snapshot
   const information = participantInformationSchema.parse(input)
-  const records = new Map(information.records.map(row => [informationPartyKey(row.party), row.values]))
+  const records = new Map(information.records.map(row => [informationPartyKey(row.party), row]))
   return participantSnapshotSchema.parse({ ...snapshot, participants: snapshot.participants.map(row => {
-    const values = records.get(informationPartyKey(row.party))
-    return values ? { ...row, information: values } : row
+    const saved = records.get(informationPartyKey(row.party))
+    return saved ? { role: row.role, party: row.party, information: saved.values, ...(saved.addresses ? { addresses: saved.addresses } : {}), ...(saved.addressReferences ? { addressReferences: saved.addressReferences } : {}) } : row
   }) })
 }
 export function pruneParticipantInformation(input: unknown, snapshot: ParticipantSnapshot): ParticipantInformation | undefined {

@@ -1,5 +1,6 @@
 import { z } from "zod"
 import { correspondenceSchema, participantPresentationSchema } from "./information"
+import { transactionAddressesSchema, addressReferencesSchema } from "@/platform/addresses/contracts"
 
 const id = z.string().trim().min(1).max(100)
 export const participantRoleSchema = z.enum(["CUSTOMER", "ADDITIONAL_CUSTOMER", "REPRESENTATIVE"])
@@ -36,6 +37,8 @@ export const savedParticipantSchema = z.object({
   role: participantRoleSchema,
   party: participantPartyReferenceSchema.extend(partyDetails).strict(),
   information: correspondenceSchema.optional(),
+  addresses: transactionAddressesSchema.optional(),
+  addressReferences: addressReferencesSchema.optional(),
 }).strict()
 export const participantSnapshotSchema = z.object({
   format: z.literal(1),
@@ -90,7 +93,7 @@ export type ParticipantEditorData = {
 
 export const participantInformationSchema = z.object({
   format: z.literal(1),
-  records: z.array(z.object({ party: participantPartyReferenceSchema, values: correspondenceSchema }).strict()).max(100).superRefine((rows, ctx) => {
+  records: z.array(z.object({ party: participantPartyReferenceSchema, values: correspondenceSchema, addresses: transactionAddressesSchema.optional(), addressReferences: addressReferencesSchema.optional() }).strict()).max(100).superRefine((rows, ctx) => {
     const seen = new Set<string>()
     rows.forEach((row, index) => {
       const key = JSON.stringify([row.party.kind, row.party.id])

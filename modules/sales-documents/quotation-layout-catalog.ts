@@ -1,7 +1,9 @@
+import { participantAddressSections } from "@/platform/participants/document-blocks"
 import type { TemplateCatalog } from "@/platform/documents/layout"
 
 const sections=[
   {key:"customer-details",label:"Customers and correspondence",required:true},
+  ...participantAddressSections,
   {key:"reference-details",label:"Reference details",required:true},
   {key:"commercial-lines",label:"Commercial lines",required:true},
   {key:"totals",label:"Pricing totals and pending charges",required:true},
@@ -19,5 +21,5 @@ export const quotationLayoutCatalog: TemplateCatalog={
     {key:"supplier.name",label:"Supplier name"},{key:"supplier.website",label:"Supplier website"},
     {key:"bank.name",label:"Bank name"},{key:"bank.account-name",label:"Bank account name"},{key:"bank.account-number",label:"Bank account number"},{key:"bank.routing-code",label:"Bank routing code"}],
   sections,
-  starter:{type:"doc",content:sections.map(row=>({type:"documentSection",attrs:{key:row.key}}))},
+  starter:{type:"doc",content:sections.filter(row=>row.required).map(row=>({type:"documentSection",attrs:{key:row.key}}))},
 }

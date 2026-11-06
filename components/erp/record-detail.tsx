@@ -52,7 +52,7 @@ export function RecordTabs({ tabs, value, onChange, keepMounted = false, validat
       event.preventDefault(); onChange(tabs[next].value)
       document.getElementById(`${id}-${tabs[next].value}`)?.focus()
     }}>
-      {tabs.map(tab => <Button key={tab.value} type="button" role="tab" id={`${id}-${tab.value}`} aria-selected={value === tab.value} aria-controls={`${id}-panel-${tab.value}`} tabIndex={value === tab.value ? 0 : -1} variant={value === tab.value ? "secondary" : "ghost"} className="shrink-0" onClick={() => onChange(tab.value)}>{tab.label}</Button>)}
+      {tabs.map(tab => <Button key={tab.value} autoIcon={false} type="button" role="tab" id={`${id}-${tab.value}`} aria-selected={value === tab.value} aria-controls={`${id}-panel-${tab.value}`} tabIndex={value === tab.value ? 0 : -1} variant={value === tab.value ? "secondary" : "ghost"} className="shrink-0" onClick={() => onChange(tab.value)}>{tab.label}</Button>)}
     </div>
     {tabs.filter(tab => keepMounted || tab.value === value).map(tab => <div key={tab.value} role="tabpanel" id={`${id}-panel-${tab.value}`} data-record-panel={tab.value} hidden={tab.value !== value} aria-labelledby={`${id}-${tab.value}`} tabIndex={0} className="min-w-0 space-y-6">{tab.content}</div>)}
   </div>

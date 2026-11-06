@@ -1,3 +1,4 @@
+import { participantAddressSections } from "@/platform/participants/document-blocks"
 import { formatDecimalCurrency } from "@/lib/formatting"
 import { formatDateForDisplay } from "@/lib/date"
 import type { TemplateCatalog } from "@/platform/documents/layout"
@@ -16,7 +17,7 @@ export const orderTemplateCatalog: TemplateCatalog = {
     { key: "bank.name", label: "Bank name" }, { key: "bank.account-name", label: "Bank account name" }, { key: "bank.account-number", label: "Bank account number" }, { key: "bank.routing-code", label: "Bank routing code" },
   ],
   sections: [
-    { key: "agreement", label: "Agreement summary", required: true }, { key: "participants", label: "Customers and correspondence", required: true },
+    { key: "agreement", label: "Agreement summary", required: true }, { key: "participants", label: "Customers and correspondence", required: true }, ...participantAddressSections,
     { key: "commercial-lines", label: "Commercial lines", required: true }, { key: "payment-schedule", label: "Payment schedule", required: true },
     { key: "additional-charges", label: "Additional charges", required: true }, { key: "pending-charges", label: "Pending-charge notice", required: true },
     { key: "bank-details", label: "Payment bank details", required: true },

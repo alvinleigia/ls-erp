@@ -1,3 +1,52 @@
+## P13Q shared customer/business address book (2026-11-06)
+
+Contacts and business accounts have an Addresses tab for named correspondence,
+billing and delivery/site addresses. Purposes can share an entry, with independent
+defaults per owner. The shared address service uses CRM's canonical owner Read,
+Edit and Archive authority. Parent locks serialize changes/default transfers;
+optimistic versions, unique defaults, immutable ownership, tenant composite FKs,
+forced inherited RLS and atomic audit protect the child records. Entries archive
+rather than delete. Directory selectors are lazy, owner-bound and paginated.
+
+New opportunities and genuinely new participants copy permitted defaults once.
+The profile address remains a contact's base correspondence; business buyers
+never infer their linked person's address, even when person/business IDs match.
+Existing saved CIF rows and explicit blanks remain authoritative. Uninitialized
+sources offer draft-only suggestions without a read-time write or data backfill.
+
+The CIF editor separates Correspondence, Billing and Delivery/site into tabs.
+Selections check current owner, purpose and address version. Manual changes
+detach the selected reference for that purpose. Accepted transaction copies and
+references survive directory archive/revocation; two opportunities can keep
+different addresses for the same customer. Closing a picker ignores late detail
+responses. Validation opens the relevant edit tab. Navigation tabs no longer infer
+action icons from labels such as Addresses.
+
+Quotation revisions/orders retain all accepted purposes. Standard quotations can
+print their separate address copies; shared optional dynamic sections support
+custom quotations, company letters, receipts and commercial invoices/credits.
+Rendering uses saved facts only. Approved statutory tax identities, signature
+controls, existing layouts and issued archives keep their existing contracts.
+See [ADDRESS_BOOK.md](ADDRESS_BOOK.md) for usage.
+
+Migration 20261106000100_party_address_book is additive. A forced failure/rollback
+and successful apply preserved all 165 preceding tables, policies and functions.
+The local demo received it through the guarded migration workflow (149 applied).
+Before/after record counts and the user's test opportunity row hash match; the
+new book is empty. Local browser inspection performed zero business writes.
+No test entries were added to the demo or production tenant.
+
+Verification: 59 unit/PDF checks, 113 native database regressions and six real
+application browser workflows passed across focused runs. Coverage includes
+concurrent default transfer, archive/restore, stale versions, directory and source
+permission loss, Restricted sharing RLS, cross-tenant/owner rejection, audit
+rollback, person/business identity separation, immutable quotation/order copies,
+picker cancellation, mobile UI and receipt/invoice regressions. Desktop/mobile
+screenshots and all pages of two synthetic address PDFs were inspected. Build,
+TypeScript, targeted lint and whitespace checks passed. The migration helper and
+address tests are included in the existing participant regression runner.
+Implementation and demo migration are local; staging/production are unchanged.
+
 ## P13P initial customer correspondence (2026-11-06)
 
 Enquiry conversion and direct opportunity creation now copy permitted contact

@@ -1,5 +1,32 @@
 # Base Conventions
 
+## Shared address book and transaction copies (P13Q)
+
+- `platform/addresses` owns bounded address contracts, child CRUD and reusable UI.
+  CRM supplies canonical Contact/Business account owner adapters. Use parent Read,
+  Edit and Archive permissions and scopes; never invent a parallel address ACL.
+  PartyAddress has a single tenant-bound person/business owner, forced parent RLS,
+  immutable ownership, optimistic versions and per-purpose unique defaults.
+- Serialize address/default changes on their parent and audit them in the same
+  transaction. Default transfers version the demoted addresses too. Archive clears
+  defaults; no hard delete. Address selection is lazy and bounded/paginated.
+- The contact profile is its base correspondence address; an active named default
+  takes precedence. Businesses use only their own address book. Resolve new
+  defaults/selections with current directory permission and canonical record scope.
+  New selections verify owner, active purpose and version under a row lock.
+- Participant `information` remains correspondence; optional `addresses.billing`
+  and `addresses.delivery` hold independent accepted copies. Address references
+  identify the selected version, not a live link. Manual edits detach that purpose's
+  reference. Retained copies survive master archive or directory access revocation.
+  Preserve explicit blank rows and missing supplemental roles without backfilling.
+- Freeze all purposes through quotation/order participant snapshots. Reuse shared
+  address document blocks and registered optional sections for commercial outputs.
+  Never resolve live addresses during rendering/download or alter approved tax
+  identities, statutory signature controls or issued archives.
+- The additive address migration changes no existing business rows or snapshots.
+  Local and staging use their normal guarded migration workflow; production still
+  requires a controlled migration/release before deploying queries for this table.
+
 ## Initial customer correspondence (P13P)
 
 - CRM seeds transaction correspondence from readable, active contacts when an

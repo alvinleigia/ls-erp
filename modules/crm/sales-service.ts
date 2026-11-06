@@ -188,7 +188,7 @@ export function createSalesService<Fields extends object, Metadata extends objec
         const accountId = data.accountId === undefined ? sourceEnquiry?.accountId || "" : data.accountId
         await relations(tx, actor, data.contactId, accountId)
         const stage = await destination(tx, actor, data.pipelineId, data.stageId)
-        const defaults = await contactInformationDefaults(tx, actor, [{ kind: "PERSON", id: data.contactId }])
+        const defaults = await contactInformationDefaults(tx, actor, [{ kind: "PERSON", id: data.contactId }, ...(accountId ? [{ kind: "BUSINESS" as const, id: accountId }] : [])])
         const result = await tx.crmOpportunity.create({ data: {
           ...data, ...introduction, salesTeamId: team?.id ?? null, ...outcome(stage, data.lossReason, data.probability), ...await resolveLostReason(tx, actor, stage.kind === "LOST", data.lostReasonId), tenantId: actor.tenantId,
           accountId: accountId || null, enquiryId: data.enquiryId || null, expectedCloseOn: new Date(`${expectedCloseOn}T00:00:00Z`),
@@ -229,7 +229,7 @@ export function createSalesService<Fields extends object, Metadata extends objec
           const person = await tx.crmContact.findFirstOrThrow({ where: { ...contactScope(actor), id: data.contactId }, select: { id: true, tenantId: true, name: true, email: true, phone: true, version: true } })
           const business = data.accountId ? await tx.crmAccount.findFirstOrThrow({ where: { ...accountScope(actor), id: data.accountId }, select: { id: true, tenantId: true, name: true, version: true } }) : null
           participantInformation = pruneParticipantInformation(before.participantInformation, await crmSourceParticipants(tx, id, { tenantId: source.tenantId, person, business }))
-          const defaults = await contactInformationDefaults(tx, actor, [{ kind: "PERSON", id: data.contactId }])
+          const defaults = await contactInformationDefaults(tx, actor, [{ kind: "PERSON", id: data.contactId }, ...(data.accountId ? [{ kind: "BUSINESS" as const, id: data.accountId }] : [])])
           if (defaults.records.length) participantInformation = initializeParticipantInformation(participantInformation, defaults)
         }
         const changedStage = data.stageId !== before.stageId

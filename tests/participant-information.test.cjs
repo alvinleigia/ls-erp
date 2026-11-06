@@ -69,7 +69,7 @@ test('initial correspondence copies missing identities once and preserves comple
 
 test('directory defaults use only people and valid correspondence; missing directory permission performs no lookup',async()=>{
  const actor={tenantId:'tenant-a',userId:'admin-a',role:'ADMIN'},queries=[]
- const tx={crmContact:{findMany:async query=>{queries.push(query);return [{id:'person-a',email:'old invalid value',phone:'123',addressLine1:'Valid address',city:'Panaji',country:'India'}]}}}
+ const tx={crmContact:{findMany:async query=>{queries.push(query);return [{id:'person-a',email:'old invalid value',phone:'123',addressLine1:'Valid address',city:'Panaji',country:'India'}]}},crmAccount:{findMany:async()=>[]},partyAddress:{findMany:async()=>[]}}
  const parties=[{kind:'PERSON',id:'person-a'},{kind:'BUSINESS',id:'business-a'},{kind:'PERSON',id:'person-a'}]
  const result=await contactInformationDefaults(tx,actor,parties)
  assert.equal(queries.length,1);assert.deepEqual(queries[0].where.id.in,['person-a']);assert.equal(queries[0].where.archived,false)

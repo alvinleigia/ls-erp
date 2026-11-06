@@ -1,6 +1,6 @@
 import type { DocumentBlock,PrintableDocument } from "@/platform/documents/contracts"
 import { resolveDocumentLayout } from "@/platform/documents/layout"
-import { participantDocumentBlocks } from "@/platform/participants/document-blocks"
+import { participantDocumentBlocks, participantAddressBlocks } from "@/platform/participants/document-blocks"
 import { formatDateForDisplay } from "@/lib/date"
 import { formatDecimalCurrency } from "@/lib/formatting"
 import { BusinessError } from "@/platform/policy"
@@ -16,7 +16,7 @@ export function quotationLayoutDocument(record:{id:string;revision:number;revisi
   const money=(v:string)=>formatDecimalCurrency(v,c.currency,s),date=(v:string)=>v?formatDateForDisplay(v,s.dateFormat):"Not supplied"
   const reference=`${record.id}/V${record.revision}`,issuedOn=new Date(record.revisionCreatedAt).toISOString().slice(0,10)
   const blocks:DocumentBlock[]=[
-    ...participantDocumentBlocks(s.participants).map(block=>({...block,key:"customer-details"})),
+    ...participantDocumentBlocks(s.participants).map(block=>({...block,key:"customer-details"})),...participantAddressBlocks(s.participants),
     {key:"reference-details",title:"Reference details",table:{headings:["Detail","Value"],widths:[1,2],rows:[[labels.opportunity,s.opportunity],...(c.bookingDate?[["Booking date",date(c.bookingDate)]]:[]),...(c.validUntil?[["Valid until",date(c.validUntil)]]:[]),...[...s.context,...c.details].map(row=>[row.label,row.value])]}},
     {key:"commercial-lines",title:"Price",table:{headings:["Description","Quantity / unit","Rate","Amount"],widths:[2,1,1,1.2],rows:calc.lines.map(line=>[line.description,`${line.quantity} ${line.unit}`,money(line.rate),money(line.amount)])}},
     {key:"totals",title:"Pricing summary",table:{headings:["Summary","Amount"],widths:[2,1],rows:[["Base price",money(calc.base)],["Included charges",money(calc.included)],["Discount",money(calc.discount)],["Total consideration",money(calc.consideration)],["Extra charges - known",money(calc.extras)],["Total known amount",money(calc.totalKnown)]]},paragraphs:calc.hasPending?["Pending charges are additional and are not included in the total known amount."]:[]},
