@@ -1,3 +1,29 @@
+## P13R readable access-profile names (2026-11-06)
+
+Migration 20261106000200_readable_access_profile_names replaces exact generated
+`Account access <tenant hash>` labels with `Existing business access`. Custom names
+are preserved. A tenant that already uses the friendly name gets a numeric suffix
+on the generated profile, without merging users or grants. IDs, permissions,
+modules, archive state, assignments and record limits stay unchanged. Profile
+versions advance to reject stale open editors. This is a persisted data rename;
+there is no runtime display override or historical migration rewrite.
+
+The access-profile list consistently uses Profile, Profile status, Active profiles,
+Archived profiles and Loading profiles. Staff/Manager account roles retain their
+existing meaning. The disposable migration helper verifies six fixture cases,
+forced rollback, repeat application, collision handling, custom-name preservation
+and exact preservation of 165 other tables plus policies/functions. It is included
+in the normal migration rehearsal runner.
+
+The local demo received migration 150 through the guarded workflow. Its profiles
+already have custom names, so zero local labels changed; before/after checks
+preserved permissions, assignments, scopes, users, opportunities, quotations and
+orders. The profile list was inspected on desktop/mobile with no business writes.
+The existing browser workflow for profile creation, user creation, composition,
+assignment and record limits passed against the production build and disposable
+database. Full build/TypeScript, targeted lint, syntax and whitespace checks
+passed. Hosted environments remain unchanged pending the controlled release.
+
 ## P13Q shared customer/business address book (2026-11-06)
 
 Contacts and business accounts have an Addresses tab for named correspondence,

@@ -9,6 +9,7 @@ test("module profiles compose through user creation and the assignment editor", 
   let manager: Awaited<ReturnType<typeof login>> | undefined
   try {
     await admin.page.goto("/settings/roles")
+    await expect(admin.page.getByRole("button", { name: "Profile status", exact: true })).toHaveText("Active profiles")
     await admin.page.getByRole("button", { name: "New profile", exact: true }).click()
     await admin.page.getByRole("button", { name: "Profile module", exact: true }).click()
     await admin.page.getByRole("menuitemradio", { name: "Inventory", exact: true }).click()
@@ -21,6 +22,7 @@ test("module profiles compose through user creation and the assignment editor", 
     await admin.page.screenshot({ path: info.outputPath("inventory-profile-desktop.png"), fullPage: true, animations: "disabled" })
     await admin.page.getByRole("button", { name: "Save changes", exact: true }).click()
     await expect(admin.page.getByRole("button", { name: "Warehouse viewer", exact: true })).toBeVisible()
+    await expect(admin.page.getByRole("columnheader", { name: "Profile", exact: true })).toBeVisible()
     const viewer = (await json(admin.context, "/api/access/roles?q=Warehouse%20viewer")).items[0]
     const template = (key: string) => moduleProfileTemplates.find(item => item.key === key)!
     const sales = await json(admin.context, "/api/access/roles", 201, "POST", { name: "Sales manager", moduleKey: "crm", permissions: template("crm:manager").permissions })

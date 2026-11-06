@@ -1,5 +1,18 @@
 # Base Conventions
 
+## Readable access-profile names (P13R)
+
+- Keep generated tenant identifiers in profile IDs. Display names should describe
+  the profile's purpose. Use Profile consistently in the access-profile interface;
+  account roles such as Staff/Manager remain a separate concept.
+- The one-time readable-name migration targets only the exact generated ID,
+  tenant-derived name and name key from the composable-profile migration. Preserve
+  custom labels. Resolve name collisions with a readable numeric suffix; never
+  merge profiles, permissions or assignments to reuse a name.
+- A rename updates name/nameKey and advances profile version/updatedAt. Preserve
+  IDs, grants, modules, archive state, assignments, user policies and business data.
+  Keep historical migrations immutable and do not add runtime name aliases.
+
 ## Shared address book and transaction copies (P13Q)
 
 - `platform/addresses` owns bounded address contracts, child CRUD and reusable UI.
