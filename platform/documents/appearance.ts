@@ -5,6 +5,8 @@ import { letterheadProfileSchema } from "./letterhead"
 export const documentAppearanceSchema = z.object({
   fontSize: z.number().int().min(9).max(12),
   titleSize: z.number().int().min(12).max(24),
+  lineHeight: z.number().min(1).max(3).optional(),
+  spaceAfter: z.number().min(0).max(48).optional(),
   spacing: z.enum(["comfortable", "compact"]),
   margins: z.enum(["standard", "narrow", "wide"]),
   colour: z.enum(["navy", "black", "teal"]),
@@ -25,8 +27,3 @@ export const defaultDocumentAppearance: DocumentAppearance = {
   colour: "navy", tableStyle: "shaded", titleAlign: "left", referenceLayout: "line", logoAlign: "left",
   logoSize: "medium", companyHeading: true, repeatLogo: false, watermark: false, footer: "",
 }
-export const documentStylePresets = {
-  standard: { fontSize: 10, titleSize: 20, spacing: "comfortable", margins: "standard", colour: "navy", tableStyle: "shaded", titleAlign: "left", referenceLayout: "line", companyHeading: true },
-  letter: { fontSize: 10, titleSize: 14, spacing: "compact", margins: "standard", colour: "black", tableStyle: "minimal", titleAlign: "center", referenceLayout: "split", companyHeading: false },
-  compact: { fontSize: 9, titleSize: 16, spacing: "compact", margins: "narrow", colour: "black", tableStyle: "grid", titleAlign: "left", referenceLayout: "line", companyHeading: true },
-} as const

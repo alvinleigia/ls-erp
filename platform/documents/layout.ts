@@ -1,6 +1,7 @@
 import { z } from "zod"
 import { BusinessError } from "../policy"
 import type { DocumentBlock } from "./contracts"
+import { headingLevelSchema, paragraphSpacingSchema, lineSpacingSchema, type ParagraphSpacing, type LineSpacing } from "./typography"
 
 const key = z.string().regex(/^[a-z][a-z0-9.-]{0,70}$/)
 export const documentLinkSchema = z.string().trim().max(1000).refine(value => {
@@ -15,13 +16,13 @@ const marks = z.array(z.union([
 })
 const inline = z.discriminatedUnion("type", [
   z.object({ type: z.literal("text"), text: z.string().min(1).max(24000), marks: marks.optional() }).strict(),
-  z.object({ type: z.literal("documentField"), attrs: z.object({ key }).strict(), marks: marks.optional() }).strict(),
+  z.object({ type: z.literal("documentField"), attrs: z.object({ key, documentTitle: z.literal(true).nullable().optional() }).strict(), marks: marks.optional() }).strict(),
   z.object({ type: z.literal("hardBreak") }).strict(),
 ])
 const alignment = z.enum(["left", "center", "right"]).nullable().optional()
-const spacing = { paragraphSpacing: z.enum(["compact", "normal", "relaxed"]).nullable().optional(), lineSpacing: z.enum(["single", "one-and-half", "double"]).nullable().optional() }
+const spacing = { paragraphSpacing: paragraphSpacingSchema, lineSpacing: lineSpacingSchema }
 const paragraph = z.object({ type: z.literal("paragraph"), attrs: z.object({ textAlign: alignment, ...spacing }).strict().optional(), content: z.array(inline).max(250).optional() }).strict()
-const heading = z.object({ type: z.literal("heading"), attrs: z.object({ level: z.union([z.literal(1), z.literal(2), z.literal(3)]), textAlign: alignment, ...spacing }).strict(), content: z.array(inline).max(250).optional() }).strict()
+const heading = z.object({ type: z.literal("heading"), attrs: z.object({ level: headingLevelSchema, textAlign: alignment, ...spacing }).strict(), content: z.array(inline).max(250).optional() }).strict()
 type TextNode = z.infer<typeof paragraph> | z.infer<typeof heading>
 type ListNode = ({ type: "bulletList" } | { type: "orderedList" }) & { attrs?: { start?: number; type?: "1" | null }; content: { type: "listItem"; content: (z.infer<typeof paragraph> | ListNode)[] }[] }
 function listSchema(depth: number): z.ZodType<ListNode> {
@@ -44,14 +45,14 @@ export type DocumentLayout = z.infer<typeof documentLayoutSchema>
 export type TemplateField = { key: string; label: string; group?: string; help?: string }
 export type TemplateCatalog = { fields: TemplateField[]; sections: { key: string; label: string; required: boolean; alternativeFields?: string[] }[]; starter?: DocumentLayout }
 export type DocumentRun = { text: string; bold?: boolean; italic?: boolean; underline?: boolean; script?: "super" | "sub"; href?: string }
-export type DocumentFlow = ({ type: "paragraph" | "heading"; level?: number; align: "left" | "center" | "right"; runs: DocumentRun[]; paragraphSpacing?: "compact" | "normal" | "relaxed"; lineSpacing?: "single" | "one-and-half" | "double"; indent?: number; marker?: string } | { type: "section"; blocks: DocumentBlock[]; compact?: boolean } | { type: "pageBreak" } | { type: "rule" })[]
+export type DocumentFlow = ({ type: "paragraph" | "heading"; level?: number; align: "left" | "center" | "right"; runs: DocumentRun[]; documentTitle?: true; paragraphSpacing?: ParagraphSpacing; lineSpacing?: LineSpacing; indent?: number; marker?: string } | { type: "section"; blocks: DocumentBlock[]; compact?: boolean } | { type: "pageBreak" } | { type: "rule" })[]
 
 function textNodes(nodes: DocumentLayout["content"]): TextNode[] {
   return nodes.flatMap((node): TextNode[] => node.type === "paragraph" || node.type === "heading" ? [node] : node.type === "bulletList" || node.type === "orderedList" ? node.content.flatMap(item => textNodes(item.content)) : [])
 }
 
 // JSON object key order is not an edit. Keep array order and actual values.
-export const documentValueKey = (value: unknown) => JSON.stringify(value, (key, item) => ["paragraphSpacing", "lineSpacing"].includes(key) && item == null ? undefined : item && typeof item === "object" && !Array.isArray(item) ? Object.fromEntries(Object.entries(item).sort(([a], [b]) => a.localeCompare(b))) : item)
+export const documentValueKey = (value: unknown) => JSON.stringify(value, (key, item) => ["paragraphSpacing", "lineSpacing", "documentTitle"].includes(key) && item == null ? undefined : item && typeof item === "object" && !Array.isArray(item) ? Object.fromEntries(Object.entries(item).sort(([a], [b]) => a.localeCompare(b))) : item)
 
 // Open old wording tokens as ordinary editable text, retaining their marks,
 // alignment and newlines. This is an unsaved editing view, never a stored rewrite.
@@ -71,6 +72,19 @@ export function inlineDocumentWording(layout: DocumentLayout, wording: { opening
   return copy
 }
 
+// Add the title to an unsaved editing view only. Stored layouts and issued files
+// are never rewritten. Once present, its position and ordinary heading attributes win.
+export function editableDocumentLayout(layout: DocumentLayout, catalog: TemplateCatalog, alignment: "left" | "center" = "left"): DocumentLayout {
+  const titleKey = catalog.fields.find(field => ["document.title", "quote.title"].includes(field.key))?.key
+  const copy = structuredClone(layout)
+  if (titleKey) {
+    const existing = textNodes(copy.content).flatMap(node => node.content ?? []).find(item => item.type === "documentField" && item.attrs.key === titleKey)
+    if (existing?.type === "documentField") existing.attrs.documentTitle = true
+    else copy.content.unshift({ type: "heading", attrs: { level: 1, textAlign: alignment, paragraphSpacing: null, lineSpacing: null }, content: [{ type: "documentField", attrs: { key: titleKey, documentTitle: true } }] })
+  }
+  return copy
+}
+
 // Only registered fields/sections can enter the stored layout. This is data,
 // never HTML, a property-path evaluator, a formula or an executable template.
 export function validateDocumentLayout(value: unknown, catalog: TemplateCatalog): DocumentLayout {
@@ -83,6 +97,7 @@ export function validateDocumentLayout(value: unknown, catalog: TemplateCatalog)
   }
   for (const node of textNodes(layout.content)) {
       for (const item of node.content ?? []) if (item.type === "documentField") {
+        if (item.attrs.documentTitle && !["document.title", "quote.title"].includes(item.attrs.key)) throw new BusinessError(400, "Only the document title field can identify the title.")
         if (!fields.has(item.attrs.key)) throw new BusinessError(400, "This layout contains an unavailable document field.")
         usedFields.add(item.attrs.key)
       }
@@ -109,7 +124,7 @@ export function resolveDocumentLayout(value: unknown, catalog: TemplateCatalog, 
     if (node.type === "documentPageBreak") return [{ type: "pageBreak" }]
     if (node.type === "horizontalRule") return [{ type: "rule" }]
     if (node.type === "documentSection") return [{ type: "section", blocks: blocks.filter(block => block.key === node.attrs.key), ...(node.attrs.compact ? { compact: true } : {}) }]
-    return [{ type: node.type, ...(node.type === "heading" ? { level: node.attrs.level } : {}), ...(depth ? { indent: depth } : {}), ...(node.attrs?.paragraphSpacing ? { paragraphSpacing: node.attrs.paragraphSpacing } : {}), ...(node.attrs?.lineSpacing ? { lineSpacing: node.attrs.lineSpacing } : {}), align: node.attrs?.textAlign ?? "left", runs: (node.content ?? []).map(item => {
+    return [{ type: node.type, ...(node.content?.some(item => item.type === "documentField" && item.attrs.documentTitle && ["document.title", "quote.title"].includes(item.attrs.key)) ? { documentTitle: true as const } : {}), ...(node.type === "heading" ? { level: node.attrs.level } : {}), ...(depth ? { indent: depth } : {}), ...(node.attrs?.paragraphSpacing != null ? { paragraphSpacing: node.attrs.paragraphSpacing } : {}), ...(node.attrs?.lineSpacing != null ? { lineSpacing: node.attrs.lineSpacing } : {}), align: node.attrs?.textAlign ?? "left", runs: (node.content ?? []).map(item => {
       if (item.type === "hardBreak") return { text: "\n" }
       const script = item.marks?.some(mark => mark.type === "superscript") ? "super" as const : item.marks?.some(mark => mark.type === "subscript") ? "sub" as const : undefined
       const link = item.marks?.find(mark => mark.type === "link")

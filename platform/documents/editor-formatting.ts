@@ -2,14 +2,22 @@ import { Extension, Mark } from "@tiptap/core"
 import { Fragment, Slice, type Node as EditorNode } from "@tiptap/pm/model"
 import { Plugin } from "@tiptap/pm/state"
 import { documentLinkSchema } from "./layout"
+import { paragraphSpacingSchema, lineSpacingSchema, paragraphSpaceAfter, lineHeight } from "./typography"
+
+function spacingAttribute(element: HTMLElement, key: "paragraphSpacing" | "lineSpacing") {
+  const raw = element.dataset[key]
+  if (!raw) return null
+  const parsed = (key === "paragraphSpacing" ? paragraphSpacingSchema : lineSpacingSchema).safeParse(/^\d+(?:\.\d+)?$/.test(raw) ? Number(raw) : raw)
+  return parsed.success ? parsed.data : null
+}
 
 // Only these bounded styles survive paste and enter the stored document model.
 // Font families, sizes, colours, images, scripts and arbitrary CSS are not nodes.
 export const DocumentSpacing = Extension.create({
   name: "documentSpacing",
   addGlobalAttributes: () => [{ types: ["paragraph", "heading"], attributes: {
-    paragraphSpacing: { default: null, parseHTML: element => ["compact", "normal", "relaxed"].includes(element.dataset.paragraphSpacing ?? "") ? element.dataset.paragraphSpacing : null, renderHTML: attrs => attrs.paragraphSpacing ? { "data-paragraph-spacing": attrs.paragraphSpacing, style: `margin-bottom:${{ compact: "0.25em", normal: "0.75em", relaxed: "1.25em" }[attrs.paragraphSpacing as "compact"]}` } : {} },
-    lineSpacing: { default: null, parseHTML: element => ["single", "one-and-half", "double"].includes(element.dataset.lineSpacing ?? "") ? element.dataset.lineSpacing : null, renderHTML: attrs => attrs.lineSpacing ? { "data-line-spacing": attrs.lineSpacing, style: `line-height:${{ single: "1.2", "one-and-half": "1.5", double: "2" }[attrs.lineSpacing as "single"]}` } : {} },
+    paragraphSpacing: { default: null, parseHTML: element => spacingAttribute(element, "paragraphSpacing"), renderHTML: attrs => { const parsed=paragraphSpacingSchema.safeParse(attrs.paragraphSpacing),value=parsed.success?paragraphSpaceAfter(parsed.data):undefined;return value===undefined?{}:{ "data-paragraph-spacing": attrs.paragraphSpacing, style: `margin-top:0;margin-bottom:${value}pt` } } },
+    lineSpacing: { default: null, parseHTML: element => spacingAttribute(element, "lineSpacing"), renderHTML: attrs => { const parsed=lineSpacingSchema.safeParse(attrs.lineSpacing),value=parsed.success?lineHeight(parsed.data):undefined;return value===undefined?{}:{ "data-line-spacing": attrs.lineSpacing, style: `line-height:${value}` } } },
   } }],
   addProseMirrorPlugins: () => [new Plugin({
     props: { transformPasted: slice => {

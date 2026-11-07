@@ -1,8 +1,8 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
 const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),{PDFDocument,PDFPage}=require('pdf-lib')
-const {documentAppearanceSchema,defaultDocumentAppearance,documentStylePresets}=require('../platform/documents/appearance.ts')
+const {documentAppearanceSchema,defaultDocumentAppearance}=require('../platform/documents/appearance.ts')
 const {documentContentSchema}=require('../platform/documents/validation.ts')
-const {resolveDocumentLayout,starterDocumentLayout}=require('../platform/documents/layout.ts')
+const {resolveDocumentLayout,editableDocumentLayout,starterDocumentLayout}=require('../platform/documents/layout.ts')
 const {renderBusinessDocument}=require('../platform/documents/pdf.ts')
 const {documentHash}=require('../platform/documents/hash.ts')
 const {sampleDocument}=require('../modules/sales-orders/document-template-sample.ts')
@@ -12,7 +12,13 @@ const {paymentReceiptProvider}=require('../modules/receivables/receipt-template.
 const {invoiceDocumentProviders}=require('../modules/customer-invoices/document-provider.ts')
 const {statutoryTemplateTypes}=require('../platform/tax/localizations/india-statutory-pdf.ts')
 const {realEstateOrderDocuments}=require('../modules/real-estate/order-documents.ts')
-const appearance=(preset='standard',patch={})=>({...defaultDocumentAppearance,...documentStylePresets[preset],...patch})
+// Frozen appearance fixtures verify existing documents after preset shortcuts are removed.
+const savedAppearances={
+ standard:{},
+ letter:{fontSize:10,titleSize:14,spacing:'compact',margins:'standard',colour:'black',tableStyle:'minimal',titleAlign:'center',referenceLayout:'split',companyHeading:false},
+ compact:{fontSize:9,titleSize:16,spacing:'compact',margins:'narrow',colour:'black',tableStyle:'grid',titleAlign:'left',referenceLayout:'line',companyHeading:true},
+}
+const appearance=(style='standard',patch={})=>({...defaultDocumentAppearance,...savedAppearances[style],...patch})
 const base=()=>({format:1,title:'BOOKING INTIMATION LETTER',reference:'SAMPLE/BOOKING/001',date:'05 Nov 2026',sourceReference:'SAMPLE-ORDER',company:{id:'example',name:'Example Property Company'},issuer:{address:'Example Office, Goa, India',contact:'',signatory:'Authorised signatory'},opening:'Dear Customer,\nWe welcome you and confirm the saved booking described below.',terms:'Example terms for layout review only.',branding:null,blocks:[{title:'Sample Customer',paragraphs:['Primary applicant','Example address, Goa, India','customer@example.test']},{title:'Sample Additional Customer',paragraphs:['Co-applicant','Example correspondence address']},{title:'Unit details',table:{headings:['Detail','Saved value'],widths:[1,2],rows:[['Project','Example Gardens'],['Unit','PLOT-106'],['Area','277 sq m'],['Booking date','05 Nov 2026']]}}]})
 function capture(t){const calls=[],draw=PDFPage.prototype.drawText;t.mock.method(PDFPage.prototype,'drawText',function(text,options){calls.push({page:this,text,...options});return draw.call(this,text,options)});return calls}
 
@@ -42,6 +48,18 @@ test('presentation is bounded data and does not introduce arbitrary URLs, fonts,
 test('company document samples carry presentation for generic orders, receipts, invoices, credits and statutory types',()=>{
  const providers=[orderAcknowledgement,paymentReceiptProvider,...invoiceDocumentProviders,...statutoryTemplateTypes]
  for(const provider of providers){const content={...provider.defaults,appearance:appearance('compact')},payload=provider.sample(content,provider.templateCatalog,{id:'example',name:'Example Business'});assert.deepEqual(payload.appearance,content.appearance);assert(payload.body.length);assert.equal(payload.company.id,'example')}
+})
+
+test('all shared document providers render title headings and numeric text spacing without mutating their source',async()=>{
+ for(const provider of [orderAcknowledgement,paymentReceiptProvider,...invoiceDocumentProviders,...statutoryTemplateTypes]){
+  const layout=editableDocumentLayout(starterDocumentLayout(provider.templateCatalog),provider.templateCatalog)
+  layout.content.unshift({type:'heading',attrs:{level:6,paragraphSpacing:0,lineSpacing:1.35},content:[{type:'text',text:'Shared typography'}]})
+  const content={...provider.defaults,layout,appearance:appearance('compact',{lineHeight:1.45,spaceAfter:6})},before=JSON.stringify(content)
+  assert(documentContentSchema.safeParse(content).success)
+  const payload=provider.sample(content,provider.templateCatalog,{id:'example',name:'Example Business'}),bytes=await renderBusinessDocument(payload,true)
+  const title=payload.body.find(node=>node.documentTitle);assert(title);assert.equal(title.runs[0].text,payload.title)
+  assert.equal(Buffer.from(bytes).subarray(0,5).toString(),'%PDF-');assert.equal(JSON.stringify(content),before)
+ }
 })
 
 test('compact sections retain every applicant title and accepted cell without changing required source sections',async t=>{

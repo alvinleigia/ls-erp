@@ -1,6 +1,6 @@
 "use client"
 import { InfoHelp } from "@/components/erp/info-help"
-import { useEffect, useState } from "react"
+import { createContext, useContext, useEffect, useState, type CSSProperties } from "react"
 import { Node, mergeAttributes, isNodeSelection } from "@tiptap/core"
 import { EditorContent, NodeViewWrapper, ReactNodeViewRenderer, useEditor, useEditorState, type NodeViewProps } from "@tiptap/react"
 import StarterKit from "@tiptap/starter-kit"
@@ -9,9 +9,11 @@ import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/erp/controls"
 import { Input } from "@/components/ui/input"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
-import { AlignCenter, AlignLeft, AlignRight, Bold, Heading2, Italic, Link, List, ListOrdered, Minus, Pilcrow, PilcrowLeft, Redo2, RotateCcw, SeparatorHorizontal, Subscript as SubscriptIcon, Superscript as SuperscriptIcon, Underline, Undo2, WrapText, Eraser, type LucideIcon } from "lucide-react"
+import { AlignCenter, AlignLeft, AlignRight, Bold, Italic, Link, List, ListOrdered, Minus, PilcrowLeft, Redo2, RotateCcw, SeparatorHorizontal, Subscript as SubscriptIcon, Superscript as SuperscriptIcon, Underline, Undo2, Eraser, type LucideIcon } from "lucide-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
-import { documentLinkSchema, documentValueKey, inlineDocumentWording, starterDocumentLayout, type DocumentLayout, type TemplateCatalog } from "./layout"
+import { documentLinkSchema, documentValueKey, inlineDocumentWording, editableDocumentLayout, starterDocumentLayout, type DocumentLayout, type TemplateCatalog } from "./layout"
+import { type DocumentAppearance } from "./appearance"
+import { headingLevels } from "./typography"
 import { DocumentSpacing, DocumentLink, Superscript, Subscript } from "./editor-formatting"
 
 function FormatButton({ label, icon: Icon, disabled, pressed, onClick }: { label: string; icon: LucideIcon; disabled: boolean; pressed?: boolean; onClick: () => void }) {
@@ -20,18 +22,22 @@ function FormatButton({ label, icon: Icon, disabled, pressed, onClick }: { label
   </TooltipTrigger><TooltipContent side="top" sideOffset={6}>{label}</TooltipContent></Tooltip>
 }
 
+const DocumentTitleContext = createContext<string | undefined>(undefined)
+
 function TokenView({ node, selected, extension }: NodeViewProps) {
+  const documentTitle = useContext(DocumentTitleContext)
   const catalog = extension.options.catalog as TemplateCatalog
+  const isTitle = node.type.name === "documentField" && node.attrs.documentTitle === true
   const section = node.type.name === "documentSection"
   const label = (section ? catalog.sections : catalog.fields).find(row => row.key === node.attrs.key)?.label ?? "Unavailable field"
-  return <NodeViewWrapper as={section ? "div" : "span"} contentEditable={false} className={`${section ? "my-3 rounded-md border p-3" : "mx-0.5 inline-block rounded bg-muted px-1.5 text-sm"} ${selected ? "ring-2 ring-ring" : ""}`}>
-    <span>{section ? `Section: ${label}` : label}</span>{section && <span className="ml-2 text-xs text-muted-foreground">Saved records populate this section</span>}
+  return <NodeViewWrapper as={section ? "div" : "span"} aria-label={isTitle ? "Document title field" : undefined} contentEditable={false} className={`${section ? "my-3 rounded-md border p-3" : isTitle ? "inline-block rounded bg-muted/40 px-1" : "mx-0.5 inline-block rounded bg-muted px-1.5 text-sm"} ${selected ? "ring-2 ring-ring" : ""}`}>
+    <span>{section ? `Section: ${label}` : isTitle ? documentTitle || label : label}</span>{section && <span className="ml-2 text-xs text-muted-foreground">Saved records populate this section</span>}
   </NodeViewWrapper>
 }
 const Field = Node.create({
   name: "documentField", group: "inline", inline: true, atom: true,
   addOptions: () => ({ catalog: { fields: [], sections: [] } as TemplateCatalog }),
-  addAttributes: () => ({ key: { default: "" } }),
+  addAttributes: () => ({ key: { default: "" }, documentTitle: { default: null, parseHTML: element => element.getAttribute("data-document-title") === "true" ? true : null, renderHTML: attrs => attrs.documentTitle ? { "data-document-title": "true" } : {} } }),
   parseHTML: () => [{ tag: "span[data-document-field]" }],
   renderHTML: ({ HTMLAttributes }) => ["span", mergeAttributes(HTMLAttributes, { "data-document-field": "" }), HTMLAttributes.key],
   addNodeView: () => ReactNodeViewRenderer(TokenView),
@@ -48,23 +54,23 @@ const PageBreak = Node.create({
   renderHTML: () => ["hr", { "data-document-page-break": "", "aria-label": "Page break", class: "my-6 border-dashed border-t-2" }],
 })
 
-export function DocumentLayoutEditor({ value, catalog, disabled, onChange, starterWording }: { value: DocumentLayout; catalog: TemplateCatalog; disabled: boolean; onChange: (value: DocumentLayout) => void; starterWording?: { opening: string; terms: string } }) {
+export function DocumentLayoutEditor({ value, catalog, disabled, onChange, starterWording, appearance, documentTitle }: { documentTitle?: string; appearance?: DocumentAppearance; value: DocumentLayout; catalog: TemplateCatalog; disabled: boolean; onChange: (value: DocumentLayout) => void; starterWording?: { opening: string; terms: string } }) {
   const [search, setSearch] = useState(""), [reset, setReset] = useState(false)
   const [linkOpen, setLinkOpen] = useState(false), [linkUrl, setLinkUrl] = useState(""), [linkError, setLinkError] = useState("")
   const editor = useEditor({
     immediatelyRender: false,
-    extensions: [StarterKit.configure({ blockquote: false, code: false, codeBlock: false, link: false, strike: false, trailingNode: false, heading: { levels: [1, 2, 3] } }), DocumentSpacing, DocumentLink, Superscript, Subscript, TextAlign.configure({ types: ["heading", "paragraph"], alignments: ["left", "center", "right"] }), Field.configure({ catalog }), DynamicSection.configure({ catalog }), PageBreak],
+    extensions: [StarterKit.configure({ blockquote: false, code: false, codeBlock: false, link: false, strike: false, trailingNode: false, heading: { levels: [1, 2, 3, 4, 5, 6] } }), DocumentSpacing, DocumentLink, Superscript, Subscript, TextAlign.configure({ types: ["heading", "paragraph"], alignments: ["left", "center", "right"] }), Field.configure({ catalog }), DynamicSection.configure({ catalog }), PageBreak],
     content: value, editable: !disabled,
-    editorProps: { attributes: { role: "textbox", "aria-label": "Document layout", "aria-multiline": "true", class: "min-h-80 whitespace-pre-wrap p-4 outline-none [&_h1]:text-2xl [&_h1]:font-semibold [&_h2]:text-xl [&_h2]:font-semibold [&_h3]:text-lg [&_h3]:font-semibold [&_p]:my-2 [&_hr]:my-4 [&_hr]:border-t [&_ul]:list-disc [&_ol]:list-decimal [&_ul]:pl-6 [&_ol]:pl-6 [&_sup]:text-[0.7em] [&_sub]:text-[0.7em]" }, handleClick: (_view, _pos, event) => { if ((event.target as HTMLElement).closest("a")) { event.preventDefault(); return true } return false } },
+    editorProps: { attributes: { role: "textbox", "aria-label": "Document layout", "aria-multiline": "true", class: "min-h-80 whitespace-pre-wrap p-4 outline-none [&_h1]:text-2xl [&_h1]:font-semibold [&_h2]:text-xl [&_h2]:font-semibold [&_h3]:text-lg [&_h3]:font-semibold [&_h4]:text-base [&_h4]:font-semibold [&_h5]:text-sm [&_h5]:font-semibold [&_h6]:text-xs [&_h6]:font-semibold [&_hr]:my-4 [&_hr]:border-t [&_ul]:list-disc [&_ol]:list-decimal [&_ul]:pl-6 [&_ol]:pl-6 [&_sup]:text-[0.7em] [&_sub]:text-[0.7em]" }, handleClick: (_view, _pos, event) => { if ((event.target as HTMLElement).closest("a")) { event.preventDefault(); return true } return false } },
     onUpdate: ({ editor }) => onChange(editor.getJSON() as DocumentLayout),
   })
-  const active = useEditorState({ editor, selector: ({ editor }) => ({ bold: editor?.isActive("bold") ?? false, italic: editor?.isActive("italic") ?? false, underline: editor?.isActive("underline") ?? false, superscript: editor?.isActive("superscript") ?? false, subscript: editor?.isActive("subscript") ?? false, heading: editor?.isActive("heading", { level: 2 }) ?? false, link: editor?.isActive("link") ?? false, left: editor?.isActive({ textAlign: "left" }) ?? false, center: editor?.isActive({ textAlign: "center" }) ?? false, right: editor?.isActive({ textAlign: "right" }) ?? false, bulletList: editor?.isActive("bulletList") ?? false, orderedList: editor?.isActive("orderedList") ?? false, paragraphSpacing: editor?.getAttributes(editor.isActive("heading") ? "heading" : "paragraph").paragraphSpacing ?? "", lineSpacing: editor?.getAttributes(editor.isActive("heading") ? "heading" : "paragraph").lineSpacing ?? "", undo: editor?.can().undo() ?? false, redo: editor?.can().redo() ?? false, section: editor?.isActive("documentSection") ?? false, compact: editor?.getAttributes("documentSection").compact === true }) })
+  const active = useEditorState({ editor, selector: ({ editor }) => ({ bold: editor?.isActive("bold") ?? false, italic: editor?.isActive("italic") ?? false, underline: editor?.isActive("underline") ?? false, superscript: editor?.isActive("superscript") ?? false, subscript: editor?.isActive("subscript") ?? false, headingLevel: editor?.isActive("heading") ? editor.getAttributes("heading").level : 0, link: editor?.isActive("link") ?? false, left: editor?.isActive({ textAlign: "left" }) ?? false, center: editor?.isActive({ textAlign: "center" }) ?? false, right: editor?.isActive({ textAlign: "right" }) ?? false, bulletList: editor?.isActive("bulletList") ?? false, orderedList: editor?.isActive("orderedList") ?? false, undo: editor?.can().undo() ?? false, redo: editor?.can().redo() ?? false, section: editor?.isActive("documentSection") ?? false, compact: editor?.getAttributes("documentSection").compact === true }) })
   useEffect(() => { editor?.setEditable(!disabled, false) }, [editor, disabled])
   useEffect(() => { if (editor && documentValueKey(editor.getJSON()) !== documentValueKey(value)) editor.commands.setContent(value, { emitUpdate: false }) }, [editor, value])
   const busy = disabled || !editor
   function insertDynamic(key: string, section = false) {
     if (!editor || disabled) return
-    const node = { type: section ? "documentSection" : "documentField", attrs: { key } }
+    const node = { type: section ? "documentSection" : "documentField", attrs: { key, ...(!section && ["document.title", "quote.title"].includes(key) ? { documentTitle: true } : {}) } }
     const selection = editor.state.selection
     // A selected source section is a whole block. Inserting a new variable must
     // not silently replace it and discard repeated customers or payment rows.
@@ -95,7 +101,7 @@ export function DocumentLayoutEditor({ value, catalog, disabled, onChange, start
                 <FormatButton label="Redo" icon={Redo2} disabled={busy || !active?.redo} onClick={() => editor?.chain().focus().redo().run()} />
               </div>
               <div role="group" aria-label="Text formatting" className="mr-1 flex items-center border-r pr-1">
-                <FormatButton label="Heading" icon={Heading2} pressed={active?.heading} disabled={busy} onClick={() => editor?.chain().focus().toggleHeading({ level: 2 }).run()} />
+                <select aria-label="Text style" className="h-8 w-28 rounded-sm bg-transparent px-1 text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring" disabled={busy || active?.section || active?.bulletList || active?.orderedList} value={active?.headingLevel ?? 0} onChange={event => { const level=Number(event.target.value);if(!level)editor?.chain().focus().setParagraph().run();else editor?.chain().focus().setHeading({level:level as 1|2|3|4|5|6}).run() }}><option value="0">Normal text</option>{headingLevels.map(level=><option key={level} value={level}>Heading {level} (H{level})</option>)}</select>
                 <FormatButton label="Bold" icon={Bold} pressed={active?.bold} disabled={busy} onClick={() => editor?.chain().focus().toggleBold().run()} />
                 <FormatButton label="Italic" icon={Italic} pressed={active?.italic} disabled={busy} onClick={() => editor?.chain().focus().toggleItalic().run()} />
                 <FormatButton label="Underline" icon={Underline} pressed={active?.underline} disabled={busy} onClick={() => editor?.chain().focus().toggleUnderline().run()} />
@@ -112,16 +118,12 @@ export function DocumentLayoutEditor({ value, catalog, disabled, onChange, start
               <div role="group" aria-label="Alignment" className="flex items-center">
                 {([{ align: "left", icon: AlignLeft }, { align: "center", icon: AlignCenter }, { align: "right", icon: AlignRight }] as const).map(({ align, icon }) => <FormatButton key={align} label={align[0].toUpperCase() + align.slice(1)} icon={icon} pressed={active?.[align]} disabled={busy} onClick={() => editor?.chain().focus().setTextAlign(align).run()} />)}
               </div>
-              <div className="ml-auto flex items-center"><InfoHelp title="Document layout">Select text or a field to format it. Enter adds a paragraph; Shift + Enter adds a line break. Spacing applies to selected paragraphs; Default follows PDF style. Lists support up to three levels. Pasting retains supported text, lists, links and formatting while dropping external fonts, colours, images and unsupported styles. Clear formatting restores normal text and spacing without deleting tags or repeating sections. Links accept http, https or mailto addresses and become clickable in the PDF. Use the PDF preview to check pagination. Required sections must remain. Company branding, reference and page numbers are automatic.</InfoHelp></div>
+              <div className="ml-auto flex items-center"><InfoHelp title="Document layout">Select text or a field to format it. Enter adds a paragraph; Shift + Enter adds a line break. Choose Normal text or H1-H6 for the selected text block. Set Line height and Space after in PDF style for the whole document, including generated sections. Enter starts a paragraph with the paragraph gap; Shift + Enter starts a line within the same paragraph. The Document title field is part of the body; select its paragraph and choose Normal text or H1-H6 like any other heading. Lists support up to three levels. Pasting retains supported text, lists, links and formatting while dropping external fonts, colours, images and unsupported styles. Clear formatting restores normal text and spacing without deleting tags or repeating sections. Links accept http, https or mailto addresses and become clickable in the PDF. Use the PDF preview to check pagination. Required sections must remain. Company branding, reference and page numbers are automatic.</InfoHelp></div>
             </div>
             <div className="mt-1 flex flex-wrap items-center gap-y-1 border-t pt-1">
               <div role="group" aria-label="Lists" className="mr-1 flex items-center border-r pr-1">
                 <FormatButton label="Bulleted list" icon={List} pressed={active?.bulletList} disabled={busy} onClick={() => editor?.chain().focus().toggleBulletList().run()} />
                 <FormatButton label="Numbered list" icon={ListOrdered} pressed={active?.orderedList} disabled={busy} onClick={() => editor?.chain().focus().toggleOrderedList().run()} />
-              </div>
-              <div role="group" aria-label="Spacing" className="mr-1 flex flex-wrap items-center gap-1 border-r pr-1">
-                <label className="flex items-center gap-1 pl-1 text-muted-foreground"><Pilcrow className="size-4" aria-hidden="true" /><span className="sr-only">Paragraph spacing</span><Tooltip delayDuration={250}><TooltipTrigger asChild><select aria-label="Paragraph spacing" className="h-8 w-24 rounded-sm bg-transparent px-1 text-xs text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring" disabled={busy} value={active?.paragraphSpacing ?? ""} onChange={event => editor?.chain().focus().updateAttributes("paragraph", { paragraphSpacing: event.target.value || null }).updateAttributes("heading", { paragraphSpacing: event.target.value || null }).run()}><option value="">Default</option><option value="compact">Compact</option><option value="normal">Normal</option><option value="relaxed">Relaxed</option></select></TooltipTrigger><TooltipContent sideOffset={6}>Paragraph spacing</TooltipContent></Tooltip></label>
-                <label className="flex items-center gap-1 pl-1 text-muted-foreground"><WrapText className="size-4" aria-hidden="true" /><span className="sr-only">Line spacing</span><Tooltip delayDuration={250}><TooltipTrigger asChild><select aria-label="Line spacing" className="h-8 w-24 rounded-sm bg-transparent px-1 text-xs text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring" disabled={busy} value={active?.lineSpacing ?? ""} onChange={event => editor?.chain().focus().updateAttributes("paragraph", { lineSpacing: event.target.value || null }).updateAttributes("heading", { lineSpacing: event.target.value || null }).run()}><option value="">Default</option><option value="single">Single</option><option value="one-and-half">1.5 lines</option><option value="double">Double</option></select></TooltipTrigger><TooltipContent sideOffset={6}>Line spacing</TooltipContent></Tooltip></label>
               </div>
               <div role="group" aria-label="Insert blocks" className="flex items-center">
                 <FormatButton label="Add paragraph" icon={PilcrowLeft} disabled={busy} onClick={() => editor?.chain().focus().insertContentAt(editor.state.doc.content.size, { type: "paragraph" }).run()} />
@@ -132,7 +134,7 @@ export function DocumentLayoutEditor({ value, catalog, disabled, onChange, start
             </div>
           </div>
 
-          <EditorContent editor={editor} />
+          <div style={{"--document-line-height":appearance?.lineHeight,"--document-space-after":appearance?.spaceAfter===undefined?undefined:`${appearance.spaceAfter}pt`} as CSSProperties} className={`${appearance?.lineHeight===undefined?"":"[&_p]:!leading-[var(--document-line-height)] [&_h1]:!leading-[var(--document-line-height)] [&_h2]:!leading-[var(--document-line-height)] [&_h3]:!leading-[var(--document-line-height)] [&_h4]:!leading-[var(--document-line-height)] [&_h5]:!leading-[var(--document-line-height)] [&_h6]:!leading-[var(--document-line-height)]"} ${appearance?.spaceAfter===undefined?"[&_p]:my-2":"[&_p]:!mt-0 [&_p]:!mb-[var(--document-space-after)] [&_h1]:!mb-[var(--document-space-after)] [&_h2]:!mb-[var(--document-space-after)] [&_h3]:!mb-[var(--document-space-after)] [&_h4]:!mb-[var(--document-space-after)] [&_h5]:!mb-[var(--document-space-after)] [&_h6]:!mb-[var(--document-space-after)]"}`}><DocumentTitleContext.Provider value={documentTitle}><EditorContent editor={editor} /></DocumentTitleContext.Provider></div>
         </div>
         {active?.section && <label className="flex items-start gap-2"><Checkbox checked={active.compact} disabled={busy} onChange={event => editor?.chain().focus().updateAttributes("documentSection", { compact: event.target.checked }).run()} />Show table rows in this section as compact labelled details</label>}
       </div>
@@ -155,6 +157,6 @@ export function DocumentLayoutEditor({ value, catalog, disabled, onChange, start
 
     <Dialog open={linkOpen} onOpenChange={setLinkOpen}><DialogContent><DialogHeader><DialogTitle>Link selected text</DialogTitle><DialogDescription>Use a website or email address. The link opens from the PDF, not while editing.</DialogDescription></DialogHeader><label className="space-y-2">Link address<Input aria-label="Link address" placeholder="https://example.com or mailto:name@example.com" disabled={busy} value={linkUrl} onChange={event => { setLinkUrl(event.target.value); setLinkError("") }} /></label>{linkError && <p role="alert" className="text-sm text-destructive">{linkError}</p>}<DialogFooter><Button type="button" variant="outline" disabled={busy} onClick={() => { editor?.chain().focus().extendMarkRange("link").unsetMark("link").run(); setLinkOpen(false) }}>Remove link</Button><Button type="button" variant="outline" onClick={() => setLinkOpen(false)}>Cancel</Button><Button type="button" disabled={busy} onClick={() => { const parsed = documentLinkSchema.safeParse(linkUrl); if (!parsed.success) { setLinkError(parsed.error.issues[0].message); return } editor?.chain().focus().extendMarkRange("link").setMark("link", { href: parsed.data }).run(); setLinkOpen(false) }}>Apply link</Button></DialogFooter></DialogContent></Dialog>
 
-    <Dialog open={reset} onOpenChange={setReset}><DialogContent><DialogHeader><DialogTitle>Use the starter layout?</DialogTitle><DialogDescription>{starterWording?"This replaces the document body, including edited wording and formatting, with the starter content. The document title, company details and PDF style are retained.":"This replaces the unsaved layout. Company details and approved wording are retained."} Published versions and issued PDFs stay unchanged.</DialogDescription></DialogHeader><DialogFooter><Button type="button" variant="outline" onClick={() => setReset(false)}>Cancel</Button><Button type="button" onClick={() => { const layout=starterDocumentLayout(catalog);onChange(starterWording?inlineDocumentWording(layout,starterWording):layout);setReset(false) }}>Replace layout</Button></DialogFooter></DialogContent></Dialog>
+    <Dialog open={reset} onOpenChange={setReset}><DialogContent><DialogHeader><DialogTitle>Use the starter layout?</DialogTitle><DialogDescription>{starterWording?"This replaces the document body, including edited wording and formatting, with the starter content. The document title, company details and PDF style are retained.":"This replaces the unsaved layout. Company details and approved wording are retained."} Published versions and issued PDFs stay unchanged.</DialogDescription></DialogHeader><DialogFooter><Button type="button" variant="outline" onClick={() => setReset(false)}>Cancel</Button><Button type="button" onClick={() => { const layout=editableDocumentLayout(starterDocumentLayout(catalog),catalog,appearance?.titleAlign);onChange(starterWording?inlineDocumentWording(layout,starterWording):layout);setReset(false) }}>Replace layout</Button></DialogFooter></DialogContent></Dialog>
   </div>
 }

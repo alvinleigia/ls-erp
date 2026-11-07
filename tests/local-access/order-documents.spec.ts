@@ -1,5 +1,6 @@
 import { test,expect,type BrowserContext } from '@playwright/test'
 import { seed,login,json } from './fixtures'
+import { defaultDocumentAppearance } from '../../platform/documents/appearance'
 import { emptyQuotationContent } from '../../modules/sales-documents/quotation-validation'
 
 async function modules(f:Awaited<ReturnType<typeof seed>>,keys:string[]){for(const key of keys)await f.db.query('INSERT INTO "TenantModule" ("tenantId",key,allowed,enabled,"updatedAt") VALUES ($1,$2,true,true,now()) ON CONFLICT ("tenantId",key) DO UPDATE SET allowed=true,enabled=true',[f.slug,key])}
@@ -13,7 +14,7 @@ async function source(context:BrowserContext,userId:string,items:{id:string;vers
  await json(context,`/api/sales-orders/${order.id}`,200,'PATCH',{action:'confirm',version:1})
  return order
 }
-async function publish(context:BrowserContext,companyId:string,providerKey:string){const current=await json(context,`/api/document-templates?${new URLSearchParams({companyId,providerKey})}`);await json(context,'/api/document-templates',200,'PUT',{companyId,providerKey,version:current.version,reviewed:true,content:{...current.content,enabled:true,address:'QA office, Pune',terms:'QA approved company terms'}})}
+async function publish(context:BrowserContext,companyId:string,providerKey:string,patch:Record<string,unknown>={}){const current=await json(context,`/api/document-templates?${new URLSearchParams({companyId,providerKey})}`);await json(context,'/api/document-templates',200,'PUT',{companyId,providerKey,version:current.version,reviewed:true,content:{...current.content,enabled:true,address:'QA office, Pune',terms:'QA approved company terms',...patch}})}
 
 test('visual template editor inserts dynamic fields, previews without publication and persists a reviewed layout on mobile',async({browser})=>{
  test.setTimeout(180000)
@@ -43,7 +44,13 @@ test('visual template editor inserts dynamic fields, previews without publicatio
   await page.getByRole('button',{name:'Add paragraph',exact:true}).click()
   await editor.evaluate(element=>{const data=new DataTransfer();data.setData('text/html','<p><strong>Payment notes</strong> m<sup>2</sup> H<sub>2</sub>O <a href="https://example.test/terms">Read terms</a></p><ol><li><p>Review accepted values</p></li><li><p>Keep all customers</p></li></ol>');element.dispatchEvent(new ClipboardEvent('paste',{clipboardData:data,bubbles:true,cancelable:true}))})
   await expect(editor.locator('ol li')).toHaveCount(2)
-  await page.getByLabel('Line spacing',{exact:true}).selectOption('one-and-half')
+  await page.getByRole('button',{name:'Add paragraph',exact:true}).click();await page.keyboard.type('QA sixth-level heading')
+  await page.getByLabel('Text style',{exact:true}).selectOption('6')
+  await editor.getByLabel('Document title field',{exact:true}).click();await page.getByLabel('Text style',{exact:true}).selectOption('2')
+  await page.getByRole('tab',{name:'PDF style',exact:true}).click();await page.getByLabel('Customise document styling',{exact:true}).check()
+  await page.getByLabel('Line height',{exact:true}).fill('1.4');await page.getByLabel('Line height',{exact:true}).press('Enter')
+  await page.getByLabel('Space after (pt)',{exact:true}).fill('4');await page.getByLabel('Space after (pt)',{exact:true}).press('Enter')
+  await page.getByRole('tab',{name:'Content',exact:true}).click()
   const previewRequest=page.waitForRequest(r=>r.url().endsWith('/api/document-templates/preview'))
   const downloading=page.waitForEvent('download');await page.getByRole('button',{name:'Download sample preview',exact:true}).click()
   const download=await downloading;await download.saveAs(test.info().outputPath('p8-template-sample.pdf'))
@@ -56,6 +63,11 @@ test('visual template editor inserts dynamic fields, previews without publicatio
   await page.getByRole('button',{name:'Publish template version',exact:true}).click();await expect(page.getByRole('heading',{name:/version 1$/})).toBeVisible()
   await expect(page.getByLabel('Document type',{exact:true})).toBeEnabled()
   await page.reload();await expect(editor.getByText('Customer name',{exact:true})).toBeVisible()
+  await expect(editor.locator('h2').filter({has:page.getByLabel('Document title field',{exact:true})})).toBeVisible()
+  await page.getByRole('tab',{name:'PDF style',exact:true}).click()
+  await expect(page.getByLabel('Line height',{exact:true})).toHaveValue('1.4');await expect(page.getByLabel('Space after (pt)',{exact:true})).toHaveValue('4')
+  await page.getByRole('tab',{name:'Content',exact:true}).click()
+  await expect(editor.locator('h6')).toHaveText('QA sixth-level heading')
   await page.setViewportSize({width:390,height:844});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true)
   await editor.scrollIntoViewIfNeeded();await page.screenshot({path:test.info().outputPath('p8-template-editor-mobile.png'),fullPage:true,animations:'disabled'})
   await page.setViewportSize({width:1440,height:1000});await page.screenshot({path:test.info().outputPath('p8-template-editor-desktop.png'),fullPage:true,animations:'disabled'})
@@ -147,5 +159,49 @@ test('letterhead previews and issued print downloads reuse one document and reta
   const current=await json(context,'/api/companies/'+company.id);await json(context,'/api/companies/'+company.id,200,'PATCH',{name:current.name,archived:false,parentId:current.parentId,version:current.version,documentSettings:{...current.documentSettings,letterhead:{enabled:false,topMm:80,bottomMm:50}}})
   expect(await(await context.request.get(href!)).body()).toEqual(bytes);expect((await json(context,endpoint)).total).toBe(1)
   await page.setViewportSize({width:390,height:844});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.screenshot({path:test.info().outputPath('letterhead-download-mobile.png'),fullPage:true})
+ }finally{await context.close();await f.db.end()}
+})
+
+test('template-specific letterhead and footer choices work independently and issued copies stay frozen',async({browser})=>{
+ test.setTimeout(180000)
+ const f=await seed(),{page,context}=await login(browser,f.origin,f.users.admin.email)
+ try{
+  await modules(f,['salesOrders','receivables'])
+  const company=(await json(context,'/api/document-templates/catalog')).items[0]
+  const details=await json(context,'/api/companies/'+company.id)
+  await json(context,'/api/companies/'+company.id,200,'PATCH',{name:details.name,archived:false,parentId:details.parentId,version:details.version,documentSettings:{...details.documentSettings,footer:'Company shared footer',letterhead:{enabled:false,topMm:65,bottomMm:25}}})
+  await publish(context,company.id,'order-acknowledgement',{letterhead:{enabled:true,topMm:60,bottomMm:30},useCompanyDetails:true,useCompanyFooter:false,appearance:{...defaultDocumentAppearance,footer:'Order acknowledgement footer'}})
+  await publish(context,company.id,'payment-receipt',{letterhead:{enabled:false}})
+  const get=(providerKey:string)=>json(context,`/api/document-templates?${new URLSearchParams({companyId:company.id,providerKey})}`)
+  expect((await get('order-acknowledgement')).letterheadAvailable).toBe(true)
+  expect((await get('payment-receipt')).letterheadAvailable).toBe(false)
+  await page.goto('/settings/documents');await page.getByRole('tab',{name:'Printing',exact:true}).click()
+  await expect(page.getByLabel('Reserved header space (mm)',{exact:true})).toHaveValue('60')
+  await expect(page.getByLabel('Reserved footer space (mm)',{exact:true})).toHaveValue('30')
+  await page.getByRole('tab',{name:'PDF style',exact:true}).click();await page.getByRole('tab',{name:'Tables and footer',exact:true}).click();await expect(page.getByLabel('Repeating footer',{exact:true})).toHaveValue('Order acknowledgement footer');await expect(page.getByLabel('Use company footer',{exact:true})).not.toBeChecked()
+  const order=await source(context,f.users.admin.id),endpoint='/api/sales-orders/'+order.id+'/documents'
+  const prepared=await json(context,endpoint+'/prepare',200,'POST',{providerKey:'order-acknowledgement'})
+  expect(prepared.letterheadAvailable).toBe(true)
+  const digitalPreview=await context.request.post(endpoint+'/preview',{data:{providerKey:'order-acknowledgement',previewHash:prepared.previewHash}});expect(digitalPreview.status()).toBe(200);const branded=await digitalPreview.body();expect(branded.subarray(0,5).toString()).toBe('%PDF-');await test.info().attach('with-letterhead-preview.pdf',{body:branded,contentType:'application/pdf'})
+  const issued=await json(context,endpoint+'/issue',200,'POST',{providerKey:'order-acknowledgement',previewHash:prepared.previewHash,requestKey:crypto.randomUUID()})
+  const printUrl=endpoint+'/'+issued.id+'/pdf?providerKey=order-acknowledgement&variant=letterhead'
+  const before=await context.request.get(printUrl);expect(before.status()).toBe(200);const bytes=await before.body();expect(bytes.subarray(0,5).toString()).toBe('%PDF-')
+  await test.info().attach('without-letterhead.pdf',{body:bytes,contentType:'application/pdf'})
+  // The browser must not follow the server-only synthetic storage transport.
+  const digitalUrl=endpoint+'/'+issued.id+'/pdf?providerKey=order-acknowledgement'
+  const digital=await context.request.get(digitalUrl,{maxRedirects:0});expect(digital.status()).toBe(303);const signed=new URL(digital.headers().location);expect(signed.hostname).toBe('documentstest.supabase.co');expect(signed.pathname).toContain('/tenant-documents/')
+  const current=await json(context,'/api/companies/'+company.id)
+  await json(context,'/api/companies/'+company.id,200,'PATCH',{name:current.name,archived:false,parentId:current.parentId,version:current.version,documentSettings:{...current.documentSettings,letterhead:{enabled:true,topMm:80,bottomMm:50}}})
+  expect((await get('order-acknowledgement')).content.letterhead).toEqual({enabled:true,topMm:60,bottomMm:30})
+  expect((await get('payment-receipt')).letterheadAvailable).toBe(false)
+  await publish(context,company.id,'order-acknowledgement',{letterhead:{enabled:false},useCompanyFooter:false,appearance:{...defaultDocumentAppearance,footer:'Changed template footer'}})
+  expect((await get('order-acknowledgement')).letterheadAvailable).toBe(false)
+  expect(await(await context.request.get(printUrl)).body()).toEqual(bytes)
+  const digitalAfter=await context.request.get(digitalUrl,{maxRedirects:0});expect(digitalAfter.status()).toBe(303);expect(new URL(digitalAfter.headers().location).pathname).toBe(signed.pathname)
+  expect((await json(context,endpoint)).items[0].letterheadAvailable).toBe(true)
+  const replacement=await json(context,endpoint+'/prepare',200,'POST',{providerKey:'order-acknowledgement',supersedesId:issued.id,reason:'Template printing choice changed'})
+  expect(replacement.letterheadAvailable).toBe(false)
+  await json(context,endpoint+'/preview',409,'POST',{providerKey:'order-acknowledgement',supersedesId:issued.id,reason:'Template printing choice changed',previewHash:replacement.previewHash,variant:'letterhead'})
+  await json(context,'/api/document-templates',400,'PUT',{companyId:company.id,providerKey:'gst-tax-invoice',version:0,reviewed:true,content:{title:'GST Tax Invoice',opening:'',terms:'',address:'',contact:'',signatory:'Authorised signatory',useTenantLogo:false,enabled:false,letterhead:{enabled:true,topMm:60,bottomMm:30}}})
  }finally{await context.close();await f.db.end()}
 })

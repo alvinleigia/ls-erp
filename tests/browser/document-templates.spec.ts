@@ -1,6 +1,6 @@
 import { test, expect, type Page } from "@playwright/test"
 import { orderTemplateCatalog } from "../../modules/sales-orders/document-template"
-import { inlineDocumentWording, starterDocumentLayout } from "../../platform/documents/layout"
+import { editableDocumentLayout, inlineDocumentWording, starterDocumentLayout } from "../../platform/documents/layout"
 import type { DocumentContent } from "../../platform/documents/validation"
 import { propertyDocumentFields, propertyUnitsSection } from "../../modules/real-estate/document-fields"
 import { defaultDocumentAppearance } from "../../platform/documents/appearance"
@@ -29,7 +29,7 @@ async function fixture(page: Page, options: { version?: number; canPublish?: boo
       state.reads++
       if (options.rejectRefreshAfterPublish && state.publications) return json({ error: "Refresh is temporarily unavailable." }, 503)
       const providerKey = url.searchParams.get("providerKey") || booking
-      return json({ company, providerKey, ...templates[providerKey], templateCatalog: catalog, letterheadAvailable: !!options.letterhead })
+      return json({ company, providerKey, ...templates[providerKey], templateCatalog: catalog, companyLetterhead: {enabled:!!options.letterhead,topMm:65,bottomMm:25}, companyFooter:"Company shared footer", letterheadAvailable: !!options.letterhead })
     }
     if (url.pathname === "/api/document-templates" && method === "PUT") {
       const input = request.postDataJSON(); state.attempts.push(input)
@@ -58,6 +58,14 @@ const terms = (page: Page) => page.getByRole("textbox", { name: "Document layout
 const review = (page: Page) => page.getByLabel("I have reviewed the wording, company details and enablement for this version.", { exact: true })
 const publish = (page: Page) => page.getByRole("button", { name: "Publish template version", exact: true })
 
+async function setSpacing(page: Page, line: string, after: string) {
+  await page.getByRole("tab",{name:"PDF style",exact:true}).click()
+  await page.getByLabel("Customise document styling",{exact:true}).check()
+  await page.getByLabel("Line height",{exact:true}).fill(line);await page.getByLabel("Line height",{exact:true}).press("Enter")
+  await page.getByLabel("Space after (pt)",{exact:true}).fill(after);await page.getByLabel("Space after (pt)",{exact:true}).press("Enter")
+  await page.getByRole("tab",{name:"Content",exact:true}).click()
+}
+
 async function pasteMarkup(page: Page, html: string) {
   await page.getByRole("textbox", { name: "Document layout", exact: true }).evaluate((element, html) => {
     const data = new DataTransfer(); data.setData("text/html", html)
@@ -82,10 +90,7 @@ test("standard formatting, safe links and spacing survive preview and publicatio
   await page.getByRole("button", { name: "Apply link", exact: true }).click()
   await expect(body.locator("a")).toHaveAttribute("href", "https://example.test/booking")
   await expect(body.locator("a")).toHaveText(/Area/)
-  await page.getByLabel("Paragraph spacing", { exact: true }).selectOption("relaxed")
-  await page.getByLabel("Line spacing", { exact: true }).selectOption("double")
-  await expect(opening(page)).toHaveAttribute("data-paragraph-spacing", "relaxed")
-  await expect(opening(page)).toHaveAttribute("data-line-spacing", "double")
+  await setSpacing(page,"2","15")
   await page.getByRole("button", { name: "Download sample preview", exact: true }).click()
   await expect.poll(() => state.previews.length).toBe(1)
   expect(documentLayoutSchema.safeParse(state.previews[0].layout).success).toBe(true)
@@ -154,21 +159,94 @@ test("pasted Word styles are cleaned while supported lists, links and formatting
   expect(JSON.stringify(state.previews[0].layout)).not.toMatch(/Comic Sans|72px|javascript:/)
 })
 
-test("spacing reset and undo restore the published state", async ({ page }) => {
-  const { state } = await fixture(page)
-  await opening(page).click()
-  await page.getByLabel("Line spacing", { exact: true }).selectOption("double")
-  await expect(review(page)).toHaveCount(1)
-  await page.getByRole("button", { name: "Undo", exact: true }).click()
-  await expect(page.getByRole("button", { name: "Published version 2", exact: true })).toBeDisabled()
-  await page.getByRole("button", { name: "Redo", exact: true }).click()
-  await expect(opening(page)).toHaveAttribute("data-line-spacing", "double")
-  await page.getByLabel("Line spacing", { exact: true }).selectOption("")
-  await expect(review(page)).toHaveCount(0)
-  expect(state.publications).toBe(0)
+test("PDF spacing validates bounds and clearing values restores the published defaults", async({page})=>{
+ const {state}=await fixture(page,{styled:true})
+ await page.getByRole('tab',{name:'PDF style',exact:true}).click()
+ const line=page.getByLabel('Line height',{exact:true}),after=page.getByLabel('Space after (pt)',{exact:true})
+ await line.fill('0.9');await line.press('Enter');await expect(line).toHaveAttribute('aria-invalid','true')
+ await line.fill('2');await line.press('Enter');await expect(review(page)).toHaveCount(1)
+ await after.fill('49');await after.press('Enter');await expect(after).toHaveAttribute('aria-invalid','true')
+ await after.fill('');await after.press('Enter');await line.fill('');await line.press('Enter')
+ await expect(review(page)).toHaveCount(0);await expect(page.getByRole('button',{name:'Published version 2',exact:true})).toBeDisabled()
+ expect(state.publications).toBe(0)
 })
 
 test.beforeEach(({ baseURL }) => test.skip(baseURL !== "http://127.0.0.1:3012", "Synthetic component host only."))
+
+test("PDF style provides the only two spacing controls and applies them throughout the document",async({page})=>{
+ const {state,unexpected}=await fixture(page,{styled:true})
+ const source=state.templates[booking].content.layout!.content[0]
+ if(source.type!=="paragraph")throw Error('Expected a paragraph')
+ source.attrs={lineSpacing:'double',paragraphSpacing:'relaxed'}
+ await page.reload()
+ const body=page.getByRole('textbox',{name:'Document layout',exact:true})
+ await expect(body.locator('input')).toHaveCount(0)
+ await expect(page.getByText('Selected text',{exact:true})).toHaveCount(0)
+ await expect(page.getByLabel('Document line height',{exact:true})).toHaveCount(0)
+ await expect(page.getByRole('button',{name:'Use document spacing for all text',exact:true})).toHaveCount(0)
+ await setSpacing(page,'1.6','0')
+ await expect(opening(page)).toHaveAttribute('data-line-spacing','double')
+ await expect(opening(page)).toHaveCSS('margin-bottom','0px')
+ expect(await opening(page).evaluate(el=>parseFloat(getComputedStyle(el).lineHeight)/parseFloat(getComputedStyle(el).fontSize))).toBeCloseTo(1.6)
+ await expect(body.getByText('Section: Customers and correspondence',{exact:true})).toBeVisible()
+ await page.setViewportSize({width:320,height:844});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true)
+ await page.setViewportSize({width:390,height:844});await body.scrollIntoViewIfNeeded();await page.screenshot({path:test.info().outputPath('simplified-editor-mobile.png'),fullPage:true})
+ await page.getByRole('tab',{name:'PDF style',exact:true}).click()
+ await expect(page.getByLabel('Line height',{exact:true})).toHaveCount(1);await expect(page.getByLabel('Space after (pt)',{exact:true})).toHaveCount(1)
+ await expect(page.getByLabel('Text spacing',{exact:true})).toHaveCount(0)
+ await page.screenshot({path:test.info().outputPath('spacing-style-mobile.png'),fullPage:true})
+ await page.setViewportSize({width:1440,height:1000});await page.screenshot({path:test.info().outputPath('spacing-style-desktop.png'),fullPage:true})
+ await page.getByRole('button',{name:'Download sample preview',exact:true}).click();await expect.poll(()=>state.previews.length).toBe(1)
+ expect(state.previews[0].appearance?.lineHeight).toBe(1.6);expect(state.previews[0].appearance?.spaceAfter).toBe(0)
+ await review(page).check();await publish(page).click();await expect(page.getByRole('status')).toContainText('Version 3 published')
+ await page.reload();await page.getByRole('tab',{name:'PDF style',exact:true}).click()
+ await expect(page.getByLabel('Line height',{exact:true})).toHaveValue('1.6');await expect(page.getByLabel('Space after (pt)',{exact:true})).toHaveValue('0')
+ expect(state.publications).toBe(1);expect(unexpected).toEqual([])
+})
+
+test("inspecting saved spacing presets does not create an edit", async ({page})=>{
+  const {state}=await fixture(page)
+  const first=state.templates[booking].content.layout!.content[0]
+  if(first.type!=="paragraph")throw Error("Expected a paragraph in the synthetic template.")
+  first.attrs={paragraphSpacing:"relaxed",lineSpacing:"double"}
+  await page.reload()
+  await opening(page).click()
+  await expect(opening(page)).toHaveAttribute('data-line-spacing','double')
+  await expect(opening(page)).toHaveAttribute('data-paragraph-spacing','relaxed')
+  await expect(page.getByRole("button",{name:"Published version 2",exact:true})).toBeDisabled()
+  expect(state.publications).toBe(0)
+})
+
+test("heading levels, inline title and numeric spacing survive publication and preserve dynamic sections", async ({ page }) => {
+  const {state,unexpected}=await fixture(page,{styled:true})
+  const body=page.getByRole("textbox",{name:"Document layout",exact:true}),first=body.locator("p,h1,h2,h3,h4,h5,h6").nth(1)
+  await first.fill("Heading sample");await first.click()
+  for(const level of [1,2,3,4,5,6]){
+    await page.getByLabel("Text style",{exact:true}).selectOption(String(level))
+    await expect(body.locator("h"+level).filter({hasText:"Heading sample"})).toHaveText("Heading sample")
+  }
+  await page.getByLabel("Text style",{exact:true}).selectOption("0")
+  await first.fill("First paragraph");await first.press("End");await first.press("Enter");await body.pressSequentially("Second paragraph")
+  await setSpacing(page,"1.35","0")
+  await expect(first).toHaveCSS("display","block")
+  const firstBox=await first.boundingBox(),secondBox=await body.locator("p").nth(1).boundingBox()
+  expect(firstBox!.height).toBeGreaterThan(8);expect(secondBox!.y).toBeGreaterThanOrEqual(firstBox!.y+firstBox!.height-1)
+  await body.getByLabel("Document title field",{exact:true}).click();await page.getByLabel("Text style",{exact:true}).selectOption("4")
+  await expect(body.getByText("Section: Customers and correspondence",{exact:true})).toBeVisible()
+  await page.getByRole("tab",{name:"PDF style",exact:true}).click();await expect(page.getByLabel("Document title size",{exact:true})).toHaveCount(0)
+  await page.getByRole("tab",{name:"Content",exact:true}).click()
+  await page.setViewportSize({width:390,height:844});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true)
+  await body.scrollIntoViewIfNeeded();await page.screenshot({path:test.info().outputPath("p13s-editor-mobile.png"),fullPage:true})
+  await page.setViewportSize({width:1440,height:1000});await page.screenshot({path:test.info().outputPath("p13s-editor-desktop.png"),fullPage:true})
+  await page.getByRole("button",{name:"Download sample preview",exact:true}).click();await expect.poll(()=>state.previews.length).toBe(1)
+  expect(state.previews[0].layout!.content[0]).toMatchObject({type:"heading",attrs:{level:4},content:[{type:"documentField",attrs:{key:"document.title"}}]})
+  const paragraphs=state.previews[0].layout!.content.filter(n=>n.type==="paragraph")
+  expect(paragraphs.length).toBeGreaterThan(1);expect(state.previews[0].appearance?.spaceAfter).toBe(0);expect(state.previews[0].appearance?.lineHeight).toBe(1.35)
+  validateDocumentLayout(state.previews[0].layout,catalog)
+  await review(page).check();await publish(page).click();await expect(page.getByRole("status")).toContainText("Version 3 published")
+  await page.reload();await expect(body.locator("h4")).toContainText("Booking intimation letter");await expect(first).toHaveCSS("margin-bottom","0px")
+  expect(state.publications).toBe(1);expect(unexpected).toEqual([])
+})
 
 test("digital and letterhead sample actions use the same draft without publishing or changing content", async ({ page }) => {
   const { state, unexpected } = await fixture(page, { letterhead: true })
@@ -184,7 +262,7 @@ test("digital and letterhead sample actions use the same draft without publishin
 
 test("publishing confirms the saved version in place and cannot republish unchanged content", async ({ page }) => {
   const { state, unexpected } = await fixture(page, { rejectRefreshAfterPublish: true })
-  const layout = inlineDocumentWording(state.templates[booking].content.layout!, state.templates[booking].content)
+  const layout = inlineDocumentWording(editableDocumentLayout(state.templates[booking].content.layout!, catalog), state.templates[booking].content)
   await expect(page.getByRole("button", { name: "Published version 2", exact: true })).toBeDisabled()
   await expect(review(page)).toHaveCount(0)
   await page.getByRole("tab", { name: "Company", exact: true }).click()
@@ -269,8 +347,8 @@ test("published templates remain read-only without publication authority", async
   await page.getByRole("tab", { name: "Content", exact: true }).click()
   await expect(page.getByRole("button", { name: "Add paragraph", exact: true })).toBeDisabled()
   for (const name of ["Superscript", "Subscript", "Link", "Clear formatting", "Bulleted list", "Numbered list"]) await expect(page.getByRole("button", { name, exact: true })).toBeDisabled()
-  await expect(page.getByLabel("Line spacing", { exact: true })).toBeDisabled()
-  await expect(page.getByLabel("Paragraph spacing", { exact: true })).toBeDisabled()
+  await expect(page.getByLabel("Line height", { exact: true })).toHaveCount(0)
+  await expect(page.getByLabel("Space after (pt)", { exact: true })).toHaveCount(0)
   await expect(publish(page)).toHaveCount(0); await expect(review(page)).toHaveCount(0)
   expect(state.attempts).toHaveLength(0)
 })
@@ -298,14 +376,17 @@ test("mobile success stays beside the actions and selecting another document cle
   expect(state.publications).toBe(1); expect(unexpected).toEqual([])
 })
 
-test("styling is an unsaved draft until explicit preview and reviewed publication", async ({ page }) => {
+test("manual styling stays a draft until preview and reviewed publication without preset shortcuts", async ({ page }) => {
   const { state, unexpected } = await fixture(page)
   await page.getByRole("tab", { name: "PDF style", exact: true }).click()
   await page.getByLabel("Customise document styling", { exact: true }).check()
   await page.getByRole("tab", { name: "Tables and footer", exact: true }).click()
   await page.getByLabel("Repeating footer", { exact: true }).fill("Example Business | example.test")
-  await page.getByRole("button", { name: "Letter style", exact: true }).click()
-  await page.getByRole("tab", { name: "Letterhead", exact: true }).click()
+  for(const name of ['Standard style','Letter style','Compact style'])await expect(page.getByRole('button',{name,exact:true})).toHaveCount(0)
+  await page.getByLabel('Table style',{exact:true}).click();await page.getByRole('menuitemradio',{name:'Minimal lines',exact:true}).click()
+  await page.getByRole('tab',{name:'Text and spacing',exact:true}).click()
+  await page.getByLabel('Document colours',{exact:true}).click();await page.getByRole('menuitemradio',{name:'Black',exact:true}).click()
+  await page.getByRole("tab", { name: "Branding", exact: true }).click()
   await page.getByLabel("Repeat logo on later pages", { exact: true }).check()
   await page.getByLabel("Use the selected document logo as a watermark", { exact: true }).check()
   await page.getByRole("tab", { name: "Tables and footer", exact: true }).click()
@@ -315,13 +396,19 @@ test("styling is an unsaved draft until explicit preview and reviewed publicatio
   await page.getByRole("button", { name: "Download sample preview", exact: true }).click(); await download
   expect(state.previews).toHaveLength(1); expect(state.publications).toBe(0)
   await review(page).check()
-  await page.getByRole("button", { name: "Compact style", exact: true }).click()
+  await page.getByLabel('Table style',{exact:true}).click();await page.getByRole('menuitemradio',{name:'Bordered grid',exact:true}).click()
+  await page.getByRole('tab',{name:'Text and spacing',exact:true}).click()
+  await page.getByLabel('Body text size',{exact:true}).click();await page.getByRole('menuitemradio',{name:'9 pt',exact:true}).click()
+  await page.getByLabel('Page margins',{exact:true}).click();await page.getByRole('menuitemradio',{name:'Narrow',exact:true}).click()
   await expect(review(page)).not.toBeChecked(); await expect(publish(page)).toBeDisabled()
   await review(page).check(); await publish(page).click()
   const saved = state.templates[booking].content
   expect(saved.appearance).toMatchObject({ fontSize: 9, margins: "narrow", tableStyle: "grid", repeatLogo: true, watermark: true, footer: "Example Business | example.test" })
   expect(saved.opening).toBe("Saved opening wording"); expect(saved.terms).toBe("Saved reviewed terms")
   expect(state.publications).toBe(1); expect(unexpected).toEqual([])
+  await page.screenshot({path:test.info().outputPath('manual-style-desktop.png'),fullPage:true})
+  await page.setViewportSize({width:390,height:844});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true)
+  await page.screenshot({path:test.info().outputPath('manual-style-mobile.png'),fullPage:true})
 })
 
 test("read-only styling remains inspectable and mobile styling stays within its panel", async ({ page }) => {
@@ -329,7 +416,10 @@ test("read-only styling remains inspectable and mobile styling stays within its 
   await page.setViewportSize({ width: 390, height: 844 })
   await page.getByRole("tab", { name: "PDF style", exact: true }).click()
   await expect(page.getByLabel("Customise document styling", { exact: true })).toBeDisabled()
-  await page.getByRole("tab", { name: "Letterhead", exact: true }).click()
+  await page.getByRole("tab", { name: "Printing", exact: true }).click()
+  await expect(page.getByLabel("Letterhead printing",{exact:true})).toBeDisabled()
+  await page.getByRole("tab", { name: "PDF style", exact: true }).click()
+  await page.getByRole("tab", { name: "Branding", exact: true }).click()
   await expect(page.getByLabel("Repeat logo on later pages", { exact: true })).toBeDisabled()
   await page.getByRole("tab", { name: "Tables and footer", exact: true }).click()
   await expect(page.getByLabel("Repeating footer", { exact: true })).toBeDisabled()
@@ -422,7 +512,7 @@ test("fixed labels and dynamic values retain bold independently and blank paragr
   const { state } = await fixture(page)
   await page.getByRole("tab", { name: "Content", exact: true }).click()
   const editor = page.getByRole("textbox", { name: "Document layout", exact: true })
-  await editor.locator("p").first().click(); await page.keyboard.press("Control+Home")
+  await editor.locator("p").first().click(); await page.keyboard.press("Home")
   await page.getByRole("button", { name: "Bold", exact: true }).click()
   await expect(editor).toBeFocused()
   await page.keyboard.type("Project: ")
@@ -439,7 +529,7 @@ test("fixed labels and dynamic values retain bold independently and blank paragr
   const download = page.waitForEvent("download")
   await page.getByRole("button", { name: "Download sample preview", exact: true }).click(); await download
   const nodes = state.previews.at(-1)!.layout!.content
-  const first = nodes[0]
+  const first = nodes.find(node=>node.type==="paragraph"&&node.content?.some(item=>item.type==="text"&&item.text==="Project: "))!
   expect(first.type).toBe("paragraph")
   if (first.type !== "paragraph") throw Error("Expected formatted paragraph")
   const label = first.content?.find(n => n.type === "text" && n.text === "Project: "), token = first.content?.find(n => n.type === "documentField" && n.attrs.key === "property.project-name")
@@ -548,4 +638,115 @@ test("pasting supported formatting keeps page breaks distinct from separators an
   expect(nodes.filter(n => n.type === "horizontalRule")).toHaveLength(1)
   expect(JSON.stringify(nodes)).not.toContain("script")
   expect(state.publications).toBe(0)
+})
+
+test("document title is inline and uses the ordinary style menu, with no separate title controls",async({page})=>{
+ const {state,unexpected}=await fixture(page,{styled:true})
+ const body=page.getByRole('textbox',{name:'Document layout',exact:true}),title=body.getByLabel('Document title field',{exact:true})
+ await expect(title).toHaveText('Booking intimation letter')
+ await expect(page.getByLabel('Document title heading',{exact:true})).toHaveCount(0)
+ await page.getByLabel('Document title',{exact:true}).fill('Reviewed booking letter')
+ await expect(title).toHaveText('Reviewed booking letter')
+ for(const level of ['0','1','2','3','4','5','6']){
+  await title.click();await page.getByLabel('Text style',{exact:true}).selectOption(level)
+  await expect(body.locator(level==='0'?'p':'h'+level).filter({has:page.getByLabel('Document title field',{exact:true})})).toBeVisible()
+ }
+ await title.click();await page.getByLabel('Text style',{exact:true}).selectOption('2')
+ await page.getByRole('button',{name:'Download sample preview',exact:true}).click();await expect.poll(()=>state.previews.length).toBe(1)
+ expect(state.previews[0].title).toBe('Reviewed booking letter')
+ expect(state.previews[0].layout!.content[0]).toMatchObject({type:'heading',attrs:{level:2},content:[{type:'documentField',attrs:{key:'document.title',documentTitle:true}}]})
+ await review(page).check();await publish(page).click();await expect(page.getByRole('status')).toContainText('Version 3 published')
+ await page.reload();await expect(title).toHaveText('Reviewed booking letter');await expect(body.locator('h2').filter({has:page.getByLabel('Document title field',{exact:true})})).toBeVisible()
+ await page.getByRole('tab',{name:'PDF style',exact:true}).click()
+ await expect(page.getByLabel('Document title size',{exact:true})).toHaveCount(0);await expect(page.getByLabel('Document title alignment',{exact:true})).toHaveCount(0)
+ expect(unexpected).toEqual([])
+})
+
+test('Enter creates paragraphs and Shift+Enter creates a line break with shared PDF spacing',async({page})=>{
+ const {state}=await fixture(page)
+ await setSpacing(page,'1.5','8')
+ const body=page.getByRole('textbox',{name:'Document layout',exact:true}),first=opening(page)
+ await first.fill('First line');await first.click();await page.keyboard.press('End');await page.keyboard.press('Shift+Enter')
+ await expect(first.locator('br:not(.ProseMirror-trailingBreak)')).toHaveCount(1)
+ await page.keyboard.type('Second line')
+ await expect(first.locator('br')).toHaveCount(1);await expect(first).toContainText('Second line')
+ await page.keyboard.press('Enter');await page.keyboard.type('Next paragraph')
+ await expect(body.locator('p').nth(1)).toHaveText('Next paragraph')
+ await expect(first).toHaveCSS('margin-bottom','10.6667px')
+ await page.getByRole('button',{name:'Download sample preview',exact:true}).click();await expect.poll(()=>state.previews.length).toBe(1)
+ const paragraphs=state.previews[0].layout!.content.filter(node=>node.type==='paragraph')
+ expect(paragraphs[0].content?.some(node=>node.type==='hardBreak')).toBe(true)
+ expect(paragraphs[1].content).toEqual([{type:'text',text:'Next paragraph'}])
+ expect(state.publications).toBe(0)
+})
+
+test('template letterhead overrides are previewed as a draft, validated and published independently',async({page})=>{
+ const {state,unexpected}=await fixture(page)
+ await page.getByRole('tab',{name:'Printing',exact:true}).click()
+ const mode=page.getByLabel('Letterhead printing',{exact:true}),top=page.getByLabel('Reserved header space (mm)',{exact:true}),bottom=page.getByLabel('Reserved footer space (mm)',{exact:true})
+ await expect(page.getByRole('button',{name:'Preview letterhead PDF',exact:true})).toHaveCount(0)
+ await mode.click();await page.getByRole('menuitemradio',{name:'Enable for this document',exact:true}).click()
+ await top.fill('55');await bottom.fill('30')
+ await page.getByRole('button',{name:'Preview letterhead PDF',exact:true}).click();await expect.poll(()=>state.previews.length).toBe(1)
+ expect(state.previews[0].letterhead).toEqual({enabled:true,topMm:55,bottomMm:30});expect(state.previewVariants[0]).toBe('letterhead');expect(state.publications).toBe(0)
+ await top.fill('19');await review(page).check();await publish(page).click();expect(state.attempts).toHaveLength(0);await expect(page.getByText('Please check the highlighted fields.',{exact:true})).toBeVisible()
+ await top.fill('55');await review(page).check();await publish(page).click();await expect(page.getByRole('status')).toContainText('Version 3 published')
+ await page.reload();await page.getByRole('tab',{name:'Printing',exact:true}).click();await expect(top).toHaveValue('55');await expect(bottom).toHaveValue('30')
+ await page.setViewportSize({width:390,height:844});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.screenshot({path:test.info().outputPath('template-letterhead-mobile.png'),fullPage:true})
+ await page.setViewportSize({width:1440,height:1000});await page.screenshot({path:test.info().outputPath('template-letterhead-desktop.png'),fullPage:true})
+ await mode.click();await page.getByRole('menuitemradio',{name:'Disable for this document',exact:true}).click();await expect(page.getByRole('button',{name:'Preview letterhead PDF',exact:true})).toHaveCount(0)
+ expect(unexpected).toEqual([])
+})
+
+test('a template can disable company letterhead copies and restore company inheritance without publishing',async({page})=>{
+ const {state}=await fixture(page,{letterhead:true})
+ await expect(page.getByRole('button',{name:'Preview letterhead PDF',exact:true})).toBeVisible()
+ await page.getByRole('tab',{name:'Printing',exact:true}).click()
+ const mode=page.getByLabel('Letterhead printing',{exact:true})
+ await mode.click();await page.getByRole('menuitemradio',{name:'Disable for this document',exact:true}).click()
+ await expect(page.getByRole('button',{name:'Preview letterhead PDF',exact:true})).toHaveCount(0)
+ await expect(mode).toHaveAttribute('aria-expanded','false');await mode.press('ArrowDown');await page.getByRole('menuitemradio',{name:'Use company setting',exact:true}).click()
+ await expect(page.getByRole('button',{name:'Preview letterhead PDF',exact:true})).toBeVisible()
+ await expect(page.getByRole('button',{name:'Published version 2',exact:true})).toBeDisabled();expect(state.publications).toBe(0)
+})
+
+test('footer inheritance is independent of company address and read-only template settings cannot change',async({page})=>{
+ const {state}=await fixture(page,{styled:true})
+ await page.getByRole('tab',{name:'Company',exact:true}).click();await page.getByLabel('Use saved company document details',{exact:true}).check()
+ await page.getByRole('tab',{name:'PDF style',exact:true}).click();await page.getByRole('tab',{name:'Tables and footer',exact:true}).click()
+ const footer=page.getByLabel('Repeating footer',{exact:true})
+ await expect(footer).toHaveValue('Company shared footer');await expect(footer).toBeDisabled()
+ await page.getByLabel('Use company footer',{exact:true}).uncheck();await footer.fill('Booking letter footer')
+ await review(page).check();await publish(page).click();await expect(page.getByRole('status')).toContainText('Version 3 published')
+ expect(state.templates[booking].content.useCompanyDetails).toBe(true);expect(state.templates[booking].content.useCompanyFooter).toBe(false);expect(state.templates[booking].content.appearance?.footer).toBe('Booking letter footer')
+})
+
+
+test('template settings separate branding from printing and keep drafts across tabs',async({page})=>{
+ const {state,unexpected}=await fixture(page,{version:0,styled:true})
+ await page.getByRole('tab',{name:'PDF style',exact:true}).click()
+ await page.getByRole('tab',{name:'Branding',exact:true}).click()
+ await expect(page.getByLabel('Letterhead printing',{exact:true})).not.toBeVisible()
+ await page.getByLabel('Repeat logo on later pages',{exact:true}).check()
+ await page.screenshot({path:test.info().outputPath('organized-branding-desktop.png'),fullPage:true})
+ await page.getByRole('tab',{name:'Printing',exact:true}).click()
+ await expect(page.getByLabel('Customise document styling',{exact:true})).not.toBeVisible()
+ await page.getByLabel('Letterhead printing',{exact:true}).click()
+ await page.getByRole('menuitemradio',{name:'Enable for this document',exact:true}).click()
+ await page.getByLabel('Reserved header space (mm)',{exact:true}).fill('55')
+ await page.getByRole('tab',{name:'PDF style',exact:true}).click()
+ await expect(page.getByLabel('Repeat logo on later pages',{exact:true})).toBeChecked()
+ await page.getByLabel('Customise document styling',{exact:true}).uncheck()
+ await page.getByRole('tab',{name:'Printing',exact:true}).click()
+ await expect(page.getByLabel('Reserved header space (mm)',{exact:true})).toHaveValue('55')
+ await page.setViewportSize({width:390,height:844})
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true)
+ const tabs=page.getByRole('tablist').first(),printing=page.getByRole('tab',{name:'Printing',exact:true})
+ const bounds=await printing.boundingBox(),bar=await tabs.boundingBox()
+ expect(bounds!.x).toBeGreaterThanOrEqual(bar!.x);expect(bounds!.x+bounds!.width).toBeLessThanOrEqual(bar!.x+bar!.width+1)
+ await page.screenshot({path:test.info().outputPath('organized-printing-mobile.png'),fullPage:true})
+ await review(page).check();await publish(page).click()
+ expect(state.templates[booking].content.letterhead).toMatchObject({enabled:true,topMm:55})
+ expect(state.templates[booking].content.appearance).toBeUndefined()
+ expect(state.publications).toBe(1);expect(unexpected).toEqual([])
 })

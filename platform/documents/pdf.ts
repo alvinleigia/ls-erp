@@ -12,6 +12,7 @@ import { documentLinkSchema } from "./layout"
 import { defaultDocumentAppearance, documentAppearanceSchema } from "./appearance"
 import type { DocumentVariant } from "./letterhead"
 import { brandingLayer, letterheadPdf, markLetterheadPdf } from "./letterhead-pdf"
+import { headingFontSize, lineHeight, paragraphSpaceAfter } from "./typography"
 
 // A fixed, bounded font set is shared by warm requests; PDF font objects remain per document.
 const fontFiles = new Map<string, Promise<Buffer>>()
@@ -27,7 +28,7 @@ export async function renderBusinessDocument(document: PrintableDocument, previe
   const pdf = await PDFDocument.create(); pdf.registerFontkit(fontkit)
   const style = document.appearance ? documentAppearanceSchema.parse(document.appearance) : defaultDocumentAppearance
   const profile = style.letterhead
-  if (variant === "letterhead" && !profile) throw new BusinessError(409, "Enable letterhead printing in the issuing company's document settings first.")
+  if (variant === "letterhead" && !profile) throw new BusinessError(409, "Enable letterhead printing for this document template or its issuing company first.")
   if (profile) markLetterheadPdf(pdf)
   const font = await pdf.embedFont(await fontBytes("Regular"), { subset: true })
   const variants: Record<string,PDFFont> = { regular:font }
@@ -40,7 +41,9 @@ export async function renderBusinessDocument(document: PrintableDocument, previe
   const supported = new Set(font.getCharacterSet()), ink = style.colour === "black" ? rgb(.08,.08,.08) : style.colour === "teal" ? rgb(.04,.28,.3) : rgb(.1,.15,.2), muted = style.colour === "black" ? rgb(.3,.3,.3) : rgb(.36,.4,.44), pale = style.colour === "black" ? rgb(.95,.95,.95) : rgb(.94,.96,.97)
   const margin = { standard: 42, narrow: 32, wide: 54 }[style.margins], width = 595 - margin * 2, pageTop = 842 - margin - 5, top = profile ? Math.min(pageTop,842-profile.topMm*72/25.4) : pageTop
   const gap = style.spacing === "compact" ? 3 : 6, after = style.spacing === "compact" ? 6 : 9
-  const tableSize = style.fontSize - 1, tableLeading = tableSize + (style.spacing === "compact" ? 3 : 5), padding = style.spacing === "compact" ? 8 : 12
+  const textLeading = (size: number) => style.lineHeight !== undefined ? size * style.lineHeight : size + gap
+  const blockAfter = (fallback = after) => style.spaceAfter ?? fallback
+  const tableSize = style.fontSize - 1, tableLeading = style.lineHeight !== undefined ? tableSize * style.lineHeight : tableSize + (style.spacing === "compact" ? 3 : 5), padding = style.spacing === "compact" ? 8 : 12
   let page = pdf.addPage([595,842]), y = pageTop, logo: PDFImage | undefined, brandingDepth = 0
   const pages = [page]
   const beginBranding = (p: PDFPage) => p.pushOperators(PDFOperator.of(PDFOperatorNames.BeginMarkedContent,[brandingLayer]))
@@ -82,12 +85,13 @@ export async function renderBusinessDocument(document: PrintableDocument, previe
   if (footerLines.length > 6) throw new BusinessError(400,"The footer is too long for these margins. Shorten it before previewing.")
   const pageLabelY = profile ? Math.max(profile.bottomMm*72/25.4+4, footerLines.length ? footerLines.length*10+64 : 34) : 34
   const bottom = Math.max(margin+23, footerLines.length ? footerLines.length*10+64 : 0, profile ? pageLabelY+16 : 0)
-  function paragraph(value: string, size = style.fontSize, color = ink, align: "left" | "center" | "right" = "left", trailing = after) { if (!value) return; for (const line of wrap(value,width,size)) { if(!line){ensure(after);y-=after;continue}ensure(size+7); const used=font.widthOfTextAtSize(line,size),x=margin+(align==="center"?(width-used)/2:align==="right"?width-used:0);page.drawText(line,{x,y,size,font,color}); y-=size+gap }; y-=trailing }
+  function paragraph(value: string, size = style.fontSize, color = ink, align: "left" | "center" | "right" = "left", trailing = after) { if (!value) return; for (const line of wrap(value,width,size)) { if(!line){const blank=style.lineHeight!==undefined||style.spaceAfter!==undefined?textLeading(size):blockAfter();ensure(blank);y-=blank;continue}ensure(Math.max(size+7,textLeading(size))); const used=font.widthOfTextAtSize(line,size),x=margin+(align==="center"?(width-used)/2:align==="right"?width-used:0);page.drawText(line,{x,y,size,font,color}); y-=textLeading(size) }; y-=blockAfter(trailing) }
   function formatted(node:Extract<DocumentFlow[number],{runs:unknown}>) {
-    const size=node.type==="heading"?node.level===1?style.fontSize+7:node.level===3?style.fontSize+1:style.fontSize+3:style.fontSize
+    const size=node.type==="heading"?headingFontSize(style.fontSize,node.level??2):style.fontSize
     const indent = (node.indent ?? 0) * 24 + (node.marker ? Math.max(0,font.widthOfTextAtSize(node.marker,size)+6-24) : 0), available = width - indent
-    const leading = node.lineSpacing ? size * ({ single: 1.2, "one-and-half": 1.5, double: 2 }[node.lineSpacing]) : size + gap
-    const trailing = node.paragraphSpacing ? { compact: 3, normal: 9, relaxed: 15 }[node.paragraphSpacing] : after
+    const multiplier = style.lineHeight ?? lineHeight(node.lineSpacing)
+    const leading = multiplier !== undefined ? size * multiplier : size + gap
+    const trailing = style.spaceAfter ?? paragraphSpaceAfter(node.paragraphSpacing) ?? blockAfter()
     // Keep a template heading with the first line of the following content.
     if(node.type==="heading")ensure(Math.min(240,wrap(node.runs.map(run=>run.text).join(""),available,size).length*leading+35))
     type Piece={text:string;font:PDFFont;width:number;underline:boolean;size:number;shift:number;href?:string}
@@ -114,7 +118,7 @@ export async function renderBusinessDocument(document: PrintableDocument, previe
       const clean=run.text.replace(/\r/g,"").replace(/\t/g," ").replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g,"")
       if([...clean].some(c=>c!=="\n"&&!supported.has(c.codePointAt(0)!)))throw new BusinessError(400,"The PDF font cannot render some characters. Ask your administrator about language support.")
       for(const word of clean.match(/\n|[^\S\n]+|[^\s]+/g)??[]){
-        if(word==="\n"){if(line.length)flush();else{ensure(trailing);y-=trailing}continue}
+        if(word==="\n"){if(line.length)flush();else{const blank=style.lineHeight!==undefined||style.spaceAfter!==undefined?leading:trailing;ensure(blank);y-=blank}continue}
         const w=f.widthOfTextAtSize(word,runSize)
         if(used+w>available&&line.length)flush()
         if(!line.length&&/^\s+$/.test(word))continue
@@ -122,9 +126,9 @@ export async function renderBusinessDocument(document: PrintableDocument, previe
         for(const char of word){if(used+f.widthOfTextAtSize(char,runSize)>available&&line.length)flush();add(char,f,!!run.underline||!!href,runSize,shift,href)}
       }
     }
-    if(line.length)flush();else if(marker){ensure(size+7);page.drawText(marker,{x:margin+indent-6-font.widthOfTextAtSize(marker,size),y,size,font,color:ink});y-=leading}y-=trailing
+    if(line.length)flush();else if(marker){ensure(size+7);page.drawText(marker,{x:margin+indent-6-font.widthOfTextAtSize(marker,size),y,size,font,color:ink});y-=leading}else if(style.lineHeight!==undefined||style.spaceAfter!==undefined){ensure(leading);y-=leading}y-=trailing
   }
-  function section(title: string, following=49) { const before=style.spacing==="compact"?6:10;ensure(before+wrap(title,width,style.fontSize+1).length*(style.fontSize+1+gap)+3+following);y-=before;paragraph(title,style.fontSize+1,ink,"left",3); }
+  function section(title: string, following=49) { const before=style.spaceAfter!==undefined?0:style.spacing==="compact"?6:10;ensure(before+wrap(title,width,style.fontSize+1).length*textLeading(style.fontSize+1)+blockAfter(3)+following);y-=before;paragraph(title,style.fontSize+1,ink,"left",3); }
   function table(headings: string[], rows: string[][], weights: number[]) {
     if (!headings.length || headings.length !== weights.length || weights.some(value => value <= 0) || rows.some(row => row.length !== headings.length)) throw new Error("Invalid document table")
     const total = weights.reduce((a,b)=>a+b,0), widths = weights.map(value=>width*value/total)
@@ -152,15 +156,20 @@ export async function renderBusinessDocument(document: PrintableDocument, previe
         cells(lines.map(value=>value.slice(offset,offset+count)),false);offset+=count;remaining-=count
       }
     }
-    y-=style.spacing==="compact"?8:13
+    // The table cursor is below its border, but is not yet a text baseline.
+    // Keep room for the next line's ascent even when paragraph space is zero.
+    y-=style.spaceAfter!==undefined?style.fontSize+style.spaceAfter:style.spacing==="compact"?8:13
   }
   watermark();drawLogo()
   if(style.companyHeading)branding(()=>paragraph(document.company.name,style.fontSize+7))
   if(profile){if(document.issuer.address)branding(()=>paragraph(document.issuer.address,9,muted));if(y<top)throw new BusinessError(400,"Increase the reserved header space or shorten the company's digital header before previewing.");y=top}
-  paragraph(document.title,style.titleSize,ink,style.titleAlign)
+  const inlineTitle = document.body?.some(node => "runs" in node && node.documentTitle)
+  const leadingTitle = document.body?.[0]
+  if (inlineTitle && leadingTitle && "runs" in leadingTitle && leadingTitle.documentTitle) formatted(leadingTitle)
+  else if (!inlineTitle) paragraph(document.title,style.titleSize,ink,style.titleAlign)
   if(style.referenceLayout==="split"){
     const left=wrap(document.reference,width*.65-8,9),right=wrap(document.date,width*.35,9)
-    for(let i=0;i<Math.max(left.length,right.length);i++){ensure(16);if(left[i])page.drawText(left[i],{x:margin,y,size:9,font,color:muted});if(right[i])page.drawText(right[i],{x:margin+width-font.widthOfTextAtSize(right[i],9),y,size:9,font,color:muted});y-=9+gap}y-=after
+    for(let i=0;i<Math.max(left.length,right.length);i++){ensure(Math.max(16,textLeading(9)));if(left[i])page.drawText(left[i],{x:margin,y,size:9,font,color:muted});if(right[i])page.drawText(right[i],{x:margin+width-font.widthOfTextAtSize(right[i],9),y,size:9,font,color:muted});y-=textLeading(9)}y-=blockAfter()
   }else paragraph(`${document.reference} | ${document.date}`,9,muted)
   if (preview) paragraph("DRAFT PREVIEW - NOT ISSUED",10,muted)
   if (document.issuer.address && !profile) paragraph(document.issuer.address,9,muted)
@@ -171,12 +180,12 @@ export async function renderBusinessDocument(document: PrintableDocument, previe
       if(compact){const t=block.table;for(const row of t.rows)paragraph(row.length===2?`${row[0]}: ${row[1]}`:row.map((cell,i)=>`${t.headings[i]}: ${cell}`).join(" | "),style.fontSize,ink,"left",2);if(!t.rows.length)paragraph(t.headings.join(" | "))}
       else table(block.table.headings,block.table.rows,block.table.widths)
     }
-    if(compact)y-=after-2
+    if(compact && style.spaceAfter===undefined)y-=after-2
     if(block.qrCode){if(block.qrCode.length>1000||!/^https?:\/\//.test(block.qrCode))throw new BusinessError(400,"Invalid document registration link.");ensure(90);const image=await pdf.embedPng(await QRCode.toBuffer(block.qrCode,{width:240,margin:2,errorCorrectionLevel:'M'}));page.drawImage(image,{x:margin,y:y-80,width:80,height:80});y-=92}
   }}
-  if(document.body){for(const node of document.body){if(node.type==="section")await drawBlocks(node.blocks,node.compact);else if(node.type==="pageBreak")nextPage();else if(node.type==="rule"){ensure(20);y-=6;page.drawLine({start:{x:margin,y},end:{x:margin+width,y},thickness:.6,color:muted});y-=14}else formatted(node)}}
+  if(document.body){for(const [index,node] of document.body.entries()){if(index===0&&"runs" in node&&node.documentTitle)continue;if(node.type==="section")await drawBlocks(node.blocks,node.compact);else if(node.type==="pageBreak")nextPage();else if(node.type==="rule"){ensure(20);y-=6;page.drawLine({start:{x:margin,y},end:{x:margin+width,y},thickness:.6,color:muted});y-=14}else formatted(node)}}
   else{paragraph(document.opening);await drawBlocks(document.blocks);if (document.terms) { section("Terms and notes");paragraph(document.terms) }}
-  if(document.showSignatory!==false){const contactHeight=document.issuer.contact?wrap(document.issuer.contact,width,9).length*(9+gap)+after:0;const height=6+9+gap+3+(wrap(document.company.name,width).length+wrap(document.issuer.signatory,width).length)*(style.fontSize+gap)+after*2+12+contactHeight;ensure(height);y-=6;paragraph("Issued by",9,muted,"left",3);paragraph(document.company.name);y-=12;paragraph(document.issuer.signatory)}
+  if(document.showSignatory!==false){const contactHeight=document.issuer.contact?wrap(document.issuer.contact,width,9).length*textLeading(9)+blockAfter():0;const height=6+textLeading(9)+blockAfter(3)+(wrap(document.company.name,width).length+wrap(document.issuer.signatory,width).length)*textLeading(style.fontSize)+blockAfter()*2+12+contactHeight;ensure(height);y-=6;paragraph("Issued by",9,muted,"left",3);paragraph(document.company.name);y-=12;paragraph(document.issuer.signatory)}
   if (document.issuer.contact) branding(()=>paragraph(document.issuer.contact,9,muted))
   if(document.notice)paragraph(document.notice,9,muted)
   pages.forEach((p,i)=>{

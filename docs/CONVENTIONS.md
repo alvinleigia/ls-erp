@@ -1,5 +1,46 @@
 # Base Conventions
 
+## Editor typography (P13S)
+
+- Company template settings use Content, Company, PDF style and Printing tabs.
+  Keep digital logo/watermark controls under PDF style > Branding and physical
+  letterhead availability/reserved space under Printing. Printing stays available
+  independently of custom appearance. Retain mounted draft controls across tabs;
+  preview/refresh actions are grouped separately from the publication action.
+- The shared editor offers Normal text and H1–H6. Keep the existing H1–H3 PDF
+  sizes; smaller levels use the same bounded body-size scale with an 8 pt floor.
+- The title is an ordinary registered inline field inside a paragraph/heading;
+  format it with the same Normal text/H1-H6 and alignment controls as any text.
+  Do not add a separate title-style control. Company providers register and resolve
+  document.title from accepted content; quotations use their frozen quote.title.
+  Its explicit documentTitle marker identifies the visible title without guessing
+  from text. Other fields cannot claim this marker. Historical unmarked fields
+  retain their prior rendering. A leading marked title renders above references;
+  a moved title follows body order, without a second automatic title.
+- Add a title field only to the unsaved editing view, reusing one already present.
+  Loading does not publish or persist changes. Keep title metadata for document
+  names/downloads and preserve stored titleSize/titleAlign as the automatic-header
+  defaults for unchanged layouts. Required sections, historical revisions and
+  issued archives remain intact; no database migration or stored-layout rewrite.
+- PDF appearance is configured manually. Do not add named appearance preset
+  buttons or preset-application code. Keep saved appearance values intact; there
+  is no stored preset identifier to migrate.
+- Expose only Line height (1-3) and Space after (0-48 pt) under PDF style.
+  The shared body toolbar has no selected-text spacing, document-spacing row or
+  reset-spacing action. Enter creates a paragraph; Shift+Enter inserts a line break.
+- Explicit appearance.lineHeight and appearance.spaceAfter govern editable text,
+  headings, generated sections, table text and the sign-off, taking precedence
+  over stored block spacing. Editor presentation and PDF precedence must agree.
+  Preserve accepted named/numeric block data and historical geometry when a global
+  value is absent. Opening a template never publishes or rewrites saved content.
+- Preserve blank paragraphs and line breaks even at zero space after. A blank line
+  uses line height; a paragraph adds space after. Keep table padding and protected
+  footer/page-number geometry independent. Zero is explicit, not the default.
+- Paste accepts validated spacing attributes for retained documents, never arbitrary
+  CSS. No separate local spacing controls. Preserve formatting, registered fields,
+  source sections, accepted quotation revisions, issued archives and letterhead
+  rules; no database migration or saved-template rewrite.
+
 ## Readable access-profile names (P13R)
 
 - Keep generated tenant identifiers in profile IDs. Display names should describe
@@ -59,10 +100,20 @@
 
 ## Digital and preprinted letterhead PDFs (P13N)
 
-- Company document settings opt into letterhead printing and bound the reserved
-  top/bottom space in millimetres. Resolve it from the source issuing company,
-  independently of template wording. Freeze it through existing company-version
-  checks and prepared presentation; never apply current settings to an archive.
+- Company settings supply optional letterhead defaults. A template's optional
+  letterhead choice takes precedence: absent inherits, enabled:true uses its own
+  bounded top/bottom reservation, and enabled:false disables print copies for
+  that template. Keep this policy separate from resolved appearance.letterhead;
+  never trust a supplied resolved profile instead of the reviewed template policy.
+- Footer inheritance is independent: useCompanyFooter overrides the footer choice,
+  and absent retains the existing useCompanyDetails behaviour. Address/contact/
+  signatory defaults remain unchanged. Show inherited footer text as read-only;
+  an explicit custom choice uses the template's appearance.footer.
+- Apply policy only to new previews/preparations, under existing template/company
+  version checks. Freeze the resolved profile/footer into accepted presentation;
+  archived downloads never read current settings. This is per template, not an
+  unreviewed override during individual document generation. Approved statutory
+  issuer/print/signature controls cannot be bypassed by these generic overrides.
 - Digital and print copies share body coordinates, page breaks, links, required
   notices, reference and page numbers. Mark automatic company branding only in
   the shared PDF renderer. Keep references above the physical footer reservation.

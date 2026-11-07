@@ -20,6 +20,7 @@ test('company letterhead settings are bounded, opt-in, independent of wording an
 test('digital and letterhead copies share exact body streams, page breaks, links and archived source bytes',async t=>{
  const labels=[],draw=PDFPage.prototype.drawText;t.mock.method(PDFPage.prototype,'drawText',function(text,options){if(text.includes(' | Page '))labels.push(options.y);return draw.call(this,text,options)})
  const document=source(),logo=await require('sharp')({create:{width:300,height:80,channels:4,background:'#ed8822'}}).png().toBuffer();document.logoDataUrl='data:image/png;base64,'+logo.toString('base64')
+ document.body.unshift({type:'heading',level:2,align:'center',documentTitle:true,runs:[{text:document.title}]})
  const digital=await renderBusinessDocument(document,true),before=sha(digital),print=await letterheadPdf(digital),a=await PDFDocument.load(digital),b=await PDFDocument.load(print)
  assert(a.getPageCount()>2);assert.equal(a.getPageCount(),b.getPageCount());assert.equal(sha(digital),before)
  assert.equal(b.catalog.has(PDFName.of('ERPCompanyLetterheadVersion')),false)
@@ -40,4 +41,30 @@ test('existing unconfigured PDFs stay digital, unsupported copies fail and insuf
  const bytes=await renderBusinessDocument(old,true);await assert.rejects(letterheadPdf(bytes),e=>e.status===409);await assert.rejects(renderBusinessDocument(old,true,'letterhead'),e=>e.status===409)
  const tiny=source();tiny.appearance.letterhead.topMm=20;await assert.rejects(renderBusinessDocument(tiny,true),/reserved header space/)
  const signed=await PDFDocument.load(await renderBusinessDocument(source(),true));signed.getForm();const signedBytes=await signed.save();await assert.rejects(letterheadPdf(signedBytes),e=>e.status===409)
+})
+
+test('each template can enable or disable letterhead printing independently of its company defaults',()=>{
+ const {documentContentSchema}=require('../platform/documents/validation.ts')
+ const base=structuredClone(orderAcknowledgement.defaults),off=companyDocumentSettingsSchema.parse({}),on=companyDocumentSettingsSchema.parse({letterhead:{enabled:true,topMm:70,bottomMm:40}})
+ const custom={...base,letterhead:{enabled:true,topMm:55,bottomMm:30}},before=JSON.stringify(custom)
+ assert(documentContentSchema.safeParse(custom).success)
+ assert.deepEqual(resolveCompanyDocumentContent(custom,off).appearance.letterhead,{topMm:55,bottomMm:30})
+ assert.deepEqual(resolveCompanyDocumentContent(custom,on).appearance.letterhead,{topMm:55,bottomMm:30})
+ assert.deepEqual(resolveCompanyDocumentContent(base,on).appearance.letterhead,{topMm:70,bottomMm:40})
+ assert.equal(resolveCompanyDocumentContent({...base,letterhead:{enabled:false}},on).appearance?.letterhead,undefined)
+ assert.equal(JSON.stringify(custom),before)
+ for(const letterhead of [{enabled:true,topMm:19,bottomMm:30},{enabled:true,topMm:55,bottomMm:51},{enabled:true,topMm:55},{enabled:false,topMm:55,bottomMm:30},{enabled:true,topMm:55,bottomMm:30,css:'hide'}])assert(!documentContentSchema.safeParse({...base,letterhead}).success)
+ const frozen=resolveCompanyDocumentContent(custom,on);custom.letterhead.topMm=80;on.letterhead.bottomMm=50
+ assert.deepEqual(frozen.appearance.letterhead,{topMm:55,bottomMm:30},'resolved presentation is a copy, never a live template/company reference')
+})
+
+test('a document footer can override company footer without giving up company address and signatory',()=>{
+ const settings=companyDocumentSettingsSchema.parse({address:'Company address',contact:'Company contact',signatory:'Company signatory',footer:'Company footer'})
+ const content={...structuredClone(orderAcknowledgement.defaults),useCompanyDetails:true,useCompanyFooter:false,appearance:{...defaultDocumentAppearance,footer:'Document-specific footer'}}
+ const resolved=resolveCompanyDocumentContent(content,settings)
+ assert.equal(resolved.address,'Company address');assert.equal(resolved.signatory,'Company signatory');assert.equal(resolved.appearance.footer,'Document-specific footer')
+ assert.equal(resolveCompanyDocumentContent({...content,useCompanyFooter:true},settings).appearance.footer,'Company footer')
+ const inherited=structuredClone(content);delete inherited.useCompanyFooter
+ assert.equal(resolveCompanyDocumentContent(inherited,settings).appearance.footer,'Company footer','absent footer choice retains old inheritance')
+ assert.equal(resolveCompanyDocumentContent({...content,useCompanyDetails:false,useCompanyFooter:true,address:'Custom address'},settings).address,'Custom address')
 })

@@ -1,3 +1,91 @@
+## P13S editor typography (2026-11-07)
+
+Template settings are organised into Content, Company, PDF style and Printing.
+Digital logo/watermark controls are labelled Branding; physical letterhead
+availability and reserved space live only under Printing, independently of custom
+appearance. Main tabs use a two-column layout on small screens. Preview actions
+are grouped separately from refresh/publication actions, without an extra nested
+publication card. Draft persistence, fresh review, disabled/read-only controls,
+publication versions and download variants retain their existing behaviour.
+All 35 component-browser checks passed; the final mobile tab adjustment passed
+three focused browser workflows. Desktop/mobile captures were inspected, and
+TypeScript, targeted lint and whitespace checks passed. This UI follow-up changes
+no PDF rendering, business permissions, data or migrations and does not publish
+templates automatically.
+
+Company document templates can inherit company letterhead defaults, enable their
+own reserved header/footer space, or explicitly disable print copies. The same
+company may therefore use different choices for booking letters, receipts and
+commercial invoices. Staff choose digital or preprinted-letterhead copies at
+preview/download, using one frozen archived PDF. Template footer inheritance is
+independent of company address/contact/signatory defaults. Published versions,
+issued files and approved statutory print/signature controls remain protected.
+
+PDF styling is manual: Standard/Letter/Compact shortcut buttons and their
+preset-definition code have been removed. Saved appearance values and issued
+PDFs remain intact; no data migration or stored preset lookup is needed.
+
+PDF style now exposes only two document-wide spacing settings: Line height and
+Space after. Selected-text spacing, the document-spacing toolbar row and reset
+spacing action have been removed. Explicit PDF-style values govern all editable
+headings/paragraphs, generated sections, terms, table text and the sign-off.
+Stored block spacing remains intact for historical layouts; an explicit global
+value takes precedence in both the editor and PDF. Unset values preserve existing
+rendering. Table padding and protected footer/page-number spacing stay separate.
+Enter creates a paragraph with space after, Shift+Enter adds a line within the
+paragraph, and intentionally blank paragraphs stay visible even at zero gap.
+
+The shared company-document and quotation editor offers Normal text and
+Heading 1-6. The title is now a field inside the editable body and uses this same
+menu and text alignment; there is no separate title-style/size/alignment control.
+The title value stays linked to document metadata. Its explicit inline marker
+prevents a duplicate automatic header; leading titles stay above reference/date,
+and moved titles respect body order. Only registered title fields may carry this
+marker. Existing unmarked layouts and old field usage retain their original
+rendering. Opening an editor creates an unsaved view, never a stored rewrite.
+
+Numeric line height and space after remain bounded, shared controls. Existing
+saved title sizes and spacing presets remain authoritative for unchanged PDFs.
+H1-H3 keep their original PDF geometry; H4-H6 extend the same scale. Zero points
+after a block survives resolution and rendering; line height is a validated 1-3
+multiplier and space after is 0-48 pt.
+
+The controls and renderer are shared by document providers and custom quotations.
+No business data migration, template publication or issued-file rewrite is part
+of this change. Hosted release verification must confirm the deployed Git source,
+the template settings UI and preservation of saved template versions/content.
+
+Local verification passed: 48 unit/PDF checks, all 31 component-browser checks
+and six native browser workflows using a disposable synthetic database. These
+cover PDF-style-only spacing, bounds/clearing, global precedence over retained
+block values, Enter/Shift+Enter and blank paragraphs, publication/reload, quotation
+revision immutability, issued-document replacement, property allocation rules,
+receipts/refunds and digital/letterhead archives. Desktop/mobile editor and PDF
+style captures plus the generated spacing PDF were visually inspected. Production
+build (including TypeScript), targeted lint and whitespace checks passed. No new
+migration, hosted data write, automatic publication, push or deployment occurred.
+The manual-only follow-up removed all three appearance preset buttons, their
+application handler and the exported preset definitions. Existing scalar styles
+continue to render normally. Targeted verification passed: 21 appearance and
+quotation PDF/unit checks, three browser flows covering manual settings,
+publication, spacing and read-only access, final TypeScript and lint. Desktop
+and mobile manual-style captures were inspected. No migration or hosted write.
+
+The per-template letterhead follow-up passed 52 unit/PDF checks, all 34
+component-browser checks and seven distinct native browser workflows against a
+disposable synthetic database. Six existing workflows passed in the full native
+run; the new workflow passed separately after correcting its test to inspect the
+synthetic storage redirect instead of following a deliberately nonexistent host.
+Coverage includes independent template/company choices, custom footer inheritance,
+preview/publication/reload, bounds, read-only access, statutory-control rejection,
+and byte-identical issued print copies after template/company changes. Digital and
+preprinted-letterhead PDF pages were visually inspected: body positions and page
+breaks match while company branding/footer are removed from the print copy.
+Production build, TypeScript, targeted lint and whitespace checks passed. No new
+migration, hosted business write, push or deployment occurred.
+
+
+
 ## P13R readable access-profile names (2026-11-06)
 
 Migration 20261106000200_readable_access_profile_names replaces exact generated

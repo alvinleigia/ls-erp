@@ -8,6 +8,7 @@ import type { DocumentBlock } from "@/platform/documents/contracts"
 
 export const orderTemplateCatalog: TemplateCatalog = {
   fields: [
+    { key: "document.title", label: "Document title" },
     { key: "document.reference", label: "Document reference" }, { key: "document.date", label: "Issue date" },
     { key: "company.name", label: "Issuing company name" }, { key: "company.address", label: "Company address" }, { key: "company.contact", label: "Company contact details" },
     { key: "customer.name", label: "Customer name" }, { key: "order.reference", label: "Booking / order reference" }, { key: "order.date", label: "Order date" },
@@ -26,7 +27,7 @@ export const orderTemplateCatalog: TemplateCatalog = {
 export function orderTemplateValues(context: OrderDocumentContext, content: DocumentContent, reference: string): Record<string, string> {
   const money = (value: string) => formatDecimalCurrency(value, context.order.currency, context.snapshot)
   return {
-    "document.reference": reference, "document.date": formatDateForDisplay(context.date, context.snapshot.dateFormat),
+    "document.title": content.title, "document.reference": reference, "document.date": formatDateForDisplay(context.date, context.snapshot.dateFormat),
     "company.name": context.company.name, "company.address": content.address, "company.contact": content.contact,
     "customer.name": context.snapshot.customer.name, "order.reference": context.order.reference!, "order.date": formatDateForDisplay(context.order.orderedOn!.toISOString().slice(0, 10), context.snapshot.dateFormat),
     "order.booking-date": context.snapshot.content.bookingDate ? formatDateForDisplay(context.snapshot.content.bookingDate, context.snapshot.dateFormat) : "Not supplied",

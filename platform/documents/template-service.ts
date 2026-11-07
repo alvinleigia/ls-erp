@@ -11,7 +11,7 @@ import type { DocumentContent } from "./validation"
 import type { DocumentIdentity,DocumentPayload } from "./contracts"
 import { starterDocumentLayout, validateDocumentLayout, type TemplateCatalog } from "./layout"
 import { readDocumentBranding } from "../branding/read"
-import { resolveCompanyDocumentContent } from "../companies/document-settings"
+import { companyDocumentSettingsSchema, resolveCompanyDocumentContent } from "../companies/document-settings"
 export type DocumentTypeInfo = { companyDetails?: boolean; key: string; name: string; modules: readonly BusinessModuleKey[]; defaults: DocumentContent; templateCatalog: TemplateCatalog; sample: (content:DocumentContent,catalog:TemplateCatalog,company:{id:string;name:string})=>DocumentPayload }
 export function createDocumentTemplateService(db: PrismaClient, identity: DocumentIdentity, providers: readonly DocumentTypeInfo[]) {
   const registry=new Map(providers.map(row=>[row.key,row]))
@@ -47,7 +47,8 @@ export function createDocumentTemplateService(db: PrismaClient, identity: Docume
         if(!company)throw new BusinessError(404,"Issuing company not found.")
         const content=(current?.content??provider.defaults) as DocumentContent
         const settings=await tx.businessCompany.findFirst({where:{tenantId:identity.tenantId,id:companyId},select:{documentSettings:true}})
-        return {company,providerKey,version:current?.version??0,content:{...content,layout:content.layout??starterDocumentLayout(provider.templateCatalog)},templateCatalog:provider.templateCatalog,companyDetailsAvailable:provider.companyDetails!==false,letterheadAvailable:provider.companyDetails!==false&&!!resolveCompanyDocumentContent(content,settings?.documentSettings??{}).appearance?.letterhead}
+        const companySettings=companyDocumentSettingsSchema.parse(settings?.documentSettings??{})
+        return {company,providerKey,version:current?.version??0,companyLetterhead:companySettings.letterhead,companyFooter:companySettings.footer,content:{...content,layout:content.layout??starterDocumentLayout(provider.templateCatalog)},templateCatalog:provider.templateCatalog,companyDetailsAvailable:provider.companyDetails!==false,letterheadAvailable:provider.companyDetails!==false&&!!resolveCompanyDocumentContent(content,settings?.documentSettings??{}).appearance?.letterhead}
       })
     },
     async preview(input:unknown) {
@@ -60,6 +61,7 @@ export function createDocumentTemplateService(db: PrismaClient, identity: Docume
         const latest=await tx.businessDocumentTemplate.findFirst({where:{tenantId:identity.tenantId,companyId:company.id,providerKey:provider.key},orderBy:{version:"desc"},select:{version:true}})
         if((latest?.version??0)!==data.version)throw new BusinessError(409,"This template changed. Reload before previewing; your draft is retained.")
         if(provider.companyDetails===false&&data.content.useCompanyDetails)throw new BusinessError(400,"This document uses its approved tax issuer details.")
+        if(provider.companyDetails===false&&(data.content.letterhead!==undefined||data.content.useCompanyFooter!==undefined))throw new BusinessError(400,"Use the approved tax document issuer, print and signature controls.")
         if(provider.companyDetails===false&&data.variant==="letterhead")throw new BusinessError(400,"Use the approved tax document print and signature controls.")
         const content=resolveCompanyDocumentContent(data.content,provider.companyDetails===false?{}:company.documentSettings)
         return {...provider.sample(content,provider.templateCatalog,company),branding:data.content.useTenantLogo?await readDocumentBranding(tx,identity.tenantId):null}
@@ -71,6 +73,7 @@ export function createDocumentTemplateService(db: PrismaClient, identity: Docume
       const data=documentTemplateSchema.parse(input),provider=registry.get(data.providerKey)
       if(!provider)throw new BusinessError(400,"Choose a registered document type.")
       if(provider.companyDetails===false&&data.content.useCompanyDetails)throw new BusinessError(400,"This document uses its approved tax issuer details.")
+      if(provider.companyDetails===false&&(data.content.letterhead!==undefined||data.content.useCompanyFooter!==undefined))throw new BusinessError(400,"Use the approved tax document issuer, print and signature controls.")
       if(data.content.layout)validateDocumentLayout(data.content.layout,provider.templateCatalog)
       return run(true,async tx=>{
         await authorizeBusinessOperation(tx,identity,["documentTemplates.read","documentTemplates.edit"],provider.modules)

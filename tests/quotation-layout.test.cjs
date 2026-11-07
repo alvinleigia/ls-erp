@@ -32,8 +32,8 @@ test('standard and custom PDFs use accepted billing and delivery copies without 
 })
 
 test('custom quotation styling is validated and frozen with its accepted revision',async()=>{
- const {defaultDocumentAppearance,documentStylePresets}=require('../platform/documents/appearance.ts')
- const snapshot=quotationLayoutSample(starterDocumentLayout(catalog));snapshot.content.appearance={...defaultDocumentAppearance,...documentStylePresets.letter,footer:'Sample Supplier | example.test'}
+ const {defaultDocumentAppearance}=require('../platform/documents/appearance.ts')
+ const snapshot=quotationLayoutSample(starterDocumentLayout(catalog));snapshot.content.appearance={...defaultDocumentAppearance,colour:'black',tableStyle:'minimal',referenceLayout:'split',companyHeading:false,footer:'Sample Supplier | example.test'}
  assert(quotationContentSchema.safeParse(snapshot.content).success)
  const before=JSON.stringify(snapshot),payload=quotationLayoutDocument(record(snapshot));assert.deepEqual(payload.appearance,snapshot.content.appearance)
  const bytes=await buildQuotationPdf(record(snapshot),true);assert.equal(Buffer.from(bytes).subarray(0,5).toString(),'%PDF-');assert.equal(JSON.stringify(snapshot),before)

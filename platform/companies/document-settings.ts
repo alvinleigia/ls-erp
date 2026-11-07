@@ -21,10 +21,12 @@ export const emptyCompanyDocumentSettings = companyDocumentSettingsSchema.parse(
 export function resolveCompanyDocumentContent(content: DocumentContent, settings: unknown): DocumentContent {
   const company = companyDocumentSettingsSchema.parse(settings)
   const { letterhead: _ignored, ...appearance } = content.appearance ?? {}
-  const letterhead = company.letterhead.enabled ? { topMm: company.letterhead.topMm, bottomMm: company.letterhead.bottomMm } : undefined
-  if (!content.useCompanyDetails && !letterhead && !_ignored) return content
+  const profile = content.letterhead ?? company.letterhead
+  const letterhead = profile.enabled ? { topMm: profile.topMm, bottomMm: profile.bottomMm } : undefined
+  const useCompanyFooter = content.useCompanyFooter ?? !!content.useCompanyDetails
+  if (!content.useCompanyDetails && !useCompanyFooter && !letterhead && !_ignored) return content
   return { ...content, ...(content.useCompanyDetails ? { address: company.address, contact: company.contact, signatory: company.signatory } : {}),
-    appearance: { ...defaultDocumentAppearance, ...appearance, ...(content.useCompanyDetails ? { footer: company.footer } : {}), ...(letterhead ? { letterhead } : {}) } }
+    appearance: { ...defaultDocumentAppearance, ...appearance, ...(useCompanyFooter ? { footer: company.footer } : {}), ...(letterhead ? { letterhead } : {}) } }
 }
 
 // The application has already authorized the opportunity; the native reader also
