@@ -9,6 +9,7 @@ import { CollectionFollowUps } from "@/application/receivables/follow-ups"
 import { OrderDocuments } from "@/modules/sales-orders/components/documents"
 import { OrderInvoices } from "@/modules/customer-invoices/components"
 import { OrderTaxAgreement } from "@/modules/sales-orders/components/tax-agreement"
+import { ParticipantVerificationSummary } from "@/platform/verification/source-controls"
 export function SalesOrderDetail({ id }: { id: string }) {
   const modules = useBusinessModules()
   return <OrderDetail id={id} renderPanels={(value, version) => {
@@ -23,6 +24,7 @@ export function SalesOrderDetail({ id }: { id: string }) {
         <details className="rounded-xl border bg-card p-4 sm:p-5"><summary className="cursor-pointer font-medium">Bank instructions and terms</summary><div className="mt-4 space-y-5">{summary("terms")}</div></details>
       </> },
       { value: "customers", label: "Customers", content: summary("overview", snapshot.participants ? ["customers"] : ["context"]) },
+      ...(modules.enabled("customerVerification") && modules.can("verificationSummaries.read") ? [{ value: "verification", label: "Verification", permission: "verificationSummaries.read" as const, content: <ParticipantVerificationSummary kind="ORDER" id={id} version={version} /> }] : []),
       ...(modules.can("orderDocuments.read") ? [{ value: "documents", label: "Documents", permission: "orderDocuments.read" as const, content: <OrderDocuments key={version} orderId={id}/> }] : []),
       ...(modules.enabled("catalog") && modules.can("catalogItems.read") && modules.can("unitReservations.read") && snapshot.items?.some(item => item.kind === "UNIT") ? [{ value: "units", label: "Units", permission: ["catalogItems.read", "unitReservations.read"] as const, content: <OrderReservations key={version} orderId={id}/> }] : []),
       { value: "payments", label: "Payments", content: <div key={version} className="space-y-6">

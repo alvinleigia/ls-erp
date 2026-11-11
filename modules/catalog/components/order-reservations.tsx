@@ -9,8 +9,10 @@ import { Section } from "@/components/erp/section"
 import { Pagination } from "@/components/erp/pagination"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
 import { useDateFormatter } from "@/hooks/use-date-formatter"
+import { VerificationCheckpointNotice } from "@/platform/verification/checkpoint-notice"
+import type { CheckpointReview } from "@/platform/verification/checkpoint-contracts"
 type Reservation = { id: string; itemCode: string; itemName: string; status: string; version: number; expiresAt: string; events: { version: number; status: string; actorName: string; createdAt: string; reason: string }[] }
-type Result = { items: Reservation[]; units: { itemId: string; code: string; name: string; available: boolean }[]; canCreate: boolean; canAllocate: boolean; canRelease: boolean; total: number; page: number; pageSize: number }
+type Result = { verificationReview?: CheckpointReview; items: Reservation[]; units: { itemId: string; code: string; name: string; available: boolean }[]; canCreate: boolean; canAllocate: boolean; canRelease: boolean; total: number; page: number; pageSize: number }
 const labels: Record<string, string> = { HELD: "Reserved", ALLOCATED: "Allocated", RELEASED: "Released", EXPIRED: "Expired" }
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, { cache: "no-store", ...init }), result = await response.json()
@@ -48,6 +50,7 @@ export function OrderReservations({ orderId }: { orderId: string }) {
     <Button variant="outline" disabled={busy} onClick={() => { setError(""); load().catch(e => { setData(undefined); setError(e.message) }) }}>Refresh reservations</Button>
     {error && !action && <p role="alert" className="text-destructive">{error}</p>}
     {data && <>
+      <VerificationCheckpointNotice review={data.verificationReview} />
       {data.canCreate && data.units.some(unit => unit.available) && <div className="space-y-2">{data.units.filter(unit => unit.available).map(unit => <div key={unit.itemId} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border p-3"><span className="min-w-0 break-words">{unit.code} · {unit.name}</span><Button variant="outline" onClick={() => open({ kind: "reserve", id: unit.itemId, name: unit.name })}>Reserve unit</Button></div>)}</div>}
       {!data.units.length && <p className="text-sm text-muted-foreground">No accessible unique catalog units in this saved quotation. Product quantities and manual lines cannot be reserved here.</p>}
       {!data.items.length && <p>No reservations for this order.</p>}

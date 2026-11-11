@@ -1,4 +1,5 @@
 import { taxPreparationError } from "@/platform/tax/source-errors"
+import { readOrderVerificationCheckpoint, verificationCheckpointError } from "@/platform/verification/checkpoints"
 import { lockTenantOperations } from "@/platform/transactions/tenant-lock"
 import { businessDate } from "@/lib/business-time"
 import { officeBoundaryError } from "@/platform/companies/record-office"
@@ -24,7 +25,7 @@ export function createSalesOrderService(db: PrismaClient, identity: Pick<Busines
       try {
         return await db.$transaction(async tx => {
           if (write) {
-            await tx.$queryRaw`SELECT id FROM "Tenant" WHERE id=${identity.tenantId} FOR SHARE`
+            await tx.$queryRaw`SELECT id FROM "Tenant" WHERE id=${identity.tenantId} FOR UPDATE`
             await lockTenantOperations(tx, identity.tenantId)
           }
           const actor = await authorizeBusinessOperation(tx, identity, requirement, ["salesOrders"])
@@ -33,6 +34,7 @@ export function createSalesOrderService(db: PrismaClient, identity: Pick<Busines
       } catch (e) {
         const officeError = officeBoundaryError(e); if (officeError) throw officeError
         const taxError=taxPreparationError(e);if(taxError)throw taxError
+        const verificationError=verificationCheckpointError(e);if(verificationError)throw verificationError
         if ((serializationConflict(e) || (e as { code?: string }).code === "P2002") && attempt < 3) continue
         if (serializationConflict(e) || (e as { code?: string }).code === "P2002") throw new BusinessError(409, "This order changed. Refresh and try again.")
         throw e
@@ -79,7 +81,8 @@ export function createSalesOrderService(db: PrismaClient, identity: Pick<Busines
         const history = await tx.salesOrderEvent.findMany({ where: { tenantId: actor.tenantId, orderId: id }, orderBy: { version: "asc" } })
         const canConfirm = row.status === "DRAFT" && !!recordAccess.permissions["salesOrders.confirm"]
         const confirmationReview = canConfirm ? await source.reviewConfirmation?.(tx, actor, row.snapshot) : undefined
-        return { ...row, history, recordAccess, confirmationReview, canConfirm, canCancel: row.status !== "CANCELLED" && !!recordAccess.permissions["salesOrders.cancel"] }
+        const verificationReview = canConfirm ? await readOrderVerificationCheckpoint(tx, actor, id, "ORDER_CONFIRMATION") : undefined
+        return { ...row, history, recordAccess, confirmationReview, verificationReview, canConfirm, canCancel: row.status !== "CANCELLED" && !!recordAccess.permissions["salesOrders.cancel"] }
       })
     },
     create(input: unknown) {

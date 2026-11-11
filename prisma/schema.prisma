@@ -149,6 +149,7 @@ model CrmStage {
 }
 
 model CrmOpportunity {
+  partnerLinkEvents CrmPartnerLinkEvent[]
   participantInformation Json?
   participants CrmOpportunityParticipant[]
   introducedByCollaboratorId String?
@@ -232,6 +233,26 @@ model CrmOpportunityActivity {
   @@index([tenantId, opportunityId, createdAt])
 }
 
+model CrmPartnerLinkEvent {
+  id String @id @default(cuid())
+  tenantId String
+  enquiryId String?
+  opportunityId String?
+  recordVersion Int
+  actorUserId String?
+  before Json?
+  after Json?
+  reason String
+  createdAt DateTime @default(now())
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  enquiry CrmEnquiry? @relation(fields: [tenantId, enquiryId], references: [tenantId, id], onDelete: NoAction)
+  opportunity CrmOpportunity? @relation(fields: [tenantId, opportunityId], references: [tenantId, id], onDelete: NoAction)
+  actor User? @relation(fields: [tenantId, actorUserId], references: [tenantId, id], onDelete: NoAction)
+  @@unique([tenantId, id])
+  @@unique([tenantId, enquiryId, recordVersion])
+  @@unique([tenantId, opportunityId, recordVersion])
+}
+
 model TenantModule {
   tenantId String
   key      String
@@ -244,6 +265,7 @@ model TenantModule {
 }
 
 model CrmContact {
+  verificationCase CustomerVerificationCase?
   addresses PartyAddress[]
   taxIdentities PartyTaxIdentity[]
   participantRoles CrmOpportunityParticipant[]
@@ -288,6 +310,7 @@ model CrmContact {
 }
 
 model CrmAccount {
+  verificationCase CustomerVerificationCase?
   addresses PartyAddress[]
   taxIdentities PartyTaxIdentity[]
   participantRoles CrmOpportunityParticipant[]
@@ -370,6 +393,7 @@ model CrmLostReason {
 }
 
 model CrmEnquiry {
+  partnerLinkEvents CrmPartnerLinkEvent[]
   introducedByCollaboratorId String?
   introducingCollaborator ExternalCollaborator? @relation("CrmEnquiryIntroducer", fields: [tenantId, introducedByCollaboratorId], references: [tenantId, id], onDelete: NoAction)
   partnerAttribution Json?
@@ -757,6 +781,20 @@ enum StockMovementType {
 }
 
 model User {
+  verificationUploads VerificationEvidence[] @relation("EvidenceUploader")
+  verificationSubmissions VerificationSubmission[] @relation("VerificationSubmitter")
+  verificationReviews VerificationReview[] @relation("VerificationReviewer")
+  verificationRetentionVersions VerificationRetentionVersion[] @relation("VerificationRetentionPublisher")
+  verificationDisposals VerificationDisposal[] @relation("VerificationDisposalCreator")
+  verificationDisposalActions VerificationDisposal[] @relation("VerificationDisposalActor")
+  verificationDisposalEvents VerificationDisposalEvent[] @relation("VerificationDisposalEventActor")
+  verificationHoldEvents VerificationHoldEvent[] @relation("VerificationHoldActor")
+  verificationCheckpoints VerificationCheckpointVersion[] @relation("VerificationCheckpointPublisher")
+  verificationAcceptances OrderVerificationAcceptance[] @relation("VerificationAcceptanceActor")
+  verificationFinalizations VerificationEvidence[] @relation("EvidenceFinalizer")
+  verificationPolicies VerificationPolicyVersion[] @relation("VerificationPublisher")
+  startedVerifications CustomerVerificationCase[] @relation("VerificationCollector")
+  partnerLinkEvents CrmPartnerLinkEvent[]
   collaboratorId String?
   collaborator ExternalCollaborator? @relation("CollaboratorLogins", fields: [tenantId, collaboratorId], references: [tenantId, id], onDelete: NoAction)
 
@@ -860,6 +898,18 @@ model Organization {
 }
 
 model Tenant {
+  verificationEvidence VerificationEvidence[]
+  verificationSubmissions VerificationSubmission[]
+  verificationReviews VerificationReview[]
+  verificationRetentionVersions VerificationRetentionVersion[]
+  verificationDisposals VerificationDisposal[]
+  verificationDisposalEvents VerificationDisposalEvent[]
+  verificationHoldEvents VerificationHoldEvent[]
+  verificationCheckpoints VerificationCheckpointVersion[]
+  verificationAcceptances OrderVerificationAcceptance[]
+  verificationPolicies VerificationPolicyVersion[]
+  verificationCases CustomerVerificationCase[]
+  partnerLinkEvents CrmPartnerLinkEvent[]
   partyAddresses PartyAddress[]
   documentTemplates BusinessDocumentTemplate[]
   salesOrderSequence SalesOrderSequence?
@@ -2685,6 +2735,7 @@ model CrmQuotationRevision {
 }
 
 model SalesOrder {
+  verificationAcceptances OrderVerificationAcceptance[]
   taxAcceptance SalesOrderTaxAcceptance?
   invoices CustomerInvoice[]
   documents SalesOrderDocument[]
@@ -3646,6 +3697,226 @@ model TaxStatutoryDocumentEvent {
  createdAt DateTime @default(now())
  source TaxStatutoryDocument @relation(fields:[tenantId,documentId],references:[tenantId,id],onDelete:Restrict)
  @@id([tenantId,documentId,version])
+}
+
+model VerificationPolicyVersion {
+  submissions VerificationSubmission[]
+  evidence VerificationEvidence[]
+  id String @id @default(cuid())
+  tenantId String
+  version Int
+  definition Json
+  publishedByUserId String
+  publishedAt DateTime @default(now())
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  cases CustomerVerificationCase[]
+  publisher User @relation("VerificationPublisher", fields: [tenantId, publishedByUserId], references: [tenantId, id], onDelete: Restrict)
+
+  @@unique([tenantId, version])
+}
+
+model CustomerVerificationCase {
+  disposals VerificationDisposal[]
+  holds VerificationHoldEvent[]
+  submissions VerificationSubmission[]
+  evidence VerificationEvidence[]
+  id String @id @default(cuid())
+  tenantId String
+  contactId String?
+  accountId String?
+  policyVersion Int
+  createdByUserId String
+  createdAt DateTime @default(now())
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  contact CrmContact? @relation(fields: [tenantId, contactId], references: [tenantId, id], onDelete: Restrict)
+  account CrmAccount? @relation(fields: [tenantId, accountId], references: [tenantId, id], onDelete: Restrict)
+  policy VerificationPolicyVersion @relation(fields: [tenantId, policyVersion], references: [tenantId, version], onDelete: Restrict)
+  collector User @relation("VerificationCollector", fields: [tenantId, createdByUserId], references: [tenantId, id], onDelete: Restrict)
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, contactId])
+  @@unique([tenantId, accountId])
+}
+
+model VerificationEvidence {
+  disposals VerificationDisposal[]
+  submissions VerificationSubmissionEvidence[]
+  id String @id
+  tenantId String
+  caseId String
+  policyVersion Int
+  documentCode String
+  filename String
+  contentType String
+  bytes Int
+  path String @unique
+  state String @default("PENDING")
+  sha256 String?
+  uploadedByUserId String
+  finalizedByUserId String?
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+  readyAt DateTime?
+  cleanedAt DateTime?
+  failureCode String?
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  verificationCase CustomerVerificationCase @relation(fields: [tenantId, caseId], references: [tenantId, id], onDelete: Restrict)
+  policy VerificationPolicyVersion @relation(fields: [tenantId, policyVersion], references: [tenantId, version], onDelete: Restrict)
+  uploader User @relation("EvidenceUploader", fields: [tenantId, uploadedByUserId], references: [tenantId, id], onDelete: Restrict)
+  finalizer User? @relation("EvidenceFinalizer", fields: [tenantId, finalizedByUserId], references: [tenantId, id], onDelete: Restrict)
+  @@unique([tenantId, id])
+  @@unique([tenantId, caseId, id])
+  @@index([tenantId, caseId, state])
+  @@index([tenantId, state, expiresAt])
+}
+
+model VerificationSubmission {
+  id String @id @default(cuid())
+  tenantId String
+  caseId String
+  number Int
+  policyVersion Int
+  role String
+  facts Json
+  reason String?
+  submittedByUserId String
+  submittedAt DateTime @default(now())
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  verificationCase CustomerVerificationCase @relation(fields: [tenantId, caseId], references: [tenantId, id], onDelete: Restrict)
+  policy VerificationPolicyVersion @relation(fields: [tenantId, policyVersion], references: [tenantId, version], onDelete: Restrict)
+  submitter User @relation("VerificationSubmitter", fields: [tenantId, submittedByUserId], references: [tenantId, id], onDelete: Restrict)
+  evidence VerificationSubmissionEvidence[]
+  reviews VerificationReview[]
+  @@unique([tenantId, id])
+  @@unique([tenantId, caseId, id])
+  @@unique([tenantId, caseId, number])
+}
+
+model VerificationSubmissionEvidence {
+  tenantId String
+  caseId String
+  submissionId String
+  evidenceId String
+  submission VerificationSubmission @relation(fields: [tenantId, caseId, submissionId], references: [tenantId, caseId, id], onDelete: Restrict)
+  evidence VerificationEvidence @relation(fields: [tenantId, caseId, evidenceId], references: [tenantId, caseId, id], onDelete: Restrict)
+  @@id([tenantId, submissionId, evidenceId])
+}
+
+model VerificationReview {
+  id String @id @default(cuid())
+  tenantId String
+  submissionId String
+  number Int
+  decision String
+  reason String?
+  reviewedByUserId String
+  reviewedAt DateTime @default(now())
+  validUntil DateTime?
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  submission VerificationSubmission @relation(fields: [tenantId, submissionId], references: [tenantId, id], onDelete: Restrict)
+  reviewer User @relation("VerificationReviewer", fields: [tenantId, reviewedByUserId], references: [tenantId, id], onDelete: Restrict)
+  @@unique([tenantId, id])
+  @@unique([tenantId, submissionId, number])
+}
+
+model VerificationRetentionVersion {
+ disposals VerificationDisposal[]
+ id String @id @default(cuid())
+ tenantId String
+ version Int
+ retainDays Int?
+ publishedByUserId String
+ publishedAt DateTime @default(now())
+ tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+ publisher User @relation("VerificationRetentionPublisher", fields: [tenantId, publishedByUserId], references: [tenantId, id], onDelete: Restrict)
+ @@unique([tenantId, version])
+}
+
+model VerificationDisposal {
+ id String @id
+ tenantId String
+ caseId String
+ evidenceId String
+ policyVersion Int
+ previewHash String
+ reason String
+ state String @default("PENDING")
+ version Int @default(1)
+ createdByUserId String
+ actorUserId String
+ createdAt DateTime @default(now())
+ startedAt DateTime?
+ retryAfter DateTime?
+ completedAt DateTime?
+ tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+ verificationCase CustomerVerificationCase @relation(fields: [tenantId, caseId], references: [tenantId, id], onDelete: Restrict)
+ evidence VerificationEvidence @relation(fields: [tenantId, caseId, evidenceId], references: [tenantId, caseId, id], onDelete: Restrict)
+ policy VerificationRetentionVersion @relation(fields: [tenantId, policyVersion], references: [tenantId, version], onDelete: Restrict)
+ creator User @relation("VerificationDisposalCreator", fields: [tenantId, createdByUserId], references: [tenantId, id], onDelete: Restrict)
+ actor User @relation("VerificationDisposalActor", fields: [tenantId, actorUserId], references: [tenantId, id], onDelete: Restrict)
+ events VerificationDisposalEvent[]
+ @@unique([tenantId, id])
+ @@index([tenantId, caseId, state])
+}
+
+model VerificationDisposalEvent {
+ tenantId String
+ disposalId String
+ version Int
+ state String
+ actorUserId String
+ createdAt DateTime @default(now())
+ tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+ disposal VerificationDisposal @relation(fields: [tenantId, disposalId], references: [tenantId, id], onDelete: Restrict)
+ actor User @relation("VerificationDisposalEventActor", fields: [tenantId, actorUserId], references: [tenantId, id], onDelete: Restrict)
+ @@id([tenantId, disposalId, version])
+}
+
+model VerificationHoldEvent {
+ id String @id @default(cuid())
+ tenantId String
+ caseId String
+ number Int
+ action String
+ reason String
+ actorUserId String
+ createdAt DateTime @default(now())
+ tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+ verificationCase CustomerVerificationCase @relation(fields: [tenantId, caseId], references: [tenantId, id], onDelete: Restrict)
+ actor User @relation("VerificationHoldActor", fields: [tenantId, actorUserId], references: [tenantId, id], onDelete: Restrict)
+ @@unique([tenantId, caseId, number])
+}
+
+model VerificationCheckpointVersion {
+  id String @id @default(cuid())
+  tenantId String
+  version Int
+  definition Json
+  publishedByUserId String
+  publishedAt DateTime @default(now())
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  publisher User @relation("VerificationCheckpointPublisher", fields: [tenantId, publishedByUserId], references: [tenantId, id], onDelete: Restrict)
+  acceptances OrderVerificationAcceptance[]
+  @@unique([tenantId, version])
+}
+
+model OrderVerificationAcceptance {
+  id String @id @default(dbgenerated("gen_random_uuid()::text"))
+  tenantId String
+  orderId String
+  checkpoint String
+  sourceId String
+  sourceVersion Int
+  configurationVersion Int
+  actorUserId String
+  evaluatedAt DateTime @default(now())
+  proof Json
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  order SalesOrder @relation(fields: [tenantId, orderId], references: [tenantId, id], onDelete: Restrict)
+  configuration VerificationCheckpointVersion @relation(fields: [tenantId, configurationVersion], references: [tenantId, version], onDelete: Restrict)
+  actor User @relation("VerificationAcceptanceActor", fields: [tenantId, actorUserId], references: [tenantId, id], onDelete: Restrict)
+  @@unique([tenantId, checkpoint, sourceId, sourceVersion])
+  @@index([tenantId, orderId, evaluatedAt])
 }
 
 model PartyAddress {

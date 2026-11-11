@@ -10,6 +10,7 @@ import { catalogItemSchema, catalogListSchema } from "./validation"
 import type { CatalogExtension } from "./contracts"
 import { serializationConflict } from "@/platform/database-errors"
 import { activeReservation, reservationClock, reservedUnits } from "./reservation-availability"
+import { lockTenantOperations } from "@/platform/transactions/tenant-lock"
 type Tx = Prisma.TransactionClient
 const json = (value: unknown): Prisma.InputJsonValue => JSON.parse(JSON.stringify(value))
 
@@ -23,13 +24,14 @@ export async function catalogScope(tx: Tx, actor: BusinessActor, extensions: rea
   return { tenantId: actor.tenantId, OR: scopes }
 }
 export function createCatalogService(db: PrismaClient, identity: Pick<BusinessActor, "tenantId" | "userId" | "requestId">, extensions: readonly CatalogExtension[] = []) {
-  async function run<T>(requirement: Requirement, operation: (tx: Tx, actor: BusinessActor) => Promise<T>): Promise<T> {
+  async function run<T>(requirement: Requirement, operation: (tx: Tx, actor: BusinessActor) => Promise<T>, write = false): Promise<T> {
     for (let attempt = 0; ; attempt++) {
       try {
         return await db.$transaction(async tx => {
+          if (write) { await tx.$queryRaw`SELECT id FROM "Tenant" WHERE id=${identity.tenantId} FOR UPDATE`; await lockTenantOperations(tx, identity.tenantId) }
           const actor = await authorizeBusinessOperation(tx, identity, requirement, ["catalog"])
           return operation(tx, actor)
-        }, { isolationLevel: "Serializable", maxWait: 20000, timeout: 20000 })
+        }, { isolationLevel: write ? "ReadCommitted" : "Serializable", maxWait: 20000, timeout: 20000 })
       } catch (e) {
         if (serializationConflict(e) && attempt < 2) continue
         if (serializationConflict(e)) throw new BusinessError(409, "This item changed. Refresh before saving.")
@@ -91,7 +93,7 @@ export function createCatalogService(db: PrismaClient, identity: Pick<BusinessAc
         const nextExtension = extension ? await extension.read(tx, actor, row.id) : null
         await recordDomainAuditEvent(tx, { tenantId: actor.tenantId, actorUserId: actor.userId, actorRole: actor.role, requestId: actor.requestId, entityType: "CatalogItem", entityId: row.id, event: id ? "catalog.item.updated" : "catalog.item.created", before: before ? json({ ...before, extension: previousExtension }) : undefined, after: json({ ...row, extension: nextExtension }) })
         return row
-      })
+      }, true)
     },
   }
 }

@@ -1,5 +1,160 @@
 # Base Conventions
 
+## Controlled verification disposal (P13S)
+
+- Limit disposal to actual internal tenant administrators and expired, unreferenced
+  accepted originals. Use preview binding, explicit confirmation and a private reason.
+- Quarantine a durable request before storage removal. Cancellation is PENDING-only;
+  irreversible DELETING outcomes require versioned reconciliation after the native
+  retry interval. Never treat unknown storage errors as absence or roll back intent
+  after external deletion. Recheck authority and preservation after storage I/O.
+- Keep native selection/hold/checkpoint guards, immutable tombstones and attempt
+  history. Redact original name/size/checksum only through completed native disposal.
+  Facts, saved references and issued documents remain retained. No automatic purge.
+- Recovery must use the current disposal ledger, reject in-progress outcomes and
+  reject restoring disposed originals. Backups keep their own expiry. See
+  `P13S_VERIFICATION_DISPOSAL.md`.
+
+
+## Verification retention and holds (P13S)
+
+- Default accepted evidence retention to indefinite. Publish preview-bound,
+  immutable tenant retention versions; configuration does not erase anything.
+- Keep case preservation instructions in append-only, reasoned hold/release
+  events with distinct Create/Cancel capabilities and fresh canonical source
+  scope. Hold reasons are private; ordinary audit receives identifiers/action only.
+- Read-only disposal review is administrative and needs private evidence Read.
+  Holds, accepted transaction references and any saved submission take priority
+  over finite periods. Use database time and bounded, batched decisions.
+- Accepted originals/facts remain immutable. Do not extend abandoned-upload
+  cleanup to accepted records or add a purge until controlled disposal, failure
+  recovery and backup expiry rules are separately implemented and tested. See
+  `P13S_VERIFICATION_RETENTION.md`.
+
+
+## Verification checkpoints (P13S)
+
+- Keep status-only participant summaries separate from private facts/evidence
+  access. Apply canonical source Read, office/scope/sharing and internal-user
+  boundaries; order checks use frozen participants, never live CRM fallback.
+- Default checkpoints to Off. Publish previewed, versioned Off/Warn/Required
+  settings explicitly. Include the primary customer; evaluate each selected role
+  against its own latest submission, current policy and database-clock validity.
+- Native confirmation/allocation/new order-document writes atomically check and
+  mint immutable acceptance proofs. No direct proof writes or private identity
+  values/files in proofs or ordinary audit. Required cannot be bypassed by module
+  disablement. Preserve payment recording and existing PDF retrieval.
+- Bind document preparation to verification state, recheck after storage I/O and
+  retain existing idempotent retry semantics. Shared infrastructure owns the
+  engine; modules contribute bounded source/action integration. See
+  `P13S_VERIFICATION_CHECKPOINTS.md`.
+
+
+## Private verification submission and review (P13S)
+
+- Keep typed private facts in immutable, tenant/case/policy/role-bound submission
+  revisions. Never overwrite master customer data, correspondence or tax identity.
+  Require complete applicable facts and accepted evidence; reference original files
+  through native same-case composite keys, without copying files per revision.
+- Freeze evidence selection in the submission transaction. Native deferred checks
+  enforce complete evidence; subsequent inserts, updates and deletes are forbidden.
+  Corrections require a private reason and a new sequential revision.
+- Separate verificationSubmissions Read/Create from verificationReviews
+  Read/Approve/Cancel and private evidence Read. A source/case grant alone exposes
+  no private facts or verdict. External logins are excluded. Reviewer actions also
+  require fresh canonical source visibility and evidence Read.
+- Prevent approval by the submitter and uploaders/finalisers of selected evidence,
+  including administrators. Record immutable decisions and reasoned revocation;
+  new revisions, policy changes and expiry never revive older approvals.
+- Use database time for validity, fresh authority under the tenant lock before
+  the operational mutex, and explicit expected submission/review/policy versions.
+  General audit contains identifiers/counts/states only, not private reasons/facts.
+- Lazy-load Facts and review on first use, then keep it mounted across subtab
+  switches. A human approval is role/policy-specific internal verification, not
+  government verification or transaction acceptance. No implicit booking/payment
+  gates, module activation or profile migration accompanies this increment.
+
+## Private verification evidence (P13S)
+
+- Keep evidence originals in the private tenant-verification bucket, never the
+  public branding bucket or ordinary PDF archives. PDF/JPEG/PNG only, 5 MiB/file.
+  Use authorised direct signed uploads to avoid the Vercel request-body limit;
+  no server secret or ordinary Supabase write capability reaches the browser.
+- Reserve a tenant/case/policy-bound immutable UUID path before signing. Validate
+  actual bytes/size/type/structure and save the server checksum before READY.
+  Pending or invalid files are not accepted evidence. READY means accepted file,
+  not KYC approval. Recheck authority, subject state, policy and expiry after I/O.
+- verificationUploads Read/Create/Cancel governs own staging metadata/actions.
+  verificationEvidence Read independently gates accepted filenames and downloads,
+  alongside case and canonical customer Read/scope. A collector need not browse
+  colleagues' evidence. Module-off customers/accounts must not show the tab.
+- Accepted bytes/metadata cannot be overwritten, cancelled or deleted. New files
+  use new IDs. Keep 20 uncleaned slots/case and 100 unaccepted slots/business.
+  Supabase upload links last two hours; cleanup waits three hours, marks uploads
+  irreversibly abandoned under the database clock/lock, then removes only their
+  objects. Storage failures retain retryable cleanup metadata; READY is excluded.
+- Downloads check checksum and fresh authority, audit IDs only, and return a
+  60-second attachment link in a separate tab. Already issued bearer links expire
+  naturally. Do not log names, paths, hashes, tokens or file contents. Sanitise
+  native adapter errors before the general API logger receives rejected rows.
+- Include evidence objects in encrypted storage recovery and reconcile accepted
+  references/checksums against the database backup. Bucket creation/checking uses
+  an explicit environment/project; never silently change an existing public bucket.
+
+## Customer verification foundation (P13S)
+
+- Customer Verification is a separate default-off module. Its current canonical
+  subjects are native tenant-bound CRM people/accounts; platform orchestration
+  accepts a source owner adapter. Each additional applicant has their own case.
+  Never infer approval from CIF, tax registration, a Won deal or a started case.
+- Publish append-only VerificationPolicyVersion rows under the tenant security
+  lock before the operational mutex. Preview hashes bind tenant, current version
+  and the validated draft. Reads/migrations do not activate modules, grant access,
+  publish policies or backfill cases. Policy publication is admin-only.
+- Requirements are bounded typed fact/document definitions with person/business
+  and participant-role applicability. No universal identity document is required.
+  Identity facts, transaction addresses and tax identities remain separate.
+- Cases retain an immutable canonical owner and collection-start policy. Start is
+  idempotent; a newly started case is In progress, never Verified. Existing cases
+  derive their protected review status from exact submission/review revisions;
+  a case is not transaction acceptance.
+- verificationPolicies Read/Edit and customerVerification Read/Create are separate
+  grants. Case access also requires canonical customer Read, scope and Restricted
+  sharing. Forced RLS and native insert guards mirror this boundary. External
+  logins are excluded. Directory Read grants no evidence/reviewer authority.
+- Audit copies contain IDs, versions and counts only. Private facts/files and
+  reviewer decisions require their separate protected resources.
+  Bookings, allocation, PDFs and payments have no KYC checkpoint in this milestone.
+
+## Delegated introducing partners (P13S)
+
+- Keep the tenant-bound CRM introducer FK and captured partner evidence as the
+  canonical single-primary relationship. Do not introduce a duplicate current
+  link table, dual reads or a tenant-specific permission bypass. Shared partner
+  orchestration accepts typed source persistence; CRM owns its native adapter.
+- Partner choices are a bounded ID/name/code/type projection. `partnerChoices`
+  uses explicit Own/Managed teams/All supervision scopes; the administrative
+  collaborator directory stays private. `partnerLinks` Read/Create/Edit grants
+  separately govern linking and correction, bounded by the parent's Read/Edit,
+  saved office and Restricted sharing rules. External logins self-attribute at
+  creation and cannot delegate/correct an introducer, regardless of profiles.
+- Saved additions, replacements and removals require a reason and source version.
+  Acquire the tenant row exclusively before the shared operational mutex and
+  re-resolve authority after waiting. Native triggers capture eligible evidence,
+  advance only through the source version and append immutable typed history.
+  UI checks never replace SQL permission/reason/evidence guards.
+- Conversion keeps its enquiry lineage and accepted attribution. Later explicit
+  corrections do not rewrite the enquiry, issued PDFs or confirmed snapshots.
+  Reports use the existing canonical fields and must preserve total counts and
+  amounts. Changing a CP never changes the salesperson, sharing, offices or login.
+- Expose saved changes and recent history in a Partner / CP tab. Reload root
+  fields after a child correction before accepting its advanced version. Do not
+  publish stale editor drafts under a new source version.
+- New permissions do not backfill grants or record limits. A central collections
+  profile needs partnerChoices.read and partnerLinks.read/create/edit plus
+  corresponding explicit limits, in addition to its existing parent permissions.
+  Configure these through ordinary profiles; no named-user application logic.
+
 ## Editor typography (P13S)
 
 - Company template settings use Content, Company, PDF style and Printing tabs.

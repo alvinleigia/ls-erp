@@ -16,7 +16,7 @@ function fixture(t, extra = {}) {
     ...extra,
   }
   const calls = [], storage = {
-    async getBucket(bucket) { return { data: { public: bucket === 'tenant-branding', file_size_limit: 10485760, allowed_mime_types: [bucket === 'tenant-branding' ? 'image/png' : 'application/pdf'] }, error: null } },
+    async getBucket(bucket) { return files[bucket]?{ data: { public: bucket === 'tenant-branding', file_size_limit: 10485760, allowed_mime_types: [bucket === 'tenant-branding' ? 'image/png' : 'application/pdf'] }, error: null }:{data:null,error:{statusCode:404}} },
     from(bucket) { return {
       async list(prefix, { offset, limit }) {
         calls.push({ bucket, prefix, offset })
@@ -50,6 +50,13 @@ test('encrypted backup recovers every bucket path and exact bytes without cleart
   assert.equal(m.buckets[1].public, false)
   assert.throws(() => recover({ dir: f.input.out, out, unwrap: f.wrap }))
 })
+test('private verification originals round-trip in encrypted recovery and missing/tampered evidence fails references',async t=>{
+ const object='tenant-b/cases/case-a/00000000-0000-4000-8000-000000000001.png',bytes=Buffer.from('private customer evidence original'),f=fixture(t,{'tenant-verification':{[object]:bytes}})
+ assert.equal((await backup(f.input)).objects,4);assert.equal(verify({dir:f.input.out,unwrap:f.wrap}).objects,4)
+ const out=path.join(f.root,'recovered');recover({dir:f.input.out,out,unwrap:f.wrap});assert.deepEqual(fs.readFileSync(path.join(out,'tenant-verification',object)),bytes)
+ const manifest=JSON.parse(fs.readFileSync(path.join(out,'storage-manifest.json'))),refs=[reference('tenant-b','verification-evidence','tenant-verification',{path:object,bytes:bytes.length,sha256:crypto.createHash('sha256').update(bytes).digest('hex')})]
+ assert.equal(verifyReferences(refs,manifest).verified,true);manifest.buckets.find(b=>b.bucket==='tenant-verification').public=true;assert.throws(()=>verifyReferences(refs,manifest),/privacy/)
+})
 test('recursive inventory paginates beyond 100 files and 100 tenant folders', async t => {
   const many = Object.fromEntries(Array.from({ length: 105 }, (_, i) => ['tenant-a/logos/' + String(i).padStart(3, '0') + '.png', Buffer.from(String(i))]))
   for (let i = 0; i < 105; i++) many['tenant-' + i + '/logo.png'] = Buffer.from('logo')
@@ -67,7 +74,7 @@ test('issued order originals and replacements recover as separate exact private 
  await backup(f.input);const out=path.join(f.root,'order-recovery');recover({dir:f.input.out,out,unwrap:f.wrap})
  const manifest=JSON.parse(fs.readFileSync(path.join(out,'storage-manifest.json')))
  const refs=[[a,original],[b,replacement]].map(([path,bytes])=>reference('tenant-b','issued-order','tenant-documents',{path,bytes:bytes.length,sha256:crypto.createHash('sha256').update(bytes).digest('hex')}))
- assert.deepEqual(verifyReferences(refs,manifest),{references:2,uniqueReferencedObjects:2,verified:true})
+ assert.deepEqual(verifyReferences(refs,manifest),{references:2,uniqueReferencedObjects:2,disposedObjects:0,verified:true})
  assert.deepEqual(fs.readFileSync(path.join(out,'tenant-documents',a)),original);assert.deepEqual(fs.readFileSync(path.join(out,'tenant-documents',b)),replacement)
  assert.equal(manifest.buckets.find(r=>r.bucket==='tenant-documents').public,false)
 })

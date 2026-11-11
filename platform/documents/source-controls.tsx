@@ -10,8 +10,10 @@ import { ConfirmAction } from "@/components/erp/confirm-action"
 import { useDateFormatter } from "@/hooks/use-date-formatter"
 import { sourceDocumentRequest } from "./source-request"
 import type { DocumentVariant } from "./letterhead"
+import { VerificationCheckpointNotice } from "@/platform/verification/checkpoint-notice"
+import type { CheckpointReview } from "@/platform/verification/checkpoint-contracts"
 type Row={id:string;providerKey:string;version:number;reference:string;templateVersion:number;supersedesId:string|null;reason:string;createdAt:string;isLatest:boolean;historical?:boolean;letterheadAvailable?:boolean}
-type Result={items:Row[];latest:Pick<Row,'id'|'providerKey'|'version'|'reference'>[];total:number;page:number;pageSize:number;providers:{key:string;name:string}[];canIssue:boolean;notice?:string;historical?:boolean;historicalQuery?:string;recordAccess:{permissions:Record<string,boolean>}}
+type Result={verificationReview?:CheckpointReview;items:Row[];latest:Pick<Row,'id'|'providerKey'|'version'|'reference'>[];total:number;page:number;pageSize:number;providers:{key:string;name:string}[];canIssue:boolean;notice?:string;historical?:boolean;historicalQuery?:string;recordAccess:{permissions:Record<string,boolean>}}
 type Prepared={providerKey:string;templateVersion:number;version:number;supersedesId:string|null;previewHash:string;title:string;reference:string;date:string;letterheadAvailable?:boolean}
 export function SourceDocuments({endpoint,permissionResource,title="Issued documents",description="Preview a new document, then issue its exact PDF. Replacements retain the original file and its history."}:{endpoint:string;permissionResource:"orderDocuments"|"paymentDocuments"|"invoiceDocuments";title?:string;description?:string}){
   const [data,setData]=useState<Result>(),[page,setPage]=useListState("source-documents", "page", 1),[providerKey,setProviderKey]=useState(''),[reason,setReason]=useState(''),[prepared,setPrepared]=useState<Prepared>(),[requestKey,setRequestKey]=useState(''),[error,setError]=useState(''),[busy,setBusy]=useState(false),[confirm,setConfirm]=useState(false)
@@ -25,6 +27,7 @@ export function SourceDocuments({endpoint,permissionResource,title="Issued docum
   async function issue(){if(!prepared)return;setBusy(true);setError('');try{await sourceDocumentRequest(`${endpoint}/issue`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...input(),previewHash:prepared.previewHash,requestKey})});setPrepared(undefined);setReason('');setConfirm(false);await load()}catch(e){setError((e as Error).message);setConfirm(false)}finally{setBusy(false)}}
   return <Section title={title} description={description}><div className="space-y-4">
     <Button variant="outline" disabled={busy} onClick={()=>{setError('');void load().catch(e=>{setData(undefined);setError(e.message)})}}>Refresh documents</Button>
+    <VerificationCheckpointNotice review={data?.verificationReview}/>
     {data?.canIssue&&<div className="space-y-4 rounded-md border p-4"><FormField id="order-document-kind" label="Document type"><Select id="order-document-kind" value={providerKey} disabled={busy} onValueChange={key=>{setProviderKey(key);setPrepared(undefined);setReason('');setError('')}}>{data.providers.map(row=><option key={row.key} value={row.key}>{row.name}</option>)}</Select></FormField>
       {latest&&<><p>Current issued version: {latest.reference}. Preparing another version replaces this document.</p><FormField id="document-replacement-reason" label="Replacement reason"><Textarea id="document-replacement-reason" maxLength={2000} value={reason} disabled={busy} onChange={e=>{setReason(e.target.value);setPrepared(undefined)}}/></FormField></>}
       <Button variant="outline" loading={busy&&!prepared} disabled={busy||!providerKey||!!latest&&!reason.trim()} onClick={prepare}>{prepared?'Refresh prepared preview':'Prepare document'}</Button>

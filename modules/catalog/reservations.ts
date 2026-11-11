@@ -14,18 +14,22 @@ import type { CatalogExtension } from "./contracts"
 import type { ReservationOrderSource } from "./reservation-contracts"
 import { reservationClock, reservedUnits } from "./reservation-availability"
 import { reservationEvent } from "./reservation-events"
+import { lockTenantOperations } from "@/platform/transactions/tenant-lock"
+import { readOrderVerificationCheckpoint, verificationCheckpointError } from "@/platform/verification/checkpoints"
 type Tx = Prisma.TransactionClient
 
 export function createReservationService(db: PrismaClient, identity: Pick<BusinessActor, "tenantId" | "userId" | "requestId">, source: ReservationOrderSource, extensions: readonly CatalogExtension[]) {
-  async function run<T>(requirement: Requirement, operation: (tx: Tx, actor: BusinessActor) => Promise<T>): Promise<T> {
+  async function run<T>(requirement: Requirement, operation: (tx: Tx, actor: BusinessActor) => Promise<T>, write = false): Promise<T> {
     for (let attempt = 0; ; attempt++) {
       try {
         return await db.$transaction(async tx => {
+          if (write) { await tx.$queryRaw`SELECT id FROM "Tenant" WHERE id=${identity.tenantId} FOR UPDATE`; await lockTenantOperations(tx, identity.tenantId) }
           const actor = await authorizeBusinessOperation(tx, identity, requirement, ["catalog","salesOrders"])
           requirePermission(actor, ["salesOrders.read", "catalogItems.read", "unitReservations.read", requirement])
           return operation(tx, actor)
-        }, { isolationLevel: "Serializable", maxWait: 20000, timeout: 20000 })
+        }, { isolationLevel: write ? "ReadCommitted" : "Serializable", maxWait: 20000, timeout: 20000 })
       } catch (e) {
+        const verificationError=verificationCheckpointError(e);if(verificationError)throw verificationError
         const conflict = serializationConflict(e) || (e as { code?: string }).code === "P2002"
         if (conflict && attempt < 3) continue
         if (conflict) throw new BusinessError(409, "This unit changed. Refresh and try again.")
@@ -52,6 +56,7 @@ export function createReservationService(db: PrismaClient, identity: Pick<Busine
         const now = await reservationClock(tx), occupied = await reservedUnits(tx, actor.tenantId, visible.map(v => v.id), now)
         // One order has a bounded quotation; history is paged separately below.
         return {
+          verificationReview: await readOrderVerificationCheckpoint(tx, actor, orderId, "UNIT_ALLOCATION"),
           units: refs.filter(ref => visible.some(v => v.id === ref.itemId)).map(ref => { const current = visible.find(v => v.id === ref.itemId)!; return { ...ref, available: !current.archived && current.kind === "UNIT" && current.availability === "AVAILABLE" && !occupied.has(ref.itemId) } }),
           recordAccess,
           canCreate: selected.status !== "CANCELLED" && !!recordAccess.permissions["unitReservations.create"],
@@ -91,7 +96,7 @@ export function createReservationService(db: PrismaClient, identity: Pick<Busine
         const row = await tx.unitReservation.create({ data: { tenantId: actor.tenantId, orderId, itemId: data.itemId, itemCode: ref.code, itemName: ref.name, expiresAt } })
         await reservationEvent(tx, actor, row)
         return row
-      })
+      }, true)
     },
     transition(orderId: string, id: string, input: unknown) {
       const data = unitReservationTransitionSchema.parse(input)
@@ -107,7 +112,7 @@ export function createReservationService(db: PrismaClient, identity: Pick<Busine
         const next = await tx.unitReservation.update({ where: { tenantId_id: { tenantId: actor.tenantId, id } }, data: { status: data.action === "allocate" ? "ALLOCATED" : "RELEASED", version: { increment: 1 } } })
         await reservationEvent(tx, actor, next, row.status, data.action === "release" ? data.reason : "")
         return next
-      })
+      }, true)
     },
   }
 }

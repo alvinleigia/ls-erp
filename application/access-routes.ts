@@ -7,6 +7,7 @@ const routes: [string, Resource][] = [
   ["/sales-orders/invoices", "customerInvoices"],
   ["/settings/documents", "documentTemplates"],
   ["/settings/customer-details", "participantSettings"],
+  ["/settings/verification", "verificationPolicies"],
   ["/users/teams", "teams"],
   ["/sales-orders/receivables", "receivables"],
   ["/sales-orders", "salesOrders"],
@@ -36,6 +37,7 @@ export const applicationRouteAccess = createRouteAccess({
   resources: routes,
   exactResources: { "/settings": "businessSettings", "/settings/branding": "branding" },
   exactRequirements: {
+    "/settings/verification": { any: ["verificationPolicies.read", "verificationCheckpoints.read", "verificationRetention.read"] },
     "/sales-orders/receivables": ["salesOrders.read", "receivables.read"],
     "/crm/enquiries/import": ["enquiries.create", "contacts.create"],
     "/settings": "businessSettings.read",

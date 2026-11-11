@@ -42,7 +42,7 @@ async function setupStorage() {
   }
   await run('docker', [...compose, 'up', '-d', '--wait', '--wait-timeout', '180'], { ...process.env, ...values }, true)
   const client = createClient(origin, values.LOCAL_STORAGE_SERVICE_KEY, { auth: { persistSession: false, autoRefreshToken: false } })
-  for (const [name, publicRead, limit, types] of [['tenant-documents', false, 10*1024*1024, ['application/pdf']], ['tenant-branding', true, 512*1024, ['image/png','image/webp']]]) {
+  for (const [name, publicRead, limit, types] of [['tenant-documents', false, 10*1024*1024, ['application/pdf']], ['tenant-branding', true, 512*1024, ['image/png','image/webp']], ['tenant-verification', false, 5*1024*1024, ['application/pdf','image/jpeg','image/png']]]) {
     const current = await client.storage.getBucket(name)
     if (current.error) {
       if (!['404','400'].includes(String(current.error.statusCode)) && !/not found/i.test(current.error.message)) throw Error('Unable to inspect the local storage bucket.')

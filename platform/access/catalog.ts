@@ -5,6 +5,19 @@ export type PermissionAction = typeof permissionActions[number]
 const editable = ["read", "create", "edit"] as const
 const records = ["read", "create", "edit", "archive"] as const
 export const accessResources = {
+  verificationUploads: { name: "Verification uploads (own staged files)", module: "customerVerification", actions: ["read", "create", "cancel"], createOnRecord: true },
+  verificationEvidence: { name: "Private verification evidence (download)", module: "customerVerification", actions: ["read"] },
+  verificationSubmissions: { name: "Private verification facts and submissions", module: "customerVerification", actions: ["read", "create"], createOnRecord: true },
+  verificationReviews: { name: "Independent verification review", module: "customerVerification", actions: ["read", "approve", "cancel"] },
+  verificationDisposals: { name: "Verification file disposal (tenant administrator)", module: "customerVerification", actions: ["read", "create", "approve", "cancel"], createOnRecord: true },
+  verificationRetention: { name: "Verification retention (tenant administrator)", module: "customerVerification", actions: ["read", "edit"] },
+  verificationHolds: { name: "Private verification preservation holds", module: "customerVerification", actions: ["read", "create", "cancel"], createOnRecord: true },
+  verificationSummaries: { name: "Participant verification status (no private facts/files)", module: "customerVerification", actions: ["read"] },
+  verificationCheckpoints: { name: "Verification checkpoints (tenant administrator)", module: "customerVerification", actions: ["read", "edit"] },
+  verificationPolicies: { name: "Customer verification requirements (tenant administrator)", module: "customerVerification", actions: ["read", "edit"] },
+  customerVerification: { name: "Customer verification cases", module: "customerVerification", actions: ["read", "create"], createOnRecord: true },
+  partnerChoices: { name: "Partner choices (limited lookup)", module: "core", actions: ["read"] },
+  partnerLinks: { name: "Introducing partner (create links; edit corrects/removes)", module: "core", actions: ["read", "create", "edit"], createOnRecord: true },
   taxProfiles: { name: "Company tax configuration (tenant administrator)", module: "core", actions: ["read", "edit"] },
   customerInvoices: { name: "Commercial invoices (confirm posts; cancel cancels a draft or fully credits a posted invoice)", module: "invoicing", actions: ["read", "create", "edit", "confirm", "cancel"], createOnRecord: true },
   invoicePayments: { name: "Invoice payment applications (cancel releases an application; no money transfer)", module: "invoicing", actions: ["read", "create", "cancel"], createOnRecord: true },

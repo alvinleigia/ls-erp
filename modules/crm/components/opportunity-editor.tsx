@@ -1,11 +1,13 @@
 "use client"
-import { IntroductionSelection, IntroductionDetails, introductionFields } from "@/platform/collaborators/introduction-controls"
+import { IntroductionSelection, IntroductionDetails } from "@/platform/collaborators/introduction-controls"
+import { PartnerLinkPanel } from "@/platform/collaborators/partner-panel"
 import { useCreationOfficeSnapshot } from "@/platform/companies/creation-snapshot"
 import { useTerminology, useTerminologyReader } from "@/platform/terminology/provider"
 import { initialOpportunityStage } from "../conversion-stage"
 import { withRecordView, useRecordView, AccessRecordForm, AccessSummarySection, AccessSectionEdit } from "@/platform/access/record-view"
 import { ParticipantInformationEditor } from "@/platform/participants/information-editor"
 import { ParticipantEditor } from "@/platform/participants/editor"
+import { ParticipantVerificationSummary } from "@/platform/verification/source-controls"
 import { useParticipantLabels } from "./extension-provider"
 import { CrmOpportunityPanels } from "./extension-provider"
 import { SalesTeamSelect } from "@/platform/teams/controls"
@@ -48,7 +50,7 @@ export const OpportunityEditor = withRecordView(OpportunityEditorBody)
 function OpportunityEditorBody({ id, enquiryId, initialReferences }: { id?: string; enquiryId?: string; initialReferences?: CrmViewReferences }) {
   const participantLabels = useParticipantLabels()
   const creationHeaders = useCreationOfficeSnapshot(!id)
-  const { can } = useBusinessModules()
+  const { can, enabled } = useBusinessModules()
   const readTerm = useTerminologyReader()
   const term = useTerminology()
   const allowedAssignment = useCurrentResourceAction("assign")
@@ -122,7 +124,7 @@ function OpportunityEditorBody({ id, enquiryId, initialReferences }: { id?: stri
       if (!response.ok) throw new Error(data.error || "Reload this opportunity before editing its details.")
       setRecord(data); loadAccess(data.recordAccess); setContact(data.contact); setValues(fields(data)); loadExtension(data); await loadCustom(data); setRevision(value => value + 1)
     } catch {
-      setFailed(true); setError("Participants were saved. Reload this page before editing the opportunity details.")
+      setFailed(true); setError("Changes were saved. Reload this page before editing the opportunity details.")
     }
   }
   async function save(event: React.FormEvent) {
@@ -142,14 +144,16 @@ function OpportunityEditorBody({ id, enquiryId, initialReferences }: { id?: stri
       overview={record && <>
         <AccessSummarySection sectionKey="Opportunity details" title={term("crm.opportunity.singular", "Opportunity details", "{label} details")} fields={[{ label: "Title", value: record.title }, { label: term("crm.contact.singular", "Contact"), value: record.contact.name }, { label: term("crm.account.singular", "Company"), value: record.account?.name }, { label: "Pipeline", value: record.pipeline.name }, { label: "Stage", value: record.stage.name }, { label: "Salesperson", value: record.assignee.name }, { label: "Sales team", value: record.salesTeam?.name }, { label: "Expected value", value: formatDecimalCurrency(record.amount, record.currency) }, { label: "Expected close", value: formatDate(record.expectedCloseOn) }, { label: "Probability", value: `${record.probability}%` }, { label: "Description", value: record.description }, { label: "Lost reason", value: record.lostReasonName }, { label: "Closing note", value: record.lossReason }]} />
         {record.enquiryId && <AccessSummarySection title="Lead attribution" canEdit={false} fields={[{ label: "Original source", value: record.source }, { label: "Referrer", value: record.referralRestricted ? "Restricted" : record.referralContact?.name || record.referralAccount?.name }]}><Link className="text-sm underline" href={`/crm/enquiries/${record.enquiryId}`}>{term("crm.enquiry.singular", "Original enquiry", "Original {label}")}</Link></AccessSummarySection>}
-        <AccessSummarySection title="Introducing collaborator" canEdit={false} fields={introductionFields(record)} />
+        <IntroductionDetails record={record} />
         {extension.summary()} {custom.readOnlySection(<AccessSectionEdit section="Additional information" />)}
       </>}
       tabs={record ? [
         { value: "customer-details", label: "Customer details", content: <ParticipantInformationEditor endpoint={`/api/crm/opportunities/${record.id}/information`} sourceVersion={record.version} onSaved={participantsSaved} /> },
+        ...(enabled("customerVerification") && can("verificationSummaries.read") ? [{ value: "verification", label: "Verification", permission: "verificationSummaries.read" as const, content: <ParticipantVerificationSummary kind="OPPORTUNITY" id={record.id} version={record.version} /> }] : []),
         { value: "participants", label: "Participants", content: <ParticipantEditor endpoint={`/api/crm/opportunities/${record.id}/participants`} sourceVersion={record.version} labels={participantLabels} onSaved={participantsSaved} /> },
         ...(hasDocumentPanels ? [{ value: "documents", permission: "quotations.read" as const, label: "Sales documents", content: <CrmOpportunityPanels opportunityId={record.id} /> }] : []),
         { value: "activities", permission: "activities.read" as const, label: term("crm.activity.plural", "Activities"), content: <WorkList contactId={record.contactId} opportunityId={record.id} /> },
+        { value: "partner", label: "Partner / CP", permission: "partnerLinks.read" as const, content: <PartnerLinkPanel endpoint={`/api/crm/opportunities/${record.id}/partner`} revision={revision} onSaved={participantsSaved} /> },
         { value: "history", label: "History", content: <OpportunityTimeline id={record.id} revision={revision} /> },
       ] : []}>
 

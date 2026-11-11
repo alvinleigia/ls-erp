@@ -40,6 +40,13 @@ async function main() {
     env.SUPABASE_SECRET_KEY = "sb_secret_local_test"
     args.unshift("--require", "./tests/helpers/document-storage-fetch.cjs")
   }
+  if (process.env.P13S_VERIFICATION_STORAGE_TEST === "1") {
+    if (process.env.P5_DOCUMENT_STORAGE_TEST === "1") throw Error("Select one isolated storage transport.")
+    env.SUPABASE_URL = "https://verificationtest.supabase.co"
+    env.SUPABASE_SECRET_KEY = "sb_secret_isolated_test"
+    env.P13S_VERIFICATION_STORAGE_TEST = "1"
+    args.unshift("--require", "./tests/helpers/verification-storage-fetch.cjs")
+  }
   const child = spawn(process.execPath, args, { env, stdio: "inherit", windowsHide: true })
   for (const signal of ["SIGINT", "SIGTERM"]) process.on(signal, () => child.kill(signal))
   child.on("exit", code => { process.exitCode = code ?? 1 })

@@ -101,7 +101,7 @@ test('frozen quotation terms and decimal totals survive source changes; list omi
 test('new quotation participant evidence preserves authoritative IDs into the order',async()=>{
  const q=await quote(),saved=await crm.getQuotation(q.id)
  assert.equal(saved.snapshot.participants.format,1)
- assert.deepEqual(saved.snapshot.participants.participants,[{role:'CUSTOMER',party:{kind:'PERSON',id:contact.id,name:'Original customer',email:'original@example.test',phone:null,sourceVersion:1}}])
+ assert.deepEqual(saved.snapshot.participants.participants,[{role:'CUSTOMER',party:{kind:'PERSON',id:contact.id,name:'Original customer',email:'original@example.test',phone:null,sourceVersion:1},information:{email:'original@example.test',phone:'',addressLine1:'',addressLine2:'',city:'',region:'',postalCode:'',country:''}}])
  const order=await orders.create({quotationId:q.id,revision:1})
  assert.deepEqual((await orders.get(order.id)).snapshot.participants,saved.snapshot.participants)
  assert.throws(()=>crm.saveQuotation(deal.id,{content:content(),participants:{format:1,participants:[]}}))

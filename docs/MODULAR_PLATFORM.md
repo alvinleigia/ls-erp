@@ -1,3 +1,220 @@
+## P13S combined acceptance preparation (2026-11-11)
+
+A shared public-API/browser workflow now spans delegated CP selection/correction
+after Won, frozen quotation/order snapshots, two independently verified applicants,
+Required checkpoints, generic unit allocation, real PDF archiving, later approval
+revocation, historical PDF identity, idempotent partial payment and receipt issuance.
+It passed locally with Real Estate disabled; desktop/mobile captures were inspected.
+Three CP/private-storage/disposal transport regressions, TypeScript and lint passed.
+The hosted test provisions only a fresh synthetic staging tenant and verifies its
+source SHA, project/alias and unchanged production deployment. No local database
+fixture/reset helper runs against hosted data. See `P13S_ACCEPTANCE.md`.
+
+## P13S controlled original disposal - local implementation (2026-11-11)
+
+Administrative retention review now supports explicit preview, private reason and
+confirmation for expired, unreferenced accepted originals. Durable requests first
+quarantine the file. Only pending requests can be cancelled; irreversible removal
+and uncertain storage outcomes require versioned reconciliation. Native holds,
+submission-selection and transaction-proof guards prevent preservation races.
+Integrity mismatch, denied/unknown storage states and authority loss fail closed.
+Completed disposal removes the active original and scrubs its name/size/checksum,
+while retaining a minimal tombstone and immutable private attempt history.
+
+Recovery checks reject unsettled removals and manifests that would restore a
+completed original; operators must apply the current disposal ledger to older
+backups. Backups retain their own expiry. No automatic purge or pilot-data cleanup
+was run. Two new empty forced-RLS tables are added with no activation or access
+backfill. Forced rollback/reapply preserved all 177 preceding tables exactly.
+See `P13S_VERIFICATION_DISPOSAL.md` for authority, lifecycle and recovery limits.
+
+The production build, TypeScript and seven production-build browser flows passed.
+Desktop/mobile confirmation and completion captures were inspected. The main
+verification suite passed 176 checks; a subsequent 31-case disposal/checkpoint run
+also passed, including one additional irreversible-acceptance conflict scenario.
+Hosted staging acceptance and production rollout remain separate work; nothing
+was pushed, deployed or activated for Ewissen.
+
+
+Additional sales-order/catalog/reservation/order-document regression: 53 checks
+passed (`tmp/p13s-partner/disposal-orders-regression.log`). Combined distinct
+automated coverage is 230 checks (177 verification/resource/recovery/CP checks
+including the additional checkpoint scenario, plus 53 sales-order regressions),
+with seven browser flows. TypeScript, targeted ESLint and whitespace checks passed.
+
+## P13S retention review and preservation holds - local implementation (2026-11-11)
+
+Customer verification settings now include previewed, versioned retention periods,
+defaulting to indefinite. Customer/account Verification has a separate Retention
+and holds tab. Private, reasoned, immutable hold/release events use distinct
+Create/Cancel permissions and canonical customer scope; internal custodians can be
+delegated without evidence download or reviewer authority. Mobile subtabs scroll
+within their panel, retain drafts across switches and clear on customer change.
+
+Administrative, bounded retention review uses database time and prioritises holds,
+accepted transaction references and any saved submission over finite periods.
+Review batches file decisions into one database request. Native projections deny
+non-admin/private-evidence access; general audit omits private reasons. Neither
+policy publication nor hold release erases facts/files or changes verification,
+payments or archived documents. Existing accepted originals remain protected.
+
+The new migration adds two empty forced-RLS tables, with no activation, access
+backfill or existing record changes. Forced rollback/reapply preserves all 175
+preceding business tables. See `P13S_VERIFICATION_RETENTION.md` for semantics,
+permissions, tests and remaining controlled-disposal work. No automatic purge or
+deletion endpoint is provided. All work remains local; no Ewissen/hosted mutation
+or deployment accompanies this milestone.
+
+Final validation: 162 automated checks, six production-build browser flows,
+TypeScript, targeted lint, whitespace and build passed. Desktop/mobile captures
+were inspected; clipped mobile subtabs and panel nesting were corrected and
+retested. No accepted evidence was erased by retention review.
+
+## P13S participant verification and transaction checkpoints - local implementation (2026-11-11)
+
+Opportunities and sales orders now have a permission-gated, status-only Verification
+tab for every selected participant role. Orders use frozen quotation participants;
+current CRM edits do not replace them. Private facts, files and reviewer identities
+remain separately protected. Business customers and representatives are supported
+without Real Estate activation.
+
+Administrators can preview and publish versioned Off/Warn/Required checks for order
+confirmation, unit allocation and new order-document issuance. Defaults remain Off.
+Native actions enforce Required atomically and mint immutable acceptance proofs for
+Warn/Required. Each role uses its own latest submission/current policy and database
+clock validity. Module disablement cannot bypass previously Required checks.
+
+Issued PDF retrieval, idempotent completed requests and payment recording remain
+available. Document preparation binds verification state and rechecks after storage;
+changed approval/settings/expiry invalidate stale issuance and clean unused uploads.
+The migration adds two empty forced-RLS tables and deliberately updates the review
+guard to evaluate latest revisions per role; no older migration is edited.
+
+203 automated checks and five production-build browser flows passed, alongside
+build, TypeScript, targeted lint and whitespace. Desktop/mobile settings and
+participant captures were inspected. Historical forced rollback/reapply preserved
+all 173 preceding tables exactly. Catalog/reservation writers now share ordered
+tenant coordination; repeated concurrent hold/edit attempts return one winner and
+a normal conflict. No production fixture fallback was added.
+
+See `P13S_VERIFICATION_CHECKPOINTS.md` for the access contract, action matrix and
+verification evidence. Retention/holds and operational review queues remain later
+work. Everything remains local: no hosted deployment, tenant activation, access
+profile change or Ewissen data mutation.
+
+## P13S private submissions and independent review - local implementation (2026-11-11)
+
+Customer/account Verification now has Evidence and Facts and review subtabs.
+Typed private facts and selected accepted originals are frozen into immutable,
+sequential submissions with their exact role/policy. Corrections require a reason
+and new revision. Deferred native validation and same-case composite foreign keys
+enforce complete selections; files cannot be added to a revision after commit.
+
+Explicit independent reviewers can approve, request corrections and revoke with
+separate capabilities. Submitters and selected evidence uploaders/finalisers cannot
+approve, including administrators. Decisions are append-only; validity uses database
+time. New revisions, expiry, revocation and policy changes never revive an older
+approval. Ordinary case readers receive no private facts/history or inferred verdict.
+General audit carries identifiers/counts/states only. Drafts survive subtab switches.
+
+The migration adds three empty native forced-RLS tables. Historical rehearsal passed
+107 checks, with forced rollback and exact preservation of all 170 preceding tables.
+123 distinct automated checks and four production-build browser flows passed;
+desktop/mobile captures were inspected. Build, TypeScript, targeted lint and
+whitespace passed. See `P13S_VERIFICATION_REVIEW.md` for evidence and access rules.
+
+Everything remains local: no hosted deployment, module activation, profile grant
+or client data change. Participant summaries, configurable transaction checkpoints,
+acceptance proofs and retention/hold controls remain pending; booking/payment flows
+have no new KYC block.
+
+## P13S private verification evidence - local implementation (2026-11-11)
+
+Customer/account detail pages now have an activation- and permission-gated
+Verification tab. Authorised collectors can start a case, select a configured
+document type, upload an original PDF/JPEG/PNG (up to 5 MiB), retry finalisation
+and cancel pending uploads. Accepted files stay immutable and awaiting review;
+uploading never approves a customer, booking, document or payment.
+
+The shared storage adapter uses a dedicated private tenant-verification bucket.
+Authorised direct uploads avoid routing file bodies through Vercel. Server-side
+validation checks actual content/size/structure and stores an exact checksum.
+Fresh authorisation/policy/subject checks run after storage I/O. Upload metadata
+and private evidence Read are separate capabilities; no existing grants change.
+Pending files cannot be downloaded. Accepted download links require integrity,
+fresh case/directory/evidence Read and minimal audit, then expire in 60 seconds.
+Downloads preserve the ERP page; native errors do not expose sensitive row data
+to general logs. Admin cleanup is bounded to expired unaccepted uploads, with a
+three-hour delay beyond signed-upload validity and database expiration before I/O.
+
+Migration `20261111000100_verification_private_evidence` adds an empty forced-RLS
+evidence table. Rehearsal verified rollback and exact preservation of all 169
+preceding tables, with no activation, grants or data backfill. Encrypted recovery
+includes the private bucket and accepted database reference/checksum reconciliation.
+See `P13S_PRIVATE_EVIDENCE.md` for verification and remaining scope. All changes
+remain local; no hosted files, tenants, grants or production data were changed.
+
+## P13S customer verification foundation - local implementation (2026-11-11)
+
+Customer Verification now has a default-off module, separate policy/case grants,
+a Settings > Customer verification page, previewed versioned policy publication
+and typed tenant-bound person/business cases. Required facts/document types are
+configured by subject and participant role, with bounded approval validity.
+No specific government ID is mandatory. Policy history and case ownership are
+immutable; concurrent starts reuse one case. Starting means In progress, not
+Verified. A CIF, tax record or Won deal does not imply KYC approval.
+
+Shared services use a canonical CRM source adapter. Application and native SQL
+enforce current activation/grants, directory scope and Restricted sharing.
+Collectors need not browse policy administration; a bounded helper exposes only
+the current policy version. External logins remain excluded. General audit stores
+IDs/versions/counts, without identity facts or private files.
+
+Migration `20261110000200_customer_verification_foundation` adds two empty forced-RLS
+tables without activation, grants or backfill. Historical rehearsal verified
+forced rollback and exact preservation of all 167 preceding tables. Verification
+covers 129 distinct automated checks; the 49-check migration runner is a subset.
+Two native browser workflows passed; desktop/mobile screenshots were inspected.
+See `P13S_VERIFICATION_FOUNDATION.md` for evidence and the remaining scope.
+
+Private uploads, customer collection UI, submissions/review, expiry eligibility,
+transaction gates and retention/recovery remain pending. Bookings, documents and
+payments have no new KYC block. Hosted environments and Ewissen's data/profile
+configuration remain unchanged; this milestone is local only.
+
+## P13S delegated introducing partners - local implementation (2026-11-10)
+
+The first workstream of `P13S_IMPLEMENTATION_PLAN.md` adds delegated introducing
+partner selection and corrections. KYC has a separately verified local foundation;
+private collection, review and transaction integration remain pending.
+The shared relationship service uses the current tenant-bound introducer fields
+as the canonical single-primary link, with a typed CRM source adapter and native
+append-only `CrmPartnerLinkEvent` history. No dual current-link store is added.
+
+`partnerChoices.read` exposes bounded active ID/name/code/type choices within
+Own/Managed teams/All supervision limits. `partnerLinks.read/create/edit` controls
+the new Partner / CP tab, linking and corrections alongside the source's existing
+Read/Edit, office and Restricted-record boundaries. Saved additions/replacements/
+removals require a reason and source version. External identities keep their own
+creation attribution and cannot delegate/correct it. Directory administration
+remains separate. No live profile is granted these actions automatically.
+
+Native guards capture eligible evidence and history atomically. The correction
+service acquires the tenant security row exclusively before the operational
+mutex, then reads current authority. Concurrent corrections accept one version
+and reject the stale request. Source conversion is immutable; later corrections
+do not rewrite enquiries, confirmed orders, quotation revisions or issued PDFs.
+Current reports reclassify partner attribution without changing overall totals.
+
+Migration `20261110000100_delegated_partner_links` preserves the 166 prior tables
+and existing attribution, with a forced-rollback rehearsal using populated CP
+selections/conversion. Focused verification covers delegated operations, native
+SQL denial, restricted/private sources, fresh grants, concurrency, mandatory
+history/audit rollback, external login isolation and financial record integrity.
+The CP implementation and release instructions are recorded in
+`P13S_PARTNER_IMPLEMENTATION.md`. All test business writes use disposable local
+data. Hosted staging/production, live users and Ewissen's data remain unchanged.
+
 ## P13S editor typography (2026-11-07)
 
 Template settings are organised into Content, Company, PDF style and Printing.

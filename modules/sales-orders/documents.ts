@@ -18,6 +18,7 @@ import { documentHash } from "@/platform/documents/hash"
 import { documentContentSchema } from "@/platform/documents/validation"
 import { resolveDocumentLayout } from "@/platform/documents/layout"
 import { orderTemplateValues,orderTemplateBlocks } from "./document-template"
+import { readOrderVerificationCheckpoint } from "@/platform/verification/checkpoints"
 export type OrderDocumentContext={order:SalesOrder;snapshot:QuotationSnapshot;date:string;office:{id:string;version:number;archived:boolean};company:{id:string;name:string;version:number;archived:boolean;documentSettings?:unknown}}
 const json=(value:unknown)=>JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue
 export function createOrderDocumentService(db:PrismaClient,identity:DocumentIdentity,providers:readonly DocumentProvider<OrderDocumentContext>[],storage:DocumentStorage,render?:Parameters<typeof createDocumentService<OrderDocumentContext>>[4]) {
@@ -32,6 +33,7 @@ export function createOrderDocumentService(db:PrismaClient,identity:DocumentIden
       return {order,snapshot:order.snapshot as unknown as QuotationSnapshot,date:businessDate(now,setting?.timeZone||"UTC"),...source}
     },
     async lock(tx,tenantId,id){await tx.$queryRaw`SELECT id FROM "SalesOrder" WHERE "tenantId"=${tenantId} AND id=${id} FOR UPDATE`},
+    async beforeIssue(tx,actor,context){const check=await readOrderVerificationCheckpoint(tx,actor,context.order.id,"ORDER_DOCUMENT");if(check.mode==="REQUIRED"&&!check.eligible)throw new BusinessError(409,"Customer verification is required before issuing this document. Complete approval for every applicable participant.")},
     async prepare(tx,actor,context,provider,input){
       const {order,company,office}=context
       if(order.status!=="CONFIRMED"||!order.reference||!order.orderedOn)throw new BusinessError(409,"Use a confirmed order with a recorded reference and order date.")
@@ -44,7 +46,9 @@ export function createOrderDocumentService(db:PrismaClient,identity:DocumentIden
       const previous=await tx.salesOrderDocument.findFirst({where:{tenantId:actor.tenantId,orderId:order.id,providerKey:provider.key},orderBy:{version:"desc"}})
       if((previous?.id??null)!==input.supersedesId)throw new BusinessError(409,"The issued version changed. Reload before preparing its replacement.")
       const version=(previous?.version??0)+1,reference=`${order.reference}/${provider.code}/${String(version).padStart(3,"0")}`
-      const {blocks,evidence,values}=await provider.blocks(tx,actor,context)
+      const {blocks,evidence:sourceEvidence,values}=await provider.blocks(tx,actor,context)
+      const verificationReview=await readOrderVerificationCheckpoint(tx,actor,order.id,"ORDER_DOCUMENT")
+      const evidence=json({...(sourceEvidence as Prisma.InputJsonObject),verificationCheckpoint:verificationReview})
       const payload={format:1 as const,title:content.title,reference,date:context.date,sourceReference:order.reference,company:{id:company.id,name:company.name},issuer:{address:content.address,contact:content.contact,signatory:content.signatory},opening:content.opening,terms:content.terms,...(content.appearance?{appearance:content.appearance}:{}),branding:content.useTenantLogo?await readDocumentBranding(tx,actor.tenantId):null,blocks}
       const body=content.layout?resolveDocumentLayout(content.layout,provider.templateCatalog,{...values,...orderTemplateValues(context,content,reference)},orderTemplateBlocks(context,blocks)):undefined
       const composed={...payload,...(body?{body}:{})}
@@ -79,7 +83,7 @@ export function createOrderDocumentService(db:PrismaClient,identity:DocumentIden
         const maxima=await tx.salesOrderDocument.groupBy({by:["providerKey"],where,_max:{version:true}})
         const latest=maxima.length?await tx.salesOrderDocument.findMany({where:{...where,OR:maxima.map(row=>({providerKey:row.providerKey,version:row._max.version!}))},select:{id:true,providerKey:true,version:true,reference:true}}):[]
         const recordAccess=await recordActionAccess(actor,"orderDocuments",id,tx,action=>tx.salesOrder.findFirst({where:{AND:[salesOrderRecordScope({...actor,operation:{resource:"orderDocuments",action}},"orderDocuments"),{id}]},select:{id:true}}))
-        return {items:items.map(({archive,...row})=>({...row,letterheadAvailable:archivedLetterheadAvailable(archive),isLatest:latest.some(current=>current.id===row.id)})),latest,total,page,pageSize:10,totalPages:Math.max(1,Math.ceil(total/10)),providers:potential.map(({key,name})=>({key,name})),recordAccess,canIssue:context.order.status==="CONFIRMED"&&!!context.order.reference&&!!context.order.orderedOn&&!!recordAccess.permissions["orderDocuments.create"]&&!!recordAccess.permissions["orderDocuments.export"]}
+        return {items:items.map(({archive,...row})=>({...row,letterheadAvailable:archivedLetterheadAvailable(archive),isLatest:latest.some(current=>current.id===row.id)})),latest,total,page,pageSize:10,totalPages:Math.max(1,Math.ceil(total/10)),providers:potential.map(({key,name})=>({key,name})),recordAccess,verificationReview:await readOrderVerificationCheckpoint(tx,actor,id,"ORDER_DOCUMENT"),canIssue:context.order.status==="CONFIRMED"&&!!context.order.reference&&!!context.order.orderedOn&&!!recordAccess.permissions["orderDocuments.create"]&&!!recordAccess.permissions["orderDocuments.export"]}
       },{isolationLevel:"Serializable",maxWait:20000,timeout:20000})
     },
   }

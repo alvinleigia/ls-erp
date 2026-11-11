@@ -98,3 +98,16 @@ test('own scope, malformed/contradictory filters, injection strings and current 
  try{await assert.rejects(choices(manager),status(403))}finally{await root.tenantModule.update({where:{tenantId_key:{tenantId:tenant,key:'crm'}},data:{enabled:true}})}
  const profiles=createAccessRoleService(db,identity(admin)),p=await profiles.assignment(manager.id);await profiles.assign(manager.id,{version:p.accessPolicy.version,roleIds:[],rules:p.accessPolicy.rules});await assert.rejects(choices(manager),status(403))
 })
+
+
+test('correcting current CP reclassifies partner reports without changing total or duplicating deals',async()=>{
+ const first=await directory(admin).create({name:'Correction original',code:'CORRECTION_OLD',supervisorUserId:admin.id}),second=await directory(admin).create({name:'Correction accepted',code:'CORRECTION_NEW',supervisorUserId:admin.id})
+ const row=await deal('Reporting correction',admin,{introducedByCollaboratorId:first.id}),before=await crm(admin).salesOverview(period)
+ assert.equal((await crm(admin).salesOverview({...period,introducedByCollaboratorId:first.id})).totals.pipeline,1)
+ await crm(admin).partnerLink('opportunities',row.id,{version:row.version,partnerId:second.id,reason:'Correct attribution for report'})
+ assert.deepEqual((await crm(admin).salesOverview(period)).totals,before.totals)
+ assert.equal((await crm(admin).salesOverview({...period,introducedByCollaboratorId:first.id})).totals.pipeline,0)
+ const result=await crm(admin).salesReportRecords({...period,introducedByCollaboratorId:second.id,view:'pipeline'})
+ assert.equal(result.total,1);assert.equal(result.items[0].id,row.id);assert.equal(result.items[0].partnerName,second.name)
+ const history=await crm(admin).partnerLink('opportunities',row.id);assert.equal(history.history[0].before.name,first.name)
+})

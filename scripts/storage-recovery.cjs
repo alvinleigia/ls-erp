@@ -6,7 +6,7 @@ const crypto = require('node:crypto')
 const { spawnSync } = require('node:child_process')
 const assert = require('node:assert/strict')
 
-const BUCKETS = ['tenant-branding', 'tenant-documents']
+const BUCKETS = ['tenant-branding', 'tenant-documents', 'tenant-verification']
 const LIMIT = 10 * 1024 * 1024
 const sha = bytes => crypto.createHash('sha256').update(bytes).digest('hex')
 function protect(bytes, decrypt = false) {
@@ -44,6 +44,7 @@ async function inventory(storage) {
   const result = []
   for (const bucket of BUCKETS) {
     const info = await storage.getBucket(bucket)
+    if(bucket==='tenant-verification'&&info.error&&String(info.error.statusCode)==='404')continue
     assert.ok(!info.error && info.data, 'Required storage bucket unavailable')
     assert.equal(info.data.public, bucket === 'tenant-branding', 'Unexpected bucket privacy')
     const files = [], queue = ['']
@@ -105,7 +106,9 @@ function load(dir, unwrap) {
   try {
     const manifest = JSON.parse(open(fs.readFileSync(path.join(dir, 'manifest.enc')), key, 'ls-erp-storage-v1'))
     assert.equal(manifest.format, 1); assert.match(manifest.id, /^[a-f0-9-]{36}$/)
-    assert.deepEqual(manifest.buckets.map(b => b.bucket), BUCKETS)
+    const names=manifest.buckets.map(b=>b.bucket)
+    assert.ok(JSON.stringify(names)===JSON.stringify(BUCKETS)||JSON.stringify(names)===JSON.stringify(BUCKETS.slice(0,2)),'Unexpected recovery buckets')
+    for(const bucket of manifest.buckets)assert.equal(bucket.public,bucket.bucket==='tenant-branding','Unexpected bucket privacy')
     const seen = new Set(), filenames = new Set()
     for (const b of manifest.buckets) for (const f of b.files) {
       objectPath(f.path); assert.match(f.file, /^[0-9]+\.enc$/); assert.match(f.sha256, /^[a-f0-9]{64}$/)

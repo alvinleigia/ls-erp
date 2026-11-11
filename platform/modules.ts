@@ -2,6 +2,7 @@
 // dependencies are enforced at each module's server boundary.
 type ModuleDefinition = { name: string; description: string; defaultEnabled: boolean; href: string; requires: readonly string[]; parent?: string }
 export const businessModules = {
+  customerVerification: { name: "Customer Verification", description: "Versioned identity requirements and separate customer verification cases. Collection and review are being introduced in stages; booking checks remain off.", defaultEnabled: false, href: "/settings/verification", requires: ["crm"] },
   invoicing: { name: "Commercial Invoices", description: "Invoices against accepted orders, payment application and full commercial credit notes. Not statutory GST invoicing.", defaultEnabled: false, href: "/sales-orders", requires: ["receivables"], parent: "receivables" },
   receivables: { name: "Receivables", description: "Order balances, recorded payments, corrections and full refunds. Does not transfer money.", defaultEnabled: false, href: "/sales-orders/receivables", requires: ["salesOrders"], parent: "salesOrders" },
   salesOrders: { name: "Sales Orders", description: "Confirmed commercial agreements from saved quotations. Does not reserve stock or collect payments.", defaultEnabled: false, href: "/sales-orders", requires: ["salesDocuments"] },

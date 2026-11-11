@@ -1,6 +1,7 @@
 "use client"
 import { enquiryStatusLabel } from "@/modules/crm/display-labels"
-import { IntroductionSelection, IntroductionDetails, introductionFields } from "@/platform/collaborators/introduction-controls"
+import { IntroductionSelection, IntroductionDetails } from "@/platform/collaborators/introduction-controls"
+import { PartnerLinkPanel } from "@/platform/collaborators/partner-panel"
 import { useCreationOfficeSnapshot } from "@/platform/companies/creation-snapshot"
 import { useTerminology, useTerminologyReader } from "@/platform/terminology/provider"
 import { withRecordView, useRecordView, AccessRecordForm, AccessSummarySection, AccessSectionEdit } from "@/platform/access/record-view"
@@ -97,6 +98,16 @@ function EnquiryEditorBody({ id, initialContactId, initialReferences }: { id?: s
     })()
     return () => controller.abort()
   }, [loadAccess, readTerm, id, initialContactId, loadExtension, loadCustom, currentUserId, canReadDirectory])
+  async function partnerSaved() {
+    try {
+      const response = await fetch(`/api/crm/enquiries/${id}`, { cache: "no-store" })
+      const record = await response.json()
+      if (!response.ok) throw new Error("Reload failed")
+      setEnquiry(record); loadAccess(record.recordAccess); setContact(record.contact); loadExtension(record); await loadCustom(record)
+      setValues({ salesTeamId: record.salesTeamId || "", contactId: record.contact.id, title: record.title, sourceId: record.sourceId || "", accountId: record.accountId || "", referralContactId: record.referralContactId || "", referralAccountId: record.referralAccountId || "", targetCloseOn: record.targetCloseOn?.slice(0, 10) || "", requirements: record.requirements || "", assignedUserId: record.assignedUserId, status: record.status, outcome: record.outcome || "", lostReasonId: record.lostReasonId || "" })
+      setReferralType(record.referralContactId ? "contact" : record.referralAccountId ? "account" : "none"); setRevision(value => value + 1)
+    } catch { setLoadFailed(true); setError("Partner saved. Reload this page before editing enquiry details.") }
+  }
   async function save(event: React.FormEvent) {
     event.preventDefault(); setSaving(true); setError(""); clearErrors()
     try {
@@ -127,10 +138,10 @@ function EnquiryEditorBody({ id, initialContactId, initialReferences }: { id?: s
         <AccessSummarySection title="Customer" fields={[{ label: term("crm.contact.singular", "Contact"), value: <Link href={`/crm/contacts/${enquiry.contact.id}`} className="underline">{enquiry.contact.name}</Link> }, { label: term("crm.account.singular", "Buyer company"), value: enquiry.account?.name }]} />
         <AccessSummarySection sectionKey="Enquiry details" title={term("crm.enquiry.singular", "Enquiry details", "{label} details")} fields={[{ label: "Title", value: enquiry.title }, { label: "Status", value: enquiryStatusLabel(enquiry.status) }, { label: "Salesperson", value: enquiry.assignee.name }, { label: "Sales team", value: enquiry.salesTeam?.name }, { label: "Source", value: enquiry.source }, { label: "Target close", value: formatDate(enquiry.targetCloseOn) }, { label: "Requirements", value: enquiry.requirements }, { label: "Lost reason", value: enquiry.lostReasonName }, { label: "Closing note", value: enquiry.outcome }]} />
         <AccessSummarySection title="Referral (optional)" canEdit={!enquiry.referralRestricted} fields={[{ label: "Referred by", value: enquiry.referralRestricted ? "Restricted" : enquiry.referralContact?.name || enquiry.referralAccount?.name }]} />
-        <AccessSummarySection title="Introducing collaborator" canEdit={false} fields={introductionFields(enquiry)} />
+        <IntroductionDetails record={enquiry} />
         {extension.summary()} {custom.readOnlySection(<AccessSectionEdit section="Additional information" />)}
       </>}
-      tabs={enquiry ? [{ value: "activities", permission: "activities.read" as const, label: term("crm.activity.plural", "Activities"), content: <WorkList enquiryId={enquiry.id} contactId={enquiry.contact.id} /> }, { value: "history", label: "History", content: <EnquiryTimeline enquiryId={enquiry.id} contactId={enquiry.contact.id} revision={revision} includeWork={false} /> }] : []}>
+      tabs={enquiry ? [{ value: "activities", permission: "activities.read" as const, label: term("crm.activity.plural", "Activities"), content: <WorkList enquiryId={enquiry.id} contactId={enquiry.contact.id} /> }, { value: "partner", label: "Partner / CP", permission: "partnerLinks.read" as const, content: <PartnerLinkPanel endpoint={`/api/crm/enquiries/${enquiry.id}/partner`} revision={revision} onSaved={partnerSaved} /> }, { value: "history", label: "History", content: <EnquiryTimeline enquiryId={enquiry.id} contactId={enquiry.contact.id} revision={revision} includeWork={false} /> }] : []}>
 
 
       <Section title="Customer" description={term("crm.contact.singular", "Reuse an existing contact", "Reuse an existing {label}") + " " + term("crm.enquiry.singular", "or create one with this enquiry.", "or create one with this {label}.")}><fieldset disabled={saving || loadFailed} className="grid min-w-0 gap-5 sm:grid-cols-2">

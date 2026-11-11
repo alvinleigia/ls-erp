@@ -23,6 +23,19 @@ type ResourceContract = { policy: ResourceRecordPolicy; ownership: ResourceOwner
 // Adding a permission resource requires a contract here; model names are checked
 // against the generated Prisma schema. No data/default/scope migration is implied.
 export const resourceRegistry = {
+  verificationDisposals: { policy: "sources", ownership: { kind: "source", roots: ["VerificationDisposal"], children: ["VerificationDisposalEvent"], sources: ["customerVerification"] } },
+  verificationRetention: { policy: "shared", ownership: { kind: "shared", roots: ["VerificationRetentionVersion"] } },
+  verificationHolds: { policy: "sources", ownership: { kind: "source", roots: ["VerificationHoldEvent"], sources: ["customerVerification"] } },
+  verificationSummaries: { policy: "sources", ownership: { kind: "source", roots: ["CustomerVerificationCase"], sources: ["opportunities", "salesOrders"] } },
+  verificationCheckpoints: { policy: "shared", ownership: { kind: "shared", roots: ["VerificationCheckpointVersion"] } },
+  verificationSubmissions: { policy: "sources", ownership: { kind: "source", roots: ["VerificationSubmission"], children: ["VerificationSubmissionEvidence"], sources: ["customerVerification"] } },
+  verificationReviews: { policy: "sources", ownership: { kind: "source", roots: ["VerificationReview"], sources: ["verificationSubmissions"] } },
+  verificationUploads: { policy: "sources", ownership: { kind: "source", roots: ["VerificationEvidence"], sources: ["customerVerification"] } },
+  verificationEvidence: { policy: "sources", ownership: { kind: "source", roots: ["VerificationEvidence"], sources: ["customerVerification"] } },
+  verificationPolicies: { policy: "shared", ownership: { kind: "shared", roots: ["VerificationPolicyVersion"] } },
+  customerVerification: { policy: "sources", ownership: { kind: "source", roots: ["CustomerVerificationCase"], sources: ["contacts", "accounts"] } },
+  partnerChoices: { policy: "directory", ownership: { kind: "composed", roots: ["ExternalCollaborator"], sources: ["teams"] } },
+  partnerLinks: { policy: "sources", ownership: { kind: "source", roots: ["CrmPartnerLinkEvent"], sources: ["enquiries", "opportunities"] } },
   taxProfiles: { policy: "administrative", ownership: { kind: "security", roots: ["CompanyTaxRegistration", "OfficeTaxRegistration", "CompanyTaxProfile"], children: ["CompanyTaxRegistrationRevision", "CompanyTaxProfileVersion", "CompanyTaxProfileRate", "TaxStatutorySeries"] } },
   // Receivables Read remains a service/action requirement; the canonical owner
   // is the order, rather than a separate receivable header.
@@ -35,7 +48,7 @@ export const resourceRegistry = {
   receivables: { policy: "sales", ownership: { kind: "source", roots: ["OrderReceivable"], children: ["OrderReceivableLine"], sources: ["salesOrders"] }, sharing: "salesOrders" },
   orderPayments: { policy: "sales", ownership: { kind: "source", roots: ["OrderReceipt"], children: ["OrderReceiptAllocation", "OrderReceiptReversal"], sources: ["salesOrders"] }, sharing: "salesOrders" },
   unitReservations: { policy: "sales", ownership: { kind: "source", roots: ["UnitReservation"], children: ["UnitReservationEvent"], sources: ["salesOrders", "catalogItems"] }, sharing: "salesOrders" },
-  salesOrders: { policy: "sales", record: "SalesOrder", ownership: { kind: "source", roots: ["SalesOrder"], children: ["SalesOrderEvent", "SalesOrderTaxAcceptance"], sources: ["quotations"] }, sharing: "salesOrders" },
+  salesOrders: { policy: "sales", record: "SalesOrder", ownership: { kind: "source", roots: ["SalesOrder"], children: ["SalesOrderEvent", "SalesOrderTaxAcceptance", "OrderVerificationAcceptance"], sources: ["quotations"] }, sharing: "salesOrders" },
   catalogItems: { policy: "projects", ownership: { kind: "split", description: "General catalog items are shared. Industry units inherit their project; reservation availability never grants access to private orders.", parts: {
     catalog: { kind: "shared", roots: ["CatalogItem"] }, units: { kind: "source", roots: ["RealEstateUnit"], sources: ["projects"] },
     availability: { kind: "source", roots: ["CatalogReservationAvailability"], sources: ["catalogItems"] },

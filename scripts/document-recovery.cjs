@@ -7,7 +7,7 @@ function reference(tenantId,source,bucket,asset){
  assert.ok(typeof tenantId==='string'&&/^[a-zA-Z0-9_-]+$/.test(tenantId))
  assert.ok(typeof asset.path==='string'&&asset.path.startsWith(tenantId+'/')&&asset.path.split('/').every(p=>/^[a-zA-Z0-9_.-]+$/.test(p)&&p!=='.'&&p!=='..'),'Unsafe or foreign-tenant asset reference')
  assert.ok(Number.isSafeInteger(asset.bytes)&&asset.bytes>0&&asset.bytes<=10*1024*1024,'Invalid referenced asset size')
- if(bucket==='tenant-documents'||asset.sha256!==undefined)assert.match(asset.sha256||'',/^[a-f0-9]{64}$/,'Missing or invalid referenced PDF checksum')
+ if(['tenant-documents','tenant-verification'].includes(bucket)||asset.sha256!==undefined)assert.match(asset.sha256||'',/^[a-f0-9]{64}$/,'Missing or invalid referenced asset checksum')
  return {tenantId,source,bucket,path:asset.path,bytes:asset.bytes,...(asset.sha256?{sha256:asset.sha256}:{})}
 }
 async function assetReferences(db){
@@ -33,14 +33,22 @@ async function assetReferences(db){
   add(r.tenantId,'statutory-signed:'+r.id,'tenant-documents',r.signedArchive)
  }
 
+ const verification=(await db.query('SELECT to_regclass(\'public."VerificationEvidence"\') IS NOT NULL AS present')).rows[0].present
+ if(verification)for(const r of(await db.query('SELECT "tenantId",id,path,bytes,sha256 FROM "VerificationEvidence" WHERE state=\'READY\'')).rows)add(r.tenantId,'verification-evidence:'+r.id,'tenant-verification',r)
+ const disposals=(await db.query('SELECT to_regclass(\'public."VerificationDisposal"\') IS NOT NULL AS present')).rows[0].present
+ if(disposals){
+  assert.equal((await db.query('SELECT count(*)::int n FROM "VerificationDisposal" WHERE state=\'DELETING\'')).rows[0].n,0,'Reconcile in-progress verification disposals before certifying recovery')
+  for(const r of(await db.query('SELECT d."tenantId",d.id,e.path FROM "VerificationDisposal" d JOIN "VerificationEvidence" e ON e."tenantId"=d."tenantId" AND e.id=d."evidenceId" WHERE d.state=\'COMPLETED\'')).rows){assert.ok(r.path.startsWith(r.tenantId+'/cases/')&&/^[A-Za-z0-9_/-]+\.(pdf|jpg|png)$/.test(r.path),'Invalid disposal tombstone path');refs.push({tenantId:r.tenantId,source:'verification-disposal:'+r.id,bucket:'tenant-verification',path:r.path,disposed:true})}
+ }
  return refs.sort((a,b)=>Buffer.compare(Buffer.from(a.tenantId+'\0'+a.source+'\0'+a.path),Buffer.from(b.tenantId+'\0'+b.source+'\0'+b.path)))
 }
 function verifyReferences(refs,manifest){
  assert.ok(Array.isArray(manifest.buckets),'Storage manifest missing')
  for(const bucket of ['tenant-branding','tenant-documents']){const row=manifest.buckets.find(b=>b.bucket===bucket);assert.ok(row,'Required bucket missing');assert.equal(row.public,bucket==='tenant-branding','Bucket privacy mismatch')}
+ for(const b of manifest.buckets)assert.equal(b.public,b.bucket==='tenant-branding','Bucket privacy mismatch')
  const files=new Map()
  for(const b of manifest.buckets)for(const f of b.files){const key=b.bucket+'/'+f.path;assert.ok(!files.has(key),'Duplicate stored object');assert.match(f.sha256||'',/^[a-f0-9]{64}$/);files.set(key,f)}
- for(const r of refs){const f=files.get(r.bucket+'/'+r.path);assert.ok(f,'A saved database asset is missing from storage recovery');assert.equal(f.bytes,r.bytes,'Referenced asset size differs');if(r.sha256)assert.equal(f.sha256,r.sha256,'Referenced asset checksum differs')}
- return {references:refs.length,uniqueReferencedObjects:new Set(refs.map(r=>r.bucket+'/'+r.path)).size,verified:true}
+ for(const r of refs){const f=files.get(r.bucket+'/'+r.path);if(r.disposed){assert.ok(!f,'A disposed verification original would be restored; apply the current disposal ledger');continue;}assert.ok(f,'A saved database asset is missing from storage recovery');assert.equal(f.bytes,r.bytes,'Referenced asset size differs');if(r.sha256)assert.equal(f.sha256,r.sha256,'Referenced asset checksum differs')}
+ return {references:refs.filter(r=>!r.disposed).length,uniqueReferencedObjects:new Set(refs.filter(r=>!r.disposed).map(r=>r.bucket+'/'+r.path)).size,disposedObjects:refs.filter(r=>r.disposed).length,verified:true}
 }
 module.exports={assetReferences,verifyReferences,reference}

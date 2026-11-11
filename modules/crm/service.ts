@@ -21,6 +21,7 @@ import type { Requirement } from "@/platform/access/catalog"
 
 import { workspaceRead, accessResources } from "@/platform/access/catalog"
 import type { CrmServiceContext } from "./service-context"
+import { createCrmPartnerService } from "./partner-links"
 import { createPresetService, type CrmPreset } from "./preset-service"
 import { resolveSalesTeam } from "./team-service"
 import { createTeamService, teamSelect } from "@/platform/teams/service"
@@ -64,7 +65,7 @@ function pageResult<T>(items: T[], total: number, page: number, pageSize: number
 // module access, then runs in a transaction. Caller must establish DB tenant context.
 export function createCrmService<Fields extends object = object, Metadata extends object = object, Addons extends object = object>(db: PrismaClient, identity: Pick<CrmActor, "tenantId" | "userId" | "requestId">, extensions: CrmExtensions<Fields, Metadata> = noCrmExtensions as CrmExtensions<Fields, Metadata>, presets: readonly CrmPreset[] = [], install?: (context: CrmServiceContext) => Addons, terms: readonly Term[] = crmTerms, participantPreset?: ParticipantPresetReader) {
   const readTerms = (tx: Tx, actor: { tenantId: string }) => readTermReplacements(tx, actor.tenantId, terms)
-  async function run<T>(requirement: Requirement, operation: (tx: Tx, actor: CrmActor) => Promise<T>, lockSecurity = false): Promise<T> {
+  async function run<T>(requirement: Requirement, operation: (tx: Tx, actor: CrmActor) => Promise<T>, lockSecurity: boolean | "exclusive" = false): Promise<T> {
     for (let attempt = 0; ; attempt++) {
       try {
         // A page loads several CRM panels concurrently through the small tenant
@@ -74,7 +75,10 @@ export function createCrmService<Fields extends object = object, Metadata extend
           if (lockSecurity) {
             // Match security administration's tenant lock before the shared
             // office/account mutex; authorize only after both waits complete.
-            await tx.$queryRaw`SELECT id FROM "Tenant" WHERE id=${identity.tenantId} FOR SHARE`
+            // Partner evidence triggers take this row exclusively. Acquire it
+            // before the shared operational mutex to avoid lock-upgrade cycles.
+            if (lockSecurity === "exclusive") await tx.$queryRaw`SELECT id FROM "Tenant" WHERE id=${identity.tenantId} FOR UPDATE`
+            else await tx.$queryRaw`SELECT id FROM "Tenant" WHERE id=${identity.tenantId} FOR SHARE`
             await lockTenantOperations(tx, identity.tenantId)
           }
           const actor = await authorizeBusinessOperation(tx, identity, requirement, ["crm"])
@@ -183,6 +187,7 @@ export function createCrmService<Fields extends object = object, Metadata extend
   }
 
   const service = {
+    ...createCrmPartnerService({ run, runLocked: (requirement, operation) => run(requirement, operation, "exclusive"), audit }),
     ...createEnquiryImportService({ run, audit, readTerms }, extensions, createEnquiryRecord),
     ...(install ? install({ run, audit }) : {} as Addons),
     listExtensionChoices(key: string, input: unknown) { return run(workspaceRead, (tx, actor) => extensions.choices(tx, actor, key, input)) },

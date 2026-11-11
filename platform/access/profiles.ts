@@ -4,11 +4,11 @@ import { businessModules, type BusinessModuleKey } from "../modules"
 export const profileModules = ["all", "core", ...Object.keys(businessModules).filter(key => Object.values(accessResources).some(resource => resource.module === key))] as [string, ...string[]]
 export const profileModuleName = (key: string) => key === "all" ? "Several modules" : key === "core" ? "Core workspace" : businessModules[key as BusinessModuleKey]?.name ?? key
 export function profileResources(moduleKey: string): Resource[] {
-  return (Object.keys(accessResources) as Resource[]).filter(resource => moduleKey === "all" || accessResources[resource].module === moduleKey || ["dashboard", "teams", "assignmentTargets", "restrictedFields"].includes(resource))
+  return (Object.keys(accessResources) as Resource[]).filter(resource => moduleKey === "all" || accessResources[resource].module === moduleKey || ["dashboard", "teams", "assignmentTargets", "restrictedFields", "partnerChoices", "partnerLinks"].includes(resource))
 }
 export function validProfilePermissions(moduleKey: string, permissions: readonly string[]) {
   const resources = new Set(profileResources(moduleKey))
-  return permissions.every(permission => allPermissions.includes(permission as Permission) && resources.has(permission.split(".")[0] as Resource) && (moduleKey === "all" || accessResources[permission.split(".")[0] as Resource].module === moduleKey || ["dashboard.read", "teams.read", "assignmentTargets.read", "restrictedFields.read", "restrictedFields.edit"].includes(permission)))
+  return permissions.every(permission => allPermissions.includes(permission as Permission) && resources.has(permission.split(".")[0] as Resource) && (moduleKey === "all" || accessResources[permission.split(".")[0] as Resource].module === moduleKey || ["dashboard.read", "teams.read", "assignmentTargets.read", "restrictedFields.read", "restrictedFields.edit", "partnerChoices.read", "partnerLinks.read", "partnerLinks.create", "partnerLinks.edit"].includes(permission)))
 }
 export const moduleProfileTemplates = profileModules.filter(key => key !== "all" && Object.values(accessResources).some(resource => resource.module === key)).flatMap(moduleKey => ["viewer", "manager"].map(level => ({
   key: `${moduleKey}:${level}`, moduleKey, name: `${profileModuleName(moduleKey)} ${level === "viewer" ? "Viewer" : "Manager"}`,

@@ -3,6 +3,14 @@ require('../register.cjs')
 require('../../lib/logger.ts').logger.info=()=>{}
 const assert=require('node:assert/strict'),fs=require('node:fs'),{Client,Pool}=require('pg'),{createHash,randomUUID}=require('node:crypto'),{PrismaClient}=require('@prisma/client'),{TenantPgAdapter}=require('../../lib/tenant-pg-adapter.ts'),{fixtureUser}=require('./access-fixtures.cjs')
 async function historical(db,url){
+ // This fixture predates the address-book migration. Do not invoke today's
+ // directory-default resolver while constructing the historical accepted sale.
+ const defaults=require('../../modules/crm/participant-defaults.ts'),currentDefaults=defaults.contactInformationDefaults
+ // This accepted-sale fixture also predates verification checkpoint tables.
+ // Keep its historical setup independent of today's read-only checkpoint review.
+ const checkpoints=require('../../platform/verification/checkpoints.ts'),currentCheckpoint=checkpoints.readOrderVerificationCheckpoint
+ checkpoints.readOrderVerificationCheckpoint=async()=>require('../../platform/verification/checkpoint-contracts.ts').checkpointOff
+ defaults.contactInformationDefaults=async()=>({format:1,records:[]})
  const pool=new Pool({connectionString:url}),root=new PrismaClient({adapter:new TenantPgAdapter(pool,{bypass:true})})
  try{
   const tenantId='p12_history_'+randomUUID();await root.tenant.create({data:{id:tenantId,slug:tenantId,name:'QA P12 historical invoice'}})
@@ -24,7 +32,7 @@ async function historical(db,url){
    await db.query('COMMIT')
   }catch(e){await db.query('ROLLBACK');throw e}
   return {tenantId,orderId:order.id,id}
- }finally{await root.$disconnect();await pool.end()}
+ }finally{checkpoints.readOrderVerificationCheckpoint=currentCheckpoint;defaults.contactInformationDefaults=currentDefaults;await root.$disconnect();await pool.end()}
 }
 async function main(){
  assert.equal(process.env.R5_HISTORICAL_CONTAINER,'1');const url=new URL(process.env.CRM_TEST_DATABASE_URL);assert.equal(url.hostname,'127.0.0.1');assert.equal(url.pathname,'/ls_salon_crm_test');const db=new Client({connectionString:url.toString()});await db.connect()

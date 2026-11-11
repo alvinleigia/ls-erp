@@ -112,3 +112,14 @@ test('None, office removal, module/account revocation, foreign selections and ma
  await root.tenantModule.update({where:{tenantId_key:{tenantId:tenant,key:'receivables'}},data:{enabled:false}});await assert.rejects(choices(manager),status(403));await root.tenantModule.update({where:{tenantId_key:{tenantId:tenant,key:'receivables'}},data:{enabled:true}})
  await root.user.update({where:{id:manager.id},data:{status:'SUSPENDED'}});await assert.rejects(receivables(manager).list({}),status(403));await assert.rejects(choices(manager),status(403))
 })
+
+
+test('CP correction leaves confirmed agreements, quotation revisions and recorded money unchanged',async()=>{
+ const tables=['SalesOrder','CrmQuotationRevision','OrderReceivable','OrderReceivableLine','OrderReceipt','OrderReceiptAllocation','OrderReceiptReversal','SalesOrderDocument','OrderReceiptDocument']
+ const snapshot=()=>Promise.all(tables.map(table=>root.$queryRawUnsafe(`SELECT to_jsonb(r) data FROM "${table}" r WHERE "tenantId"=$1 ORDER BY to_jsonb(r)::text`,tenant)))
+ const before=await snapshot(),source=await crm(admin).getOpportunity(alpha.opportunity.id),count=(await receivables(admin).list({status:'ALL'})).total
+ await crm(admin).partnerLink('opportunities',source.id,{version:source.version,partnerId:b.id,reason:'Correct introducing partner after order confirmation'})
+ assert.deepEqual(await snapshot(),before)
+ assert.equal((await receivables(admin).list({status:'ALL'})).total,count)
+ assert.equal((await crm(admin).getOpportunity(source.id)).introducedByCollaboratorId,b.id)
+})
