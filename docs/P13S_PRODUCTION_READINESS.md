@@ -73,9 +73,9 @@ concurrent administrator edit. Verify with a fresh Soniya session afterwards.
 
 ## Remaining release and activation work
 
-1. Take an encrypted production application/storage backup and verify an isolated
-   restore and seven-migration upgrade against the current pilot data. The staging
-   backup and synthetic acceptance do not establish pilot recovery.
+1. The copied-pilot rehearsal below passed. During the approved cutover, take and
+   verify a fresh encrypted backup after blocking application access; the warm
+   rehearsal snapshot must not substitute for the final cutover backup.
 2. Agree the production maintenance window, recheck source/history/deployments,
    preserve fresh recovery evidence, then execute the controlled cutover. Fresh
    pilot tests must not create business records or send email to real customers.
@@ -93,3 +93,50 @@ Ignored evidence: `tmp/p13s-production/preflight.json`,
 `pilot-access-private.json`, `access-proposal-private.json` and
 `storage-preflight.json`. No production database, permission, storage or deployment
 mutation was performed in this preflight.
+
+## Copied-pilot recovery and upgrade result (2026-11-11)
+
+Encrypted backup `62d520961da8` contains the application schemas/data, ownership,
+ACLs and password-free PostgreSQL role inventory from the verified production
+project. A repeatable-read snapshot binds the database archive and fingerprints.
+Storage verification authenticated all four objects and both saved asset
+references. Encryption uses AES-256-GCM with a Windows CurrentUser-wrapped key,
+inside the private ignored `backups/p13s` directory. The initial disconnected
+attempt has no completion receipt and is excluded from release evidence.
+
+Restore into an owned, isolated Docker network passed exact application data,
+schema, ownership, ACL and role-membership comparisons. No ports were published,
+the application was not started, and no emails or payment services were called.
+All local rehearsal containers and their internal networks were removed afterwards.
+
+The restored pilot then passed:
+
+- Forced rollback of all seven migrations, followed by exact baseline comparison.
+- Successful upgrade from 150 to 157 migrations, preserving all 40,521 baseline
+  rows across 167 tables (including migration history). All 13 added tables were
+  empty and had forced row-level security. Existing row policies were unchanged.
+- Exact readable-record populations for all eight existing internal actors across
+  the registered sales, financial, operational, inventory and workforce tables.
+- Existing function definitions were unchanged except the two reviewed partner
+  introduction trigger functions. This is the intended attribution-write change.
+- The central accounts proposal applied only on the local copy through the normal
+  versioned access service as an existing tenant administrator. It added exactly
+  four permissions (37 to 41) and produced the two expected access audit events.
+  Stale role/policy updates and non-admin access administration were rejected.
+- Other users, profiles, office grants and business rows stayed unchanged during
+  the local access-proposal test. KYC, user-directory, CP-directory, document-template
+  editing and refund permissions remained denied to Soniya.
+- A separate pass simulated the runtime login block and zero connection limit
+  used for maintenance. The local test restored that runtime state after its
+  temporary, isolated service check. No production runtime role was changed.
+
+Private tools and receipts are under `tmp/p13s-production`, with authenticated
+archives under `backups/p13s/62d520961da8`. The final receipt records tool hashes,
+data/access preservation and storage verification. The rehearsal reproduces the
+application schemas and access controls; it does not certify restoration of every
+managed Supabase service or recreate managed event triggers.
+
+This completes the copied-pilot recovery gate. Production cutover, the actual
+central-access update, private verification bucket provisioning and KYC activation
+remain unperformed. A fresh final backup and agreed maintenance window are still
+required for the release.

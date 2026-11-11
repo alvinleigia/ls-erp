@@ -1,3 +1,21 @@
+## P13S copied-pilot recovery and access rehearsal passed (2026-11-11)
+
+A fresh encrypted production application/storage backup restored exactly into an
+isolated local Docker network without published ports. Owners, ACLs and
+password-free role memberships matched. Seven migrations passed forced rollback
+and reapplication: all 40,521 baseline rows across 167 tables were preserved,
+13 added forced-RLS tables were empty, and all eight internal actors retained
+their exact readable-record populations. Four storage objects and both saved asset
+references were verified. Rehearsal containers/networks were removed afterwards.
+
+Soniya's central Booking & Collections proposal also passed through the normal
+audited access service on the local copy, including stale-version and non-admin
+rejections, two expected audit events, unchanged other users/business records and
+no KYC/directory/refund grants. A second scenario simulated the maintenance runtime
+block and verified restoration of that local state. Production remains unchanged.
+See `P13S_PRODUCTION_READINESS.md` for evidence and recovery limits. Final cutover
+still needs an agreed maintenance window and a fresh frozen-state backup.
+
 ## P13S production preflight and central collections proposal (2026-11-11)
 
 Read-only checks verified production at the unchanged 150-migration baseline,
