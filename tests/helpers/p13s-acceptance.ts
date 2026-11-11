@@ -60,7 +60,9 @@ export async function p13sAcceptance({ admin, operator, reviewer, info }: { admi
   await api(o, `/api/crm/opportunities/${deal.id}`, 200, "PATCH", { ...input, enquiryId: undefined, enquiryVersion: undefined, version: deal.version, stageId: pipeline.stages.find((x: any) => x.kind === "WON").id })
   const item = await api(a, "/api/catalog/items", 201, "POST", { code: "P13S-UNIT", name: "Synthetic generic unit", kind: "UNIT", price: "100", currency: "INR", unit: "each" })
   const quote = await api(o, `/api/crm/opportunities/${deal.id}/quotations`, 201, "POST", { content: { ...structuredClone(emptyQuotationContent), title: "Synthetic acceptance quotation", supplierName: company.name, currency: "INR", bookingDate: "2026-11-11", lines: [{ description: item.name, quantity: "1", unit: "each", rate: "100", catalogItemId: item.id, catalogItemVersion: item.version }], instalments: [{ label: "Booking", percent: "20", days: 0, note: "" }, { label: "Balance", percent: "80", days: 30, note: "" }] } })
-  const order = await api(o, "/api/sales-orders", 200, "POST", { quotationId: quote.id, revision: 1, orderedOn: "2026-11-11" }), saved = await api(o, `/api/sales-orders/${order.id}`)
+  const source = await api(o, `/api/sales-orders/context?${new URLSearchParams({ quotationId: quote.id, revision: "1" })}`)
+  const order = await api(o, "/api/sales-orders", 200, "POST", { quotationId: quote.id, revision: 1, orderedOn: source.orderedOn }), saved = await api(o, `/api/sales-orders/${order.id}`)
+  expect(saved.snapshot).toBeTruthy()
   const links = await api(o, `/api/crm/opportunities/${deal.id}/partner`)
   await api(o, `/api/crm/opportunities/${deal.id}/partner`, 200, "PATCH", { version: links.version, partnerId: cpB.id, reason: "Synthetic correction after won and saved quotation" })
   expect((await api(o, `/api/crm/opportunities/${deal.id}`)).assignedUserId).toBe(operator.id)
@@ -96,7 +98,7 @@ export async function p13sAcceptance({ admin, operator, reviewer, info }: { admi
   const replacement = await api(o, endpoint + "/prepare", 200, "POST", { providerKey: "order-acknowledgement", supersedesId: document.id, reason: "Synthetic replacement attempt" })
   await api(o, endpoint + "/issue", 409, "POST", { providerKey: "order-acknowledgement", supersedesId: document.id, reason: "Synthetic replacement attempt", previewHash: replacement.previewHash, requestKey: randomUUID() })
   expect(await pdf(o, `${endpoint}/${document.id}/pdf?providerKey=order-acknowledgement`)).toEqual(originalPdf)
-  const paymentInput = { requestKey: randomUUID(), version: 1, amount: "30", receivedOn: "2026-11-11", method: "BANK_TRANSFER", reference: "SYNTHETIC-NOT-A-PAYMENT", note: "Acceptance test only" }
+  const paymentInput = { requestKey: randomUUID(), version: 1, amount: "30", receivedOn: source.orderedOn, method: "BANK_TRANSFER", reference: "SYNTHETIC-NOT-A-PAYMENT", note: "Acceptance test only" }
   const payment = await api(o, `/api/sales-orders/${order.id}/receivables/payments`, 200, "POST", paymentInput)
   expect((await api(o, `/api/sales-orders/${order.id}/receivables/payments`, 200, "POST", paymentInput)).id).toBe(payment.id)
   const receiptEndpoint = `/api/payment-receipts/${payment.id}/documents`, receiptPreview = await api(o, receiptEndpoint + "/prepare", 200, "POST", { providerKey: "payment-receipt" }), receipt = await api(o, receiptEndpoint + "/issue", 200, "POST", { providerKey: "payment-receipt", previewHash: receiptPreview.previewHash, requestKey: randomUUID() })

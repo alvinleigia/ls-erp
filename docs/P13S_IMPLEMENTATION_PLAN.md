@@ -5,7 +5,8 @@ and verified locally. The KYC requirements/case foundation is also locally
 verified. Private evidence collection, typed submissions and independent review
 are implemented locally. Participant summaries and configurable transaction
 checkpoints, retention review and reasoned preservation holds are implemented locally.
-Controlled disposal is implemented locally; combined hosted staging acceptance remains pending. This document coordinates
+Controlled disposal is implemented and combined hosted staging acceptance has passed.
+Production rollout and Ewissen access/activation remain pending. This document coordinates
 the two workstreams; it does not authorise production changes.
 
 Detailed specifications:
@@ -139,6 +140,10 @@ Success: review, expiry, policy changes and all applicable participant checks
 work, including stale requests and permission revocation.
 
 ### E. Combined staging acceptance and controlled release
+
+Combined hosted acceptance passed on staging commit `ccb486a`; see
+`P13S_ACCEPTANCE.md`. Controlled production release and pilot configuration remain
+pending. No production changes are authorised by this acceptance result alone.
 
 Use isolated local/staging data to test:
 

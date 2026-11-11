@@ -59,3 +59,38 @@ to Ewissen as part of this test.
 
 Hosted acceptance results and deployment identifiers are recorded separately
 after the staging release. Production rollout remains a separate controlled step.
+
+## Hosted result (2026-11-11)
+
+Staging application commit `ccb486aef32d5c137ad5752d662f4c8fa53e1ca6` is READY at
+`ls-erp-staging.vercel.app` (deployment `dpl_9tgxeKvQyTxkh42iidHRYavY693Z`).
+All seven migrations applied: 157 total. Before QA writes, exact row/count hashes
+for all 166 existing staging tables matched; 13 added tables were empty and forced
+RLS was enabled. No existing tenant was activated for KYC. The pre-deployment
+staging database backup was encrypted; key round-trip, archive read and migration
+history presence were verified. This does not claim a new full recovery rehearsal.
+
+The shared hosted flow passed (46.2 seconds), using real private Supabase originals
+and archived PDFs. Two independent applicant approvals permitted confirmation and
+allocation. Later revocation blocked a replacement order document while preserving
+the issued PDF checksum and allowing payment/receipt recording. Exactly 30 paid
+and 70 outstanding were verified, including idempotent document/payment retries.
+Desktop/mobile captures were inspected. No emails or gateway payments were sent.
+
+The initial hosted run correctly rejected a hard-coded order date: the new tenant
+used America/New_York, whose business date was still the previous day. The test
+now uses the normal sales-order context date for the order and payment. No date
+validation or application permission was weakened. The corrected local run passed
+as well. This test-only follow-up and acceptance notes are kept in the local
+checkout; the deployed application source is unchanged from the SHA above.
+
+Two clearly labelled synthetic staging tenants remain with ignored private setup
+receipts for inspection and explicit cleanup. The first contains the interrupted
+pre-order setup; the second completed acceptance. No pilot tenant was used.
+Evidence: `tmp/p13s-staging/hosted-acceptance-final.log`, `deployment.json`,
+`database-verification.json`, `production-unchanged.json` and the QA acceptance
+receipt. Screenshots: `test-results/p13s-staging-final`.
+
+The final production read-only check confirmed its alias was unchanged, with 150
+applied migrations and zero P13S migrations. Production release, Ewissen profile
+grants and tenant KYC activation are still separate, unperformed actions.

@@ -1,3 +1,19 @@
+## P13S hosted combined acceptance passed (2026-11-11)
+
+Staging application `ccb486a` deployed successfully; seven migrations applied
+(157 total). Exact pre/post-migration row hashes preserved all 166 existing
+staging tables. Thirteen added tables were empty with forced RLS and no existing
+tenant KYC activation. An encrypted staging backup was verified before deployment.
+The complete public-API/browser workflow passed in an isolated synthetic tenant,
+including delegated CP correction, independent multi-applicant review, Required
+checkpoints, generic allocation, archived PDFs, revocation and partial payment /
+receipt. Real Estate stayed disabled. Desktop/mobile captures were inspected.
+A hard-coded test date was replaced with the application-suggested tenant business
+date; application validation remains unchanged. The corrected local run also passed.
+See `P13S_ACCEPTANCE.md` for evidence, QA residue and release boundaries.
+Production alias/history are unchanged: 150 migrations, zero P13S migrations.
+No Ewissen profile/module/requirements/transaction changes were made.
+
 ## P13S combined acceptance preparation (2026-11-11)
 
 A shared public-API/browser workflow now spans delegated CP selection/correction
