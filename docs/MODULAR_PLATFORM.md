@@ -1,3 +1,24 @@
+## P13S production release verified (2026-11-11)
+
+Production is READY at `816b25f` (`dpl_5BnhvyjdS9Lg1YGBMZgrBzsN8NzQ`), with all
+three production aliases verified and normal runtime access reopened. A fresh
+encrypted frozen-state backup restored and upgraded successfully before cutover.
+Seven migrations applied (157 total); all 40,525 baseline rows across 167 tables
+were preserved and 13 added tables were empty with forced RLS.
+
+Soniya's reviewed central Booking & Collections update was applied atomically via
+the versioned access service, with the two expected audit events. Her 41 permissions
+include bounded CP selection/correction; existing relevant action scopes now cover
+All accessible sales while retaining office and Restricted boundaries. Other users
+and business records were preserved. Native runtime checks and an authenticated,
+read-only five-view desktop/mobile production smoke passed; screenshots were
+inspected. No test business records or outbound emails were created.
+
+Private verification storage is provisioned, but Ewissen KYC remains inactive.
+Requirements, independent reviewer/collector setup, module-settings UI registration
+and staged UI activation verification remain separate work. See
+`P13S_PRODUCTION_RELEASE.md` for evidence, limits and activation prerequisites.
+
 ## P13S copied-pilot recovery and access rehearsal passed (2026-11-11)
 
 A fresh encrypted production application/storage backup restored exactly into an

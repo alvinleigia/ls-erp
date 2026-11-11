@@ -2,6 +2,8 @@
 
 Read-only preflight completed on 2026-11-11. This is a release preparation
 checkpoint, not a production deployment or permission-change receipt.
+The subsequent completed release is recorded in `P13S_PRODUCTION_RELEASE.md`;
+the baseline/proposal sections below retain their pre-cutover meaning.
 
 ## Verified baseline
 
