@@ -1,3 +1,20 @@
+## P13S production preflight and central collections proposal (2026-11-11)
+
+Read-only checks verified production at the unchanged 150-migration baseline,
+including the retained historical rollback, and the READY staging application at
+`ccb486a`. Seven pinned migrations remain pending in production. Soniya's existing
+Booking & Collections profile is assigned only to her. The user selected all
+Ewissen sales for central accounts; a version-bound proposal adds four CP actions
+and broadens only her existing relevant action scopes to All accessible records.
+Normal schemas and effective rules passed validation. Office and Restricted
+boundaries remain; no KYC/admin authority or other-user changes are proposed.
+
+Production permissions, modules, data, storage and deployment remain unchanged.
+The private verification bucket needs provisioning before KYC uploads. Fresh pilot
+backup/restore/upgrade rehearsal, agreed cutover and explicit KYC activation remain
+separate required work. See `P13S_PRODUCTION_READINESS.md` for the concrete proposal
+and release boundaries.
+
 ## P13S hosted combined acceptance passed (2026-11-11)
 
 Staging application `ccb486a` deployed successfully; seven migrations applied
