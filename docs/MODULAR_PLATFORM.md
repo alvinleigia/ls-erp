@@ -1,3 +1,18 @@
+## P13S verification activation controls — step 1 (2026-11-16)
+
+Customer Verification is now included in the shared CRM and sales module-settings
+group, exposing the existing platform allowance and tenant activation controls.
+The disable/remove dialog explains that Required transaction checkpoints still
+apply. Activation, permissions and requirement publication remain separate; no
+server activation semantics, schema, grants or existing tenant data are changed.
+
+Seven local browser scenarios, 18 focused checks, TypeScript, lint and an isolated
+production build passed. Desktop/mobile captures were inspected. Coverage now
+requires every registered module to appear once across the settings groups.
+The hosted staging test exercises real activation/revocation with a newly created
+synthetic tenant; see `P13S_VERIFICATION_ACTIVATION.md` for the flow and evidence.
+Production activation and deployment are separate from this staging increment.
+
 ## P13S production release verified (2026-11-11)
 
 Production is READY at `816b25f` (`dpl_5BnhvyjdS9Lg1YGBMZgrBzsN8NzQ`), with all

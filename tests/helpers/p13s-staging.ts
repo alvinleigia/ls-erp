@@ -21,7 +21,7 @@ async function vercel(path: string, method = "GET", body?: unknown) {
     child.on("close", code => { clearTimeout(timeout); if (code) reject(Error("Staging alias operation failed")); else { try { resolve(JSON.parse(out)) } catch { reject(Error("Invalid staging alias receipt")) } } })
   })
 }
-export async function stagingFixture(browser: Browser) {
+export async function stagingFixture(browser: Browser, modules: readonly string[] = ["crm", "salesDocuments", "paymentPlans", "salesOrders", "catalog", "receivables", "customerVerification"]) {
   expect(process.env.RUN_P13S_STAGING_WRITES).toBe("1")
   const env = parse(fs.readFileSync(".env.new-vercel-staging")), release = JSON.parse(fs.readFileSync(`${dir}/deployment.json`, "utf8")), baseline = JSON.parse(fs.readFileSync(`${dir}/vercel-baseline.json`, "utf8"))
   expect(new URL(env.NEXTAUTH_URL).origin).toBe(root); expect(new URL(env.SUPABASE_URL).hostname).toBe("oyhsrcmjhwxhvepdbcdc.supabase.co")
@@ -36,7 +36,7 @@ export async function stagingFixture(browser: Browser) {
   const auth = async (c: any, base: string, email: string, password: string) => { const csrf = await json(c, "/api/auth/csrf"); await c.post("/api/auth/callback/credentials", { form: { csrfToken: csrf.csrfToken, email, password, callbackUrl: base + "/dashboard" } }); const session = await json(c, "/api/auth/session"); expect(session.user?.email).toBe(email); return session }
   try {
     await auth(platform, root, env.PLATFORM_ADMIN_EMAIL, env.PLATFORM_ADMIN_PASSWORD)
-    const tenant = await json(platform, "/api/tenants", "POST", { name: "P13S Synthetic Acceptance " + slug, slug, customDomain: host, adminName: "P13S QA Administrator", adminEmail: slug + "@example.test", adminPassword: secret, modules: ["crm", "salesDocuments", "paymentPlans", "salesOrders", "catalog", "receivables", "customerVerification"] }, 201)
+    const tenant = await json(platform, "/api/tenants", "POST", { name: "P13S Synthetic Acceptance " + slug, slug, customDomain: host, adminName: "P13S QA Administrator", adminEmail: slug + "@example.test", adminPassword: secret, modules }, 201)
     const receipt = { at: new Date().toISOString(), project, deployment: release.id, source: release.source, origin, slug, tenantId: tenant.tenant.id, admin: tenant.admin, password: secret }
     fs.writeFileSync(`${dir}/${slug}.json`, JSON.stringify(receipt, null, 2), { mode: 0o600 })
     await vercel(`/v10/projects/${project}/domains`, "POST", { name: host }); await vercel(`/v2/deployments/${release.id}/aliases`, "POST", { alias: host })

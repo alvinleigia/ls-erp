@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { businessModules, moduleKeys, moduleChangeProblem, moduleAllowanceProblem, type BusinessModuleKey } from "./modules"
 
 const moduleGroups: { value: string; label: string; keys: readonly BusinessModuleKey[] }[] = [
- { value: "sales", label: "CRM and sales", keys: ["crm", "realEstate", "catalog", "salesDocuments", "paymentPlans", "salesOrders"] },
+ { value: "sales", label: "CRM and sales", keys: ["crm", "customerVerification", "realEstate", "catalog", "salesDocuments", "paymentPlans", "salesOrders"] },
  { value: "billing", label: "Billing", keys: ["receivables", "invoicing"] },
  { value: "operations", label: "Operations", keys: ["inventory", "services", "appointments"] },
  { value: "workforce", label: "Workforce", keys: ["leaves", "shifts"] },
@@ -76,6 +76,7 @@ export function ModuleControls({ tenantId }: { tenantId?: string }) {
     <Dialog open={!!pending} onOpenChange={open => { if (!saving && !open) setPending(null) }}><DialogContent>
       <DialogHeader><DialogTitle>{platform ? "Remove allowance for" : "Disable"} {pending?.name}?</DialogTitle><DialogDescription>
         {pending?.key === "paymentPlans" ? "New instalment schedules and edits to scheduled documents will be disabled. Saved versions remain readable and downloadable." : "Users will lose access to this module. Its records will be kept."}
+        {pending?.key === "customerVerification" && " Any Required transaction checkpoints still apply after disabling Customer Verification."}
         {platform ? " The tenant administrator cannot enable it again until you allow it." : " You can enable it again while the platform allows it."}
       </DialogDescription></DialogHeader>
       <DialogFooter><Button variant="outline" disabled={saving} onClick={() => setPending(null)}>Cancel</Button><Button loading={saving} onClick={() => pending && void save(pending)}>{platform ? "Remove allowance" : "Disable module"}</Button></DialogFooter>
