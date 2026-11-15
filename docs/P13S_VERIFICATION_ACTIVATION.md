@@ -48,3 +48,15 @@ module flags and denied manager/reviewer access without separate grants. Only a
 new synthetic staging tenant is changed. No SQL seed/reset helper runs against a
 hosted database. Deployment and final acceptance receipts are ignored under
 `tmp/p13s-activation` and `tmp/p13s-staging`.
+
+## Deployment status (2026-11-16)
+
+Implementation is committed and pushed to the staging branch at `98961ff`.
+Vercel rejected the explicit staging Git deployment request with HTTP 402:
+"Your Team exceeded our fair use limits and has been blocked."
+Hosted acceptance has **not run**; no synthetic tenant was created this increment.
+The staging alias still points to its earlier deployment, production still points
+to `816b25f`, and main is unchanged. No production activation/settings were changed.
+The deployment error and final unchanged-alias checks are recorded in ignored
+`tmp/p13s-activation` receipts. Resume deployment and then run the guarded hosted
+acceptance after the Vercel account restriction is resolved.

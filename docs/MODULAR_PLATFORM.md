@@ -9,9 +9,12 @@ server activation semantics, schema, grants or existing tenant data are changed.
 Seven local browser scenarios, 18 focused checks, TypeScript, lint and an isolated
 production build passed. Desktop/mobile captures were inspected. Coverage now
 requires every registered module to appear once across the settings groups.
-The hosted staging test exercises real activation/revocation with a newly created
-synthetic tenant; see `P13S_VERIFICATION_ACTIVATION.md` for the flow and evidence.
-Production activation and deployment are separate from this staging increment.
+Code is pushed to staging at `98961ff`, but Vercel rejected the deployment request
+with HTTP 402: the team is blocked for exceeding fair-use limits. Hosted acceptance
+has not run and no synthetic tenant was created. Existing staging and production
+deployment aliases and main remain unchanged. See `P13S_VERIFICATION_ACTIVATION.md`
+for the prepared acceptance flow and evidence. Production activation and deployment
+are separate from this staging increment.
 
 ## P13S production release verified (2026-11-11)
 
