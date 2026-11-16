@@ -4,6 +4,20 @@ const {verificationPolicySchema,verificationSubjectSchema,emptyVerificationPolic
 const {moduleEnabled,businessModules}=require('../platform/modules.ts'),{externalPermissionAllowed}=require('../platform/collaborators/permissions.ts')
 const {allPermissions}=require('../platform/access/catalog.ts'),{recordScope}=require('../platform/access/rules.ts'),{composeProfilePermissions}=require('../platform/access/profiles.ts')
 const fact={code:'legal_name',label:'Legal name',type:'TEXT',subjects:['PERSON'],roles:['CUSTOMER','ADDITIONAL_CUSTOMER']}
+const {simpleIndividualVerificationPolicy}=require('../platform/verification/starter-checklist.ts')
+
+test('simple checklist is an independent opt-in draft with two categories for each individual applicant only',()=>{
+ const policy=verificationPolicySchema.parse(simpleIndividualVerificationPolicy())
+ assert.deepEqual(policy.facts,[]);assert.equal(policy.validityDays,null);assert.equal(policy.preventSelfApproval,true)
+ assert.deepEqual(policy.documents.map(d=>d.code),['tax_identification','identity_address'])
+ for(const role of ['CUSTOMER','ADDITIONAL_CUSTOMER'])assert.equal(applicableRequirements(policy,'PERSON',role).documents.length,2)
+ assert.equal(applicableRequirements(policy,'PERSON','REPRESENTATIVE').documents.length,0)
+ assert.equal(applicableRequirements(policy,'BUSINESS','CUSTOMER').documents.length,0)
+ policy.documents[0].roles.pop();policy.documents[1].label='Changed draft'
+ assert.equal(simpleIndividualVerificationPolicy().documents[0].roles.length,2)
+ assert.equal(simpleIndividualVerificationPolicy().documents[1].label,'Identity/address evidence')
+ assert.deepEqual(emptyVerificationPolicy().documents,[])
+})
 test('verification has no universal identity document or required fact and defaults off',()=>{
  assert.deepEqual(verificationPolicySchema.parse(emptyVerificationPolicy()),{format:1,facts:[],documents:[],validityDays:null,preventSelfApproval:true})
  assert.equal(businessModules.customerVerification.defaultEnabled,false)

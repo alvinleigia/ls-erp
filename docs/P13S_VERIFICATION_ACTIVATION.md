@@ -60,3 +60,92 @@ to `816b25f`, and main is unchanged. No production activation/settings were chan
 The deployment error and final unchanged-alias checks are recorded in ignored
 `tmp/p13s-activation` receipts. Resume deployment and then run the guarded hosted
 acceptance after the Vercel account restriction is resolved.
+
+## Ewissen access preparation (2026-11-16)
+
+At the user's request, two active but unassigned access profiles were created for
+Ewissen through the normal validated, audited access-role service. The hosted
+settings API returned Vercel HTTP 402, so the one-off configuration operation used
+the existing service directly against the verified production database, with its
+tenant/admin checks and native database actor context. This did not deploy code.
+
+- **KYC Collector:** scoped contact/account Read, case Read/Create, own staged
+  upload Read/Create/Cancel, and private fact/submission Read/Create (9 grants).
+  It does not grant evidence download or review approval.
+- **KYC Reviewer:** scoped contact/account Read, case Read, private submission
+  Read, evidence download Read and review Read/Approve/Cancel (8 grants).
+  It does not grant uploads or submission creation. Existing self-approval guards
+  still apply, including when users have additional profiles.
+
+Both profiles contain zero assignments. Existing profiles, user assignments,
+record scopes, office/company access, module flags, requirements and checkpoints
+were compared within the transaction and preserved. Two normal role-created audit
+events were verified, followed by independent readback of saved permissions and
+zero assignments. KYC remains inactive. Staff selection and applicable record
+scopes must be configured separately before use; requirements remain deferred.
+Private configuration receipts are ignored under `tmp/p13s-kyc-profiles`.
+
+## Local upload and independent-review acceptance (2026-11-16)
+
+The user deferred Ewissen requirements and staff assignments, then requested local
+upload/review testing. No real client requirements were inferred or published.
+
+- `node scripts/test-sales-orders.cjs --verification --browser`: 177 checks passed,
+  zero failures/skips, plus seven Chrome browser scenarios passed. The runner used
+  a new disposable loopback PostgreSQL container and removed only that container
+  afterwards. Native migration/preservation, forced-RLS, evidence integrity,
+  self-approval denial (including administrators), tenant/office/sharing boundaries,
+  immutable revisions, correction/approval/revocation, checkpoints, retention and
+  disposal checks passed. Browser storage in this suite is an isolated transport.
+- A separate new synthetic tenant on `*.localhost:3109` exercised the **real local
+  Docker Supabase Storage** service on `127.0.0.1:55446`, with no storage mock.
+  Its two profiles exactly matched the nine Collector and eight Reviewer grants
+  prepared for Ewissen. Public API upload/finalisation, denied Collector download
+  and approval, correction request, corrected submission, independent approval and
+  revocation passed. The authorised evidence download matched the uploaded SHA-256.
+  Desktop/mobile approved-review screenshots were inspected, as were the isolated
+  suite's upload, evidence-reader and revision-history captures.
+- The original demo tenant retained KYC disabled; its saved records were not used
+  as fixtures. The synthetic live-storage tenant remains for explicit inspection.
+  Its private login receipt and result/screenshots are ignored under
+  `tmp/p13s-kyc-profiles/local-live`. Do not print or commit its credentials.
+
+No hosted application/database/storage connection, email or gateway payment was
+made by these local checks. No application fix, push or deployment was needed.
+Suite evidence: `tmp/industry-release/ls-erp-sales-orders-24c042b9445e.log` and
+`test-results/local-access/verification-*.png`.
+
+## Simple individual checklist — Step 2 prepared locally (2026-11-16)
+
+The user subsequently approved a simple starting checklist. New, empty and
+unpublished requirements show **Use simple individual checklist** to an authorised
+publisher. It prepares two editable document categories: `tax_identification`
+(Tax identification proof) and `identity_address` (Identity/address evidence).
+Each applies separately to PERSON customers and additional customers. No private
+fact field, company-buyer requirement, automatic expiry or individual ID-document
+mandate is invented. Reviewers decide whether the uploaded tax/identity/address
+evidence is acceptable for the transaction; a file upload is not government KYC.
+
+Applying the starter only edits the current browser draft. Explicit preview and
+publication still use the existing version/hash/admin checks. The starter is
+hidden for readers, published policies, existing choices and unsaved edits, so it
+cannot overwrite an existing configuration. No migration or new server endpoint
+is needed, and empty global defaults remain unchanged.
+
+Six contract checks and five intercepted browser scenarios passed. A new local
+synthetic tenant used the real private Docker Storage bucket: the admin applied,
+previewed and published the starter through the UI; primary and additional
+applicants each uploaded two originals. Submitting only one category failed;
+complete submissions were independently approved, while Collector approval was
+denied. Company buyers did not inherit the individual requirements. Checkpoints
+remained Off, and the existing demo tenant stayed inactive for KYC. Desktop/mobile
+captures were inspected. TypeScript, targeted lint and an isolated production
+build passed.
+
+Ewissen's intended draft is saved privately under
+`tmp/p13s-simple-checklist/ewissen-requirements-draft.json`. It has **not** been
+published to production. Ewissen KYC is still inactive, staff assignments are
+deferred, and the activation UI deployment is blocked by Vercel. Do not bypass
+these activation/publication controls with a direct policy/flag SQL write.
+Native local evidence is under `tmp/p13s-kyc-profiles/local-simple`; intercepted
+UI captures are under `test-results/p13s-simple-checklist`.

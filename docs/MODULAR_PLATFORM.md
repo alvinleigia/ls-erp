@@ -1,3 +1,17 @@
+## P13S simple individual verification checklist — step 2 local (2026-11-16)
+
+The administrator can prepare an optional two-category individual checklist on a
+new, empty, unpublished requirements screen. Tax identification proof and
+Identity/address evidence apply separately to customers and co-applicants. It is
+an editable draft, with no global defaults, government-verification claim,
+company-buyer requirements, invented private fact/expiry or automatic publication.
+Existing choices, drafts and reader access are preserved. Six contract checks,
+five UI scenarios and real local Storage acceptance for both participant roles
+passed; TypeScript/lint, an isolated production build and inspected desktop/mobile
+captures support the result.
+Ewissen publication/activation remains pending, with no staff assignment or
+transaction-checkpoint change. See `P13S_VERIFICATION_ACTIVATION.md`.
+
 ## P13S verification activation controls — step 1 (2026-11-16)
 
 Customer Verification is now included in the shared CRM and sales module-settings

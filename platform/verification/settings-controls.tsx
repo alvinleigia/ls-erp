@@ -7,7 +7,9 @@ import { Section } from "@/components/erp/section"
 import { pageClass } from "@/components/erp/page"
 import { AccessPageHeader } from "@/platform/access/record-page"
 import { ReloadDraft } from "@/components/erp/reload-draft"
+import { InfoHelp } from "@/components/erp/info-help"
 import { verificationPolicySchema, verificationRoles, type VerificationConfiguration, type VerificationPolicy } from "./contracts"
+import { simpleIndividualVerificationPolicy } from "./starter-checklist"
 
 type Settings = VerificationConfiguration & { canPublish: boolean }
 type Preview = { previewHash: string; facts: number; documents: number }
@@ -60,6 +62,7 @@ export function VerificationSettingsControls() {
     {saved && draft && <>
       <Section title={`Requirements · ${saved.version ? `published version ${saved.version}` : "not published"}`} help="Each selected fact or document type will be required for the chosen subject and participant roles. These settings define internal human review; they do not claim government identity validation. Transaction checkpoints are configured separately. Recording payments already received is never gated here.">
         <div className="flex flex-wrap items-center justify-between gap-3"><p className="text-sm text-muted-foreground">{dirty ? "Unpublished changes" : "Saved requirements"}</p><ReloadDraft disabled={busy} onReload={() => setReload(n => n + 1)} /></div>
+        {saved.canPublish && saved.version === 0 && !dirty && !draft.facts.length && !draft.documents.length && <div className="my-4 flex items-center gap-2"><Button type="button" variant="outline" disabled={busy} onClick={() => { change(simpleIndividualVerificationPolicy()); setError(""); setTab("documents") }}>Use simple individual checklist</Button><InfoHelp title="Simple individual checklist">Two editable evidence categories for each individual customer and additional applicant: tax identification proof and identity/address evidence. Your reviewer checks accepted document alternatives and current address. Business buyers need their own requirements. This only prepares a draft; preview and publish it separately. Module activation, staff access and transaction checkpoints are unchanged.</InfoHelp></div>}
         <div role="tablist" aria-label="Verification requirements" className="flex flex-wrap gap-2">{(["facts", "documents"] as const).map(key => <Button key={key} type="button" role="tab" aria-selected={tab === key} disabled={busy} variant={tab === key ? "secondary" : "ghost"} onClick={() => setTab(key)}>{key === "facts" ? "Required facts" : "Required documents"} ({draft[key].length})</Button>)}</div>
         <fieldset disabled={busy || !saved.canPublish} className="mt-4 space-y-4">
           <div className="max-w-sm space-y-2"><label htmlFor="verification-validity" className="text-sm font-medium">Approval validity (days; blank means no automatic expiry)</label><Input id="verification-validity" type="number" min={1} max={3650} value={draft.validityDays ?? ""} onChange={e => change({ ...draft, validityDays: e.target.value === "" ? null : Number(e.target.value) })} /></div>

@@ -43,6 +43,7 @@ import { AppointmentOrderEditor } from '@/app/(protected)/appointments/appointme
 import { AccessRoles } from '@/platform/access/role-controls';
 import { BusinessViewGuard } from '@/platform/access/view-guard';
 import { ModuleControls, ModuleActivationHelp } from '@/platform/module-controls';
+import { VerificationSettingsControls } from '@/platform/verification/settings-controls';
 import TenantsPageClient from '@/app/(protected)/settings/tenants/tenants-page-client';
 import {ProjectEditor} from '@/modules/real-estate/components/project-editor';
 import { SessionProvider } from 'next-auth/react';
@@ -93,6 +94,7 @@ function Preview(){
  if(path[1]==='appointments')return <BusinessModuleProvider><BusinessViewGuard module='appointments'><div className='min-w-0 [contain:inline-size]'>{path[2]==='coupons'?<Coupons/>:path[2]==='new'?<AppointmentOrderEditor mode='create'/>:path[2]?<AppointmentOrderEditor key={path[2]} mode='edit' appointmentId={path[2]}/>:<Appointments/>}</div></BusinessViewGuard></BusinessModuleProvider>;
  if(path[1]==='inventory'){ const InventoryView=path[2]==='categories'?InventoryCategories:path[2]==='suppliers'?InventorySuppliers:path[2]==='purchases'?InventoryPurchases:InventoryProducts; return <BusinessModuleProvider><BusinessViewGuard module='inventory'><InventoryView/></BusinessViewGuard></BusinessModuleProvider>; }
  if(path[1]==='sales-orders'&&path[2])return <BusinessModuleProvider><BusinessViewGuard module='salesOrders'><SessionProvider session={{user:{id:'admin',name:'Test Admin',role:'ADMIN'},expires:'2099-01-01'}}><SalesOrderDetail id={path[2]}/></SessionProvider></BusinessViewGuard></BusinessModuleProvider>;
+ if(key==='verification')return <VerificationSettingsControls/>;
  if(key==='roles')return <AccessRoles/>;
  if(key==='modules')return <><div className='flex items-center gap-2'><h1>Business modules</h1><ModuleActivationHelp platform={Boolean(query.get('tenant'))}/></div><ModuleControls tenantId={query.get('tenant') || undefined}/></>;
  if(key==='tenants')return <TenantsPageClient rootDomain='example.test' platformAccessMode='SUPER_ADMIN'/>;
