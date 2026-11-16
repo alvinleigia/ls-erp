@@ -5,6 +5,17 @@ const {moduleEnabled,businessModules}=require('../platform/modules.ts'),{externa
 const {allPermissions}=require('../platform/access/catalog.ts'),{recordScope}=require('../platform/access/rules.ts'),{composeProfilePermissions}=require('../platform/access/profiles.ts')
 const fact={code:'legal_name',label:'Legal name',type:'TEXT',subjects:['PERSON'],roles:['CUSTOMER','ADDITIONAL_CUSTOMER']}
 const {simpleIndividualVerificationPolicy}=require('../platform/verification/starter-checklist.ts')
+const {verificationQueueSchema,verificationHistorySchema,verificationRevisionSchema}=require('../platform/verification/review-contracts.ts')
+
+test('review/history queries use bounded strict contracts and cannot override customer or tenant scope',()=>{
+ assert.deepEqual(verificationQueueSchema.parse({}),{page:1,pageSize:10,search:''})
+ assert.equal(verificationQueueSchema.parse({page:'2',pageSize:'5',search:' buyer '}).search,'buyer')
+ for(const input of [{page:0},{pageSize:100},{page:'invalid'},{role:'ADMIN'},{kind:'PROJECT'},{search:'x'.repeat(101)},{tenantId:'foreign'}])assert.equal(verificationQueueSchema.safeParse(input).success,false)
+ assert.equal(verificationHistorySchema.parse({kind:'PERSON',id:'customer_1',page:'2'}).page,2)
+ assert.equal(verificationHistorySchema.safeParse({kind:'PERSON',id:'customer_1',pageSize:1000}).success,false)
+ assert.equal(verificationRevisionSchema.safeParse({kind:'PERSON',id:'customer_1',submissionId:'revision_1'}).success,true)
+ assert.equal(verificationRevisionSchema.safeParse({kind:'PERSON',id:'customer_1',submissionId:'revision_1',canReview:true}).success,false)
+})
 
 test('simple checklist is an independent opt-in draft with two categories for each individual applicant only',()=>{
  const policy=verificationPolicySchema.parse(simpleIndividualVerificationPolicy())

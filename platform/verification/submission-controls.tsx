@@ -1,5 +1,6 @@
 "use client"
 import * as React from "react"
+import { VerificationHistory } from "./history-controls"
 import { Button } from "@/components/ui/button"
 import { Select } from "@/components/erp/controls"
 import { COUNTRY_OPTIONS } from "@/lib/constants/countries"
@@ -67,7 +68,7 @@ export function VerificationSubmissions({ kind, id, changed, onChanged }: Verifi
         {!!view.submission && <label className="block text-sm font-medium">Reason for new revision<textarea maxLength={1000} value={reason} disabled={busy} onChange={e => setReason(e.target.value)} className="mt-1 block w-full rounded-md border bg-background p-2 font-normal" /></label>}
         <Button type="button" disabled={busy || !!view.submission && !reason.trim()} onClick={() => void act(() => post("/api/verification/submissions", { caseId: view.case!.id, version: view.submission?.number ?? 0, policyVersion: view.policy.version, role, facts: requirements.facts.map(f => ({ code: f.code, value: values[f.code] ?? "" })), evidenceIds: files.filter(id => view.evidence.some(e => e.id === id && requirements.documents.some(d => d.code === e.documentCode))), ...(reason.trim() ? { reason: reason.trim() } : {}) }), "Revision submitted for independent review.")}>Submit for review</Button>
       </div></details>}
-      {!!view.history.length && <details className="rounded-lg border p-4"><summary className="cursor-pointer font-medium">Recent revision history</summary><div className="mt-3 space-y-3">{view.history.map(s => <div key={s.id} className="space-y-1 border-t pt-2 text-sm"><p className="font-medium">Revision {s.number} · policy {s.policyVersion} · {s.reviews[0] ? readable(s.reviews[0].decision) : "Under review"}</p>{s.reason && <p className="break-words">Revision reason: {s.reason}</p>}{s.reviews.map(r => <p key={r.number} className="break-words">{readable(r.decision)}{r.reason ? `: ${r.reason}` : ""}{r.validUntil ? ` · Valid until ${r.validUntil.slice(0, 10)}` : ""}</p>)}</div>)}<p className="text-xs text-muted-foreground">Latest 10 revisions. Earlier revisions remain retained.</p></div></details>}
+      {!!view.history.length && <VerificationHistory kind={kind} id={id} changed={changed} />}
     </>}
   </div>
 }

@@ -46,7 +46,7 @@ export function businessNavigation(flags: ModuleFlag[], permissions?: Permission
       entry("Sales reports", "/crm/sales", BarChart3Icon),
       entry("Configuration", "/crm/configuration", SettingsIcon, current => current === "/crm/configuration" || configMatches(crmConfigurationGroups[0], current)),
     ] },
-    { key: "contacts", title: term("crm.contact.plural", "Contacts"), icon: UsersIcon, items: [entry(term("crm.contact.plural", "People"), "/crm/contacts", UsersIcon), entry(term("crm.account.plural", "Business accounts"), "/crm/accounts", Building2Icon)] },
+    { key: "contacts", title: term("crm.contact.plural", "Contacts"), icon: UsersIcon, items: [entry(term("crm.contact.plural", "People"), "/crm/contacts", UsersIcon), entry(term("crm.account.plural", "Business accounts"), "/crm/accounts", Building2Icon), ...(moduleEnabled(flags,"customerVerification") ? [entry("Verification review", "/crm/verification", FileTextIcon)] : [])] },
     { key: "activities", title: term("crm.activity.plural", "Activities"), icon: CalendarClockIcon, items: [
       entry("Overview", "/crm/overview", BarChart3Icon), entry("My Work", "/crm/activities", CalendarClockIcon, current => matches("/crm/activities", current) || matches("/crm/tasks", current)),
       entry("Calendar", "/crm/calendar", CalendarClockIcon),

@@ -10,6 +10,7 @@ import { createVerificationSubmissionService } from "@/platform/verification/sub
 import { createVerificationSourceService } from "@/platform/verification/source-service"
 import { opportunityScope } from "@/modules/crm/policy"
 import { salesOrderRecordScope } from "@/platform/access/record-scope"
+import { readVerificationReviewQueue } from "./review-queue"
 
 import { createVerificationRetentionService } from "@/platform/verification/retention-service"
 import { createVerificationDisposalService } from "@/platform/verification/disposal-service"
@@ -30,7 +31,7 @@ export function applicationVerificationEvidence(db: PrismaClient, identity: Veri
   return createVerificationEvidenceService(db, identity, verificationOwner, storage)
 }
 export function applicationVerificationSubmissions(db: PrismaClient, identity: VerificationIdentity) {
-  return createVerificationSubmissionService(db, identity, verificationOwner)
+  return createVerificationSubmissionService(db, identity, verificationOwner, readVerificationReviewQueue)
 }
 export function applicationVerificationSummary(db: PrismaClient, identity: VerificationIdentity) {
   return createVerificationSourceService(db, identity, (tx, actor, source) => source.kind === "ORDER"

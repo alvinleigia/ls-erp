@@ -1,3 +1,23 @@
+## P13S verification queue and full history — local acceptance (2026-11-17)
+
+Contacts now provides a permission-gated verification review queue with literal
+customer search, type/role filters and bounded pagination. It lists the latest
+undecided submission per customer and participant role, applying native customer
+visibility before counts and resolving each page through canonical directory Read
+scopes. The exact revision opens through the existing independent review service
+with global case-version and per-role freshness checks.
+
+Facts and review now lazy-loads paginated revision history beyond the latest ten.
+Older facts, original policy labels, selected evidence and decisions are available
+for read-only inspection with fresh source/evidence authorization. The shared
+history panel preserves open collection drafts. No migration is required.
+
+All 181 regression checks, twelve focused access/query checks (with overlap), an
+isolated production build and all eight browser flows passed. Queue desktop/mobile
+and historical-revision screenshots were inspected. This is a local development
+checkpoint awaiting hosted release acceptance. Client setup remains deferred.
+See `P13S_VERIFICATION_QUEUE_HISTORY.md` for behavior and evidence.
+
 ## P13S activation/checklist UI production release verified (2026-11-16)
 
 Vercel access was restored on Pro. Application commit `c107e74` is pushed to both

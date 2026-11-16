@@ -71,14 +71,15 @@ or modify correspondence, partners, bookings, snapshots, documents or payments.
 The existing encrypted database/storage recovery captures these rows and their
 retained evidence; no extra per-submission file archive is created.
 
-## Remaining scope
+## Follow-up scope
 
 This is internal verification, not automated government validation, AML screening,
 malware scanning or a legal/compliance determination. No new KYC booking, allocation,
-document or payment block is enabled. Next: reusable participant status projections,
-warning/required checkpoints and frozen acceptance proofs; then retention/holds,
-operational history/queue controls and release/recovery acceptance. Ewissen
-activation and any required-transaction rules need their own rollout decision.
+document or payment block is enabled by this original increment. Participant
+checkpoints/proofs, retention/holds and disposal were completed in later P13S
+increments (see their dedicated guides). Operational queue/history development
+is covered in `P13S_VERIFICATION_QUEUE_HISTORY.md`. Ewissen activation and any
+required-transaction rules remain separate client configuration decisions.
 
 ## Verification
 

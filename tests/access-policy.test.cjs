@@ -5,6 +5,18 @@ const {permits}=require('../platform/access/policy.ts')
 const {moduleKeys}=require('../platform/modules.ts')
 const flags=moduleKeys.map(key=>({key,enabled:true,allowed:true}))
 
+test('verification queue requires private review grants and module activation, including its detail route',()=>{
+ const {applicationRouteAccess:access}=require('../application/access-routes.ts')
+ const permissions=['customerVerification.read','verificationSubmissions.read','verificationReviews.read','verificationEvidence.read']
+ assert.deepEqual(access.routeRequirement('/crm/verification'),permissions)
+ assert.deepEqual(access.routeRequirement('/crm/verification/revision_1'),permissions)
+ const visible=(f,p)=>businessNavigation(f,p).flatMap(g=>g.items).some(i=>i.href==='/crm/verification')
+ assert.equal(visible(flags,permissions),true)
+ for(const permission of permissions)assert.equal(visible(flags,permissions.filter(p=>p!==permission)),false)
+ assert.equal(visible(flags.map(f=>f.key==='customerVerification'?{...f,enabled:false}:f),permissions),false)
+ assert.equal(visible(flags.map(f=>f.key==='customerVerification'?{...f,allowed:false}:f),permissions),false)
+})
+
 test('shared teams have core routes, explicit resource policies and protected security history',()=>{
  const {applicationRouteAccess: access}=require('../application/access-routes.ts')
  const {resourceKeys,accessResources}=require('../platform/access/catalog.ts')

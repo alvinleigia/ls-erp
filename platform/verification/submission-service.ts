@@ -11,8 +11,15 @@ import { applicableRequirements, verificationPolicySchema, verificationSubjectSc
 import { privateFactsValid, verificationSubmissionSchema, verificationReviewSchema } from "./submission-contracts"
 import { disposalAvailableEvidence } from "./disposal-contracts"
 import { verificationStatus } from "./submission-status"
+import { verificationHistorySchema, verificationRevisionSchema, verificationQueueSchema, type VerificationQueueQuery } from "./review-contracts"
 
-export function createVerificationSubmissionService(db: PrismaClient, identity: VerificationIdentity, owner: VerificationOwnerReader) {
+type QueueReader = (tx: Prisma.TransactionClient, actor: BusinessActor, query: VerificationQueueQuery) => Promise<{
+  page: number; pageSize: number; total: number; rows: { id: string; number: number; policyVersion: number; role: string; submittedAt: Date; subject: VerificationSubject; name: string }[]
+}>
+const historySelect = { id: true, number: true, policyVersion: true, role: true, submittedAt: true, reason: true,
+  reviews: { orderBy: { number: "desc" }, take: 2, select: { id: true, number: true, decision: true, reason: true, reviewedAt: true, validUntil: true } } } satisfies Prisma.VerificationSubmissionSelect
+
+export function createVerificationSubmissionService(db: PrismaClient, identity: VerificationIdentity, owner: VerificationOwnerReader, queueReader?: QueueReader) {
   async function run<T>(write: boolean, permission: Requirement, work: (tx: Prisma.TransactionClient, actor: BusinessActor) => Promise<T>) {
     return db.$transaction(async tx => {
       if (write) { await tx.$queryRaw`SELECT id FROM "Tenant" WHERE id=${identity.tenantId} FOR UPDATE`; await lockTenantOperations(tx, identity.tenantId) }
@@ -45,6 +52,49 @@ export function createVerificationSubmissionService(db: PrismaClient, identity: 
   const latest = (tx: Prisma.TransactionClient, actor: BusinessActor, caseId: string) => tx.verificationSubmission.findFirst({ where: { tenantId: actor.tenantId, caseId }, orderBy: { number: "desc" } })
   const audit = (tx: Prisma.TransactionClient, actor: BusinessActor, event: string, id: string, after: Prisma.InputJsonValue) => recordDomainAuditEvent(tx, { tenantId: actor.tenantId, actorUserId: actor.userId, actorRole: actor.role, requestId: actor.requestId, event: `customerVerification.${event}`, entityType: "VerificationSubmission", entityId: id, after })
   return {
+    queue(input: unknown) {
+      const query = verificationQueueSchema.parse(input)
+      return run(false, ["verificationReviews.read", "verificationEvidence.read"], async (tx, actor) => {
+        if (!queueReader) throw new BusinessError(503, "Review queue is unavailable.")
+        const result = await queueReader(tx, actor, query)
+        const [current] = await tx.$queryRaw<{ version: number | null }[]>`SELECT app.verification_latest_version(${actor.tenantId}) AS version`
+        return { ...result, policyVersion: current?.version ?? 0 }
+      })
+    },
+    history(input: unknown) {
+      const data = verificationHistorySchema.parse(input), subject = { kind: data.kind, id: data.id }
+      return run(false, "verificationSubmissions.read", async (tx, actor) => {
+        await subjectRow(tx, actor, subject)
+        const row = await tx.customerVerificationCase.findFirst({ where: { tenantId: actor.tenantId, ...(subject.kind === "PERSON" ? { contactId: subject.id } : { accountId: subject.id }) }, select: { id: true } })
+        const where = { tenantId: actor.tenantId, caseId: row?.id ?? "" }
+        const total = row ? await tx.verificationSubmission.count({ where }) : 0
+        const page = Math.min(data.page, Math.max(1, Math.ceil(total / data.pageSize)))
+        const rows = row ? await tx.verificationSubmission.findMany({ where, orderBy: { number: "desc" }, take: data.pageSize, skip: (page - 1) * data.pageSize, select: historySelect }) : []
+        return { rows, total, page, pageSize: data.pageSize }
+      })
+    },
+    revision(input: unknown) {
+      const data = verificationRevisionSchema.parse(input), subject = { kind: data.kind, id: data.id }
+      return run(false, "verificationSubmissions.read", async (tx, actor) => {
+        const source = await subjectRow(tx, actor, subject)
+        const row = await tx.customerVerificationCase.findFirst({ where: { tenantId: actor.tenantId, ...(subject.kind === "PERSON" ? { contactId: subject.id } : { accountId: subject.id }) }, select: { id: true } })
+        const submission = row ? await tx.verificationSubmission.findFirst({ where: { tenantId: actor.tenantId, caseId: row.id, id: data.submissionId }, select: { ...historySelect, facts: true, submittedByUserId: true } }) : null
+        if (!submission || !row) throw new BusinessError(404, "Submission not found.")
+        const current = await latest(tx, actor, row.id)
+        const latestRole = await tx.verificationSubmission.findFirst({ where: { tenantId: actor.tenantId, caseId: row.id, role: submission.role }, orderBy: { number: "desc" }, select: { id: true } })
+        const revisionPolicy = await policy(tx, actor, submission.policyVersion), currentPolicy = await policy(tx, actor)
+        const canReadEvidence = permits(actor, "verificationEvidence.read")
+        const selected = await tx.verificationSubmissionEvidence.findMany({ where: { tenantId: actor.tenantId, submissionId: submission.id }, select: { evidenceId: true } })
+        const evidence = await tx.verificationEvidence.findMany({ where: { tenantId: actor.tenantId, caseId: row.id, id: { in: selected.map(s => s.evidenceId) }, state: "READY", ...disposalAvailableEvidence, ...(!canReadEvidence ? { uploadedByUserId: actor.userId } : {}) }, select: { id: true, filename: true, documentCode: true, uploadedByUserId: true, finalizedByUserId: true } })
+        const selfReview = submission.submittedByUserId === actor.userId || evidence.some(e => [e.uploadedByUserId, e.finalizedByUserId].includes(actor.userId))
+        const { submittedByUserId: _submitter, ...saved } = submission
+        void _submitter
+        return { submission: saved, revisionPolicy, policyVersion: currentPolicy.version, caseVersion: current!.number, currentForRole: latestRole?.id === submission.id,
+          evidence: selected.map(s => { const file = evidence.find(e => e.id === s.evidenceId); return { id: s.evidenceId, filename: file?.filename ?? null, documentCode: file?.documentCode ?? null, downloadable: canReadEvidence && !!file } }),
+          selfReview, canReview: !source.archived && canReadEvidence && satisfies(actor, ["verificationReviews.read", "verificationReviews.approve"]),
+          canRevoke: canReadEvidence && satisfies(actor, ["verificationReviews.read", "verificationReviews.cancel"]) }
+      })
+    },
     view(input: unknown) {
       const subject = verificationSubjectSchema.parse(input)
       return run(false, "verificationSubmissions.read", async (tx, actor) => {

@@ -1,5 +1,19 @@
 # Base Conventions
 
+## Verification review queue and history (P13S)
+
+- Apply native tenant/customer visibility before queue counts or pagination, and
+  resolve the bounded page through canonical directory Read scopes. Keep source
+  SQL in the application adapter; do not enumerate all IDs or filter hidden rows
+  after paging. Queue responses contain no private facts/reasons/file metadata.
+- Queue the latest undecided submission per customer and participant role. Review
+  that exact revision using existing native review writes and global case-version
+  tokens; do not silently switch to another role's most recent submission.
+- Page revision history lazily and keep historical inspection read-only. Frozen
+  requirement labels and selected originals belong to the saved revision. Recheck
+  current source/evidence authority and disposal availability; never copy files or
+  revive older approvals. See `P13S_VERIFICATION_QUEUE_HISTORY.md`.
+
 ## Controlled verification disposal (P13S)
 
 - Limit disposal to actual internal tenant administrators and expired, unreferenced
