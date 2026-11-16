@@ -1,3 +1,18 @@
+## P13S activation/checklist UI production release verified (2026-11-16)
+
+Vercel access was restored on Pro. Application commit `c107e74` is pushed to both
+main and staging. Staging is READY at `dpl_5YsSHbqJTQnVDi1AB8gqZfG5Dsoh`;
+production is READY at `dpl_9XnpZcX8pUHGkevgz3khsVcZxBCz`, with all three
+production aliases verified. Both builds verified 157 migrations with zero new
+ones applied. The isolated hosted staging activation/preview/revocation check
+passed without publishing requirements. Desktop/mobile captures were inspected.
+
+An authenticated read-only production smoke verified unchanged module flags and
+all four access profiles, both KYC profiles unassigned, KYC still inactive and
+policy access still gated until activation. No production business writes were
+attempted. Client staff assignment, activation and requirement publication remain
+separate configuration steps. See `P13S_VERIFICATION_ACTIVATION.md`.
+
 ## P13S simple individual verification checklist — step 2 local (2026-11-16)
 
 The administrator can prepare an optional two-category individual checklist on a

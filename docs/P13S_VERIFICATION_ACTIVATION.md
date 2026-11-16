@@ -149,3 +149,40 @@ deferred, and the activation UI deployment is blocked by Vercel. Do not bypass
 these activation/publication controls with a direct policy/flag SQL write.
 Native local evidence is under `tmp/p13s-kyc-profiles/local-simple`; intercepted
 UI captures are under `test-results/p13s-simple-checklist`.
+
+## Production release verified (2026-11-16)
+
+At the user's instruction to push to production while deferring client staff
+assignment, fresh checks found Vercel access restored and the team on Pro.
+The application commit is `c107e74a38cdbd023c0940143cae05669d34685d`, pushed to
+both main and staging. This UI-only release adds no migrations or permission
+backfill. Both hosted builds reported 157 applied migrations and zero newly
+applied migrations.
+
+- Staging: READY deployment `dpl_5YsSHbqJTQnVDi1AB8gqZfG5Dsoh`. The guarded test
+  in `tests/staging-access/verification-activation.spec.ts` passed (41.2 seconds)
+  using only a new labelled synthetic tenant. Platform allowance, tenant
+  enable/disable/cancel, requirements navigation, the two-category draft/preview,
+  discard without publication and platform revocation all passed. Requirements
+  remained unpublished, checkpoints Off, and unrelated module flags unchanged.
+  The QA tenant ended with KYC inactive. Screenshots were inspected.
+- Production: READY deployment `dpl_9XnpZcX8pUHGkevgz3khsVcZxBCz`. Aliases
+  `erp.ewissen.in`, `leiwissen.leigia.com` and `ls-erp-phi.vercel.app` all resolve
+  to that exact deployment/source. An existing saved Ewissen administrator
+  session passed an authenticated read-only smoke. The module card was present
+  and inactive; desktop/mobile screenshots and the profiles screen were inspected.
+  All module allowance/enabled flags and all four profile list entries matched
+  the pre-release API snapshot, including zero KYC profile assignments. Display
+  descriptions were intentionally updated by this release and are not settings.
+  KYC requirements still returned 403 while the module is inactive. No business
+  mutation was attempted; the browser blocked non-read methods defensively.
+
+Ewissen's module is still inactive, its policy is not published and staff
+assignments are left for the client. No transaction checkpoint was enabled or
+changed, and no production customer/upload/review/payment record was created.
+Deployment and read-only receipts are ignored under `tmp/p13s-simple-release`;
+QA credentials remain private under `tmp/p13s-staging`. Screenshots are under
+`test-results/p13s-simple-release-staging` and
+`test-results/p13s-simple-release-production`. The follow-up hosted test
+assertions and release notes form a local evidence checkpoint, without another
+application build.
