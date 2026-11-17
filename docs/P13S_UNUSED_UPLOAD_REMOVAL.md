@@ -48,3 +48,10 @@ resets a hosted database. Release results are recorded in MODULAR_PLATFORM.md.
 
 Production removal of the customer's earlier images is a separate operation.
 This implementation does not automatically delete any existing upload.
+
+Validation on 2026-11-17: the final local run passed 73 native checks and all five
+browser flows. Build, TypeScript, targeted ESLint and whitespace checks passed;
+confirmation captures were inspected at desktop and mobile widths. Staging source
+`dc68fdd` passed both hosted acceptance tests with migration 159 and real private
+storage. Existing crop, exact duplicate, submission, independent review and
+correction flows passed alongside unused-file removal. Production is unchanged.

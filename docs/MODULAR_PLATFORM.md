@@ -1,4 +1,4 @@
-## P13S unused upload removal — local verified (2026-11-17)
+## P13S unused upload removal — staging verified (2026-11-17)
 
 Internal tenant administrators can remove unused verification uploads, including
 the last original, without changing retention. Any saved submission selection,
@@ -13,8 +13,21 @@ duplicate, retention, queue/history and independent-review regressions. Desktop
 and mobile confirmation captures were inspected. Earlier failures were corrected
 test fixtures/assertions, not relaxed application protections. Evidence is under
 `tmp/p13s-unused/` and `tmp/industry-release/ls-erp-sales-orders-27c98fccb3b7.log`.
-Staging acceptance is next. Production remains on migration 158; no real customer
-uploads have been removed by this change.
+Source `dc68fdd80c3eea6d2957cf405031a7002b106500` is READY on staging deployment
+`dpl_B2AHFCbusbmAjr1T19yiamvcmNjR`, with all 159 migrations applied. Both hosted
+acceptance tests passed: unused-file confirmation/cancellation, last-file removal,
+replacement and independent approval, plus six crop/duplicate/review regression
+steps. Desktop/mobile hosted captures were inspected. Tests used two synthetic
+staging tenants and real separate private storage; no hosted seed/reset was run.
+The Playwright report and `.last-run.json` confirm zero failures; PowerShell's
+wrapper exit 1 came from a harmless native stderr colour warning.
+
+Evidence: `tmp/p13s-unused/staging.log`, `tmp/r9-staging/test-results.json`, private
+progress receipts under `tmp/p13s-staging/`, and `test-results/staging-access/`.
+Production deployment `dpl_9VhiJHzwchNid3PrTjhcdLYyrz7R` remains unchanged and
+production still has 158 migrations. No Git push, production deployment, live
+permission change or customer upload deletion occurred. Production release and
+removal of the earlier customer images remain separate follow-up work.
 
 ## P13S image preparation and duplicate removal — production released (2026-11-17)
 
