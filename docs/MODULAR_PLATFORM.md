@@ -1,3 +1,19 @@
+## P13S image preparation and duplicate removal — production released (2026-11-17)
+
+GitHub main/staging and both hosted environments now use source `33bdbe1`.
+Production `dpl_9VhiJHzwchNid3PrTjhcdLYyrz7R` and staging
+`dpl_94ExzhbhNRY5e5mzhMVbH6iC2i2p` are READY. Both databases have all 158
+migrations applied. The final encrypted backup `de779e44638d` restored and passed
+forced rollback, upgrade and nine-actor access checks. Live preservation checks
+kept existing records and security unchanged; runtime access is reopened.
+
+Ewissen authenticated read-only smoke passed five views and the queue API. The
+unsaved crop dialog passed desktop/mobile inspection without uploading. Profiles,
+modules and verification settings are unchanged. No test business data or automatic
+file deletion occurred. See `P13S_IMAGE_PRODUCTION_RELEASE.md` for maintenance,
+recovery, initial check restriction and final evidence. This supersedes earlier
+pending-production status below.
+
 ## P13S image preparation and duplicate removal — staging verified (2026-11-17)
 
 Source `4a94758b8edb6016b5185d4eecadd479cfd3d3d9` was committed locally and
