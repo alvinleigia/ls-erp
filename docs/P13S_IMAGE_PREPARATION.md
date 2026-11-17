@@ -35,6 +35,27 @@ permissions and upload/storage action. Only JPEG/PNG receive crop controls. The
 component accepts browser File objects, not remote private-file URLs. KYC is the
 first integration; branding, avatars and catalog upload screens are not changed.
 
+Empty and over-limit selections are rejected immediately beside the file picker,
+with the selected size and the allowed maximum. The invalid File is not passed to
+the consumer, so Crop and Upload cannot act on it or an earlier valid selection.
+Choosing a valid replacement clears the error. The evidence limit remains 5 MB
+for both source selection and final upload; larger originals are not decoded just
+to reduce them through cropping.
+
+Valid local images show a thumbnail before upload; Apply crop replaces it with
+only the selected crop. Header/pixel bounds are checked before decoding, preview
+URLs are tied to their current File and revoked when replaced/unmounted. Nothing
+is persisted in browser storage and no remote evidence download is added.
+
+`components/uploads/upload-file.ts` provides a browser PUT transfer using actual
+upload progress events. Consumers own signed reservations, headers, finalization
+and success handling. KYC displays transfer percentage, then its existing separate
+server-validation state. Failed transfers clear the bar, preserve the local File
+and existing pending-upload recovery; they never report accepted evidence. The
+confirmed File is sent directly, preserving exact bytes without an extra explicit
+array-buffer copy. No upload endpoint, storage copy or server image processing is
+added.
+
 The crop dialog is dynamically loaded, using the ISC-licensed open-source
 [`react-image-crop`](https://github.com/dominictobias/react-image-crop) 11.1.2 from the pinned dependency lock. No CDN, external image
 service, server image optimizer or new upload endpoint is used. Keyboard and touch

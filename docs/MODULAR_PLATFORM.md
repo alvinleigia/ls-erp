@@ -1,3 +1,24 @@
+## P13S upload selection, thumbnails and progress — local verified (2026-11-17)
+
+The shared file picker now immediately rejects empty or over-limit selections,
+reports their size and allowed maximum, and clears the consumer's selected File.
+Valid images show a bounded local thumbnail that updates to the crop. Blob URLs
+are revoked on replacement/unmount; older previews cannot appear for a newer File.
+KYC now uses real browser PUT progress events and displays server validation as a
+separate stage. Failure clears progress and retains existing pending-upload
+recovery. Upload limits, permissions, storage bytes and finalization are unchanged;
+there is no migration or extra stored original/thumbnail.
+
+Production build, TypeScript, lint and whitespace checks passed. The focused run
+passed 67 native checks and all 10 browser flows, including size boundaries, stale
+selection prevention, thumbnails, transfer/validation phases, failures/retry,
+PDF/JPEG/PNG handling, independent review and existing deletion regressions.
+Desktop/mobile error and progress captures were inspected. Evidence is under
+`tmp/p13s-file-validation/` and
+`tmp/industry-release/ls-erp-sales-orders-2dfc7750dc49.log`.
+Staging acceptance is next; production is unchanged. Shared behavior is documented
+in `P13S_IMAGE_PREPARATION.md`.
+
 ## P13S unused upload removal — production released (2026-11-17)
 
 GitHub main/staging and both hosted environments now use source `a18efb1`.

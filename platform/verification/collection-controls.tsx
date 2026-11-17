@@ -8,6 +8,7 @@ import { VerificationSubmissions } from "./submission-controls"
 import { VerificationRetentionControls } from "./retention-controls"
 import type { EvidenceMetadata } from "./evidence-contracts"
 import { ImageFileInput } from "@/components/uploads/image-file-input"
+import { uploadFileWithProgress } from "@/components/uploads/upload-file"
 
 type View = { canReadHolds: boolean; status: string; reviewStatusAvailable: boolean; canReadSubmissions: boolean; case: { id: string } | null; documents: { code: string; label: string }[]; canStart: boolean; canUpload: boolean; canCancel: boolean; canCleanup: boolean; canReadEvidence: boolean; evidence: EvidenceMetadata[]; pending: EvidenceMetadata[]; policyVersion: number; fileLimit: number }
 async function request(path: string, data?: unknown) {
@@ -21,7 +22,8 @@ export function VerificationCollection({ kind, id }: VerificationSubject) {
   const [retentionOpened, setRetentionOpened] = React.useState(false)
   const [tab, setTab] = React.useState("evidence"), [reviewOpened, setReviewOpened] = React.useState(false)
   const [documentCode, setDocumentCode] = React.useState(""), [file, setFile] = React.useState<File | null>(null), [inputKey, setInputKey] = React.useState(0), [progress, setProgress] = React.useState("")
-  React.useEffect(() => { setFile(null); setInputKey(n => n + 1); setProgress("") }, [kind, id])
+  const [uploadPercent, setUploadPercent] = React.useState<number | null>(null)
+  React.useEffect(() => { setFile(null); setInputKey(n => n + 1); setProgress(""); setUploadPercent(null) }, [kind, id])
   React.useEffect(() => {
     const controller = new AbortController()
     void fetch(`/api/verification/collection?${new URLSearchParams({ kind, id })}`, { cache: "no-store", signal: controller.signal }).then(async r => {
@@ -35,16 +37,16 @@ export function VerificationCollection({ kind, id }: VerificationSubject) {
     setBusy(true); setError(""); setProgress("")
     try { await work(); setReload(n => n + 1) }
     catch (e) { setProgress(""); setError(e instanceof Error ? e.message : "Unable to complete this action.") }
-    finally { setBusy(false) }
+    finally { setBusy(false); setUploadPercent(null) }
   }
   async function uploadFile() {
     if (!view?.case || !file) return
     if (!file.size || file.size > view.fileLimit || !["application/pdf", "image/jpeg", "image/png"].includes(file.type)) throw Error("Choose a PDF, JPEG or PNG up to 5 MB.")
     const upload = await request("/api/verification/evidence/uploads", { caseId: view.case.id, documentCode, filename: file.name, bytes: file.size, contentType: file.type })
-    setProgress("Uploading original file…")
+    setProgress("Uploading file…")
     try {
-      const response = await fetch(upload.uploadUrl, { method: "PUT", headers: { "Content-Type": file.type, "x-upsert": "false", "cache-control": "max-age=0" }, body: await file.arrayBuffer() })
-      if (!response.ok) throw Error("The upload failed. Select the file again or cancel its pending upload.")
+      await uploadFileWithProgress(upload.uploadUrl, file, { "Content-Type": file.type, "x-upsert": "false", "cache-control": "max-age=0" }, setUploadPercent)
+      setUploadPercent(null)
       setProgress("Validating file…")
       await request(`/api/verification/evidence/${upload.id}/finalize`, {})
     } finally { setReload(n => n + 1) }
@@ -53,6 +55,7 @@ export function VerificationCollection({ kind, id }: VerificationSubject) {
   return <Section title="Customer verification" help="Private originals: PDF/JPEG/PNG, 5 MB each, up to 20 uncleaned files per case. Uploading does not verify identity or approve a booking. Only authorised evidence readers can download files; bearer download links expire after 60 seconds. Customer correspondence and issued PDFs remain separate.">
     {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
     {progress && <p role="status" className="text-sm">{progress}</p>}
+    {uploadPercent !== null && <div className="flex items-center gap-3"><div role="progressbar" aria-label="Evidence upload progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={uploadPercent} className="h-2 min-w-0 flex-1 overflow-hidden rounded-full bg-muted"><div className="h-full bg-primary transition-[width] motion-reduce:transition-none" style={{ width: `${uploadPercent}%` }} /></div><span aria-hidden="true" className="text-sm tabular-nums">{uploadPercent}%</span></div>}
     {!view && !error && <p>Loading verification…</p>}
     {view && <>
       <div className="flex flex-wrap items-center justify-between gap-3"><span className="text-sm font-medium">{view.case ? (view.reviewStatusAvailable ? view.status.toLowerCase().replaceAll("_", " ") : "Case started - private review status") : "Not started"}</span><Button type="button" variant="outline" disabled={busy} onClick={() => { setError(""); setReload(n => n + 1) }}>Refresh verification</Button></div>

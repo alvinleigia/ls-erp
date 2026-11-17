@@ -6,6 +6,12 @@
   Consumers own permissions, allowed types and size limits; KYC is the first use.
   Do not expose an editor for accepted private evidence or fetch signed originals
   into it. PDFs and Use original preserve their exact bytes.
+- Reject empty/over-limit selections immediately with actual size and limit; clear
+  the consumer's selected File so an earlier valid selection cannot be uploaded.
+  Local thumbnails must be bounded before decoding, tied to the current File and
+  revoked when replaced/unmounted. Never fetch accepted private evidence for them.
+- Show upload progress from browser transfer events; keep server validation as a
+  separate step. Transfer completion alone must not report accepted evidence.
 - Lazy-load the cropper. Bound input bytes/dimensions before decoding, keep the
   working preview small, and export from the original bitmap at natural resolution.
   Apply phone orientation; retain PNG alpha and enforce final output limits. Cancel

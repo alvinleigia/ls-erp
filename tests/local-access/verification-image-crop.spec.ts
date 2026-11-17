@@ -27,6 +27,48 @@ async function dragHandle(page: Page, dialog: Locator, direction: string, x: num
   expect(box).not.toBeNull(); await page.mouse.move(box!.x + box!.width / 2, box!.y + box!.height / 2); await page.mouse.down(); await page.mouse.move(x, y, { steps: 8 }); await page.mouse.up()
 }
 
+test("oversized and empty selections are rejected immediately and cannot upload a previously selected valid file", async ({ browser }) => {
+  test.setTimeout(120_000)
+  const { f, page, context } = await setup(browser)
+  try {
+    let reservations = 0
+    page.on("request", r => { if (r.method() === "POST" && r.url().endsWith("/api/verification/evidence/uploads")) reservations++ })
+    const input = page.getByLabel("Evidence file (up to 5 MB)"), button = page.getByRole("button", { name: "Upload evidence", exact: true }), valid = await pattern()
+    await input.setInputFiles({ name: "valid.png", mimeType: "image/png", buffer: valid })
+    await expect(button).toBeEnabled()
+    for (const [name, mimeType] of [["too-large.png", "image/png"], ["too-large.pdf", "application/pdf"]]) {
+      await input.setInputFiles({ name, mimeType, buffer: Buffer.alloc(12 * 1024 * 1024) })
+      await expect(page.getByRole("alert").filter({ hasText: "Selected file is 12 MB. Maximum allowed is 5 MB." })).toBeVisible()
+      await expect(input).toHaveAttribute("aria-invalid", "true")
+      await expect(button).toBeDisabled()
+      await expect(page.getByRole("button", { name: "Crop image", exact: true })).toHaveCount(0)
+      await expect(page.getByRole("dialog", { name: "Crop image", exact: true })).toHaveCount(0)
+      expect(reservations).toBe(0)
+    }
+    await page.screenshot({ path: "test-results/local-access/file-size-validation-desktop.png", animations: "disabled" })
+    await page.setViewportSize({ width: 390, height: 844 })
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+    await page.screenshot({ path: "test-results/local-access/file-size-validation-mobile.png", animations: "disabled" })
+    await input.setInputFiles({ name: "empty.png", mimeType: "image/png", buffer: Buffer.alloc(0) })
+    await expect(page.getByRole("alert").filter({ hasText: "The selected file is empty." })).toBeVisible()
+    await expect(button).toBeDisabled()
+    // The upper boundary is inclusive; no decode or upload happens on selection.
+    await input.setInputFiles({ name: "exact-limit.png", mimeType: "image/png", buffer: Buffer.alloc(5 * 1024 * 1024) })
+    await expect(input).not.toHaveAttribute("aria-invalid", "true")
+    await expect(button).toBeEnabled()
+    await input.setInputFiles({ name: "replacement.png", mimeType: "image/png", buffer: valid })
+    await expect(page.getByRole("alert").filter({ hasText: /Selected file is|selected file is empty/ })).toHaveCount(0)
+    await page.getByRole("button", { name: "Crop image", exact: true }).click()
+    const dialog = page.getByRole("dialog", { name: "Crop image", exact: true })
+    await expect(dialog.getByRole("img", { name: "Image to crop", exact: true })).toBeVisible()
+    await dialog.getByRole("button", { name: "Cancel", exact: true }).click()
+    await upload(page)
+    expect(reservations).toBe(1)
+    const rows = (await f.db.query('SELECT filename,sha256 FROM "VerificationEvidence" WHERE "tenantId"=$1', [f.slug])).rows
+    expect(rows).toEqual([{ filename: "replacement.png", sha256: createHash("sha256").update(valid).digest("hex") }])
+  } finally { await context.close(); await f.db.end() }
+})
+
 test("shared cropper rotates and crops at natural resolution, preserves PNG transparency and uploads only after confirmation", async ({ browser }) => {
   test.setTimeout(120_000)
   const { f, page, context } = await setup(browser)
@@ -34,6 +76,7 @@ test("shared cropper rotates and crops at natural resolution, preserves PNG tran
     let reservations = 0
     page.on("request", r => { if (r.method() === "POST" && r.url().endsWith("/api/verification/evidence/uploads")) reservations++ })
     await page.getByLabel("Evidence file (up to 5 MB)").setInputFiles({ name: "synthetic-id.png", mimeType: "image/png", buffer: await pattern() })
+    await expect(page.getByRole("img", { name: "Selected image preview", exact: true })).toBeVisible()
     await page.getByRole("button", { name: "Crop image", exact: true }).click()
     const dialog = page.getByRole("dialog", { name: "Crop image", exact: true }), canvas = dialog.getByRole("img", { name: "Image to crop", exact: true })
     await expect(canvas).toBeVisible()
@@ -51,8 +94,32 @@ test("shared cropper rotates and crops at natural resolution, preserves PNG tran
     expect(reservations).toBe(0)
     await dialog.getByRole("button", { name: "Apply crop", exact: true }).click()
     await expect(page.getByRole("img", { name: "Cropped image preview", exact: true })).toBeVisible()
+    await expect(page.getByRole("img", { name: "Selected image preview", exact: true })).toHaveCount(0)
+    const thumb = page.getByRole("img", { name: "Cropped image preview", exact: true })
+    await expect.poll(() => thumb.evaluate(n => Math.abs((n as HTMLImageElement).naturalWidth - 600) < 10 && Math.abs((n as HTMLImageElement).naturalHeight - 1200) < 10)).toBe(true)
     expect(reservations).toBe(0)
-    await upload(page); expect(reservations).toBe(1)
+    let releaseTransfer!: () => void, releaseValidation!: () => void
+    const transferGate = new Promise<void>(resolve => { releaseTransfer = resolve }), validationGate = new Promise<void>(resolve => { releaseValidation = resolve })
+    await page.route("https://verificationtest.supabase.co/**", async route => {
+      await transferGate
+      const u = new URL(route.request().url()), response = await route.fetch({ url: "http://127.0.0.1:3319" + u.pathname + u.search })
+      await route.fulfill({ response })
+    })
+    await page.route("**/api/verification/evidence/*/finalize", async route => { await validationGate; await route.continue() })
+    const finalized = page.waitForResponse(r => r.url().endsWith("/finalize") && r.request().method() === "POST")
+    await page.getByRole("button", { name: "Upload evidence", exact: true }).click()
+    const progress = page.getByRole("progressbar", { name: "Evidence upload progress", exact: true })
+    await expect(progress).toBeVisible()
+    await expect(page.getByRole("button", { name: "Upload evidence", exact: true })).toBeDisabled()
+    await progress.scrollIntoViewIfNeeded()
+    await page.screenshot({ path: "test-results/local-access/image-upload-progress-mobile.png", animations: "disabled" })
+    releaseTransfer()
+    await expect(page.getByRole("status").filter({ hasText: "Validating file" })).toBeVisible()
+    await expect(progress).toHaveCount(0)
+    releaseValidation()
+    expect((await finalized).status()).toBe(200)
+    await expect(page.getByRole("status").filter({ hasText: "Evidence uploaded" })).toBeVisible()
+    expect(reservations).toBe(1)
     const row = (await f.db.query('SELECT state,path,bytes,filename,"contentType",sha256 FROM "VerificationEvidence" WHERE "tenantId"=$1', [f.slug])).rows[0]
     expect(row).toMatchObject({ state: "READY", filename: "synthetic-id-cropped.png", contentType: "image/png" })
     const stored = await context.request.get("http://127.0.0.1:3319/storage/v1/object/tenant-verification/" + row.path), bytes = await stored.body(), meta = await sharp(bytes).metadata()
@@ -61,6 +128,32 @@ test("shared cropper rotates and crops at natural resolution, preserves PNG tran
     const raw = await sharp(bytes).ensureAlpha().raw().toBuffer(), red = Math.floor(meta.height! * 0.25) * meta.width! * 4 + Math.floor(meta.width! / 2) * 4, blue = Math.floor(meta.height! * 0.75) * meta.width! * 4 + Math.floor(meta.width! / 2) * 4
     expect(raw[red]).toBeGreaterThan(240); expect(raw[blue + 2]).toBeGreaterThan(240); expect(raw[blue + 3]).toBeGreaterThan(120); expect(raw[blue + 3]).toBeLessThan(135)
     await expect(page.getByRole("button", { name: "Crop image", exact: true })).toHaveCount(0)
+    await expect(thumb).toHaveCount(0)
+  } finally { await context.close(); await f.db.end() }
+})
+
+test("failed transfers clear progress, keep the local thumbnail and leave evidence unaccepted until a successful retry", async ({ browser }) => {
+  test.setTimeout(120_000)
+  const { f, page, context } = await setup(browser)
+  try {
+    let finalizations = 0
+    page.on("request", r => { if (r.method() === "POST" && r.url().endsWith("/finalize")) finalizations++ })
+    await page.getByLabel("Evidence file (up to 5 MB)").setInputFiles({ name: "retry-image.png", mimeType: "image/png", buffer: await pattern() })
+    await expect(page.getByRole("img", { name: "Selected image preview", exact: true })).toBeVisible()
+    await page.route("https://verificationtest.supabase.co/**", route => route.fulfill({ status: 503, headers: { "access-control-allow-origin": "*" }, body: "Synthetic upload failure" }))
+    await page.getByRole("button", { name: "Upload evidence", exact: true }).click()
+    await expect(page.getByRole("alert").filter({ hasText: "The upload failed." })).toBeVisible()
+    await expect(page.getByRole("progressbar", { name: "Evidence upload progress", exact: true })).toHaveCount(0)
+    await expect(page.getByRole("status").filter({ hasText: "Evidence uploaded" })).toHaveCount(0)
+    await expect(page.getByRole("img", { name: "Selected image preview", exact: true })).toBeVisible()
+    expect(finalizations).toBe(0)
+    expect((await f.db.query('SELECT state FROM "VerificationEvidence" WHERE "tenantId"=$1', [f.slug])).rows).toEqual([{ state: "PENDING" }])
+    await page.getByRole("button", { name: "Cancel upload", exact: true }).click()
+    await expect(page.getByRole("button", { name: "Cancel upload", exact: true })).toHaveCount(0)
+    await page.unroute("https://verificationtest.supabase.co/**")
+    await upload(page)
+    expect(finalizations).toBe(1)
+    expect((await f.db.query('SELECT state FROM "VerificationEvidence" WHERE "tenantId"=$1 ORDER BY "createdAt"', [f.slug])).rows).toEqual([{ state: "ABANDONED" }, { state: "READY" }])
   } finally { await context.close(); await f.db.end() }
 })
 
