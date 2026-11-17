@@ -96,14 +96,18 @@ fallback alias has a deployment mapping but its auth page returns 404 because
 tenant-host routing requires a registered business/root host; routing code is
 unchanged in this release.
 
-Authenticated production UI smoke is pending: saved tenant sessions are no longer
-authenticated. Dedicated Chrome was opened at the Ewissen sign-in page and the
-user was asked to sign in; deployment was completed independently. After login
-confirmation, run browser:save and the read-only helper
-`tmp/p13s-checklist-context/smoke-production.cjs after`. It blocks mutating browser
-requests and checks default/checklist/context views without uploading or submitting.
-The 17 local and both hosted staging flows remain the completed functional evidence;
-do not describe the private production UI as verified until that smoke passes.
+Authenticated production UI smoke completed after the user renewed the dedicated
+Chrome login and browser:save captured the session privately. The read-only helper
+`tmp/p13s-checklist-context/smoke-production.cjs after` passed dashboard, enquiries,
+opportunities, review queue and modules. Ewissen's ordinary Contact KYC shows no
+Participant role or redundant Verification checklist selector. A participant-context
+URL automatically opens Verification with Additional customer selected as text,
+and the role-filtered APIs return the correct role and shared case-version token.
+Desktop/mobile captures were inspected without horizontal overflow. All mutating
+browser requests were blocked; no document was uploaded or business record changed.
+This supplements the 17 local and both hosted staging flows. Configuration
+preservation was established by the pre/post database comparison above, not an
+invented authenticated pre-release session snapshot.
 
 Private release receipts are under `tmp/p13s-checklist-context/production/`.
 This release-record follow-up is local and does not trigger another deployment.

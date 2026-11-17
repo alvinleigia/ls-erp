@@ -7,11 +7,13 @@ Both databases retain 159 applied migrations with none pending. Ewissen's seven
 module/access/verification configuration table snapshots match before and after
 release; no production documents or business records were changed.
 
-Public tenant/platform sign-in checks passed. Authenticated production UI smoke
-awaits the user's renewed tenant login in dedicated Chrome; the expired saved
-session was not treated as successful validation. Completed functional evidence
-remains the 68 native checks, 17 local browser flows and both hosted staging tests.
-See `P13S_VERIFICATION_CHECKLIST_CONTEXT.md` for release receipts and follow-up.
+Public tenant/platform sign-in checks passed. After the user renewed the dedicated
+Chrome login, authenticated Ewissen read-only smoke passed five views, default
+Customer verification with no redundant checklist dropdown, automatic Verification
+tab/participant context and role-scoped API version checks. Desktop/mobile captures
+were inspected without horizontal overflow. No upload or business write was
+submitted. Functional evidence also includes the 68 native checks, 17 local browser
+flows and both hosted staging tests. See `P13S_VERIFICATION_CHECKLIST_CONTEXT.md`.
 
 ## P13S automatic verification checklist context — staging verified (2026-11-17)
 
