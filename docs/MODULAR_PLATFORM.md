@@ -1,3 +1,18 @@
+## P13S automatic verification checklist context — production released (2026-11-17)
+
+GitHub main/staging and both hosted environments now use `b8c9d29`. Production
+`dpl_HvDtcaKAwg2nQ9MbCNvRtQqseT7p` and staging
+`dpl_B5sLXREwvuDTLQMUFg6giwXRj5NF` are READY; domain mappings were verified.
+Both databases retain 159 applied migrations with none pending. Ewissen's seven
+module/access/verification configuration table snapshots match before and after
+release; no production documents or business records were changed.
+
+Public tenant/platform sign-in checks passed. Authenticated production UI smoke
+awaits the user's renewed tenant login in dedicated Chrome; the expired saved
+session was not treated as successful validation. Completed functional evidence
+remains the 68 native checks, 17 local browser flows and both hosted staging tests.
+See `P13S_VERIFICATION_CHECKLIST_CONTEXT.md` for release receipts and follow-up.
+
 ## P13S automatic verification checklist context — staging verified (2026-11-17)
 
 Ordinary contact/account verification defaults to Customer and hides equivalent

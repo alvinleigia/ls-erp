@@ -72,3 +72,38 @@ No hosted seed/reset was used. Production still points to
 This increment is committed locally and staged, without a Git push or production
 release. Hosted receipts are in `tmp/p13s-checklist-context/staging.log` and
 `test-results/staging-access/`.
+
+## Production release
+
+Released on 2026-11-17. The staging-only statement above records the earlier
+acceptance milestone. GitHub main/staging were fast-forwarded atomically to
+`b8c9d29d74ca54903757aa3cbcbc4183aa1b4b13`. Application/test code matches the
+tested staging source exactly; the subsequent commit recorded acceptance only.
+Production `dpl_HvDtcaKAwg2nQ9MbCNvRtQqseT7p` and staging
+`dpl_B5sLXREwvuDTLQMUFg6giwXRj5NF` are READY at that source. Their registered
+production and staging alias mappings were verified.
+
+Both databases retain 159 applied migrations with none pending. No maintenance,
+schema migration, storage change or permission update was needed. A read-only
+pre/post comparison of seven Ewissen configuration tables matched exactly: modules,
+access profiles, role assignments, record scopes and verification policy/checkpoint/
+retention versions. No production customer documents or business records were
+changed. The previous production deployment remains a code rollback target.
+
+Public sign-in availability passed for erp.ewissen.in and leiwissen.leigia.com;
+the anonymous auth-session endpoint exposes no authenticated user. The Vercel
+fallback alias has a deployment mapping but its auth page returns 404 because
+tenant-host routing requires a registered business/root host; routing code is
+unchanged in this release.
+
+Authenticated production UI smoke is pending: saved tenant sessions are no longer
+authenticated. Dedicated Chrome was opened at the Ewissen sign-in page and the
+user was asked to sign in; deployment was completed independently. After login
+confirmation, run browser:save and the read-only helper
+`tmp/p13s-checklist-context/smoke-production.cjs after`. It blocks mutating browser
+requests and checks default/checklist/context views without uploading or submitting.
+The 17 local and both hosted staging flows remain the completed functional evidence;
+do not describe the private production UI as verified until that smoke passes.
+
+Private release receipts are under `tmp/p13s-checklist-context/production/`.
+This release-record follow-up is local and does not trigger another deployment.
