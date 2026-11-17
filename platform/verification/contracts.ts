@@ -3,6 +3,8 @@ import { z } from "zod"
 export const verificationSubjectSchema = z.object({ kind: z.enum(["PERSON", "BUSINESS"]), id: z.string().trim().min(1).max(100) }).strict()
 export type VerificationSubject = z.infer<typeof verificationSubjectSchema>
 export const verificationRoles = ["CUSTOMER", "ADDITIONAL_CUSTOMER", "REPRESENTATIVE"] as const
+export const verificationViewSchema = verificationSubjectSchema.extend({ role: z.enum(verificationRoles).optional() })
+export type VerificationRole = typeof verificationRoles[number]
 const code = z.string().regex(/^[a-z][a-z0-9_]{0,39}$/, "Use a lowercase code starting with a letter.")
 const label = z.string().trim().min(1).max(100)
 const applicability = {
@@ -37,4 +39,19 @@ export type VerificationConfiguration = { version: number; definition: Verificat
 export function applicableRequirements(policy: VerificationPolicy, subject: VerificationSubject["kind"], role: typeof verificationRoles[number]) {
   const applies = (row: { subjects: ("PERSON" | "BUSINESS")[]; roles: (typeof verificationRoles[number])[] }) => row.subjects.includes(subject) && row.roles.includes(role)
   return { facts: policy.facts.filter(applies), documents: policy.documents.filter(applies) }
+}
+
+// Group choices by required fields/files, not by a person's transaction role.
+// This only simplifies the editor; saved approvals remain specific to their role.
+export function verificationChecklists(policy: VerificationPolicy, subject: VerificationSubject["kind"]) {
+  const groups: { role: VerificationRole; roles: VerificationRole[]; key: string }[] = []
+  for (const role of verificationRoles) {
+    const required = applicableRequirements(policy, subject, role)
+    if (role !== "CUSTOMER" && !required.facts.length && !required.documents.length) continue
+    const key = JSON.stringify([required.facts.map(f => f.code).sort(), required.documents.map(d => d.code).sort()])
+    const group = groups.find(g => g.key === key)
+    if (group) group.roles.push(role)
+    else groups.push({ role, roles: [role], key })
+  }
+  return groups
 }

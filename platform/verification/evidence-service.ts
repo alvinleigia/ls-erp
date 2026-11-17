@@ -9,7 +9,7 @@ import { BusinessError, type BusinessActor } from "@/platform/policy"
 import { recordDomainAuditEvent } from "@/lib/domain-audit"
 import type { VerificationIdentity } from "./configuration"
 import type { VerificationOwnerReader } from "./cases"
-import { verificationDocumentSchema, verificationSubjectSchema, type VerificationSubject } from "./contracts"
+import { verificationDocumentSchema, verificationViewSchema, type VerificationSubject } from "./contracts"
 import { evidenceUploadSchema, EVIDENCE_LIMIT, EVIDENCE_CASE_LIMIT } from "./evidence-contracts"
 import { validateEvidenceFile } from "./evidence-files"
 import { evidencePath, privateEvidenceStorage, type EvidenceStorage } from "./evidence-storage"
@@ -71,7 +71,7 @@ export function createVerificationEvidenceService(db: PrismaClient, identity: Ve
   }
   return {
     view(input: unknown) {
-      const subject = verificationSubjectSchema.parse(input)
+      const { role, ...subject } = verificationViewSchema.parse(input)
       return run(false, "customerVerification.read", async (tx, actor) => {
         const customer = await source(tx, actor, subject)
         const row = await tx.customerVerificationCase.findFirst({ where: { tenantId: actor.tenantId, ...(subject.kind === "PERSON" ? { contactId: subject.id } : { accountId: subject.id }) }, select: { id: true } })
@@ -79,7 +79,7 @@ export function createVerificationEvidenceService(db: PrismaClient, identity: Ve
         const canReadEvidence = permits(actor, "verificationEvidence.read"), canUpload = !customer.archived && permits(actor, "verificationUploads.create"), canCancel = permits(actor, "verificationUploads.cancel")
         const evidence = row && canReadEvidence ? await tx.verificationEvidence.findMany({ where: { tenantId: actor.tenantId, caseId: row.id, state: "READY", ...disposalAvailableEvidence }, orderBy: { createdAt: "desc" }, take: EVIDENCE_CASE_LIMIT }) : []
         const pending = row && permits(actor, "verificationUploads.read") ? await tx.verificationEvidence.findMany({ where: { tenantId: actor.tenantId, caseId: row.id, uploadedByUserId: actor.userId, state: "PENDING", expiresAt: { gt: new Date() } }, orderBy: { createdAt: "desc" }, take: EVIDENCE_CASE_LIMIT }) : []
-        return { case: row, subject, ...await verificationStatus(tx, actor, row?.id), policyVersion: requirements?.version ?? 0, documents: requirements?.documents ?? [], canStart: !customer.archived && permits(actor, "customerVerification.create"), canUpload, canCancel, canCleanup: actor.role === "ADMIN" && canCancel, canReadEvidence, canReadHolds: permits(actor, "verificationHolds.read"), canReadSubmissions: permits(actor, "verificationSubmissions.read"), evidence: evidence.map(metadata), pending: pending.map(metadata), fileLimit: EVIDENCE_LIMIT }
+        return { case: row, subject, ...await verificationStatus(tx, actor, row?.id, role), policyVersion: requirements?.version ?? 0, documents: requirements?.documents ?? [], canStart: !customer.archived && permits(actor, "customerVerification.create"), canUpload, canCancel, canCleanup: actor.role === "ADMIN" && canCancel, canReadEvidence, canReadHolds: permits(actor, "verificationHolds.read"), canReadSubmissions: permits(actor, "verificationSubmissions.read"), evidence: evidence.map(metadata), pending: pending.map(metadata), fileLimit: EVIDENCE_LIMIT }
       })
     },
     async reserve(input: unknown) {

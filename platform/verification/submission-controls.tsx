@@ -5,11 +5,11 @@ import { Button } from "@/components/ui/button"
 import { Select } from "@/components/erp/controls"
 import { COUNTRY_OPTIONS } from "@/lib/constants/countries"
 import { InfoHelp } from "@/components/erp/info-help"
-import { applicableRequirements, verificationRoles, type VerificationPolicy, type VerificationSubject } from "./contracts"
+import { applicableRequirements, verificationChecklists, verificationRoles, type VerificationRole, type VerificationPolicy, type VerificationSubject } from "./contracts"
 
 type Review = { number: number; decision: string; reason: string | null; validUntil: string | null }
 type View = {
-  case: { id: string } | null; status: string; policy: { version: number; definition: VerificationPolicy }; revisionPolicy: { version: number; definition: VerificationPolicy }
+  case: { id: string } | null; caseVersion: number; currentReview: Review | null; status: string; policy: { version: number; definition: VerificationPolicy }; revisionPolicy: { version: number; definition: VerificationPolicy }
   submission: { id: string; number: number; policyVersion: number; role: typeof verificationRoles[number]; facts: { code: string; value: string }[]; evidenceIds: string[] } | null
   history: { id: string; number: number; policyVersion: number; role: string; submittedAt: string; reason: string | null; reviews: Review[] }[]
   evidence: { id: string; documentCode: string; filename: string }[]; canSubmit: boolean; canReview: boolean; canRevoke: boolean; canReadEvidence: boolean; selfReview: boolean
@@ -19,36 +19,39 @@ async function post(path: string, data: unknown) {
   const response = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) })
   const result = await response.json(); if (!response.ok) throw Error(result.error || "Unable to complete verification action."); return result
 }
-export function VerificationSubmissions({ kind, id, changed, onChanged }: VerificationSubject & { changed: number; onChanged: () => void }) {
+export function VerificationSubmissions({ kind, id, role, contextualRole, onRoleChange, changed, onChanged }: VerificationSubject & { role: VerificationRole; contextualRole: boolean; onRoleChange: (role: VerificationRole) => void; changed: number; onChanged: () => void }) {
   const [view, setView] = React.useState<View>(), [error, setError] = React.useState(""), [busy, setBusy] = React.useState(false), [message, setMessage] = React.useState("")
-  const [role, setRole] = React.useState<typeof verificationRoles[number]>("CUSTOMER"), [values, setValues] = React.useState<Record<string, string>>({}), [files, setFiles] = React.useState<string[]>([]), [reason, setReason] = React.useState("")
+  const [values, setValues] = React.useState<Record<string, string>>({}), [files, setFiles] = React.useState<string[]>([]), [reason, setReason] = React.useState("")
   const [reviewReason, setReviewReason] = React.useState(""), [reviewed, setReviewed] = React.useState(false), initialized = React.useRef("")
   React.useEffect(() => {
     const controller = new AbortController()
-    void fetch(`/api/verification/submissions?${new URLSearchParams({ kind, id })}`, { cache: "no-store", signal: controller.signal }).then(async r => {
+    setView(undefined); setError("")
+    void fetch(`/api/verification/submissions?${new URLSearchParams({ kind, id, role })}`, { cache: "no-store", signal: controller.signal }).then(async r => {
       const data: View & { error?: string } = await r.json(); if (!r.ok) throw Error(data.error || "Unable to load private submissions.")
       if (controller.signal.aborted) return
       setView(data); setError("")
-      const key = `${kind}:${id}:${data.policy.version}:${data.submission?.number ?? 0}:${data.history[0]?.reviews[0]?.number ?? 0}`
+      const key = `${kind}:${id}:${role}:${data.policy.version}:${data.caseVersion}:${data.submission?.number ?? 0}:${data.currentReview?.number ?? 0}`
       if (initialized.current !== key) {
-        initialized.current = key; setRole(data.submission?.role ?? "CUSTOMER"); setValues(Object.fromEntries(data.submission?.facts.map(f => [f.code, f.value]) ?? [])); setFiles(data.submission?.evidenceIds ?? []); setReason(""); setReviewReason(""); setReviewed(false)
+        initialized.current = key; setValues(Object.fromEntries(data.submission?.facts.map(f => [f.code, f.value]) ?? [])); setFiles(data.submission?.evidenceIds ?? []); setReason(""); setReviewReason(""); setReviewed(false)
       }
     }).catch(e => { if (!controller.signal.aborted) setError(e.message) })
     return () => controller.abort()
-  }, [kind, id, changed])
+  }, [kind, id, role, changed])
   async function act(work: () => Promise<unknown>, success: string) {
     if (busy) return
     setBusy(true); setError(""); setMessage("")
     try { await work(); setMessage(success); onChanged() } catch (e) { setError(e instanceof Error ? e.message : "Unable to complete this action.") } finally { setBusy(false) }
   }
   const requirements = view && applicableRequirements(view.policy.definition, kind, role), submittedRequirements = view?.submission && applicableRequirements(view.revisionPolicy.definition, kind, view.submission.role)
-  const currentReview = view?.history[0]?.reviews[0], awaiting = !!view?.submission && !currentReview
-  const review = (decision: "APPROVED" | "CHANGES_REQUIRED" | "REVOKED") => view?.submission && post("/api/verification/reviews", { submissionId: view.submission.id, version: view.submission.number, reviewVersion: currentReview?.number ?? 0, decision, reviewed, ...(reviewReason.trim() ? { reason: reviewReason.trim() } : {}) })
+  const checklists = view ? verificationChecklists(view.policy.definition, kind) : []
+  const currentReview = view?.currentReview, awaiting = !!view?.submission && !currentReview
+  const review = (decision: "APPROVED" | "CHANGES_REQUIRED" | "REVOKED") => view?.submission && post("/api/verification/reviews", { submissionId: view.submission.id, version: view.caseVersion, reviewVersion: currentReview?.number ?? 0, decision, reviewed, ...(reviewReason.trim() ? { reason: reviewReason.trim() } : {}) })
   return <div className="space-y-4">
     {error && <p role="alert" className="text-sm text-destructive">{error}</p>}{message && <p role="status" className="text-sm">{message}</p>}
     {!view && !error && <p>Loading private submissions…</p>}
     {view && <>
       <p className="font-medium">Review status: {readable(view.status)}</p>
+      {contextualRole && <p className="text-sm text-muted-foreground">Verification for: {readable(role)}</p>}
       {view.submission && <div className="space-y-3 rounded-lg border p-4"><h3 className="font-medium">Submitted revision {view.submission.number}</h3><p className="text-sm text-muted-foreground">Policy {view.submission.policyVersion} · {readable(view.submission.role)}</p>
         <dl className="grid gap-3 sm:grid-cols-2">{view.submission.facts.map(f => <div key={f.code} className="min-w-0"><dt className="text-sm text-muted-foreground">{submittedRequirements?.facts.find(d => d.code === f.code)?.label ?? f.code}</dt><dd className="break-words text-sm font-medium">{f.value}</dd></div>)}</dl>
         <h4 className="text-sm font-medium">Documents in this submission</h4>{!view.submission.evidenceIds.length ? <p className="text-sm">No documents required by this revision.</p> : view.submission.evidenceIds.map(fileId => <div key={fileId} className="flex flex-wrap items-center justify-between gap-2 rounded border p-2"><span className="min-w-0 break-all text-sm">{view.evidence.find(e => e.id === fileId)?.filename ?? "Private selected file"}</span>{view.canReadEvidence && <Button asChild variant="outline"><a href={`/api/verification/evidence/${fileId}/download`} target="_blank" rel="noopener noreferrer">Download submitted document</a></Button>}</div>)}
@@ -63,11 +66,11 @@ export function VerificationSubmissions({ kind, id, changed, onChanged }: Verifi
       </div>}
       {view.canSubmit && view.case && requirements && <details className="rounded-lg border p-4" open={!view.submission}><summary className="cursor-pointer font-medium">{view.submission ? "Prepare a corrected submission" : "Prepare verification submission"}</summary><div className="mt-4 space-y-4">
         <div className="flex items-center gap-2"><h3 className="text-sm font-medium">Customer details and supporting documents</h3><InfoHelp title="Submitting for review">Submitting saves a fixed copy of these details and selected documents for independent review. Uploading alone does not verify the customer. A corrected submission needs a new reason and a fresh review; previous submissions and decisions remain in history.</InfoHelp></div>
-        <div><label htmlFor="verification-role" className="block text-sm font-medium">Participant role</label><Select id="verification-role" value={role} disabled={busy} onValueChange={v => { setRole(v as typeof role); setFiles([]) }}>{verificationRoles.map(r => <option key={r} value={r}>{readable(r)}</option>)}</Select></div>
+        {!contextualRole && checklists.length > 1 && <div className="space-y-1"><div className="flex items-center gap-2"><label htmlFor="verification-checklist" className="block text-sm font-medium">Verification checklist</label><InfoHelp title="Verification checklist">Choose a checklist only when your business requires different details or documents. Participant links open the correct role automatically. A selection here does not change the participant role on a booking or grant approval for another role.</InfoHelp></div><Select id="verification-checklist" value={checklists.find(c => c.roles.includes(role))?.role ?? role} disabled={busy} onValueChange={v => onRoleChange(v as VerificationRole)}>{checklists.map(c => <option key={c.role} value={c.role}>{readable(c.role)}</option>)}</Select></div>}
         <div className="grid gap-3 sm:grid-cols-2">{requirements.facts.map(f => <label key={f.code} className="min-w-0 text-sm font-medium">{f.label}{f.type === "COUNTRY" ? <Select aria-label={f.label} className="mt-1 w-full" value={values[f.code] ?? ""} disabled={busy} onValueChange={v => setValues(s => ({ ...s, [f.code]: v }))}><option value="">Choose a country</option>{COUNTRY_OPTIONS.map(c => <option key={c} value={c}>{c}</option>)}</Select> : <input type={f.type === "DATE" ? "date" : f.type === "EMAIL" ? "email" : "text"} value={values[f.code] ?? ""} maxLength={f.type === "EMAIL" ? 254 : 500} disabled={busy} onChange={e => setValues(s => ({ ...s, [f.code]: e.target.value }))} className="mt-1 block w-full rounded-md border bg-background px-3 py-2 font-normal" />}</label>)}</div>
         {requirements.documents.map(d => <fieldset key={d.code} className="space-y-2 rounded border p-3"><legend className="text-sm font-medium">{d.label} (required)</legend>{view.evidence.filter(e => e.documentCode === d.code).map(e => <label key={e.id} className="flex min-w-0 gap-2 text-sm"><input type="checkbox" checked={files.includes(e.id)} disabled={busy} onChange={event => setFiles(list => event.target.checked ? [...list, e.id] : list.filter(id => id !== e.id))} /><span className="break-all">{e.filename}</span></label>)}{!view.evidence.some(e => e.documentCode === d.code) && <p className="text-sm text-muted-foreground">Upload this document in the Documents tab first.</p>}</fieldset>)}
-        {!!view.submission && <label className="block text-sm font-medium">Reason for new revision<textarea maxLength={1000} value={reason} disabled={busy} onChange={e => setReason(e.target.value)} className="mt-1 block w-full rounded-md border bg-background p-2 font-normal" /></label>}
-        <Button type="button" disabled={busy || !!view.submission && !reason.trim()} onClick={() => void act(() => post("/api/verification/submissions", { caseId: view.case!.id, version: view.submission?.number ?? 0, policyVersion: view.policy.version, role, facts: requirements.facts.map(f => ({ code: f.code, value: values[f.code] ?? "" })), evidenceIds: files.filter(id => view.evidence.some(e => e.id === id && requirements.documents.some(d => d.code === e.documentCode))), ...(reason.trim() ? { reason: reason.trim() } : {}) }), "Revision submitted for independent review.")}>Submit for review</Button>
+        {view.caseVersion > 0 && <label className="block text-sm font-medium">Reason for new revision<textarea maxLength={1000} value={reason} disabled={busy} onChange={e => setReason(e.target.value)} className="mt-1 block w-full rounded-md border bg-background p-2 font-normal" /></label>}
+        <Button type="button" disabled={busy || view.caseVersion > 0 && !reason.trim()} onClick={() => void act(() => post("/api/verification/submissions", { caseId: view.case!.id, version: view.caseVersion, policyVersion: view.policy.version, role, facts: requirements.facts.map(f => ({ code: f.code, value: values[f.code] ?? "" })), evidenceIds: files.filter(id => view.evidence.some(e => e.id === id && requirements.documents.some(d => d.code === e.documentCode))), ...(reason.trim() ? { reason: reason.trim() } : {}) }), "Revision submitted for independent review.")}>Submit for review</Button>
       </div></details>}
       {!!view.history.length && <VerificationHistory kind={kind} id={id} changed={changed} />}
     </>}

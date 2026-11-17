@@ -11,6 +11,8 @@ import { ImageFileInput } from "@/components/uploads/image-file-input"
 import { uploadFileWithProgress } from "@/components/uploads/upload-file"
 import { ArrowRight, RefreshCw } from "lucide-react"
 import { ConfirmAction } from "@/components/erp/confirm-action"
+import { useSearchParams } from "next/navigation"
+import { verificationRoles, type VerificationRole } from "./contracts"
 
 type View = { canReadHolds: boolean; status: string; reviewStatusAvailable: boolean; canReadSubmissions: boolean; case: { id: string } | null; documents: { code: string; label: string }[]; canStart: boolean; canUpload: boolean; canCancel: boolean; canCleanup: boolean; canReadEvidence: boolean; evidence: EvidenceMetadata[]; pending: EvidenceMetadata[]; policyVersion: number; fileLimit: number }
 async function request(path: string, data?: unknown) {
@@ -20,21 +22,23 @@ async function request(path: string, data?: unknown) {
   return result
 }
 export function VerificationCollection({ kind, id }: VerificationSubject) {
+  const queryRole = useSearchParams().get("verificationRole"), initialRole = verificationRoles.find(r => r === queryRole) ?? "CUSTOMER"
+  const [role, setRole] = React.useState<VerificationRole>(initialRole)
   const [view, setView] = React.useState<View>(), [reload, setReload] = React.useState(0), [error, setError] = React.useState(""), [busy, setBusy] = React.useState(false)
   const [retentionOpened, setRetentionOpened] = React.useState(false)
   const [tab, setTab] = React.useState("evidence"), [reviewOpened, setReviewOpened] = React.useState(false)
   const [documentCode, setDocumentCode] = React.useState(""), [file, setFile] = React.useState<File | null>(null), [inputKey, setInputKey] = React.useState(0), [progress, setProgress] = React.useState("")
   const [uploadPercent, setUploadPercent] = React.useState<number | null>(null)
   const [confirmCleanup, setConfirmCleanup] = React.useState(false), panelId = React.useId(), reviewPanel = React.useRef<HTMLDivElement>(null)
-  React.useEffect(() => { setView(undefined); setFile(null); setInputKey(n => n + 1); setProgress(""); setUploadPercent(null); setTab("evidence"); setReviewOpened(false); setRetentionOpened(false); setConfirmCleanup(false) }, [kind, id])
+  React.useEffect(() => { setView(undefined); setRole(initialRole); setFile(null); setInputKey(n => n + 1); setProgress(""); setUploadPercent(null); setTab("evidence"); setReviewOpened(false); setRetentionOpened(false); setConfirmCleanup(false) }, [kind, id, initialRole])
   React.useEffect(() => {
     const controller = new AbortController()
-    void fetch(`/api/verification/collection?${new URLSearchParams({ kind, id })}`, { cache: "no-store", signal: controller.signal }).then(async r => {
+    void fetch(`/api/verification/collection?${new URLSearchParams({ kind, id, role })}`, { cache: "no-store", signal: controller.signal }).then(async r => {
       const data = await r.json(); if (!r.ok) throw Error(data.error || "Unable to load verification.")
       if (!controller.signal.aborted) { setView(data); setDocumentCode(code => data.documents.some((d: { code: string }) => d.code === code) ? code : data.documents[0]?.code ?? "") }
     }).catch(e => { if (!controller.signal.aborted) setError(e.message) })
     return () => controller.abort()
-  }, [kind, id, reload])
+  }, [kind, id, role, reload])
   async function act(work: () => Promise<unknown>) {
     if (busy) return
     setBusy(true); setError(""); setProgress("")
@@ -84,7 +88,7 @@ export function VerificationCollection({ kind, id }: VerificationSubject) {
       <div className="space-y-2"><h3 className="font-medium">Uploaded documents{view.canReadEvidence && view.evidence.length > 0 && <span className="ml-2 text-sm text-muted-foreground">({view.evidence.length})</span>}</h3>{!view.canReadEvidence ? <p className="text-sm text-muted-foreground">Stored documents are visible only to authorised viewers.</p> : !view.evidence.length ? <p className="rounded-lg border border-dashed px-4 py-5 text-sm text-muted-foreground">No documents uploaded yet.</p> : view.evidence.map(row => <div key={row.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border p-3"><div className="min-w-0"><p className="break-all text-sm font-medium">{row.filename}</p><p className="text-xs text-muted-foreground">{view.documents.find(d => d.code === row.documentCode)?.label ?? row.documentCode} · {Math.ceil(row.bytes / 1024)} KB · Uploaded</p></div><Button asChild variant="outline"><a href={`/api/verification/evidence/${row.id}/download`} target="_blank" rel="noopener noreferrer">Download document</a></Button></div>)}</div>
       {view.case && view.canReadSubmissions && <div className="flex justify-end border-t pt-4"><Button type="button" variant="outline" disabled={busy} onClick={() => { openTab("review"); requestAnimationFrame(() => reviewPanel.current?.focus()) }}>Continue to details & review<ArrowRight aria-hidden="true" /></Button></div>}
       </div>
-      {view.case && view.canReadSubmissions && reviewOpened && <div ref={reviewPanel} id={`${panelId}-review`} role="tabpanel" aria-label="Details & review" tabIndex={-1} hidden={tab !== "review"} className="focus:outline-none"><VerificationSubmissions kind={kind} id={id} changed={reload} onChanged={() => setReload(n => n + 1)} /></div>}
+      {view.case && view.canReadSubmissions && reviewOpened && <div ref={reviewPanel} id={`${panelId}-review`} role="tabpanel" aria-label="Details & review" tabIndex={-1} hidden={tab !== "review"} className="focus:outline-none"><VerificationSubmissions key={role} kind={kind} id={id} role={role} contextualRole={verificationRoles.some(r => r === queryRole)} onRoleChange={next => { setView(undefined); setRole(next) }} changed={reload} onChanged={() => setReload(n => n + 1)} /></div>}
       {view.case && (view.canReadHolds || view.canCleanup) && retentionOpened && <div id={`${panelId}-retention`} role="tabpanel" aria-label="File management" hidden={tab !== "retention"} className="space-y-4">{view.canReadHolds && <VerificationRetentionControls kind={kind} id={id} changed={reload} />}{view.canCleanup && <details className="rounded-lg border p-4"><summary className="cursor-pointer text-sm font-medium">Advanced cleanup</summary><p className="my-3 text-sm text-muted-foreground">Remove expired, unfinished uploads across this business. Stored customer documents are retained.</p><Button type="button" variant="outline" disabled={busy} onClick={() => setConfirmCleanup(true)}>Clean expired business uploads</Button></details>}</div>}
       {confirmCleanup && view.canCleanup && <ConfirmAction title="Clean expired business uploads?" description="This checks expired, unfinished uploads across the entire business, not just this customer. Successfully stored customer documents are retained." label="Confirm cleanup" busy={busy} onCancel={() => setConfirmCleanup(false)} onConfirm={() => void act(async () => { const result = await request("/api/verification/evidence/cleanup", {}); setConfirmCleanup(false); setProgress(`Cleaned ${result.cleaned} expired, unfinished uploads across this business. Stored customer documents were retained.`) })} />}
     </>}

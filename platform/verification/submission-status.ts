@@ -1,12 +1,13 @@
 import type { Prisma } from "@prisma/client"
 import type { BusinessActor } from "@/platform/policy"
 import { permits } from "@/platform/access/policy"
+import type { VerificationRole } from "./contracts"
 
-export async function verificationStatus(tx: Prisma.TransactionClient, actor: BusinessActor, caseId: string | undefined) {
+export async function verificationStatus(tx: Prisma.TransactionClient, actor: BusinessActor, caseId: string | undefined, role?: VerificationRole) {
   if (!caseId) return { status: "NOT_STARTED", reviewStatusAvailable: false }
   // Ordinary directory/case readers receive no private revision information.
   if (!permits(actor, "verificationSubmissions.read")) return { status: "IN_PROGRESS", reviewStatusAvailable: false }
-  const latest = await tx.verificationSubmission.findFirst({ where: { tenantId: actor.tenantId, caseId }, orderBy: { number: "desc" }, select: { id: true, policyVersion: true } })
+  const latest = await tx.verificationSubmission.findFirst({ where: { tenantId: actor.tenantId, caseId, ...(role ? { role } : {}) }, orderBy: { number: "desc" }, select: { id: true, policyVersion: true } })
   if (!latest) return { status: "IN_PROGRESS", reviewStatusAvailable: true }
   const review = await tx.verificationReview.findFirst({ where: { tenantId: actor.tenantId, submissionId: latest.id }, orderBy: { number: "desc" } })
   const [clock] = await tx.$queryRaw<{ now: Date }[]>`SELECT statement_timestamp() AS now`

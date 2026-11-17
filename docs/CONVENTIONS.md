@@ -98,6 +98,13 @@
 
 ## Private verification submission and review (P13S)
 
+- Default ordinary contact/account collection to Customer. Only show a checklist
+  selector for different configured requirements; transaction links carry the
+  participant role as editor context. Never infer access or cross-role approval
+  from a URL or identical fields/files. Role-scoped views must use the global
+  caseVersion for writes and the selected role's review/status. Keep saved history
+  and native role-specific checkpoints unchanged. See
+  `P13S_VERIFICATION_CHECKLIST_CONTEXT.md`.
 - Keep typed private facts in immutable, tenant/case/policy/role-bound submission
   revisions. Never overwrite master customer data, correspondence or tax identity.
   Require complete applicable facts and accepted evidence; reference original files

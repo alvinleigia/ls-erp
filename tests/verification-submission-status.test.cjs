@@ -16,3 +16,9 @@ test('latest pending/corrected/revoked or outdated-policy revisions never fall b
  assert.equal((await verificationStatus(database({decision:'APPROVED',validUntil:null},2),actor,'case')).status,'REVIEW_REQUIRED')
  assert.equal((await verificationStatus(database(null,1,null),actor,'case')).status,'IN_PROGRESS')
 })
+
+test('an explicit participant role scopes status without reading other role submissions',async()=>{
+ const tx=database(null);tx.verificationSubmission.findFirst=async({where})=>{assert.deepEqual(where,{tenantId:'t',caseId:'case',role:'ADDITIONAL_CUSTOMER'});return null}
+ assert.deepEqual(await verificationStatus(tx,actor,'case','ADDITIONAL_CUSTOMER'),{status:'IN_PROGRESS',reviewStatusAvailable:true})
+ const hidden=database(null);await verificationStatus(hidden,{...actor,permissions:['customerVerification.read']},'case','REPRESENTATIVE');assert.equal(hidden.reads,0)
+})

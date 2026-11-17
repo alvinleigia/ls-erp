@@ -55,7 +55,7 @@ test("hosted image preparation, exact duplicate removal and independent review p
     }
     await assign(a, f.operator.id, "Synthetic evidence collector", ["dashboard.read", "contacts.read", "contacts.create", "customerVerification.read", "customerVerification.create", "verificationUploads.read", "verificationUploads.create", "verificationUploads.cancel", "verificationEvidence.read", "verificationSubmissions.read", "verificationSubmissions.create"])
     await assign(a, f.reviewer.id, "Synthetic independent reviewer", ["dashboard.read", "contacts.read", "customerVerification.read", "verificationEvidence.read", "verificationSubmissions.read", "verificationReviews.read", "verificationReviews.approve", "verificationReviews.cancel"])
-    const definition = { format: 1, facts: [], documents: [{ code: "identity", label: "Synthetic identity evidence", subjects: ["PERSON"], roles: ["CUSTOMER"] }], validityDays: null, preventSelfApproval: true }
+    const definition = { format: 1, facts: [], documents: [{ code: "identity", label: "Synthetic identity evidence", subjects: ["PERSON"], roles: ["CUSTOMER", "ADDITIONAL_CUSTOMER"] }], validityDays: null, preventSelfApproval: true }
     const preview = await api(a, "/api/verification/policy/preview", 200, "POST", { version: 0, definition })
     await api(a, "/api/verification/policy", 200, "PUT", { version: 0, definition, previewHash: preview.previewHash })
     const person = await api(o, "/api/crm/contacts", 201, "POST", { name: "SYNTHETIC Crop and Review Customer" })
@@ -202,6 +202,25 @@ test("hosted image preparation, exact duplicate removal and independent review p
       await f.reviewer.page.getByRole("tab", { name: "Details & review", exact: true }).click()
       await expect(f.reviewer.page.getByText("Review status: Verified", { exact: true })).toBeVisible()
       await f.reviewer.page.screenshot({ path: info.outputPath("independent-review.png"), fullPage: true, animations: "disabled" })
+    })
+    await record("Common checklist stays simple while participant contexts retain separate native approvals", async () => {
+      await expect(f.reviewer.page.getByLabel("Participant role", { exact: true })).toHaveCount(0)
+      await page.getByRole("tab", { name: "Details & review", exact: true }).click()
+      await expect(page.getByLabel("Verification checklist", { exact: true })).toHaveCount(0)
+      const additional = await api(o, "/api/verification/submissions", 200, "POST", { caseId: started.case.id, version: 2, policyVersion: 1, role: "ADDITIONAL_CUSTOMER", facts: [], evidenceIds: [keeper.id], reason: "Synthetic additional participant context" })
+      const main = await api(r, `/api/verification/submissions?${query}&role=CUSTOMER`)
+      expect(main.status).toBe("VERIFIED"); expect(main.submission.number).toBe(2); expect(main.caseVersion).toBe(3)
+      const selected = await api(r, `/api/verification/submissions?${query}&role=ADDITIONAL_CUSTOMER`)
+      expect(selected.status).toBe("UNDER_REVIEW"); expect(selected.submission.id).toBe(additional.id)
+      expect((await api(r, `/api/verification/collection?${query}&role=ADDITIONAL_CUSTOMER`)).status).toBe("UNDER_REVIEW")
+      const contextual = new URLSearchParams({ "l.record-view.tab": JSON.stringify("verification"), verificationRole: "ADDITIONAL_CUSTOMER" })
+      await page.goto(`/crm/contacts/${person.id}?${contextual}`)
+      await expect(page.getByRole("tab", { name: "Verification", exact: true })).toHaveAttribute("aria-selected", "true")
+      await page.getByRole("tab", { name: "Details & review", exact: true }).click()
+      await expect(page.getByText("Verification for: Additional customer", { exact: true })).toBeVisible()
+      await expect(page.getByRole("heading", { name: "Submitted revision 3", exact: true })).toBeVisible()
+      await expect(page.getByLabel("Verification checklist", { exact: true })).toHaveCount(0)
+      await page.screenshot({ path: info.outputPath("participant-context.png"), fullPage: true, animations: "disabled" })
     })
     fs.writeFileSync(`tmp/p13s-staging/${f.receipt.slug}-image-acceptance.json`, JSON.stringify({ at: new Date().toISOString(), source: f.receipt.source, deployment: f.receipt.deployment, tenantId: f.receipt.tenantId, passed, customerId: person.id, keeperId: keeper.id, removedDuplicateId: redundant.id, productionChanged: false }, null, 2), { mode: 0o600 })
   } finally { await f.close() }

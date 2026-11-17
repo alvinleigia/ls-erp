@@ -7,7 +7,7 @@ import { lockTenantOperations } from "@/platform/transactions/tenant-lock"
 import { recordDomainAuditEvent } from "@/lib/domain-audit"
 import type { VerificationOwnerReader } from "./cases"
 import type { VerificationIdentity } from "./configuration"
-import { applicableRequirements, verificationPolicySchema, verificationSubjectSchema, type VerificationSubject } from "./contracts"
+import { applicableRequirements, verificationPolicySchema, verificationViewSchema, type VerificationSubject } from "./contracts"
 import { privateFactsValid, verificationSubmissionSchema, verificationReviewSchema } from "./submission-contracts"
 import { disposalAvailableEvidence } from "./disposal-contracts"
 import { verificationStatus } from "./submission-status"
@@ -96,18 +96,20 @@ export function createVerificationSubmissionService(db: PrismaClient, identity: 
       })
     },
     view(input: unknown) {
-      const subject = verificationSubjectSchema.parse(input)
+      const { role, ...subject } = verificationViewSchema.parse(input)
       return run(false, "verificationSubmissions.read", async (tx, actor) => {
         const source = await subjectRow(tx, actor, subject), current = await policy(tx, actor)
         const row = await tx.customerVerificationCase.findFirst({ where: { tenantId: actor.tenantId, ...(subject.kind === "PERSON" ? { contactId: subject.id } : { accountId: subject.id }) }, select: { id: true } })
-        const submission = row ? await latest(tx, actor, row.id) : null
+        const currentSubmission = row ? await latest(tx, actor, row.id) : null
+        const submission = row && role ? await tx.verificationSubmission.findFirst({ where: { tenantId: actor.tenantId, caseId: row.id, role }, orderBy: { number: "desc" } }) : currentSubmission
         const history = row ? await tx.verificationSubmission.findMany({ where: { tenantId: actor.tenantId, caseId: row.id }, orderBy: { number: "desc" }, take: 10, select: { id: true, number: true, policyVersion: true, role: true, submittedAt: true, reason: true, reviews: { orderBy: { number: "desc" }, take: 2, select: { id: true, number: true, decision: true, reason: true, reviewedAt: true, validUntil: true } } } }) : []
         const selected = submission ? await tx.verificationSubmissionEvidence.findMany({ where: { tenantId: actor.tenantId, submissionId: submission.id }, select: { evidenceId: true } }) : []
         const canReadEvidence = permits(actor, "verificationEvidence.read")
         const evidence = row ? await tx.verificationEvidence.findMany({ where: { tenantId: actor.tenantId, caseId: row.id, state: "READY", ...disposalAvailableEvidence, ...(!canReadEvidence ? { uploadedByUserId: actor.userId } : {}) }, orderBy: { createdAt: "desc" }, take: 20, select: { id: true, documentCode: true, filename: true, bytes: true, uploadedByUserId: true, finalizedByUserId: true } }) : []
         const revisionPolicy = submission ? await policy(tx, actor, submission.policyVersion) : current
         const selfReview = !!submission && (submission.submittedByUserId === actor.userId || evidence.some(e => selected.some(l => l.evidenceId === e.id) && [e.uploadedByUserId, e.finalizedByUserId].includes(actor.userId)))
-        return { case: row, ...await verificationStatus(tx, actor, row?.id), policy: current, revisionPolicy,
+        const currentRoleReview = submission ? await tx.verificationReview.findFirst({ where: { tenantId: actor.tenantId, submissionId: submission.id }, orderBy: { number: "desc" }, select: { number: true, decision: true, reason: true, validUntil: true } }) : null
+        return { case: row, caseVersion: currentSubmission?.number ?? 0, currentReview: currentRoleReview, ...await verificationStatus(tx, actor, row?.id, role), policy: current, revisionPolicy,
           submission: submission ? { id: submission.id, number: submission.number, policyVersion: submission.policyVersion, role: submission.role, facts: submission.facts, reason: submission.reason, submittedAt: submission.submittedAt, evidenceIds: selected.map(l => l.evidenceId) } : null,
           history, evidence: evidence.map(e => ({ id: e.id, documentCode: e.documentCode, filename: e.filename, bytes: e.bytes })),
           canSubmit: !source.archived && permits(actor, "verificationSubmissions.create"), canReview: !source.archived && canReadEvidence && satisfies(actor, ["verificationReviews.read", "verificationReviews.approve"]), canRevoke: canReadEvidence && satisfies(actor, ["verificationReviews.read", "verificationReviews.cancel"]), canReadEvidence, selfReview }

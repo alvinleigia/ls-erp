@@ -6,6 +6,18 @@ const {allPermissions}=require('../platform/access/catalog.ts'),{recordScope}=re
 const fact={code:'legal_name',label:'Legal name',type:'TEXT',subjects:['PERSON'],roles:['CUSTOMER','ADDITIONAL_CUSTOMER']}
 const {simpleIndividualVerificationPolicy}=require('../platform/verification/starter-checklist.ts')
 const {verificationQueueSchema,verificationHistorySchema,verificationRevisionSchema}=require('../platform/verification/review-contracts.ts')
+const {verificationChecklists,verificationViewSchema}=require('../platform/verification/contracts.ts')
+
+test('ordinary customer verification hides duplicate and unused role checklist choices',()=>{
+ const policy=simpleIndividualVerificationPolicy()
+ assert.deepEqual(verificationChecklists(policy,'PERSON').map(g=>({role:g.role,roles:g.roles})),[{role:'CUSTOMER',roles:['CUSTOMER','ADDITIONAL_CUSTOMER']}])
+ policy.facts.push({code:'authority',label:'Authority reference',type:'TEXT',subjects:['PERSON'],roles:['REPRESENTATIVE']})
+ assert.deepEqual(verificationChecklists(policy,'PERSON').map(g=>g.role),['CUSTOMER','REPRESENTATIVE'])
+ assert.deepEqual(verificationChecklists(policy,'BUSINESS').map(g=>g.role),['CUSTOMER'])
+ assert.equal(verificationViewSchema.safeParse({kind:'PERSON',id:'person',role:'ADDITIONAL_CUSTOMER'}).success,true)
+ assert.equal(verificationViewSchema.safeParse({kind:'PERSON',id:'person',role:'ADMIN'}).success,false)
+ assert.equal(verificationViewSchema.safeParse({kind:'PERSON',id:'person',tenantId:'other'}).success,false)
+})
 
 test('review/history queries use bounded strict contracts and cannot override customer or tenant scope',()=>{
  assert.deepEqual(verificationQueueSchema.parse({}),{page:1,pageSize:10,search:''})
