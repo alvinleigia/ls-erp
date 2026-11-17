@@ -1,3 +1,18 @@
+## P13S clearer customer verification workflow — staging verified (2026-11-17)
+
+The shared verification panel now separates Documents, Details & review and File
+management. Clear status labels distinguish uploads from approval; a next-step
+button opens the review form while preserving draft facts. Progress stays beside
+the upload action. Inactive preservation/retention details are collapsed, and
+business-wide unfinished-upload cleanup is under Advanced cleanup with confirmation.
+Existing private access, independent decisions and removal safeguards are retained.
+
+Build, TypeScript, lint, 67 native checks, 14 local browser flows and both hosted
+staging acceptance tests passed. Desktop/mobile captures were inspected. Source
+`f66654a` is READY on staging `dpl_HARY6EKY3jBERMMnuKirjW2thMP7`.
+Production remains on the deployment below; no migration, permission change or
+production write accompanied this increment. See `P13S_VERIFICATION_WORKFLOW_UI.md`.
+
 ## P13S upload selection, thumbnails and progress — production released (2026-11-17)
 
 GitHub main/staging and both hosted environments now use `721dfa6`. Production
