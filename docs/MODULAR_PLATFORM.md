@@ -1,4 +1,4 @@
-## P13S upload selection, thumbnails and progress — local verified (2026-11-17)
+## P13S upload selection, thumbnails and progress — staging verified (2026-11-17)
 
 The shared file picker now immediately rejects empty or over-limit selections,
 reports their size and allowed maximum, and clears the consumer's selected File.
@@ -16,8 +16,20 @@ PDF/JPEG/PNG handling, independent review and existing deletion regressions.
 Desktop/mobile error and progress captures were inspected. Evidence is under
 `tmp/p13s-file-validation/` and
 `tmp/industry-release/ls-erp-sales-orders-2dfc7750dc49.log`.
-Staging acceptance is next; production is unchanged. Shared behavior is documented
-in `P13S_IMAGE_PREPARATION.md`.
+Source `1df9098f72167999a52e0bb20392b86483772dc4` is READY on staging deployment
+`dpl_2xBEKgcbkyfFZrDT6uEznp2JvwxF`. Both hosted acceptance tests passed, including
+the six image/crop/progress/duplicate/review steps and unused-upload replacement
+protection. The mobile hosted progress/thumbnail capture was inspected. Staging
+still has 159 migrations with none pending; this change requires no database or
+storage configuration change. Evidence is in `tmp/p13s-file-validation/staging.log`,
+`tmp/r9-staging/test-results.json` and `test-results/staging-access/`.
+
+This was committed locally and deployed directly to staging. No Git push or
+production deployment was performed. Production remains at source `a18efb1`,
+deployment `dpl_98p1BDEBFTE6Qb4vTzkJKdA7UNZb`; its alias was rechecked after
+acceptance. Tests used owned synthetic staging tenants and normal APIs, with no
+hosted seed/reset or real customer changes. Shared behavior is documented in
+`P13S_IMAGE_PREPARATION.md`.
 
 ## P13S unused upload removal — production released (2026-11-17)
 

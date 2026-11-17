@@ -56,6 +56,16 @@ confirmed File is sent directly, preserving exact bytes without an extra explici
 array-buffer copy. No upload endpoint, storage copy or server image processing is
 added.
 
+Selection/thumbnail/progress validation on 2026-11-17: production build,
+TypeScript, targeted ESLint and whitespace checks passed. The focused crop runner
+passed 67 native checks and all ten local browser flows; both hosted staging
+acceptance tests passed at source `1df9098`. Desktop/mobile selection-error and
+progress captures were inspected. Coverage includes invalid replacement clearing
+the prior selection, inclusive size boundary, crop thumbnail dimensions, transfer
+versus validation phases, storage failures/cancellation/retry, byte preservation,
+PDF/JPEG/PNG handling and existing review/removal protections. Production has not
+received this UI increment yet. See MODULAR_PLATFORM.md for deployment evidence.
+
 The crop dialog is dynamically loaded, using the ISC-licensed open-source
 [`react-image-crop`](https://github.com/dominictobias/react-image-crop) 11.1.2 from the pinned dependency lock. No CDN, external image
 service, server image optimizer or new upload endpoint is used. Keyboard and touch
