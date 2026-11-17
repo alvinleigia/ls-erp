@@ -1,5 +1,37 @@
 # Customer Verification activation controls
 
+## Ewissen client setup completed (2026-11-17)
+
+After the user requested client setup and signed into the platform console,
+Customer Verification was allowed through the normal platform module API and
+verified as Allowed/Enabled through both platform and Ewissen administrator
+reads. CRM was active. The module update preserved the other module flags and
+the existing access-profile assignments.
+
+The user confirmed Soniya Kankonkar as collector and Anil Verma as reviewer.
+Soniya now has KYC Collector alongside Booking & Collections. The seven KYC
+case/upload/submission actions have explicit All accessible scopes, bounded by
+canonical customer visibility and native upload ownership. Her existing rule
+entries and office access were verified against the preflight snapshot. She has
+no verification review action or private evidence-download capability. Anil's
+existing ADMIN role supplies independent review/approval; custom access profiles
+apply to staff/managers, so an additional assignment was unnecessary.
+
+Requirements version 1 was preview-bound and published through the normal UI.
+Tax identification proof and Identity/address evidence apply separately to person
+customers and additional customers. The checklist has no extra fact fields or
+automatic expiry. Transaction checkpoints were read back at version 0 and Off.
+The production private evidence bucket passed its read-only configuration check,
+including its 5 MiB/file limit and PDF/JPEG/PNG allowlist.
+
+Private preflight and post-change readbacks are under `tmp/p13s-ewissen-setup`.
+The published requirements screen was visually inspected at
+`test-results/p13s-ewissen-setup/published-checklist.png`. No customer case,
+upload, submission, review or payment was created as a test. Soniya's own login
+has not been exercised; acceptance here verifies saved configuration through
+the authorised administrator APIs. The new
+review queue/history development at `ba1e5ae` still awaits hosted deployment.
+
 Step 1, 2026-11-16. Customer Verification is listed under **CRM and sales** in
 the shared module controls used by both the platform tenant dialog and tenant
 Settings > Modules. The existing creation-time module selector already lists it.

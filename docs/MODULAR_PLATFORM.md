@@ -1,3 +1,19 @@
+## P13S Ewissen verification setup applied (2026-11-17)
+
+At the user's instruction, Customer Verification is Allowed/Enabled for Ewissen.
+Requirements version 1 requires Tax identification proof and Identity/address
+evidence for individual customers and additional customers. The user selected
+Soniya for collection and Anil for review. KYC Collector was added to Soniya's
+Booking & Collections profile set with explicit KYC operation scopes. Other rule
+entries and her office policy were read back and preserved. Anil's existing ADMIN
+access provides review/approval. Soniya has no KYC review or private file-download
+grant. Transaction checkpoints remain at their unpublished Off defaults.
+
+Authenticated production API readbacks and an inspected publication capture
+verify setup. The private bucket configuration was checked read-only. No real
+customer workflow was exercised during setup. Queue/history code `ba1e5ae`
+still awaits hosted deployment. See `P13S_VERIFICATION_ACTIVATION.md`.
+
 ## P13S verification queue and full history — local acceptance (2026-11-17)
 
 Contacts now provides a permission-gated verification review queue with literal
