@@ -6,7 +6,7 @@ import { BusinessError, type BusinessActor } from "@/platform/policy"
 import { recordDomainAuditEvent } from "@/lib/domain-audit"
 import type { VerificationIdentity } from "./configuration"
 import type { VerificationOwnerReader } from "./cases"
-import { disposalActionSchema, disposalPreviewSchema, disposalRequestSchema } from "./disposal-contracts"
+import { disposalActionSchema, disposalPreviewSchema, disposalRequestSchema, type DisposalKind } from "./disposal-contracts"
 import { privateDisposalStorage, type DisposalStorage } from "./disposal-storage"
 const publicRow = (r: VerificationDisposal) => ({ id: r.id, evidenceId: r.evidenceId, version: r.version, state: r.state, retryAfter: r.retryAfter, completedAt: r.completedAt })
 export function createVerificationDisposalService(db: PrismaClient, identity: VerificationIdentity, owner: VerificationOwnerReader, storage: DisposalStorage = privateDisposalStorage) {
@@ -28,11 +28,14 @@ export function createVerificationDisposalService(db: PrismaClient, identity: Ve
     if (!c || !await owner(tx, actor, c.contactId ? { kind: "PERSON", id: c.contactId } : { kind: "BUSINESS", id: c.accountId! })) throw new BusinessError(404, "Verification case not found.")
     return e
   }
-  async function prepare(tx: Prisma.TransactionClient, actor: BusinessActor, evidenceId: string, kind: "RETENTION" | "DUPLICATE") {
+  async function prepare(tx: Prisma.TransactionClient, actor: BusinessActor, evidenceId: string, kind: DisposalKind) {
     const e = await evidence(tx, actor, evidenceId)
     if (e.state !== "READY" || await tx.verificationDisposal.findFirst({ where: { tenantId: actor.tenantId, OR: [{ evidenceId, state: { not: "CANCELLED" } }, { retainedEvidenceId: evidenceId, state: { in: ["PENDING", "DELETING"] } }] } })) throw new BusinessError(409, "This original is unavailable or protected by another removal request.")
     let policyVersion: number | null = null, retained: VerificationEvidence | null = null
-    if (kind === "DUPLICATE") {
+    if (kind === "UNSUBMITTED") {
+      const [unused] = await tx.$queryRaw<{ allowed: boolean }[]>`SELECT app.verification_unused_original(${actor.tenantId},${e.id}) AS allowed`
+      if (!unused?.allowed) throw new BusinessError(409, "Only unused uploads without submission history, preservation holds or transaction references can be removed.")
+    } else if (kind === "DUPLICATE") {
       const [match] = await tx.$queryRaw<{ id: string | null }[]>`SELECT app.verification_duplicate_original(${actor.tenantId},${e.id}) AS id`
       if (!match?.id) throw new BusinessError(409, "Only an unsubmitted exact duplicate with an older matching original, without holds or transaction references, can be removed.")
       retained = await evidence(tx, actor, match.id)

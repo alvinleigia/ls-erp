@@ -38,6 +38,12 @@
   integrity. Do not shorten tenant retention to remove mistakes. See
   `P13S_VERIFICATION_DUPLICATES.md`.
 - Use preview binding, explicit confirmation and a private reason.
+- Unused-upload removal is an explicit UNSUBMITTED purpose, available only to
+  internal tenant administrators. A READY file must never have been selected in
+  any saved submission, and must have no case hold, transaction proof or active
+  keeper reference. It may be the last upload; retention publication is unnecessary.
+  Preserve the existing disposal lifecycle and audit history. Repeat eligibility
+  natively at every non-cancelled transition. See `P13S_UNUSED_UPLOAD_REMOVAL.md`.
 - Quarantine a durable request before storage removal. Cancellation is PENDING-only;
   irreversible DELETING outcomes require versioned reconciliation after the native
   retry interval. Never treat unknown storage errors as absence or roll back intent

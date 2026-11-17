@@ -1,3 +1,21 @@
+## P13S unused upload removal — local verified (2026-11-17)
+
+Internal tenant administrators can remove unused verification uploads, including
+the last original, without changing retention. Any saved submission selection,
+preservation hold, accepted transaction proof or active duplicate-keeper reference
+blocks removal. The existing audited disposal/recovery lifecycle is reused.
+Migration 159 preserves existing records and native functions; no grants or tenant
+configuration are changed. See `P13S_UNUSED_UPLOAD_REMOVAL.md`.
+
+Production build, TypeScript, targeted lint and whitespace checks passed. The final
+focused run passed 73 native checks and all five browser flows, including existing
+duplicate, retention, queue/history and independent-review regressions. Desktop
+and mobile confirmation captures were inspected. Earlier failures were corrected
+test fixtures/assertions, not relaxed application protections. Evidence is under
+`tmp/p13s-unused/` and `tmp/industry-release/ls-erp-sales-orders-27c98fccb3b7.log`.
+Staging acceptance is next. Production remains on migration 158; no real customer
+uploads have been removed by this change.
+
 ## P13S image preparation and duplicate removal — production released (2026-11-17)
 
 GitHub main/staging and both hosted environments now use source `33bdbe1`.

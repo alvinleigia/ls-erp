@@ -144,9 +144,9 @@ test("hosted image preparation, exact duplicate removal and independent review p
     expect(candidates).toHaveLength(2)
     await record("Only administrators remove duplicates; confirmation and cancellation retain an older identical original", async () => {
       await api(o, "/api/verification/disposals/preview", 403, "POST", { evidenceId: redundant.id, kind: "DUPLICATE" })
-      await expect(page.getByRole("button", { name: "Manage duplicate uploads and retention", exact: true })).toHaveCount(0)
+      await expect(page.getByRole("button", { name: "Manage uploaded files", exact: true })).toHaveCount(0)
       await admin.goto(`/crm/contacts/${person.id}`); await admin.getByRole("tab", { name: "Verification", exact: true }).click()
-      await admin.getByRole("button", { name: "Manage duplicate uploads and retention", exact: true }).click()
+      await admin.getByRole("button", { name: "Manage uploaded files", exact: true }).click()
       await expect(admin.getByRole("button", { name: "Remove duplicate", exact: true })).toHaveCount(1)
       await admin.getByRole("button", { name: "Remove duplicate", exact: true }).click()
       await expect(admin.getByText("Older original to keep", { exact: true })).toBeVisible()

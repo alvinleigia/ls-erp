@@ -23,13 +23,13 @@ test("administrator removes only an exact unsubmitted duplicate without changing
       expect((await finalized).status()).toBe(200)
       await expect(page.getByRole("button", { name: "Upload evidence", exact: true })).toBeDisabled()
       if (i === 0) {
-        await page.getByRole("button", { name: "Manage duplicate uploads and retention", exact: true }).click()
-        await expect(page.getByText("No eligible originals or disposal requests.", { exact: true })).toBeVisible()
+        await page.getByRole("button", { name: "Manage uploaded files", exact: true }).click()
+        await expect(page.getByRole("button", { name: "Remove unused upload", exact: true })).toBeVisible()
         await page.getByRole("tab", { name: "Evidence", exact: true }).click()
       }
     }
     await expect(page.getByRole("link", { name: "Download evidence", exact: true })).toHaveCount(2)
-    await page.getByRole("button", { name: "Manage duplicate uploads and retention", exact: true }).click()
+    await page.getByRole("button", { name: "Manage uploaded files", exact: true }).click()
     await expect(page.getByRole("button", { name: "Remove duplicate", exact: true })).toHaveCount(1)
     await page.getByRole("button", { name: "Remove duplicate", exact: true }).click()
     await expect(page.getByText("Older original to keep", { exact: true })).toBeVisible()

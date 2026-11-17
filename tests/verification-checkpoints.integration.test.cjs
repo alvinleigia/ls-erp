@@ -167,6 +167,7 @@ test('an accepted transaction reference protects all case evidence independently
  const v=await retention.view(subject(main));assert.equal(v.decisions.find(d=>d.id===row.id).decision,'TRANSACTION_REFERENCE');assert.ok(evidence.has(row.path));const {applicationVerificationDisposal}=require('../application/verification/service.ts');await assert.rejects(applicationVerificationDisposal(db,identity(admin)).preview({evidenceId:row.id}),status(409));
  const copy=await e.reserve({caseId,documentCode:'archive',filename:'duplicate-retained-original.png',contentType:'image/png',bytes:bytes.length}),duplicate=await root.verificationEvidence.findUniqueOrThrow({where:{id:copy.id}});evidence.set(duplicate.path,bytes);await e.finalize(duplicate.id);
  await assert.rejects(applicationVerificationDisposal(db,identity(admin)).preview({evidenceId:duplicate.id,kind:'DUPLICATE'}),status(409));
+ await assert.rejects(applicationVerificationDisposal(db,identity(admin)).preview({evidenceId:duplicate.id,kind:'UNSUBMITTED'}),status(409));
 });
 
 test('irreversible disposal conflicts with new transaction acceptance until reconciliation completes',async()=>{
