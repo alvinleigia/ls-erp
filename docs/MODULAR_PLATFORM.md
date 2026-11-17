@@ -1,3 +1,18 @@
+## P13S upload selection, thumbnails and progress — production released (2026-11-17)
+
+GitHub main/staging and both hosted environments now use `721dfa6`. Production
+`dpl_6dW9a4R9rQjMgGNxUS2tAjcF6Wze` and staging
+`dpl_8UyfmUVkoyGf1vwqMVcBwZf9X2rs` are READY, and their domains were verified.
+This UI-only release required no maintenance, migrations or permission changes.
+Both databases retain 159 applied migrations with none pending.
+
+Authenticated Ewissen read-only smoke passed five views, local selected/cropped
+thumbnail checks, immediate 12 MB rejection and disabled-upload checks. Desktop
+and mobile captures were inspected. Existing configuration matches the baseline;
+no production uploads or business changes were submitted. See
+`P13S_UPLOAD_UI_PRODUCTION_RELEASE.md`. This supersedes the staging milestone's
+pending-production status below.
+
 ## P13S upload selection, thumbnails and progress — staging verified (2026-11-17)
 
 The shared file picker now immediately rejects empty or over-limit selections,
