@@ -54,4 +54,7 @@ browser flows. Build, TypeScript, targeted ESLint and whitespace checks passed;
 confirmation captures were inspected at desktop and mobile widths. Staging source
 `dc68fdd` passed both hosted acceptance tests with migration 159 and real private
 storage. Existing crop, exact duplicate, submission, independent review and
-correction flows passed alongside unused-file removal. Production is unchanged.
+correction flows passed alongside unused-file removal. The subsequent production
+release is complete; see `P13S_UNUSED_UPLOAD_PRODUCTION_RELEASE.md` for backup,
+preservation, deployment and read-only smoke evidence. No real customer file was
+deleted during that release.

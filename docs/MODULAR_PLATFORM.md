@@ -1,3 +1,18 @@
+## P13S unused upload removal — production released (2026-11-17)
+
+GitHub main/staging and both hosted environments now use source `a18efb1`.
+Production `dpl_98p1BDEBFTE6Qb4vTzkJKdA7UNZb` and staging
+`dpl_9qJF6Fufxu6eFFyUpfFm6oC7DLqy` are READY, with all 159 migrations applied.
+Fresh encrypted backup `87e36e699c12` restored and passed forced rollback, upgrade
+and nine-actor access checks. All 44,014 existing rows and security were preserved;
+all six stored objects matched the backup byte-for-byte. Access is reopened.
+
+Authenticated Ewissen read-only smoke passed five views, queue and unused-file
+eligibility/control checks. Profiles, modules and verification settings match the
+pre-release baseline. No production customer files were deleted or test business
+data created. See `P13S_UNUSED_UPLOAD_PRODUCTION_RELEASE.md`. This supersedes the
+pending-production status in the staging milestone below.
+
 ## P13S unused upload removal — staging verified (2026-11-17)
 
 Internal tenant administrators can remove unused verification uploads, including
