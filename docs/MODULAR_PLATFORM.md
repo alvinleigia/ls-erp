@@ -1,3 +1,21 @@
+## P13S image preparation and duplicate removal — staging verified (2026-11-17)
+
+Source `4a94758b8edb6016b5185d4eecadd479cfd3d3d9` was committed locally and
+deployed only to staging (`dpl_Gd2HdJ4aLupfxFtZhpJpmhFYezsM`). All 158 staging
+migrations are applied. Both hosted acceptance scenarios passed: six named image/
+duplicate/review steps against real private storage, plus the combined booking,
+document, checkpoint and collections regression. Desktop/mobile captures were
+inspected; TypeScript, targeted ESLint and whitespace checks passed. Initial test
+assertion/locator errors were corrected; no application changes were required.
+
+Only synthetic staging tenants were used. Two completed tenants remain available;
+two incomplete runs were suspended without erasing audit or accepted evidence.
+Production remains on its prior deployment with 157 applied migrations. No Git
+push, production migration/deployment, customer upload deletion or production
+permission change was performed. See `P13S_IMAGE_STAGING_ACCEPTANCE.md` for exact
+coverage, limitations and private local evidence locations. This milestone
+supersedes the earlier local-only/pending-hosted status below.
+
 ## P13S shared image preparation — local acceptance (2026-11-17)
 
 KYC selection now uses a shared optional browser image editor: crop, quarter-turn

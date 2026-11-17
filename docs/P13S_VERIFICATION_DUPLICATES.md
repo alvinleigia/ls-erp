@@ -63,5 +63,7 @@ create isolated disposable loopback databases and synthetic file storage.
 Evidence: `tmp/p13s-duplicates-final-tests.log` (full native checks and broader
 browser results), `tmp/p13s-duplicates-targeted-tests.log` (final 62 checks/two
 flows), `tmp/p13s-duplicates-build.log`, `tmp/p13s-duplicates-lint.log`, and
-`tmp/industry-release/ls-erp-sales-orders-95c03a725933.log`. Nothing was pushed or
-deployed; the production customer's duplicate remains untouched pending release.
+`tmp/industry-release/ls-erp-sales-orders-95c03a725933.log`. This local run did not
+deploy. Subsequent staging migration and hosted acceptance passed; see
+`P13S_IMAGE_STAGING_ACCEPTANCE.md`. The production customer's duplicate remains
+untouched pending its production release.

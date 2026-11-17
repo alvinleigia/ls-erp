@@ -61,8 +61,8 @@ browser Canvas helpers.
   coordinates added to logs, persistent browser storage or ordinary audit.
 
 No database schema, tenant setting, module flag, permission, accepted file or stored
-document is changed by this feature. The earlier duplicate-removal migration remains
-a separate pending local change.
+document is changed by image preparation itself. Duplicate removal has a separate
+migration and release status; see `P13S_IMAGE_STAGING_ACCEPTANCE.md`.
 
 ## Verification
 
@@ -88,4 +88,5 @@ ESLint and whitespace checks passed, and both responsive screenshots were inspec
 Evidence: `tmp/p13s-crop-final-tests.log`, `tmp/p13s-crop-final-browser.log`,
 `tmp/p13s-crop-build.log`, `tmp/p13s-crop-lint.log`, and
 `tmp/industry-release/ls-erp-sales-orders-69dd83e53e93.log`.
-No hosted upload, tenant configuration, commit, push or deployment was performed.
+That local run did not use hosted uploads or deploy. Subsequent hosted staging
+acceptance passed; see `P13S_IMAGE_STAGING_ACCEPTANCE.md`. Production is unchanged.
