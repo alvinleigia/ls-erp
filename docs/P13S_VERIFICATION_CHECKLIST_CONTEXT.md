@@ -49,3 +49,26 @@ approvals, global stale-write tokens, default contact collection, automatic orde
 participant navigation, preservation of drafts across subtabs and status-only
 operators receiving no private verification link. Existing upload, crop, disposal,
 retention, independent-review and Required booking-checkpoint checks run alongside.
+
+Verified on 2026-11-17: production build, TypeScript, targeted ESLint and whitespace
+checks passed. Twelve focused unit checks and 68 native/integration checks passed.
+All 17 local browser flows passed in the final run, including Required order
+confirmation/allocation, the automatic participant link, common/distinct checklists,
+role-specific corrections and the existing file/review regressions. The first run
+caught a tab-link key error and a refresh/edit race; the link now uses the shared
+navigation helper, and submission actions wait while their latest state loads.
+Subtab draft preservation remains verified. Local receipts are under
+`tmp/p13s-checklist-context/` and
+`tmp/industry-release/ls-erp-sales-orders-ae3ccc3f7f8a.log`.
+
+Source `c89cc13531305d9e3a4f4a867c3db57125fc8571` is READY on staging deployment
+`dpl_9UZqEMgjCkN38FZtruaj7Gi8NvEe`. Both hosted acceptance tests passed, including
+the added common-checklist/context check: Customer approval stays valid while an
+Additional customer submission is pending, and its contextual editor displays the
+correct revision without a role dropdown. Desktop/mobile captures were inspected.
+Staging tests used owned synthetic tenants, normal APIs and real private storage.
+No hosted seed/reset was used. Production still points to
+`dpl_4dLeTyXmvWEQfeR1LpNqc1ogAEeF`; no production configuration or record changed.
+This increment is committed locally and staged, without a Git push or production
+release. Hosted receipts are in `tmp/p13s-checklist-context/staging.log` and
+`test-results/staging-access/`.

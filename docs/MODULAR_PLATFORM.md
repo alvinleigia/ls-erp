@@ -1,3 +1,20 @@
+## P13S automatic verification checklist context — staging verified (2026-11-17)
+
+Ordinary contact/account verification defaults to Customer and hides equivalent
+role choices. A Verification checklist selector appears only for different
+configured requirements. Opportunity/order participant summaries link directly to
+the correct contact/account verification tab with the participant role supplied
+automatically. Explicit role views show that role's submission/review/status and
+retain the global case token for writes. Existing role-specific approvals, native
+checkpoints, private access and immutable history remain unchanged.
+
+Build, TypeScript, lint, 12 focused unit checks, 68 native checks, all 17 local
+browser flows and both hosted staging acceptance tests passed. Desktop/mobile
+captures were inspected. Source `c89cc13` is READY on staging
+`dpl_9UZqEMgjCkN38FZtruaj7Gi8NvEe`. No schema migration or production change was
+needed; production remains on the deployment below. This increment is local/staging
+only. See `P13S_VERIFICATION_CHECKLIST_CONTEXT.md`.
+
 ## P13S clearer customer verification workflow — production released (2026-11-17)
 
 GitHub main/staging and both hosted environments now use `e351a64`. Production
