@@ -3739,7 +3739,8 @@ model CustomerVerificationCase {
 }
 
 model VerificationEvidence {
-  disposals VerificationDisposal[]
+  disposals VerificationDisposal[] @relation("DisposedEvidence")
+  duplicateRemovals VerificationDisposal[] @relation("RetainedEvidence")
   submissions VerificationSubmissionEvidence[]
   id String @id
   tenantId String
@@ -3837,7 +3838,9 @@ model VerificationDisposal {
  tenantId String
  caseId String
  evidenceId String
- policyVersion Int
+ policyVersion Int?
+ kind String @default("RETENTION")
+ retainedEvidenceId String?
  previewHash String
  reason String
  state String @default("PENDING")
@@ -3850,8 +3853,9 @@ model VerificationDisposal {
  completedAt DateTime?
  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
  verificationCase CustomerVerificationCase @relation(fields: [tenantId, caseId], references: [tenantId, id], onDelete: Restrict)
- evidence VerificationEvidence @relation(fields: [tenantId, caseId, evidenceId], references: [tenantId, caseId, id], onDelete: Restrict)
- policy VerificationRetentionVersion @relation(fields: [tenantId, policyVersion], references: [tenantId, version], onDelete: Restrict)
+ evidence VerificationEvidence @relation("DisposedEvidence", fields: [tenantId, caseId, evidenceId], references: [tenantId, caseId, id], onDelete: Restrict)
+ retainedEvidence VerificationEvidence? @relation("RetainedEvidence", fields: [tenantId, caseId, retainedEvidenceId], references: [tenantId, caseId, id], onDelete: Restrict, map: "VerificationDisposal_retained_evidence_fk")
+ policy VerificationRetentionVersion? @relation(fields: [tenantId, policyVersion], references: [tenantId, version], onDelete: Restrict)
  creator User @relation("VerificationDisposalCreator", fields: [tenantId, createdByUserId], references: [tenantId, id], onDelete: Restrict)
  actor User @relation("VerificationDisposalActor", fields: [tenantId, actorUserId], references: [tenantId, id], onDelete: Restrict)
  events VerificationDisposalEvent[]

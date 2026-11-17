@@ -1,5 +1,19 @@
 # Base Conventions
 
+## Shared image preparation (P13S)
+
+- Keep optional cropping in the shared browser File picker, before upload/reservation.
+  Consumers own permissions, allowed types and size limits; KYC is the first use.
+  Do not expose an editor for accepted private evidence or fetch signed originals
+  into it. PDFs and Use original preserve their exact bytes.
+- Lazy-load the cropper. Bound input bytes/dimensions before decoding, keep the
+  working preview small, and export from the original bitmap at natural resolution.
+  Apply phone orientation; retain PNG alpha and enforce final output limits. Cancel
+  must not replace a selected file or create uploads. Release local image resources.
+- Server content/size/checksum validation remains mandatory. Store only the
+  confirmed upload; no crop data or identity bytes in ordinary logs/browser storage.
+  See `P13S_IMAGE_PREPARATION.md`.
+
 ## Verification review queue and history (P13S)
 
 - Apply native tenant/customer visibility before queue counts or pagination, and
@@ -16,8 +30,14 @@
 
 ## Controlled verification disposal (P13S)
 
-- Limit disposal to actual internal tenant administrators and expired, unreferenced
-  accepted originals. Use preview binding, explicit confirmation and a private reason.
+- Limit disposal to actual internal tenant administrators. Retention disposal needs
+  expired, unreferenced originals. Duplicate removal is a separate purpose: require
+  identical checksum/size/type in the same customer and document category, preserve
+  an older available original, and reject saved target references, holds and case
+  transaction proofs. Pin the keeper during active removal and verify its storage
+  integrity. Do not shorten tenant retention to remove mistakes. See
+  `P13S_VERIFICATION_DUPLICATES.md`.
+- Use preview binding, explicit confirmation and a private reason.
 - Quarantine a durable request before storage removal. Cancellation is PENDING-only;
   irreversible DELETING outcomes require versioned reconciliation after the native
   retry interval. Never treat unknown storage errors as absence or roll back intent

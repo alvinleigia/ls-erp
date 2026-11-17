@@ -52,14 +52,14 @@ export function createVerificationRetentionService(db: PrismaClient, identity: V
       const history = row ? await tx.verificationHoldEvent.findMany({ where: { tenantId: actor.tenantId, caseId: row.id }, orderBy: { number: "desc" }, take: 10 }) : []
       const canReview = actor.role === "ADMIN" && permits(actor, "verificationRetention.read") && permits(actor, "verificationEvidence.read")
       const evidence = row && canReview ? await tx.verificationEvidence.findMany({ where: { tenantId: actor.tenantId, caseId: row.id, state: "READY" }, select: { id: true, filename: true }, orderBy: { readyAt: "desc" }, take: 20 }) : []
-      const results = evidence.length ? await tx.$queryRaw<{ id: string; decision: RetentionDecision | null }[]>`SELECT id, app.verification_retention_decision(${actor.tenantId},id) AS decision FROM "VerificationEvidence" WHERE "tenantId"=${actor.tenantId} AND id=ANY(${evidence.map(e => e.id)}::text[])` : []
+      const results = evidence.length ? await tx.$queryRaw<{ id: string; decision: RetentionDecision | null; duplicateOfId: string | null }[]>`SELECT id, app.verification_retention_decision(${actor.tenantId},id) AS decision, app.verification_duplicate_original(${actor.tenantId},id) AS "duplicateOfId" FROM "VerificationEvidence" WHERE "tenantId"=${actor.tenantId} AND id=ANY(${evidence.map(e => e.id)}::text[])` : []
       const decisions = evidence.map(e => {
         const decision = results.find(r => r.id === e.id)?.decision
         if (!decision) throw new BusinessError(404, "Retention review unavailable.")
-        return { ...e, ...decision }
+        return { ...e, ...decision, duplicateOfId: results.find(r => r.id === e.id)?.duplicateOfId ?? null }
       })
       const canDispose = actor.role === "ADMIN" && permits(actor, "verificationDisposals.read")
-      const select = { id: true, evidenceId: true, version: true, state: true, reason: true, createdAt: true, startedAt: true, retryAfter: true, completedAt: true } as const
+      const select = { id: true, evidenceId: true, kind: true, retainedEvidenceId: true, version: true, state: true, reason: true, createdAt: true, startedAt: true, retryAfter: true, completedAt: true } as const
       const [recent, activeRequests] = row && canDispose ? await Promise.all([
         tx.verificationDisposal.findMany({ where: { tenantId: actor.tenantId, caseId: row.id }, select, orderBy: { createdAt: "desc" }, take: 10 }),
         tx.verificationDisposal.findMany({ where: { tenantId: actor.tenantId, caseId: row.id, state: { in: ["PENDING", "DELETING"] } }, select, orderBy: { createdAt: "desc" } }),

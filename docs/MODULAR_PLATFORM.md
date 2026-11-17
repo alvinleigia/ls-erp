@@ -1,3 +1,51 @@
+## P13S shared image preparation — local acceptance (2026-11-17)
+
+KYC selection now uses a shared optional browser image editor: crop, quarter-turn
+rotation, reset, Cancel and Use original. PDFs and unedited files keep their exact
+bytes. Only Upload evidence reserves/uploads the confirmed File through the existing
+private-storage validation. Accepted evidence is never edited. The shared picker
+accepts per-consumer limits and an optional fixed ratio; other modules are ready
+to integrate it but their upload screens are unchanged.
+
+The lazy-loaded ISC-licensed cropper has bounded input dimensions and a small
+working preview. Export reads the original decoded bitmap at natural resolution,
+preserving PNG transparency and applying phone orientation. Invalid/over-limit
+output cannot replace the selection; local resources and unfinished async work
+are discarded on close/unmount. No server endpoint, schema, permission or tenant
+setting was added. See `P13S_IMAGE_PREPARATION.md`.
+
+All 54 focused automated checks passed, including eight preparation checks. All
+eight final real browser flows passed against the completed production build;
+high-resolution cropping, exact stored checksum/size, PNG alpha, JPEG orientation,
+cancel/original/PDF handling, output limits and upload/review/disposal regressions
+were exercised. Targeted ESLint and whitespace checks passed; desktop/mobile
+captures were inspected. Evidence is in `tmp/p13s-crop-final-tests.log`,
+`tmp/p13s-crop-final-browser.log`, `tmp/p13s-crop-build.log` and
+`tmp/industry-release/ls-erp-sales-orders-69dd83e53e93.log`.
+Nothing was pushed/deployed; hosted customer files and settings remain unchanged.
+The earlier duplicate-removal migration 158 remains a separate pending change.
+
+## P13S accidental duplicate upload removal — local acceptance (2026-11-17)
+
+Tenant administrators can remove an exact, unsubmitted verification duplicate
+through the existing audited disposal/reconciliation flow. An older matching
+original in the same customer and document category is preserved. Native checks
+block saved target references, holds, transaction proofs and conflicting keeper
+removal. Storage integrity is checked for both files. No retention change or
+collector deletion grant is introduced. The panel refreshes after new uploads.
+
+Migration 158 (`20261117000100_verification_duplicate_removal`) adds disposal
+purpose and a same-case keeper reference; no uploads are automatically removed.
+Apply it before deploying. See `P13S_VERIFICATION_DUPLICATES.md`.
+
+The full disposable suite passed 192 checks. Final focused disposal/checkpoint/
+recovery rerun passed 62 checks (overlap), with both real browser disposal flows
+passing after the refresh change. The eight other verification/browser results
+from the broader run remain valid (one overlaps the focused run). Final production
+build, Prisma generation, targeted ESLint and whitespace checks passed. Desktop
+and mobile duplicate confirmation captures were inspected. No production
+migration, deployment, upload deletion or retention change was performed.
+
 ## P13S Ewissen verification setup applied (2026-11-17)
 
 At the user's instruction, Customer Verification is Allowed/Enabled for Ewissen.
