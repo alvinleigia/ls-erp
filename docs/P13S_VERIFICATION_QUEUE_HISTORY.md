@@ -36,7 +36,7 @@ revocation needs Cancel and a reason. No bulk approvals or new write path.
 
 ## Complete revision history
 
-Customer/account → Verification → Facts and review → Revision history loads a
+Customer/account → Verification → Details & review → Revision history loads a
 bounded page on demand. Pages show newest revisions first, with 5/10/20/30 rows.
 Earlier revisions are accessible beyond the former latest-ten display. Selecting
 a revision loads its immutable facts, original requirement labels, selected

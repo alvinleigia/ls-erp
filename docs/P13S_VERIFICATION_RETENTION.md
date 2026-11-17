@@ -22,7 +22,7 @@ review access.
 
 ## Case preservation holds
 
-Customer/account > Verification > Retention and holds provides a case-wide
+Customer/account > Verification > File management > Preservation hold provides a case-wide
 preservation instruction for accepted verification records. One active instruction
 protects that person/business across its transactions. Hold placement and release
 are separate verificationHolds Create/Cancel capabilities, with explicit Read,

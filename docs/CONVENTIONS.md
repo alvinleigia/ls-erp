@@ -115,7 +115,7 @@
 - Use database time for validity, fresh authority under the tenant lock before
   the operational mutex, and explicit expected submission/review/policy versions.
   General audit contains identifiers/counts/states only, not private reasons/facts.
-- Lazy-load Facts and review on first use, then keep it mounted across subtab
+- Lazy-load Details & review on first use, then keep it mounted across subtab
   switches. A human approval is role/policy-specific internal verification, not
   government verification or transaction acceptance. No implicit booking/payment
   gates, module activation or profile migration accompanies this increment.

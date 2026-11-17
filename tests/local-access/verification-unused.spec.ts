@@ -22,14 +22,14 @@ test("admin can cancel then remove the last unused upload; saved submissions rem
     const bytes = await sharp({ create: { width: 20, height: 20, channels: 3, background: "orange" } }).png().toBuffer()
     async function upload() {
       const finalized = page.waitForResponse(r => r.url().endsWith("/finalize") && r.request().method() === "POST")
-      await page.getByLabel("Evidence file (up to 5 MB)").setInputFiles({ name: "synthetic-unused.png", mimeType: "image/png", buffer: bytes })
-      await page.getByRole("button", { name: "Upload evidence", exact: true }).click()
+      await page.getByLabel("Document file (up to 5 MB)").setInputFiles({ name: "synthetic-unused.png", mimeType: "image/png", buffer: bytes })
+      await page.getByRole("button", { name: "Upload document", exact: true }).click()
       expect((await finalized).status()).toBe(200)
-      await expect(page.getByRole("button", { name: "Upload evidence", exact: true })).toBeDisabled()
+      await expect(page.getByRole("button", { name: "Upload document", exact: true })).toBeDisabled()
     }
     await upload()
     const original = (await f.db.query('SELECT id FROM "VerificationEvidence" WHERE "tenantId"=$1', [f.slug])).rows[0]
-    await page.getByRole("button", { name: "Manage uploaded files", exact: true }).click()
+    await page.getByRole("tab", { name: "File management", exact: true }).click()
     await page.getByRole("button", { name: "Remove unused upload", exact: true }).click()
     const confirm = page.getByRole("button", { name: "Confirm unused upload removal", exact: true })
     await expect(confirm).toBeDisabled()
@@ -48,8 +48,8 @@ test("admin can cancel then remove the last unused upload; saved submissions rem
     await page.screenshot({ path: "test-results/local-access/verification-unused-confirm-mobile.png", fullPage: true, animations: "disabled" })
     await confirm.click()
     await expect(page.getByRole("status").filter({ hasText: "Unused upload removed." })).toHaveText("Unused upload removed. The audit history was retained.")
-    await page.getByRole("tab", { name: "Evidence", exact: true }).click()
-    await expect(page.getByRole("link", { name: "Download evidence", exact: true })).toHaveCount(0)
+    await page.getByRole("tab", { name: "Documents", exact: true }).click()
+    await expect(page.getByRole("link", { name: "Download document", exact: true })).toHaveCount(0)
     await json(context, `/api/verification/evidence/${original.id}/download`, 404)
     expect((await f.db.query('SELECT kind,state,"policyVersion","retainedEvidenceId" FROM "VerificationDisposal" WHERE "tenantId"=$1', [f.slug])).rows).toEqual([{ kind: "UNSUBMITTED", state: "COMPLETED", policyVersion: null, retainedEvidenceId: null }])
     expect((await json(context, "/api/verification/retention")).version).toBe(0)
@@ -58,7 +58,7 @@ test("admin can cancel then remove the last unused upload; saved submissions rem
     const replacement = (await f.db.query('SELECT id FROM "VerificationEvidence" WHERE "tenantId"=$1 AND state=\'READY\'', [f.slug])).rows[0]
     await json(context, "/api/verification/submissions", 200, "POST", { caseId: started.case.id, version: 0, policyVersion: 1, role: "CUSTOMER", facts: [], evidenceIds: [replacement.id] })
     await page.getByRole("button", { name: "Refresh verification", exact: true }).click()
-    await page.getByRole("button", { name: "Manage uploaded files", exact: true }).click()
+    await page.getByRole("tab", { name: "File management", exact: true }).click()
     await expect(page.getByRole("button", { name: "Remove unused upload", exact: true })).toHaveCount(0)
     await json(context, "/api/verification/disposals/preview", 409, "POST", { evidenceId: replacement.id, kind: "UNSUBMITTED" })
   } finally { await admin.context.close(); await f.db.end() }

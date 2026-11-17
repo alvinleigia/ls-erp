@@ -18,18 +18,18 @@ test("administrator removes only an exact unsubmitted duplicate without changing
     const bytes = await sharp({ create: { width: 10, height: 10, channels: 3, background: "orange" } }).png().toBuffer()
     for (let i = 0; i < 2; i++) {
       const finalized = page.waitForResponse(r => r.url().endsWith("/finalize") && r.request().method() === "POST")
-      await page.getByLabel("Evidence file (up to 5 MB)").setInputFiles({ name: "duplicate-identity.png", mimeType: "image/png", buffer: bytes })
-      await page.getByRole("button", { name: "Upload evidence", exact: true }).click()
+      await page.getByLabel("Document file (up to 5 MB)").setInputFiles({ name: "duplicate-identity.png", mimeType: "image/png", buffer: bytes })
+      await page.getByRole("button", { name: "Upload document", exact: true }).click()
       expect((await finalized).status()).toBe(200)
-      await expect(page.getByRole("button", { name: "Upload evidence", exact: true })).toBeDisabled()
+      await expect(page.getByRole("button", { name: "Upload document", exact: true })).toBeDisabled()
       if (i === 0) {
-        await page.getByRole("button", { name: "Manage uploaded files", exact: true }).click()
+        await page.getByRole("tab", { name: "File management", exact: true }).click()
         await expect(page.getByRole("button", { name: "Remove unused upload", exact: true })).toBeVisible()
-        await page.getByRole("tab", { name: "Evidence", exact: true }).click()
+        await page.getByRole("tab", { name: "Documents", exact: true }).click()
       }
     }
-    await expect(page.getByRole("link", { name: "Download evidence", exact: true })).toHaveCount(2)
-    await page.getByRole("button", { name: "Manage uploaded files", exact: true }).click()
+    await expect(page.getByRole("link", { name: "Download document", exact: true })).toHaveCount(2)
+    await page.getByRole("tab", { name: "File management", exact: true }).click()
     await expect(page.getByRole("button", { name: "Remove duplicate", exact: true })).toHaveCount(1)
     await page.getByRole("button", { name: "Remove duplicate", exact: true }).click()
     await expect(page.getByText("Older original to keep", { exact: true })).toBeVisible()
@@ -49,8 +49,8 @@ test("administrator removes only an exact unsubmitted duplicate without changing
     await page.getByRole("button", { name: "Confirm duplicate removal", exact: true }).click()
     await expect(page.getByRole("status").filter({ hasText: "Duplicate removed." })).toHaveText("Duplicate removed. The older original was preserved.")
     await expect(page.getByRole("button", { name: "Remove duplicate", exact: true })).toHaveCount(0)
-    await page.getByRole("tab", { name: "Evidence", exact: true }).click()
-    await expect(page.getByRole("link", { name: "Download evidence", exact: true })).toHaveCount(1)
+    await page.getByRole("tab", { name: "Documents", exact: true }).click()
+    await expect(page.getByRole("link", { name: "Download document", exact: true })).toHaveCount(1)
     const rows = (await f.db.query('SELECT state, bytes FROM "VerificationEvidence" WHERE "tenantId"=$1 ORDER BY "createdAt",id COLLATE "C"', [f.slug])).rows
     expect(rows).toEqual([{ state: "READY", bytes: bytes.length }, { state: "DISPOSED", bytes: 0 }])
     expect((await json(context, "/api/verification/retention", 200)).version).toBe(0)
@@ -72,13 +72,13 @@ test("administrator previews and confirms disposal; quarantine can be cancelled 
     await context.route("https://verificationtest.supabase.co/**", async route => { const u = new URL(route.request().url()), response = await route.fetch({ url: "http://127.0.0.1:3319" + u.pathname + u.search }); await route.fulfill({ response }) })
     await page.goto(`/crm/contacts/${person.id}`); await page.getByRole("tab", { name: "Verification", exact: true }).click()
     const bytes = await sharp({ create: { width: 10, height: 10, channels: 3, background: "orange" } }).png().toBuffer()
-    await page.getByLabel("Evidence file (up to 5 MB)").setInputFiles({ name: "disposal-original.png", mimeType: "image/png", buffer: bytes }); await page.getByRole("button", { name: "Upload evidence", exact: true }).click()
-    await expect(page.getByRole("status")).toContainText("Evidence uploaded")
+    await page.getByLabel("Document file (up to 5 MB)").setInputFiles({ name: "disposal-original.png", mimeType: "image/png", buffer: bytes }); await page.getByRole("button", { name: "Upload document", exact: true }).click()
+    await expect(page.getByRole("status")).toContainText("Document uploaded")
     // Age only this synthetic file in the disposable loopback test database.
     await f.db.query('BEGIN')
     try { await f.db.query('ALTER TABLE "VerificationEvidence" DISABLE TRIGGER verification_evidence_write'); await f.db.query('UPDATE "VerificationEvidence" SET "readyAt"="readyAt"-interval \'100 days\' WHERE "tenantId"=$1', [f.slug]); await f.db.query('ALTER TABLE "VerificationEvidence" ENABLE TRIGGER verification_evidence_write'); await f.db.query('COMMIT') } catch (e) { await f.db.query('ROLLBACK'); throw e }
     const e = (await f.db.query('SELECT id FROM "VerificationEvidence" WHERE "tenantId"=$1', [f.slug])).rows[0]
-    await page.getByRole("tab", { name: "Retention and holds", exact: true }).click()
+    await page.getByRole("tab", { name: "File management", exact: true }).click()
     await page.getByRole("button", { name: "Review disposal", exact: true }).click(); await expect(page.getByRole("button", { name: "Confirm file disposal", exact: true })).toBeDisabled()
     await page.getByLabel("Disposal reason", { exact: true }).fill("Synthetic file no longer needed")
     await page.getByLabel("I reviewed the file, retention period and permanent removal.", { exact: true }).check()

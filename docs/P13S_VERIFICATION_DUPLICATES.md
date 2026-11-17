@@ -5,11 +5,11 @@ It does not publish or shorten retention, grant staff permissions, or remove any
 existing upload automatically. The feature is shared across customer verification
 subjects and industries.
 
-An internal tenant administrator opens a customer's Verification → Evidence →
-Manage duplicate uploads and retention. Retention and holds offers Remove duplicate
-only for eligible files. The confirmation identifies the older original to keep,
+An internal tenant administrator opens a customer's Verification > File management.
+Remove documents offers Remove duplicate only for eligible files. The confirmation
+identifies the older original to keep,
 requires a private reason and permanent-removal acknowledgement, then uses the
-existing quarantine, removal and recovery process. Returning to Evidence reloads
+existing quarantine, removal and recovery process. Returning to Documents reloads
 the accepted-file list. Soniya's Collector access cannot delete originals.
 
 Matching uses accepted server checksums, byte count and MIME type, within the same

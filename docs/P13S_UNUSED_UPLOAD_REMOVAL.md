@@ -6,7 +6,7 @@ status is not the cutoff: even an undecided or rejected saved submission protect
 its selected files. Preservation holds, accepted transaction proofs and a file's
 use as an active duplicate keeper also block removal.
 
-Open the customer, then Verification, Evidence, Manage uploaded files. An eligible
+Open the customer, then Verification, File management. An eligible
 original offers Remove unused upload. Review the file, enter a private reason and
 acknowledge permanent removal before confirming. Keep file cancels the preview
 without creating a request. Soniya's Collector access remains unchanged; Anil as

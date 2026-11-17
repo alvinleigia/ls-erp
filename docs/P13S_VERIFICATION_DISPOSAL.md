@@ -22,7 +22,7 @@ by this workflow. Abandoned-upload cleanup remains a separate operation.
 
 ## Administrator flow
 
-Open the customer/account's Verification tab, then Retention and holds. Eligible
+Open the customer/account's Verification tab, then File management. Eligible
 files offer Review disposal. Review the original, provide a private reason and
 check the explicit permanent-removal acknowledgement before confirming. The
 preview binds the tenant, original, checksum, size, accepted instant and retention

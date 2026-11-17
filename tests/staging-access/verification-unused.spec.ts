@@ -44,7 +44,7 @@ test("hosted unused upload removal protects submissions and preserves the normal
     await api(o, "/api/verification/disposals/preview", 403, "POST", { evidenceId: original, kind: "UNSUBMITTED" })
     await page.goto(`/crm/contacts/${person.id}`)
     await page.getByRole("tab", { name: "Verification", exact: true }).click()
-    await page.getByRole("button", { name: "Manage uploaded files", exact: true }).click()
+    await page.getByRole("tab", { name: "File management", exact: true }).click()
     await page.getByRole("button", { name: "Remove unused upload", exact: true }).click()
     const confirm = page.getByRole("button", { name: "Confirm unused upload removal", exact: true })
     await expect(confirm).toBeDisabled()

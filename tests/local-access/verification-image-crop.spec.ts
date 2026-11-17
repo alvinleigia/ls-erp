@@ -19,8 +19,8 @@ async function setup(browser: Parameters<typeof login>[0]) {
 const pattern = () => sharp(Buffer.from('<svg width="2400" height="1200"><rect width="1200" height="1200" fill="red"/><rect x="1200" width="1200" height="1200" fill="blue" fill-opacity="0.5"/></svg>')).png().toBuffer()
 async function upload(page: Page) {
   const saved = page.waitForResponse(r => r.url().endsWith("/finalize") && r.request().method() === "POST")
-  await page.getByRole("button", { name: "Upload evidence", exact: true }).click(); expect((await saved).status()).toBe(200)
-  await expect(page.getByRole("button", { name: "Upload evidence", exact: true })).toBeDisabled()
+  await page.getByRole("button", { name: "Upload document", exact: true }).click(); expect((await saved).status()).toBe(200)
+  await expect(page.getByRole("button", { name: "Upload document", exact: true })).toBeDisabled()
 }
 async function dragHandle(page: Page, dialog: Locator, direction: string, x: number, y: number) {
   const handle = dialog.getByRole("button", { name: new RegExp(direction + " drag handle") }), box = await handle.boundingBox()
@@ -33,7 +33,7 @@ test("oversized and empty selections are rejected immediately and cannot upload 
   try {
     let reservations = 0
     page.on("request", r => { if (r.method() === "POST" && r.url().endsWith("/api/verification/evidence/uploads")) reservations++ })
-    const input = page.getByLabel("Evidence file (up to 5 MB)"), button = page.getByRole("button", { name: "Upload evidence", exact: true }), valid = await pattern()
+    const input = page.getByLabel("Document file (up to 5 MB)"), button = page.getByRole("button", { name: "Upload document", exact: true }), valid = await pattern()
     await input.setInputFiles({ name: "valid.png", mimeType: "image/png", buffer: valid })
     await expect(button).toBeEnabled()
     for (const [name, mimeType] of [["too-large.png", "image/png"], ["too-large.pdf", "application/pdf"]]) {
@@ -75,7 +75,7 @@ test("shared cropper rotates and crops at natural resolution, preserves PNG tran
   try {
     let reservations = 0
     page.on("request", r => { if (r.method() === "POST" && r.url().endsWith("/api/verification/evidence/uploads")) reservations++ })
-    await page.getByLabel("Evidence file (up to 5 MB)").setInputFiles({ name: "synthetic-id.png", mimeType: "image/png", buffer: await pattern() })
+    await page.getByLabel("Document file (up to 5 MB)").setInputFiles({ name: "synthetic-id.png", mimeType: "image/png", buffer: await pattern() })
     await expect(page.getByRole("img", { name: "Selected image preview", exact: true })).toBeVisible()
     await page.getByRole("button", { name: "Crop image", exact: true }).click()
     const dialog = page.getByRole("dialog", { name: "Crop image", exact: true }), canvas = dialog.getByRole("img", { name: "Image to crop", exact: true })
@@ -107,10 +107,10 @@ test("shared cropper rotates and crops at natural resolution, preserves PNG tran
     })
     await page.route("**/api/verification/evidence/*/finalize", async route => { await validationGate; await route.continue() })
     const finalized = page.waitForResponse(r => r.url().endsWith("/finalize") && r.request().method() === "POST")
-    await page.getByRole("button", { name: "Upload evidence", exact: true }).click()
-    const progress = page.getByRole("progressbar", { name: "Evidence upload progress", exact: true })
+    await page.getByRole("button", { name: "Upload document", exact: true }).click()
+    const progress = page.getByRole("progressbar", { name: "Document upload progress", exact: true })
     await expect(progress).toBeVisible()
-    await expect(page.getByRole("button", { name: "Upload evidence", exact: true })).toBeDisabled()
+    await expect(page.getByRole("button", { name: "Upload document", exact: true })).toBeDisabled()
     await progress.scrollIntoViewIfNeeded()
     await page.screenshot({ path: "test-results/local-access/image-upload-progress-mobile.png", animations: "disabled" })
     releaseTransfer()
@@ -118,7 +118,7 @@ test("shared cropper rotates and crops at natural resolution, preserves PNG tran
     await expect(progress).toHaveCount(0)
     releaseValidation()
     expect((await finalized).status()).toBe(200)
-    await expect(page.getByRole("status").filter({ hasText: "Evidence uploaded" })).toBeVisible()
+    await expect(page.getByRole("status").filter({ hasText: "Document uploaded" })).toBeVisible()
     expect(reservations).toBe(1)
     const row = (await f.db.query('SELECT state,path,bytes,filename,"contentType",sha256 FROM "VerificationEvidence" WHERE "tenantId"=$1', [f.slug])).rows[0]
     expect(row).toMatchObject({ state: "READY", filename: "synthetic-id-cropped.png", contentType: "image/png" })
@@ -138,13 +138,13 @@ test("failed transfers clear progress, keep the local thumbnail and leave eviden
   try {
     let finalizations = 0
     page.on("request", r => { if (r.method() === "POST" && r.url().endsWith("/finalize")) finalizations++ })
-    await page.getByLabel("Evidence file (up to 5 MB)").setInputFiles({ name: "retry-image.png", mimeType: "image/png", buffer: await pattern() })
+    await page.getByLabel("Document file (up to 5 MB)").setInputFiles({ name: "retry-image.png", mimeType: "image/png", buffer: await pattern() })
     await expect(page.getByRole("img", { name: "Selected image preview", exact: true })).toBeVisible()
     await page.route("https://verificationtest.supabase.co/**", route => route.fulfill({ status: 503, headers: { "access-control-allow-origin": "*" }, body: "Synthetic upload failure" }))
-    await page.getByRole("button", { name: "Upload evidence", exact: true }).click()
+    await page.getByRole("button", { name: "Upload document", exact: true }).click()
     await expect(page.getByRole("alert").filter({ hasText: "The upload failed." })).toBeVisible()
-    await expect(page.getByRole("progressbar", { name: "Evidence upload progress", exact: true })).toHaveCount(0)
-    await expect(page.getByRole("status").filter({ hasText: "Evidence uploaded" })).toHaveCount(0)
+    await expect(page.getByRole("progressbar", { name: "Document upload progress", exact: true })).toHaveCount(0)
+    await expect(page.getByRole("status").filter({ hasText: "Document uploaded" })).toHaveCount(0)
     await expect(page.getByRole("img", { name: "Selected image preview", exact: true })).toBeVisible()
     expect(finalizations).toBe(0)
     expect((await f.db.query('SELECT state FROM "VerificationEvidence" WHERE "tenantId"=$1', [f.slug])).rows).toEqual([{ state: "PENDING" }])
@@ -161,7 +161,7 @@ test("cancel and use original preserve selected bytes; PDFs bypass cropping and 
   test.setTimeout(120_000)
   const { f, page, context } = await setup(browser)
   try {
-    const bytes = await pattern(), input = page.getByLabel("Evidence file (up to 5 MB)")
+    const bytes = await pattern(), input = page.getByLabel("Document file (up to 5 MB)")
     await input.setInputFiles({ name: "original.png", mimeType: "image/png", buffer: bytes }); await page.getByRole("button", { name: "Crop image", exact: true }).click()
     const dialog = page.getByRole("dialog", { name: "Crop image", exact: true })
     await expect(dialog.getByRole("img", { name: "Image to crop", exact: true })).toBeVisible(); await dialog.getByRole("button", { name: "Rotate right", exact: true }).click(); await dialog.getByRole("button", { name: "Cancel", exact: true }).click()
@@ -182,7 +182,7 @@ test("JPEG orientation is respected, prepared JPEGs normalize rotation, and over
   test.setTimeout(120_000)
   const { f, page, context } = await setup(browser)
   try {
-    const jpeg = await sharp(await pattern()).resize(120, 60).flatten({ background: "white" }).withMetadata({ orientation: 6 }).jpeg().toBuffer(), input = page.getByLabel("Evidence file (up to 5 MB)")
+    const jpeg = await sharp(await pattern()).resize(120, 60).flatten({ background: "white" }).withMetadata({ orientation: 6 }).jpeg().toBuffer(), input = page.getByLabel("Document file (up to 5 MB)")
     await input.setInputFiles({ name: "phone.jpg", mimeType: "image/jpeg", buffer: jpeg }); await page.getByRole("button", { name: "Crop image", exact: true }).click()
     const dialog = page.getByRole("dialog", { name: "Crop image", exact: true }), canvas = dialog.getByRole("img", { name: "Image to crop", exact: true })
     await expect.poll(() => canvas.evaluate(n => ({ width: (n as HTMLCanvasElement).width, height: (n as HTMLCanvasElement).height }))).toEqual({ width: 60, height: 120 })

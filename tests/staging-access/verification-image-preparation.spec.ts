@@ -26,14 +26,14 @@ async function original(c: BrowserContext, id: string) {
   return file.body()
 }
 async function upload(page: Page, name: string, mimeType: string, buffer: Buffer) {
-  await page.getByLabel("Evidence file (up to 5 MB)").setInputFiles({ name, mimeType, buffer })
+  await page.getByLabel("Document file (up to 5 MB)").setInputFiles({ name, mimeType, buffer })
   await confirmUpload(page)
 }
 async function confirmUpload(page: Page) {
   const finalized = page.waitForResponse(r => r.url().endsWith("/finalize") && r.request().method() === "POST")
-  await page.getByRole("button", { name: "Upload evidence", exact: true }).click()
+  await page.getByRole("button", { name: "Upload document", exact: true }).click()
   const result = await finalized; expect(result.status()).toBe(200)
-  await expect(page.getByRole("button", { name: "Upload evidence", exact: true })).toBeDisabled()
+  await expect(page.getByRole("button", { name: "Upload document", exact: true })).toBeDisabled()
   return (await result.json()).id as string
 }
 
@@ -67,12 +67,14 @@ test("hosted image preparation, exact duplicate removal and independent review p
       expect(row, `Accepted synthetic evidence: ${name}`).toBeTruthy(); return row
     }
     await page.goto(`/crm/contacts/${person.id}`); await page.getByRole("tab", { name: "Verification", exact: true }).click()
-    await expect(page.getByLabel("Evidence file (up to 5 MB)")).toBeVisible()
+    await expect(page.getByLabel("Document file (up to 5 MB)")).toBeVisible()
+    await expect(page.getByRole("button", { name: "Continue to details & review", exact: true })).toBeVisible()
+    await expect(page.getByRole("button", { name: "Clean expired business uploads", exact: true })).toHaveCount(0)
     let reservations = 0
     page.on("request", request => { if (request.method() === "POST" && request.url().endsWith("/api/verification/evidence/uploads")) reservations++ })
     const pattern = await sharp(Buffer.from('<svg width="2400" height="1200"><rect width="1200" height="1200" fill="red"/><rect x="1200" width="1200" height="1200" fill="blue" fill-opacity="0.5"/></svg>')).png().toBuffer()
     await record("PNG cropping: natural resolution, alpha, rotation, responsive dialog and no premature upload", async () => {
-      await page.getByLabel("Evidence file (up to 5 MB)").setInputFiles({ name: "synthetic-id.png", mimeType: "image/png", buffer: pattern })
+      await page.getByLabel("Document file (up to 5 MB)").setInputFiles({ name: "synthetic-id.png", mimeType: "image/png", buffer: pattern })
       await expect(page.getByRole("img", { name: "Selected image preview", exact: true })).toBeVisible()
       await page.getByRole("button", { name: "Crop image", exact: true }).click()
       const dialog = page.getByRole("dialog", { name: "Crop image", exact: true }), canvas = dialog.getByRole("img", { name: "Image to crop", exact: true })
@@ -98,7 +100,7 @@ test("hosted image preparation, exact duplicate removal and independent review p
       const gate = new Promise<void>(resolve => { releaseTransfer = resolve })
       await page.route("https://oyhsrcmjhwxhvepdbcdc.supabase.co/**", async route => { if (route.request().method() === "PUT") await gate; await route.continue() })
       const finished = confirmUpload(page)
-      const progress = page.getByRole("progressbar", { name: "Evidence upload progress", exact: true })
+      const progress = page.getByRole("progressbar", { name: "Document upload progress", exact: true })
       await expect(progress).toBeVisible(); await progress.scrollIntoViewIfNeeded()
       await page.screenshot({ path: info.outputPath("upload-progress-mobile.png"), animations: "disabled" })
       releaseTransfer(); await finished
@@ -112,7 +114,7 @@ test("hosted image preparation, exact duplicate removal and independent review p
       await page.setViewportSize({ width: 1280, height: 900 })
     })
     await record("Cancel, use original and PDF bypass preserve exact uploaded bytes", async () => {
-      const input = page.getByLabel("Evidence file (up to 5 MB)")
+      const input = page.getByLabel("Document file (up to 5 MB)")
       await input.setInputFiles({ name: "original.png", mimeType: "image/png", buffer: pattern }); await page.getByRole("button", { name: "Crop image", exact: true }).click()
       const dialog = page.getByRole("dialog", { name: "Crop image", exact: true })
       await expect(dialog.getByRole("img", { name: "Image to crop", exact: true })).toBeVisible()
@@ -125,12 +127,12 @@ test("hosted image preparation, exact duplicate removal and independent review p
       await confirmUpload(page); expect(digest(await original(a, (await find("synthetic.pdf")).id))).toBe(digest(bytes))
     })
     await record("Phone JPEG orientation and invalid/oversized image guards", async () => {
-      const input = page.getByLabel("Evidence file (up to 5 MB)"), before = reservations
+      const input = page.getByLabel("Document file (up to 5 MB)"), before = reservations
       await input.setInputFiles({ name: "broken.png", mimeType: "image/png", buffer: Buffer.from("not an image") }); await page.getByRole("button", { name: "Crop image", exact: true }).click()
       const dialog = page.getByRole("dialog", { name: "Crop image", exact: true })
       await expect(dialog.getByRole("alert")).toContainText("valid JPEG or PNG"); await dialog.getByRole("button", { name: "Cancel", exact: true }).click(); expect(reservations).toBe(before)
       await input.setInputFiles({ name: "oversized.png", mimeType: "image/png", buffer: Buffer.alloc(5 * 1024 * 1024 + 1) })
-      await expect(page.getByRole("button", { name: "Upload evidence", exact: true })).toBeDisabled()
+      await expect(page.getByRole("button", { name: "Upload document", exact: true })).toBeDisabled()
       await expect(page.getByRole("button", { name: "Crop image", exact: true })).toHaveCount(0)
       await expect(page.getByRole("alert").filter({ hasText: "Maximum allowed is 5 MB." })).toBeVisible(); expect(reservations).toBe(before)
       const bytes = await sharp(pattern).resize(120, 60).flatten({ background: "white" }).withMetadata({ orientation: 6 }).jpeg().toBuffer()
@@ -157,9 +159,9 @@ test("hosted image preparation, exact duplicate removal and independent review p
     expect(candidates).toHaveLength(2)
     await record("Only administrators remove duplicates; confirmation and cancellation retain an older identical original", async () => {
       await api(o, "/api/verification/disposals/preview", 403, "POST", { evidenceId: redundant.id, kind: "DUPLICATE" })
-      await expect(page.getByRole("button", { name: "Manage uploaded files", exact: true })).toHaveCount(0)
+      await expect(page.getByRole("tab", { name: "File management", exact: true })).toHaveCount(0)
       await admin.goto(`/crm/contacts/${person.id}`); await admin.getByRole("tab", { name: "Verification", exact: true }).click()
-      await admin.getByRole("button", { name: "Manage uploaded files", exact: true }).click()
+      await admin.getByRole("tab", { name: "File management", exact: true }).click()
       await expect(admin.getByRole("button", { name: "Remove duplicate", exact: true })).toHaveCount(1)
       await admin.getByRole("button", { name: "Remove duplicate", exact: true }).click()
       await expect(admin.getByText("Older original to keep", { exact: true })).toBeVisible()
@@ -197,7 +199,7 @@ test("hosted image preparation, exact duplicate removal and independent review p
       await api(a, "/api/verification/disposals/preview", 409, "POST", { evidenceId: keeper.id, kind: "DUPLICATE" })
       expect(digest(await original(r, keeper.id))).toBe(digest(duplicate))
       await f.reviewer.page.goto(`/crm/contacts/${person.id}`); await f.reviewer.page.getByRole("tab", { name: "Verification", exact: true }).click()
-      await f.reviewer.page.getByRole("tab", { name: "Facts and review", exact: true }).click()
+      await f.reviewer.page.getByRole("tab", { name: "Details & review", exact: true }).click()
       await expect(f.reviewer.page.getByText("Review status: Verified", { exact: true })).toBeVisible()
       await f.reviewer.page.screenshot({ path: info.outputPath("independent-review.png"), fullPage: true, animations: "disabled" })
     })

@@ -5,7 +5,7 @@ changes. This builds on the policy/case and private-evidence increments.
 
 ## Workflow and boundaries
 
-Customer/account > Verification has Evidence and Facts and review subtabs.
+Customer/account > Verification has Documents and Details & review subtabs.
 The private panel loads on first use and remains mounted so tab switches preserve
 unsaved facts. Opening a record does not submit or approve anything.
 
