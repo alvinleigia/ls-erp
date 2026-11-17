@@ -1,3 +1,18 @@
+## P13S clearer customer verification workflow — production released (2026-11-17)
+
+GitHub main/staging and both hosted environments now use `e351a64`. Production
+`dpl_4dLeTyXmvWEQfeR1LpNqc1ogAEeF` and staging
+`dpl_4AeRx1CMy6c22uygpTpuuS5G9ABT` are READY; all production and staging aliases
+were verified. This UI-only release required no maintenance or migrations. Both
+databases retain 159 applied migrations with none pending.
+
+Authenticated Ewissen read-only smoke passed five views, the new workflow tabs,
+next-step navigation and cleanup confirmation cancellation. Existing image
+selection, crop thumbnail, immediate size validation and mobile overflow checks
+also passed. Desktop/mobile captures were inspected. Modules, profiles and
+verification configuration match the pre-release snapshot; no production upload
+or business change was submitted. See `P13S_VERIFICATION_WORKFLOW_UI.md`.
+
 ## P13S clearer customer verification workflow — staging verified (2026-11-17)
 
 The shared verification panel now separates Documents, Details & review and File

@@ -52,3 +52,31 @@ corrections and approval. Desktop/mobile captures were inspected. Hosted evidenc
 is in `tmp/p13s-verification-ui/staging.log` and `test-results/staging-access/`.
 The production alias still points to `dpl_6dW9a4R9rQjMgGNxUS2tAjcF6Wze`.
 This increment is staging-only; no production settings, grants or records changed.
+
+## Production release
+
+Released on 2026-11-17. The staging-only statement above records the earlier
+acceptance milestone. GitHub main/staging were fast-forwarded atomically to
+`e351a64dd0e80b486a9d9a452cf3bccc198941c3`. Application/test code matches the
+tested staging source exactly; later changes only recorded acceptance.
+Production `dpl_4dLeTyXmvWEQfeR1LpNqc1ogAEeF` and staging
+`dpl_4AeRx1CMy6c22uygpTpuuS5G9ABT` are READY at that source. All three production
+aliases and the staging alias resolve to their expected projects/deployments.
+
+No maintenance, database migration, storage change or access-profile change was
+needed. Both databases have 159 verified applied migrations and none pending.
+The previous production deployment remains available for a code rollback.
+
+Authenticated Ewissen smoke passed dashboard, enquiries, opportunities, verification
+queue and modules, followed by the new Documents/Details & review/File management
+navigation, next-step button and cancellation of the business-wide cleanup
+confirmation. Local image selection/cropping, preview dimensions and immediate
+12 MB rejection still work. Desktop/mobile captures were inspected without
+horizontal overflow. Upload selection was cleared without uploading; all mutating
+browser requests were blocked throughout the smoke check.
+
+Modules, access profiles, verification policy, checkpoints and retention match
+the pre-release read-only snapshot. No production document or business record was
+changed. Private release receipts are under `tmp/p13s-verification-ui/production/`
+and captures under `test-results/p13s-verification-ui-production/`. This local
+release-record follow-up does not trigger another deployment.
