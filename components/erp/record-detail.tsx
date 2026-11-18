@@ -85,7 +85,7 @@ export function EditPanel({ open, title, description, help, onClose, onSubmit, s
   function close() { if (!saving) { if (dirty) setDiscard(true); else onClose() } }
   return <><Sheet open={open} onOpenChange={next => { if (!next) close() }}><SheetContent className="w-full gap-0 sm:max-w-2xl" onInteractOutside={event => { event.preventDefault() }}>
     <SheetHeader className="shrink-0 border-b p-5 pr-12"><div className="flex items-center gap-2"><SheetTitle className="min-w-0">{title}</SheetTitle>{help && <InfoHelp title={title}>{help}</InfoHelp>}</div><SheetDescription>{description}</SheetDescription></SheetHeader>
-    <form id={formId} onSubmit={event => { event.preventDefault(); onSubmit(event) }} onInvalidCapture={event => { const target = event.target as HTMLElement; const section = target.closest("details"); if (section) section.open = true }} className="min-h-0 flex-1 space-y-5 overflow-y-auto p-5">
+    <form id={formId} onSubmit={event => { event.preventDefault(); event.stopPropagation(); onSubmit(event) }} onInvalidCapture={event => { const target = event.target as HTMLElement; const section = target.closest("details"); if (section) section.open = true }} className="min-h-0 flex-1 space-y-5 overflow-y-auto p-5">
       {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
       <fieldset disabled={saving} className="min-w-0 space-y-5">{children}</fieldset>
     </form>

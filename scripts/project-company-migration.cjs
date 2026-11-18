@@ -128,11 +128,37 @@ async function fingerprints(db, changes = [], { grants = [], migration = null } 
   return out
 }
 
-async function applyLocal(db, manifest, reviewed, access, { failBeforeCommit = false } = {}) {
-  assert(['127.0.0.1','localhost'].includes(db.connectionParameters.host),'Rehearsal database only; production execution is not implemented')
+async function applyLocal(db, manifest, reviewed, access, options = {}) {
+  assert(['127.0.0.1','localhost'].includes(db.connectionParameters.host),'Rehearsal database only; hosted cutovers require the production entry point')
   assert.match(db.connectionParameters.database,/^ls_erp_(?:company_)?rehearsal_[a-f0-9]{12}$/,'Dedicated rehearsal database required')
+  return applyReviewed(db,manifest,reviewed,access,options)
+}
+
+// Explicit offline cutover entry point. No web route or application runtime
+// imports this module. The release runner must first verify its fresh encrypted
+// backup/copy receipt and exact source fingerprints while maintenance is active.
+async function applyProduction(db, manifest, reviewed, access, confirmation) {
+  const { hostedUrl, targets }=require('./database-workflow.cjs'),c=db.connectionParameters,target=targets.production
+  const url=new URL('postgresql://'+encodeURIComponent(c.user)+'@'+c.host+':'+c.port+'/'+c.database)
+  hostedUrl(url,target,true)
+  assert.equal(c.user,'postgres.'+target.ref,'Use the registered production migration identity')
+  assert.equal(c.ssl?.rejectUnauthorized,true,'Verified production TLS is required')
+  assert.equal(confirmation?.tenantId,reviewed.tenantId,'Confirm the reviewed tenant')
+  assert.equal(confirmation?.digest,reviewed.digest,'Confirm the reviewed source digest')
+  assert.match(confirmation?.verifiedBackup||'',/^[a-f0-9]{12}$/,'Fresh verified recovery backup required')
+  assert.equal(confirmation?.copyRehearsalPassed,true,'Fresh copied-source rehearsal required')
+  assert.deepEqual((await db.query("SELECT rolcanlogin,rolconnlimit FROM pg_roles WHERE rolname='prisma_app'")).rows[0],{rolcanlogin:false,rolconnlimit:0},'Block runtime logins before reassignment')
+  assert.equal((await db.query("SELECT count(*)::int n FROM pg_stat_activity WHERE usename='prisma_app' AND datname=current_database()")).rows[0].n,0,'Drain runtime sessions before reassignment')
+  return {...await applyReviewed(db,manifest,reviewed,access),productionWrites:true}
+}
+
+async function applyReviewed(db, manifest, reviewed, access, { failBeforeCommit = false } = {}) {
   await db.query('BEGIN ISOLATION LEVEL SERIALIZABLE')
   try{
+    // Freeze every table included in preservation fingerprints, including
+    // source contexts and permission/team configuration, before the final plan.
+    const tables=(await db.query("SELECT tablename FROM pg_tables WHERE schemaname='public' ORDER BY tablename")).rows
+    await db.query(`LOCK TABLE ${tables.map(r=>qi(r.tablename)).join(',')} IN SHARE ROW EXCLUSIVE MODE NOWAIT`)
     for(const table of [...roots,'BusinessOfficePolicy','BusinessOfficeGrant','BusinessCompanyGrant','User'])await db.query(`LOCK TABLE ${qi(table)} IN ACCESS EXCLUSIVE MODE NOWAIT`)
     const current=await plan(db,manifest,access);assert.equal(current.digest,reviewed.digest,'Source changed; generate and review a fresh plan')
     assert(current.summary.accessAssessed,'Capture every active user action scope before migration')
@@ -171,4 +197,4 @@ async function applyLocal(db, manifest, reviewed, access, { failBeforeCommit = f
     return {migration,changes:current.summary,unrelatedTablesPreserved:true,guardsRestored:true,productionWrites:false}
   }catch(e){await db.query('ROLLBACK');throw e}
 }
-module.exports={plan,captureAccess,fingerprints,applyLocal}
+module.exports={plan,captureAccess,fingerprints,applyLocal,applyProduction}

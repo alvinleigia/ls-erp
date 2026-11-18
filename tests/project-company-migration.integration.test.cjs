@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
 const {test,before,after}=require('node:test'),assert=require('node:assert/strict'),{randomUUID}=require('node:crypto'),{Client,Pool}=require('pg'),{PrismaClient}=require('@prisma/client')
-const {plan,captureAccess,applyLocal,fingerprints}=require('../scripts/project-company-migration.cjs')
+const {plan,captureAccess,applyLocal,applyProduction,fingerprints}=require('../scripts/project-company-migration.cjs')
 const {TenantPgAdapter}=require('../lib/tenant-pg-adapter.ts'),{createApplicationCrmService}=require('../application/crm/service.ts'),{createRealEstateService}=require('../modules/real-estate/service.ts'),{createCompanyService}=require('../platform/companies/service.ts'),{createOfficeAccessService}=require('../platform/companies/office-access.ts'),{createAccessRoleService}=require('../platform/access/service.ts'),{allPermissions}=require('../platform/access/catalog.ts'),{defaultRecordRules,supportedScopes}=require('../platform/access/rules.ts')
 require('../lib/logger.ts').logger.info=()=>{}
 assert.equal(process.env.COMPANY_MIGRATION_TEST_RUN,'1');const url=new URL(process.env.COMPANY_MIGRATION_TEST_DATABASE_URL);assert.equal(url.hostname,'127.0.0.1');assert.match(url.pathname,/^\/ls_erp_company_rehearsal_[a-f0-9]{12}$/)
@@ -56,6 +56,19 @@ test('preview follows sources and adds only necessary office eligibility',()=>{
 test('hosted databases and ordinary local demo are not valid migration targets',async()=>{
  await assert.rejects(applyLocal({connectionParameters:{host:'example.supabase.co',database:'postgres'}},manifest,reviewed,baseline),/Rehearsal database only/)
  await assert.rejects(applyLocal({connectionParameters:{host:'127.0.0.1',database:'ls_salon_crm_test'}},manifest,reviewed,baseline),/Dedicated rehearsal/)
+})
+test('production entry point requires exact environment, TLS, reviewed proof and drained maintenance',async()=>{
+ const confirmation={tenantId:reviewed.tenantId,digest:reviewed.digest,verifiedBackup:'012345abcdef',copyRehearsalPassed:true}
+ const connectionParameters={host:'aws-1-ap-south-1.pooler.supabase.com',port:5432,database:'postgres',user:'postgres.tehtbbifiimoplzlewzs',ssl:{rejectUnauthorized:true}}
+ let writes=0
+ const fake={connectionParameters,query:async sql=>{assert(sql.startsWith('SELECT'));writes++;return {rows:[{rolcanlogin:true,rolconnlimit:-1}]}}}
+ await assert.rejects(applyProduction(db,manifest,reviewed,baseline,confirmation),/Database URL/)
+ await assert.rejects(applyProduction({...fake,connectionParameters:{...connectionParameters,ssl:{rejectUnauthorized:false}}},manifest,reviewed,baseline,confirmation),/TLS/)
+ await assert.rejects(applyProduction(fake,manifest,reviewed,baseline,{...confirmation,digest:'stale'}),/digest/)
+ await assert.rejects(applyProduction(fake,manifest,reviewed,baseline,{...confirmation,copyRehearsalPassed:false}),/rehearsal/)
+ await assert.rejects(applyProduction(fake,manifest,reviewed,baseline,confirmation),/Block runtime/)
+ assert.equal(writes,1,'All invalid requests must stop before any database mutation')
+ await assert.rejects(applyProduction({...fake,query:async sql=>({rows:sql.includes('pg_roles')?[{rolcanlogin:false,rolconnlimit:0}]:[{n:1}]})},manifest,reviewed,baseline,confirmation),/Drain runtime/)
 })
 test('conflicting mappings and post-preview changes fail before modifying rows',async()=>{
  const before=await fingerprints(db)

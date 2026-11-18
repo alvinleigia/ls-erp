@@ -46,9 +46,12 @@ units or activity-plan launches require a separately reviewed migration. It neve
 rewrites frozen documents or invents company-specific customer/KYC copies.
 
 The rehearsal writer accepts only dedicated loopback rehearsal databases, not
-hosted databases or the everyday local demo. A production execution entry point
-is deliberately not exposed. The native ownership guard still rejects ordinary
-office updates, including privileged direct updates.
+hosted databases or the everyday local demo. The separate offline production
+entry point requires the registered production database and migration identity,
+verified TLS, the reviewed tenant/source digest, a verified recovery backup and
+copy rehearsal, disabled runtime logins and zero remaining runtime sessions.
+There is no web route for reassignment. The native ownership guard still rejects
+ordinary office updates, including privileged direct updates.
 
 ### Preservation checks
 
@@ -57,7 +60,7 @@ office updates, including privileged direct updates.
 - Derive the additional office grants needed by existing authorized readers,
   responsible users, project members and affected import operators. Preserve old
   grants, profile rules, teams, reporting relationships and creation preferences.
-- In one transaction, lock the ownership/security tables, recheck the source
+- In one transaction, lock every table covered by preservation checks, recheck the source
   digest, add audited grants and move only the reviewed roots. Increment source
   versions to reject already-open stale editors.
 - Transactional DDL suspends only the identified native office-immutability
@@ -104,7 +107,7 @@ not an executable migration authorization or a permanently valid row count.
 
 ### Local acceptance (2026-11-18)
 
-- 56 native office/access/workspace checks; seven isolated reassignment checks;
+- 56 native office/access/workspace checks; eight isolated reassignment checks;
   61 CRM unit checks; seven real browser scenarios passed.
 - TypeScript, targeted lint and production build passed. Desktop and mobile
   project-detail captures were inspected; saved ownership sits inside the
@@ -115,6 +118,12 @@ not an executable migration authorization or a permanently valid row count.
 - No hosted schema, company grants, assignments or business records have been
   changed by this work. Production and hosted staging verification remain a
   separate release step.
+
+The hosted acceptance test exposed React portal submit bubbling from the office
+chooser into its enclosing project form. Shared edit panels now stop submit
+propagation; regression checks require zero project POSTs when applying the office
+and exactly one POST after explicitly saving the project. Existing page drafts,
+office expectation checks and phase inheritance remain unchanged.
 
 ### Protected Ewissen-copy acceptance (2026-11-18)
 

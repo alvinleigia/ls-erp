@@ -5,7 +5,7 @@ forms share an explicit creation chooser; phases and conversions inherit their
 source. Migration 160 adds only read-only office labels. The offline pre-commercial
 utility moves reviewed source families and preserves native ownership guards.
 
-Verification passed: 56 native checks, seven reassignment tests, 61 CRM unit checks,
+Verification passed: 56 native checks, eight reassignment tests, 61 CRM unit checks,
 seven browser scenarios, TypeScript, targeted lint and production build. Desktop
 and mobile ownership layouts were inspected. A fresh encrypted Ewissen backup was
 restored internally: all eight users retained exact application action/record
@@ -15,9 +15,13 @@ users. All 3,072 enquiries and existing profile/party/KYC/history data were reta
 full rollback passed. See `PROJECT_COMPANY_OWNERSHIP_P13S.md` for native-access
 comparison details and the reviewed company mapping.
 
-The local demo has 160 migrations. Nothing from this increment is pushed, deployed
-or applied to hosted data. The utility exposes only a guarded loopback rehearsal
-writer; a controlled production execution/release remains a separate step.
+The local demo and staging have 160 migrations. Staging metadata migration
+preservation passed. Hosted acceptance exposed portalled form-submit bubbling;
+the shared edit-panel fix now passes all seven local browser checks, including
+zero parent-project POSTs when applying an office choice. Hosted re-verification
+is next. The offline production entry point requires the registered production
+identity, verified TLS, reviewed source, a verified backup/copy rehearsal and
+drained maintenance. Production data remains unchanged pending that cutover.
 
 ## P13S automatic verification checklist context — production released (2026-11-17)
 

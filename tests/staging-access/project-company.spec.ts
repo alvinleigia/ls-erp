@@ -11,6 +11,8 @@ test("project form explicitly chooses company without losing its draft or moving
     await admin.page.goto("/crm/projects/new")
     await admin.page.getByLabel("Project name", { exact: true }).fill("Ownership browser project")
     await admin.page.getByLabel("Project code", { exact: true }).fill("OWNERSHIP")
+    let projectCreates = 0
+    admin.page.on("request", request => { if (request.method() === "POST" && new URL(request.url()).pathname === "/api/real-estate/projects") projectCreates++ })
     await admin.page.getByRole("button", { name: "Choose company and office", exact: true }).click()
     const panel = admin.page.getByRole("dialog")
     await panel.getByLabel("Office for new records").click()
@@ -19,9 +21,11 @@ test("project form explicitly chooses company without losing its draft or moving
     await expect(panel).not.toBeVisible()
     await expect(admin.page.getByLabel("Project name", { exact: true })).toHaveValue("Ownership browser project")
     await expect(admin.page.getByText("Project company", { exact: true })).toBeVisible()
+    expect(projectCreates, "Applying the portalled office form must not submit its parent project form").toBe(0)
     const saved = admin.page.waitForResponse(r => new URL(r.url()).pathname === "/api/real-estate/projects" && r.request().method() === "POST")
     await admin.page.getByRole("button", { name: "Save project", exact: true }).click()
     const response = await saved
+    expect(projectCreates).toBe(1)
     expect(response.status(), await response.text()).toBe(201)
     const project = await response.json()
     expect(project.officeId).toBe(office.id)
