@@ -18,8 +18,11 @@ comparison details and the reviewed company mapping.
 The local demo and staging have 160 migrations. Staging metadata migration
 preservation passed. Hosted acceptance exposed portalled form-submit bubbling;
 the shared edit-panel fix now passes all seven local browser checks, including
-zero parent-project POSTs when applying an office choice. Hosted re-verification
-is next. The offline production entry point requires the registered production
+zero parent-project POSTs when applying an office choice. Hosted staging
+acceptance passed on `d3053ed`, including desktop/mobile inspection and inherited
+phase ownership. The eight cutover checks also pass with password-authenticated
+PostgreSQL; scoped readers explicitly preserve pg's non-enumerable password.
+The offline production entry point requires the registered production
 identity, verified TLS, reviewed source, a verified backup/copy rehearsal and
 drained maintenance. Production data remains unchanged pending that cutover.
 

@@ -92,7 +92,9 @@ async function captureAccess(db, tenantId, users, role='prisma_app') {
   const {runWithDatabaseActor}=require('../lib/database-actor.ts'),{authorizeBusinessOperation}=require('../platform/access/operation.ts')
   const {enquiryScope,opportunityScope,contactScope,accountScope}=require('../modules/crm/policy.ts'),{projectScope}=require('../modules/real-estate/access.ts'),{workScope}=require('../modules/crm/work-scope.ts')
   const {allPermissions}=require('../platform/access/catalog.ts')
-  const pool=new Pool({...db.connectionParameters,max:1}),client=new PrismaClient({adapter:new TenantPgAdapter(pool,{tenantId})}),out={}
+  // pg deliberately makes password non-enumerable. Preserve it explicitly when
+  // opening scoped readers; a spread alone works only with trust authentication.
+  const pool=new Pool({...db.connectionParameters,password:db.connectionParameters.password,max:1}),client=new PrismaClient({adapter:new TenantPgAdapter(pool,{tenantId})}),out={}
   try{
     for(const user of users.filter(u=>u.status==='ACTIVE')){
       out[user.id]={}

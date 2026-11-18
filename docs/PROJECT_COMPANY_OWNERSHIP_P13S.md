@@ -125,6 +125,12 @@ propagation; regression checks require zero project POSTs when applying the offi
 and exactly one POST after explicitly saving the project. Existing page drafts,
 office expectation checks and phase inheritance remain unchanged.
 
+Hosted staging acceptance passed on `d3053ed`; desktop/mobile screenshots were
+inspected. Migration 160 preserved all prior staging rows. The reassignment suite
+uses disposable SCRAM-authenticated PostgreSQL, including the scoped reader pool,
+so trust-only local authentication cannot conceal a missing connection password.
+These release-runner corrections do not change application record-access rules.
+
 ### Protected Ewissen-copy acceptance (2026-11-18)
 
 A fresh encrypted, read-only production backup was restored without an application
