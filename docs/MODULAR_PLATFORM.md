@@ -1,4 +1,20 @@
-## P13S project/company ownership - local and protected-copy verified (2026-11-18)
+## P13S project/company ownership - production released (2026-11-18)
+
+Main/staging application source is `cbb6c64`. Production
+`dpl_6apr35DzyupqvYnN4PGavipXnMck` and staging
+`dpl_4KReX1bpWTzrYcVHLXuT77xY7xLb` are READY with 160 migrations; all aliases
+were verified and application access is restored. The frozen backup and 16 stored
+files/references were restored/verified before the atomic ownership move.
+All original 3,072 enquiries, 48 opportunities, nine project/phase records,
+263 activities, 3,072 contacts and one account were retained. Every active user's
+runtime action/record populations matched for the original inventory after
+reopening. Eight project/company mappings, inherited phase ownership, moved sales
+office labels and desktop/mobile layouts passed authenticated read-only checks.
+No production test fixtures or commercial/KYC document rewrites were made. See
+`PROJECT_COMPANY_OWNERSHIP_P13S.md` for cutover evidence, the resolved local pooler
+verification cooldown and remaining company tax/bank/template setup.
+
+### Implementation and pre-release verification
 
 Projects, enquiries and opportunities display saved company/office. New independent
 forms share an explicit creation chooser; phases and conversions inherit their
@@ -15,7 +31,7 @@ users. All 3,072 enquiries and existing profile/party/KYC/history data were reta
 full rollback passed. See `PROJECT_COMPANY_OWNERSHIP_P13S.md` for native-access
 comparison details and the reviewed company mapping.
 
-The local demo and staging have 160 migrations. Staging metadata migration
+The local demo and staging reached 160 migrations. Staging metadata migration
 preservation passed. Hosted acceptance exposed portalled form-submit bubbling;
 the shared edit-panel fix now passes all seven local browser checks, including
 zero parent-project POSTs when applying an office choice. Hosted staging
@@ -26,7 +42,7 @@ retain their authenticated verifier while new logins are blocked. That verifier
 is closed before writes; no extra operator role memberships are granted.
 The offline production entry point requires the registered production
 identity, verified TLS, reviewed source, a verified backup/copy rehearsal and
-drained maintenance. Production data remains unchanged pending that cutover.
+drained maintenance. The subsequent production cutover is recorded above.
 
 ## P13S automatic verification checklist context — production released (2026-11-17)
 

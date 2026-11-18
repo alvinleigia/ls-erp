@@ -1,6 +1,45 @@
 # P13S: explicit company ownership and pilot reassignment
 
-Status: local implementation; production data has not been reassigned.
+Status: released to production and staging on 2026-11-18, source `cbb6c64`.
+Both databases have 160 applied migrations. Ewissen's approved company mapping
+has been applied and application access is restored.
+
+## Production acceptance
+
+- Production `dpl_6apr35DzyupqvYnN4PGavipXnMck` and staging
+  `dpl_4KReX1bpWTzrYcVHLXuT77xY7xLb` are READY on the same source; all four
+  tenant/platform/staging aliases were verified.
+- The final frozen backup restored exactly, including owners, ACLs, roles and
+  all 16 stored files/references. Forced rollback and successful reassignment
+  passed on that exact copy before the live operation.
+- Five projects, 26 enquiries, 19 opportunities, nine activities and one import
+  batch moved atomically. Ten office grants were added across six users; prior
+  grants, profiles, assignments, teams, master parties and KYC remained intact.
+- All original 3,072 enquiries, 48 opportunities, nine project/phase records,
+  263 activities, 3,072 contacts and one business account were retained. The
+  eight enquiries without a project kept their original office.
+- After reopening, each active user's actual runtime Read/Edit/Assign/Archive/
+  Export populations matched for the original record inventory. New records
+  legitimately created after reopening were excluded from that comparison.
+- Authenticated live APIs verified every project/company mapping and moved
+  enquiry/opportunity offices. Five live views passed read-only smoke; desktop
+  and mobile project layouts were inspected. No dummy tenant business records,
+  issued documents or KYC files were created/rewritten by production testing.
+
+The local verifier encountered Supavisor's authentication circuit breaker after
+maintenance login denials. The runtime role had already been restored; the actual
+application database API was verified healthy independently. Verification resumed
+after the local cooldown without repeating the migration or changing credentials.
+For future cutovers, gate application traffic before disabling logins, persist
+the restored-access state before health probes, and use bounded backoff instead
+of repeated authentication attempts. See the
+[Supabase circuit-breaker guidance](https://supabase.com/kb/troubleshooting/supavisor-error-circuit-breaker-open-after-password-rotation-0fdb72).
+
+Company tax registrations, bank instructions and published document templates
+still need business review for each issuing company before commercial use. This
+release does not invent those settings or implement a project expense ledger.
+
+## Implementation
 
 Projects, enquiries and opportunities now display their saved owning company and
 office. New independent projects and sales forms expose the shared creation-office
@@ -115,9 +154,8 @@ not an executable migration authorization or a permanently valid row count.
 - The local demo was brought up to 160 migrations without a reset or reseed.
   This included two previously pending safeguard migrations and the new
   read-only office-label function.
-- No hosted schema, company grants, assignments or business records have been
-  changed by this work. Production and hosted staging verification remain a
-  separate release step.
+- At this initial local checkpoint, no hosted schema, grants or business records
+  had changed. The later production acceptance above supersedes that status.
 
 The hosted acceptance test exposed React portal submit bubbling from the office
 chooser into its enclosing project form. Shared edit panels now stop submit
@@ -170,5 +208,6 @@ was verified for every user and destination offices were operationally empty, so
 additional office grants could not reveal unrelated destination data. Application
 record scopes remained exact; original audit facts were preserved.
 
-The successful receipt and source/grant details are ignored private evidence. This
-is acceptance on a restored copy, not a production data migration or deployment.
+The successful receipt and source/grant details are ignored private evidence.
+This section records the earlier rehearsal; the production acceptance above
+records the subsequent live release and verified reassignment.
