@@ -1,3 +1,24 @@
+## P13S project/company ownership - local and protected-copy verified (2026-11-18)
+
+Projects, enquiries and opportunities display saved company/office. New independent
+forms share an explicit creation chooser; phases and conversions inherit their
+source. Migration 160 adds only read-only office labels. The offline pre-commercial
+utility moves reviewed source families and preserves native ownership guards.
+
+Verification passed: 56 native checks, seven reassignment tests, 61 CRM unit checks,
+seven browser scenarios, TypeScript, targeted lint and production build. Desktop
+and mobile ownership layouts were inspected. A fresh encrypted Ewissen backup was
+restored internally: all eight users retained exact application action/record
+populations after moving five projects, 26 enquiries, 19 opportunities, nine
+activities and one import batch, with ten additional office grants across six
+users. All 3,072 enquiries and existing profile/party/KYC/history data were retained;
+full rollback passed. See `PROJECT_COMPANY_OWNERSHIP_P13S.md` for native-access
+comparison details and the reviewed company mapping.
+
+The local demo has 160 migrations. Nothing from this increment is pushed, deployed
+or applied to hosted data. The utility exposes only a guarded loopback rehearsal
+writer; a controlled production execution/release remains a separate step.
+
 ## P13S automatic verification checklist context — production released (2026-11-17)
 
 GitHub main/staging and both hosted environments now use `b8c9d29`. Production

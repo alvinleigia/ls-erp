@@ -1,3 +1,4 @@
+import { recordOfficeLabel } from "@/platform/companies/record-office-label"
 import { createCrmPartyTaxService } from "./party-tax-service"
 import { createCrmPartyAddressService } from "./party-address-service"
 import { introductionForCreate, introductionBoundaryError } from "@/platform/collaborators/attribution"
@@ -379,6 +380,7 @@ export function createCrmService<Fields extends object = object, Metadata extend
     getEnquiry(id: string) {
       return run("enquiries.read", async (tx, actor) => {
         const { items: [record] } = await extensions.decorate(tx, actor, "enquiry", await maskReferrals(tx, actor, [await findEnquiry(tx, actor, id)]))
+        Object.assign(record, { office: await recordOfficeLabel(tx, actor.tenantId, record.officeId) })
         const events = await Promise.all(["created", "updated", "assigned"].map(event => tx.crmActivity.findFirst({ where: { tenantId: actor.tenantId, enquiryId: id, event }, orderBy: [{ createdAt: "desc" }, { id: "desc" }], select: { createdAt: true, actor: { select: personSelect } } })))
         return { ...record, recordAccess: await recordActionAccess(actor, "enquiries", id, tx, async action => !!await tx.crmEnquiry.findFirst({ where: { ...enquiryScope(actor, action), id }, select: { id: true } })), customFields: await readCustomFields(tx, actor, enquiryFields, record), metadata: { created: events[0], updated: events[1] || events[0], assigned: events[2] }, canAssign: permits(actor, "enquiries.assign"), opportunity: await tx.crmOpportunity.findFirst({ where: { ...opportunityScope(actor), enquiryId: id }, select: { id: true } }) }
       })

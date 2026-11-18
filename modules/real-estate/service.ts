@@ -1,4 +1,5 @@
 import { officeBoundaryError } from "@/platform/companies/record-office"
+import { recordOfficeLabel } from "@/platform/companies/record-office-label"
 import { authorizeBusinessOperation } from "@/platform/access/operation"
 import { recordActionAccess } from "@/platform/access/record-actions"
 
@@ -112,7 +113,7 @@ export function createRealEstateService(db: PrismaClient, identity: Pick<Busines
         const recordAccess = await recordActionAccess(actor, "projects", id, tx, action => tx.realEstateProject.findFirst({ where: { AND: [projectScope(actor, action), { id }] }, select: { id: true } }))
         const membersAccess = await recordActionAccess(actor, "projectMembers", id, tx, action => tx.realEstateProject.findFirst({ where: { AND: [projectScope(actor, "read"), projectScope(actor, action, "projectMembers"), { id }] }, select: { id: true } }))
         Object.assign(recordAccess.permissions, membersAccess.permissions)
-        return { ...record, team, recordAccess, customFields: await readCustomFields(tx, actor, projectFields, record), developerAccountId: developerAccount?.id || null, developerAccount, developerRestricted: !!record.developerAccountId && !developerAccount, parent, canManage: !!recordAccess.permissions["projects.edit"] }
+        return { ...record, office: await recordOfficeLabel(tx, actor.tenantId, record.officeId), team, recordAccess, customFields: await readCustomFields(tx, actor, projectFields, record), developerAccountId: developerAccount?.id || null, developerAccount, developerRestricted: !!record.developerAccountId && !developerAccount, parent, canManage: !!recordAccess.permissions["projects.edit"] }
       })
     },
     createProject(input: unknown) {

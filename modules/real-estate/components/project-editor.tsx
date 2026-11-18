@@ -1,6 +1,8 @@
 "use client"
 import { useListState } from "@/components/erp/list-navigation"
-import { useCreationOfficeSnapshot } from "@/platform/companies/creation-snapshot"
+import { useCreationOfficeContext } from "@/platform/companies/creation-snapshot"
+import { CreationOfficeFields } from "@/platform/companies/creation-office-fields"
+import { RecordOfficeFields } from "@/platform/companies/record-office-fields"
 import { useTerminology, useTerminologyReader } from "@/platform/terminology/provider"
 import { useCustomFields } from "@/modules/crm/components/custom-fields"
 import { useBusinessModules } from "@/platform/module-provider"
@@ -34,7 +36,8 @@ import { CatalogList } from "@/modules/catalog/components/item-list"
 const empty: Project = { id: "", name: "", code: "", parentId: null, developerAccountId: null, location: "", description: "", categories: [], lifecycle: "", priceMin: "", priceMax: "", currency: "", archived: false, version: 1 }
 export const ProjectEditor = withRecordView(ProjectEditorBody)
 function ProjectEditorBody({ id, parentId = "" }: { id?: string; parentId?: string }) {
-  const creationHeaders = useCreationOfficeSnapshot(!id)
+  const creation = useCreationOfficeContext(!id && !parentId)
+  const creationHeaders = creation.headers
   const readTerm = useTerminologyReader()
   const term = useTerminology()
   const { can, enabled } = useBusinessModules()
@@ -88,6 +91,7 @@ function ProjectEditorBody({ id, parentId = "" }: { id?: string; parentId?: stri
   const cancelHref = record.parentId ? `/crm/projects/${record.parentId}` : "/crm/projects"
   const change = <K extends keyof Project>(key: K, value: Project[K]) => setRecord(previous => ({ ...previous, [key]: value }))
   async function save(archive = false) {
+    if (!id && !record.parentId && (creation.loading || !creation.context?.creationOffice || creation.error)) return
     setSaving(true); setError(""); clearErrors()
     const { name, code, parentId, developerAccountId, teamId, location, description, categories, lifecycle, priceMin, priceMax, currency, archived, version } = record
     try {
@@ -119,9 +123,11 @@ function ProjectEditorBody({ id, parentId = "" }: { id?: string; parentId?: stri
   const pricingForm = <>        <Section title="Property and pricing" description="Indicative marketing information. Prices and sales lifecycle do not represent unit availability."><fieldset className="space-y-3"><legend className="mb-3 text-sm font-medium">Property categories</legend><ChoiceSelect kind="property-categories" id="project-category" value="" placeholder="Add a property category…" disabled={!canManage || saving || record.categories.length >= 50} onChange={(id, name) => setRecord(previous => ({ ...previous, categories: [...new Set([...previous.categories, id])], categoryNames: { ...previous.categoryNames, [id]: name || id } }))} /><div className="flex flex-wrap gap-2">{record.categories.map(id => <span key={id} className="inline-flex items-center gap-2 rounded-md border px-3 py-1 text-sm">{record.categoryNames?.[id] || choiceLabel(id)}{canManage && <Button type="button" size="sm" variant="ghost" aria-label={`Remove ${record.categoryNames?.[id] || choiceLabel(id)}`} onClick={() => change("categories", record.categories.filter(item => item !== id))}>×</Button>}</span>)}</div></fieldset><div className="grid gap-4 sm:grid-cols-3">{field("priceMin", "Indicative minimum price")}{field("priceMax", "Indicative maximum price")}{field("currency", "Currency code (e.g. INR)")}</div></Section>
 </>
   const current = saved || record
+  const creationBlocked = !id && !parentId && (creation.loading || !creation.context?.creationOffice || !!creation.error)
   const editAction = (section: "details" | "pricing" | "custom", label: string) => canManage ? <Button variant="outline" size="sm" onClick={() => begin(section)}>{label}</Button> : undefined
   const overview = <>
     <Section title={term(recordKey + ".singular", "Project details", "{label} details")} actions={editAction("details", "Edit details")}>
+      <RecordOfficeFields office={current.office} />
       <ReadOnlyFields fields={[
         { label: term(recordKey + ".singular", "Project code", "{label} code"), value: current.code }, { label: "Location", value: current.location },
         { label: "Sales lifecycle", value: current.lifecycleName || choiceLabel(current.lifecycle) },
@@ -143,9 +149,11 @@ function ProjectEditorBody({ id, parentId = "" }: { id?: string; parentId?: stri
     <AccessPageHeader title={id ? current.name : term(recordKey + ".singular", record.parentId ? "New subproject" : "New project", "New {label}")} description={current.parent ? <>Part of <Link className="underline" href={`/crm/projects/${current.parent.id}`}>{current.parent.name}</Link>{current.parent.archived && " (archived)"}</> : id ? [current.code, current.location].filter(Boolean).join(" / ") : "Start with the basics. Add pricing and other details after saving."} backHref={cancelHref} badge={id ? <span className="rounded bg-muted px-2 py-1 text-xs">{current.archived ? "Archived" : current.lifecycleName || "Active"}</span> : undefined} actions={id ? <>
       {canManage && <Button onClick={() => begin("details")}>{term(recordKey + ".singular", "Edit project", "Edit {label}")}</Button>}
       <RecordMenu actions={[{ label: "Refresh", onSelect: () => setRevision(value => value + 1) }, ...(canManage && can("projects.archive") ? [{ label: current.archived ? term(recordKey + ".singular", "Restore project", "Restore {label}") : term(recordKey + ".singular", "Archive project", "Archive {label}"), onSelect: () => { setError(""); setConfirm(true) } }] : [])]} />
-    </> : <AccessFormActions form="project-form" cancelHref={cancelHref} canSave={canManage} disabled={custom.blocked} saving={saving} saveLabel={term(recordKey + ".singular", "Save project", "Save {label}")} />} descriptionDisplay="inline" />
+    </> : <AccessFormActions form="project-form" cancelHref={cancelHref} canSave={canManage} disabled={custom.blocked || creationBlocked} saving={saving} saveLabel={term(recordKey + ".singular", "Save project", "Save {label}")} />} descriptionDisplay="inline" />
     {error && !editing && <p role="alert" className="text-destructive">{error}</p>}
-    {!id ? <form id="project-form" onSubmit={event => { event.preventDefault(); void save() }} className="space-y-6"><fieldset disabled={saving} className="min-w-0 space-y-6">{detailsForm}
+    {!id ? <form id="project-form" onSubmit={event => { event.preventDefault(); void save() }} className="space-y-6"><fieldset disabled={saving} className="min-w-0 space-y-6">
+      {!parentId ? <CreationOfficeFields capture={creation} disabled={saving} /> : record.parent?.office && <RecordOfficeFields office={record.parent.office} />}
+      {detailsForm}
       <details className="rounded-xl border bg-card p-4"><summary className="cursor-pointer font-medium">Optional property and pricing</summary><div className="mt-4">{pricingForm}</div></details>
       {custom.section(saving)}
     </fieldset></form> : <>
@@ -158,6 +166,7 @@ function ProjectEditorBody({ id, parentId = "" }: { id?: string; parentId?: stri
         { value: "team", permission: "projectMembers.read" as const, label: "Team", content: record.parentId ? <Section title="Staff access"><p className="text-sm text-muted-foreground">{term("realEstate.project.singular", "Staff access is inherited from the parent project.", "Staff access is inherited from the parent {label}.")}</p><Button variant="outline" asChild><Link href={`/crm/projects/${record.parentId}`}>{term("realEstate.project.singular", "Manage parent project", "Manage parent {label}")}</Link></Button></Section> : <ProjectMembers id={id} version={record.version} archived={record.archived} onVersion={version => { change("version", version); setSaved(previous => previous ? { ...previous, version } : previous) }} /> },
       ]} />
       <EditPanel open={!!editing} title={editing === "pricing" ? "Edit property and pricing" : editing === "custom" ? "Edit additional information" : term(recordKey + ".singular", "Edit project details", "Edit {label} details")} description={term("realEstate.project.singular", "Changes apply to this project only.", "Changes apply to this {label} only.")} onClose={cancelEdit} onSubmit={() => void save()} saving={saving} disabled={custom.blocked} error={error} dirty={JSON.stringify(record) !== JSON.stringify(saved) || Object.keys(custom.payload.customFields).length > 0}>
+        {editing === "details" && <RecordOfficeFields office={current.office} />}
         {editing === "details" ? detailsForm : editing === "pricing" ? pricingForm : editing === "custom" ? custom.section(saving) : null}
       </EditPanel>
     </>}

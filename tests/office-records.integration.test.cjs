@@ -60,6 +60,22 @@ test('native root ownership is persisted and shared customer identity is reused 
  assert.equal((await crm(staffA).getContact(contact.id)).id,contact.id);assert.equal((await crm(staffB).getContact(contact.id)).id,contact.id)
  assert.equal(await root.crmContact.count({where:{tenantId:tenant,email:'office-customer@example.test'}}),1)
 })
+
+test('record company captions follow authorized saved ownership, including closed-office history',async()=>{
+ const view=await projects(staffA).getProject(projectA.id)
+ assert.deepEqual(view.office,{id:a.id,name:'East',companyName:'Office record checks',active:true})
+ assert.equal((await crm(staffA).getEnquiry(leadA.id)).office.id,a.id)
+ assert.equal((await crm(staffA).getOpportunity(dealA.id)).office.id,a.id)
+ await assert.rejects(projects(staffA).getProject(projectB.id),status(404))
+ await direct(staffA,()=>db.$transaction(async tx=>{
+   assert.equal((await tx.$queryRaw`SELECT app.record_office_label(${tenant},${b.id}) office`)[0].office,null)
+   assert.equal((await tx.$queryRaw`SELECT app.record_office_label(${foreign},${b.id}) office`)[0].office,null)
+ }))
+ const office=await companies.getOffice(a.id)
+ await companies.updateOffice(a.id,{version:office.version,archived:true})
+ try{assert.equal((await projects(staffA).getProject(projectA.id)).office.active,false)}
+ finally{const closed=await companies.getOffice(a.id);await companies.updateOffice(a.id,{version:closed.version,archived:false})}
+})
 test('lists, details and exports intersect broad record permissions with exact office access',async()=>{
  for(const user of [staffA,manager]){
   assert.deepEqual((await crm(user).listEnquiries({})).items.map(r=>r.id),[leadA.id])

@@ -1,3 +1,4 @@
+import { recordOfficeLabel } from "@/platform/companies/record-office-label"
 import { initializeParticipantInformation, pruneParticipantInformation } from "@/platform/participants/source-information"
 import { contactInformationDefaults } from "./participant-defaults"
 import { crmSourceParticipants } from "./participant-source"
@@ -157,7 +158,10 @@ export function createSalesService<Fields extends object, Metadata extends objec
         return { ...page(decorated.items.map(item => ({ ...item, overdueActivityCount: counts.get(item.id) || 0 })), total, query.page, query.pageSize), ...decorated.metadata, exportTerms: exporting ? await readTerms(tx, actor) : undefined, extensionExport: decorated.exportFields, customFieldExport: exporting ? await customFieldExport(tx, actor, opportunityFields, items.map(item => item.id)) : undefined }
       })
     },
-    getOpportunity(id: string) { return run("opportunities.read", async (tx, actor) => ({ ...await find(tx, actor, id), recordAccess: await recordActionAccess(actor, "opportunities", id, tx, async action => !!await tx.crmOpportunity.findFirst({ where: { ...scope(actor, action), id }, select: { id: true } })) })) },
+    getOpportunity(id: string) { return run("opportunities.read", async (tx, actor) => {
+      const record = await find(tx, actor, id)
+      return { ...record, office: await recordOfficeLabel(tx, actor.tenantId, record.officeId), recordAccess: await recordActionAccess(actor, "opportunities", id, tx, async action => !!await tx.crmOpportunity.findFirst({ where: { ...scope(actor, action), id }, select: { id: true } })) }
+    }) },
     createOpportunity(input: unknown) {
       const custom = splitCustomFields(input)
       const { core, extension } = extensions.splitWrite(custom.core)

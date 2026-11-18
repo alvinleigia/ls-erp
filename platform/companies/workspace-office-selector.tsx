@@ -42,7 +42,7 @@ export function WorkspaceOfficeSelector({ tenantId, userId }: { tenantId: string
     {open && <OfficePreferenceEditor denied={denied} onForbidden={forbidden} onRetry={() => setDenied(false)} onClose={() => setOpen(false)} onSaved={() => { setOpen(false); window.dispatchEvent(new Event(changedEvent)); channel.current?.postMessage("changed") }} />}
   </>
 }
-function OfficePreferenceEditor({ onClose, onSaved, onForbidden, onRetry, denied }: { onClose: () => void; onSaved: () => void; onForbidden: () => void; onRetry: () => void; denied: boolean }) {
+export function OfficePreferenceEditor({ onClose, onSaved, onForbidden, onRetry, denied }: { onClose: () => void; onSaved: () => void; onForbidden: () => void; onRetry: () => void; denied: boolean }) {
   const [revision, reload] = React.useReducer(value => value+1, 0)
   const [loaded, setLoaded] = React.useState<{ revision: number; value: WorkspaceOfficeContext } | null>(null), [error, setError] = React.useState("")
   React.useEffect(() => {

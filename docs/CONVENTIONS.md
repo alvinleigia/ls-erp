@@ -1,5 +1,18 @@
 # Base Conventions
 
+## Company ownership presentation and reassignment (P13S)
+
+- Display saved company/office through the shared office-label adapter only after
+  authorizing the source record. Never expose company administration or treat
+  labels as write inputs. Keep labels out of persisted sales/audit snapshots.
+- Explicitly recapture a creation form only after its own company/office chooser
+  succeeds. Other drafts retain their captured version; phases and conversions
+  inherit their saved parent/source. A creation preference never transfers data.
+- Ownership reassignment is a separately reviewed offline operation with full
+  linked-source, access, history and preservation checks. Keep the ordinary native
+  immutability guards and current profile rules. See
+  `PROJECT_COMPANY_OWNERSHIP_P13S.md`.
+
 ## Shared image preparation (P13S)
 
 - Keep optional cropping in the shared browser File picker, before upload/reservation.

@@ -113,6 +113,7 @@
     "test:office-access": "node scripts/test-sales-orders.cjs --office-access",
     "test:office-access:browser": "node scripts/test-sales-orders.cjs --office-access --browser",
     "test:office-records": "node scripts/test-sales-orders.cjs --office-records",
+    "test:project-company-migration": "node scripts/test-project-company-migration.cjs",
     "test:office-records:browser": "node scripts/test-sales-orders.cjs --office-records --browser",
     "test:office-provisioning": "node scripts/test-sales-orders.cjs --office-provisioning",
     "test:office-provisioning:browser": "node scripts/test-sales-orders.cjs --office-provisioning --browser",

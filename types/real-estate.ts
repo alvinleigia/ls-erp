@@ -1,6 +1,7 @@
 import type { FieldView } from "@/platform/custom-fields/validation"
 
 export type Project = {
+  office?: import("@/types/companies").RecordOffice | null;
   recordAccess?: import("@/platform/access/record-actions").RecordAccess;
   teamId?: string | null; team?: { id: string; name: string } | null;
   customFields?: FieldView[];
@@ -8,7 +9,7 @@ export type Project = {
   location: string; description: string; categories: string[]; lifecycle: string; lifecycleName?: string; categoryNames?: Record<string, string>;
   priceMin: string | null; priceMax: string | null; currency: string | null; archived: boolean; version: number;
   canManage?: boolean; developerRestricted?: boolean; developerAccount?: { id: string; name: string } | null;
-  parent?: { id: string; name: string; archived: boolean } | null;
+  parent?: { id: string; name: string; archived: boolean; office?: import("@/types/companies").RecordOffice | null } | null;
 }
 export type PropertyContext = {
   projectId: string | null; subprojectId: string | null;

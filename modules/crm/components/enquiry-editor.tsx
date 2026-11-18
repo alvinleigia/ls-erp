@@ -1,8 +1,10 @@
 "use client"
+import { recordOfficeFields } from "@/platform/companies/record-office-fields"
 import { enquiryStatusLabel } from "@/modules/crm/display-labels"
 import { IntroductionSelection, IntroductionDetails } from "@/platform/collaborators/introduction-controls"
 import { PartnerLinkPanel } from "@/platform/collaborators/partner-panel"
-import { useCreationOfficeSnapshot } from "@/platform/companies/creation-snapshot"
+import { useCreationOfficeContext } from "@/platform/companies/creation-snapshot"
+import { CreationOfficeFields } from "@/platform/companies/creation-office-fields"
 import { useTerminology, useTerminologyReader } from "@/platform/terminology/provider"
 import { withRecordView, useRecordView, AccessRecordForm, AccessSummarySection, AccessSectionEdit } from "@/platform/access/record-view"
 import { SalesTeamSelect } from "@/platform/teams/controls"
@@ -40,7 +42,8 @@ export const textareaClass = "min-h-24 w-full rounded-md border bg-background px
 
 export const EnquiryEditor = withRecordView(EnquiryEditorBody)
 function EnquiryEditorBody({ id, initialContactId, initialReferences }: { id?: string; initialContactId?: string; initialReferences?: CrmViewReferences }) {
-  const creationHeaders = useCreationOfficeSnapshot(!id)
+  const creation = useCreationOfficeContext(!id)
+  const creationHeaders = creation.headers
   const { can } = useBusinessModules()
   const readTerm = useTerminologyReader()
   const term = useTerminology()
@@ -136,7 +139,7 @@ function EnquiryEditorBody({ id, initialContactId, initialReferences }: { id?: s
     <AccessRecordForm id="enquiry-form" onSubmit={save} saving={saving} disabled={loadFailed || custom.blocked} error={error} fingerprint={{ introducedByCollaboratorId, values, referralType, extension: extension.payload, custom: custom.payload }} initialSection="Enquiry details" createSection="Customer"
       overview={enquiry && <>
         <AccessSummarySection title="Customer" fields={[{ label: term("crm.contact.singular", "Contact"), value: <Link href={`/crm/contacts/${enquiry.contact.id}`} className="underline">{enquiry.contact.name}</Link> }, { label: term("crm.account.singular", "Buyer company"), value: enquiry.account?.name }]} />
-        <AccessSummarySection sectionKey="Enquiry details" title={term("crm.enquiry.singular", "Enquiry details", "{label} details")} fields={[{ label: "Title", value: enquiry.title }, { label: "Status", value: enquiryStatusLabel(enquiry.status) }, { label: "Salesperson", value: enquiry.assignee.name }, { label: "Sales team", value: enquiry.salesTeam?.name }, { label: "Source", value: enquiry.source }, { label: "Target close", value: formatDate(enquiry.targetCloseOn) }, { label: "Requirements", value: enquiry.requirements }, { label: "Lost reason", value: enquiry.lostReasonName }, { label: "Closing note", value: enquiry.outcome }]} />
+        <AccessSummarySection sectionKey="Enquiry details" title={term("crm.enquiry.singular", "Enquiry details", "{label} details")} fields={[...recordOfficeFields(enquiry.office), { label: "Title", value: enquiry.title }, { label: "Status", value: enquiryStatusLabel(enquiry.status) }, { label: "Salesperson", value: enquiry.assignee.name }, { label: "Sales team", value: enquiry.salesTeam?.name }, { label: "Source", value: enquiry.source }, { label: "Target close", value: formatDate(enquiry.targetCloseOn) }, { label: "Requirements", value: enquiry.requirements }, { label: "Lost reason", value: enquiry.lostReasonName }, { label: "Closing note", value: enquiry.outcome }]} />
         <AccessSummarySection title="Referral (optional)" canEdit={!enquiry.referralRestricted} fields={[{ label: "Referred by", value: enquiry.referralRestricted ? "Restricted" : enquiry.referralContact?.name || enquiry.referralAccount?.name }]} />
         <IntroductionDetails record={enquiry} />
         {extension.summary()} {custom.readOnlySection(<AccessSectionEdit section="Additional information" />)}
@@ -154,6 +157,7 @@ function EnquiryEditorBody({ id, initialContactId, initialReferences }: { id?: s
         </>}
       </fieldset></Section>
       <Section sectionKey="Enquiry details" title={term("crm.enquiry.singular", "Enquiry details", "{label} details")} description="Customer requirements, ownership and progress."><fieldset disabled={saving || loadFailed} className="grid min-w-0 gap-5 sm:grid-cols-2">
+        {!id && <div className="sm:col-span-2"><CreationOfficeFields capture={creation} disabled={saving || loadFailed} /></div>}
         <SalesTeamSelect value={values.salesTeamId} selected={enquiry?.salesTeam} disabled={!!id && !allowedAssignment} onChange={salesTeamId => { setValues({ ...values, salesTeamId }); void custom.changeTeam(salesTeamId) }} />
       <FormField id="assignedUserId" label="Salesperson" error={errors.assignedUserId}><RecordSelect id="assignedUserId" endpoint={values.salesTeamId ? `/api/crm/assignees?salesTeamId=${values.salesTeamId}` : "/api/crm/assignees"} value={values.assignedUserId} selected={{ value: selectedAssignee.id, label: selectedAssignee.name || "Unnamed user" }} onChange={assignedUserId => setValues({ ...values, assignedUserId })} disabled={!allowedAssignment || !canReadDirectory} /></FormField>
         <FormField id="title" label={term("crm.enquiry.singular", "Enquiry title", "{label} title")} error={errors.title} className="sm:col-span-2"><Input id="title" required maxLength={200} value={values.title} onChange={event => setValues({ ...values, title: event.target.value })} /></FormField>

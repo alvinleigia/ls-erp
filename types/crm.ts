@@ -12,6 +12,7 @@ export type CrmContactRow = {
 }
 export type CrmAccountRow = CrmContactRow & { website: string | null; notes: string | null }
 export type CrmEnquiryRow = PartnerIntroductionEvidence & {
+  office?: import("@/types/companies").RecordOffice | null;
   recordAccess?: import("@/platform/access/record-actions").RecordAccess
   salesTeamId?: string | null; salesTeam?: { id: string; name: string; workflow: string; archived: boolean } | null;
   lostReasonId?: string | null; lostReasonName?: string | null;
@@ -36,6 +37,7 @@ export type CrmActivityRow = { id: string; event: string; message: string; creat
 export type CrmStageRow = { isConversionDefault?: boolean; id: string; name: string; kind: "OPEN" | "WON" | "LOST"; color: string; probability: number; archived: boolean; position: number }
 export type CrmPipelineRow = { id: string; name: string; archived: boolean; version: number; stages: CrmStageRow[]; canManage?: boolean }
 export type CrmOpportunityRow = PartnerIntroductionEvidence & {
+  office?: import("@/types/companies").RecordOffice | null;
   recordAccess?: import("@/platform/access/record-actions").RecordAccess
   salesTeamId?: string | null; salesTeam?: { id: string; name: string; workflow: string; archived: boolean } | null;
   lostReasonId?: string | null; lostReasonName?: string | null;
