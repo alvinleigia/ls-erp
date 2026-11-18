@@ -107,7 +107,7 @@ not an executable migration authorization or a permanently valid row count.
 
 ### Local acceptance (2026-11-18)
 
-- 56 native office/access/workspace checks; eight isolated reassignment checks;
+- 56 native office/access/workspace checks; nine isolated reassignment checks;
   61 CRM unit checks; seven real browser scenarios passed.
 - TypeScript, targeted lint and production build passed. Desktop and mobile
   project-detail captures were inspected; saved ownership sits inside the
@@ -130,6 +130,11 @@ inspected. Migration 160 preserved all prior staging rows. The reassignment suit
 uses disposable SCRAM-authenticated PostgreSQL, including the scoped reader pool,
 so trust-only local authentication cannot conceal a missing connection password.
 These release-runner corrections do not change application record-access rules.
+Maintenance verification retains one authenticated read-only session for the
+actual runtime role while new logins are blocked, captures all actor scopes, then
+closes that verifier before the writer runs. The new regression test proves this
+with NOLOGIN enforced and rejects a separate new connection. No temporary role
+membership is granted to the database operator.
 
 ### Protected Ewissen-copy acceptance (2026-11-18)
 

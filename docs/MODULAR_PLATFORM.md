@@ -5,7 +5,7 @@ forms share an explicit creation chooser; phases and conversions inherit their
 source. Migration 160 adds only read-only office labels. The offline pre-commercial
 utility moves reviewed source families and preserves native ownership guards.
 
-Verification passed: 56 native checks, eight reassignment tests, 61 CRM unit checks,
+Verification passed: 56 native checks, nine reassignment tests, 61 CRM unit checks,
 seven browser scenarios, TypeScript, targeted lint and production build. Desktop
 and mobile ownership layouts were inspected. A fresh encrypted Ewissen backup was
 restored internally: all eight users retained exact application action/record
@@ -20,8 +20,10 @@ preservation passed. Hosted acceptance exposed portalled form-submit bubbling;
 the shared edit-panel fix now passes all seven local browser checks, including
 zero parent-project POSTs when applying an office choice. Hosted staging
 acceptance passed on `d3053ed`, including desktop/mobile inspection and inherited
-phase ownership. The eight cutover checks also pass with password-authenticated
-PostgreSQL; scoped readers explicitly preserve pg's non-enumerable password.
+phase ownership. The nine cutover checks also pass with password-authenticated
+PostgreSQL; scoped readers explicitly preserve pg's non-enumerable password and
+retain their authenticated verifier while new logins are blocked. That verifier
+is closed before writes; no extra operator role memberships are granted.
 The offline production entry point requires the registered production
 identity, verified TLS, reviewed source, a verified backup/copy rehearsal and
 drained maintenance. Production data remains unchanged pending that cutover.

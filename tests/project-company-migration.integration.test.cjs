@@ -57,6 +57,17 @@ test('hosted databases and ordinary local demo are not valid migration targets',
  await assert.rejects(applyLocal({connectionParameters:{host:'example.supabase.co',database:'postgres'}},manifest,reviewed,baseline),/Rehearsal database only/)
  await assert.rejects(applyLocal({connectionParameters:{host:'127.0.0.1',database:'ls_salon_crm_test'}},manifest,reviewed,baseline),/Dedicated rehearsal/)
 })
+test('maintenance capture reuses its authenticated verifier and closes it afterward',async()=>{
+ let pid,captured
+ const params={...db.connectionParameters,user:'crm_test_runtime',password:db.connectionParameters.password},runtimeReader=new Client(params)
+ try{captured=await captureAccess(runtimeReader,tenant,[admin,staff,manager],'crm_test_runtime',{beforeRead:async backend=>{
+   pid=backend;assert(Number.isInteger(pid));assert.equal((await db.query('SELECT count(*)::int n FROM pg_stat_activity WHERE pid=$1',[pid])).rows[0].n,1)
+   await db.query('ALTER ROLE crm_test_runtime NOLOGIN')
+   const denied=new Client(params);try{await assert.rejects(denied.connect(),e=>e.code==='28000')}finally{await denied.end()}
+ }})}finally{await db.query('ALTER ROLE crm_test_runtime LOGIN')}
+ assert.deepEqual(captured,baseline,'The real runtime identity must retain the same scoped results after new logins are blocked')
+ assert.equal((await db.query('SELECT count(*)::int n FROM pg_stat_activity WHERE pid=$1',[pid])).rows[0].n,0)
+})
 test('production entry point requires exact environment, TLS, reviewed proof and drained maintenance',async()=>{
  const confirmation={tenantId:reviewed.tenantId,digest:reviewed.digest,verifiedBackup:'012345abcdef',copyRehearsalPassed:true}
  const connectionParameters={host:'aws-1-ap-south-1.pooler.supabase.com',port:5432,database:'postgres',user:'postgres.tehtbbifiimoplzlewzs',ssl:{rejectUnauthorized:true}}

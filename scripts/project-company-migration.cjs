@@ -86,7 +86,7 @@ async function plan(db, manifest, access = {}) {
   return {tenantId:t,admin,users,manifest,changes,grants,digest:hash({manifest,data,users,access}),summary:{accessAssessed,records:Object.fromEntries(roots.map(k=>[k,changes.filter(c=>c.table===k).length])),officeGrants:grants.length,usersNeedingGrants:new Set(grants.map(g=>g.userId)).size,unassignedProjectEnquiries:data.CrmEnquiry.filter(e=>!ec.get(e.id)?.projectId).length}}
 }
 
-async function captureAccess(db, tenantId, users, role='prisma_app') {
+async function captureAccess(db, tenantId, users, role='prisma_app', { beforeRead } = {}) {
   assert(['prisma_app','crm_test_runtime'].includes(role))
   const { Pool }=require('pg'),{PrismaClient}=require('@prisma/client'),{TenantPgAdapter}=require('../lib/tenant-pg-adapter.ts')
   const {runWithDatabaseActor}=require('../lib/database-actor.ts'),{authorizeBusinessOperation}=require('../platform/access/operation.ts')
@@ -94,8 +94,12 @@ async function captureAccess(db, tenantId, users, role='prisma_app') {
   const {allPermissions}=require('../platform/access/catalog.ts')
   // pg deliberately makes password non-enumerable. Preserve it explicitly when
   // opening scoped readers; a spread alone works only with trust authentication.
-  const pool=new Pool({...db.connectionParameters,password:db.connectionParameters.password,max:1}),client=new PrismaClient({adapter:new TenantPgAdapter(pool,{tenantId})}),out={}
+  const pool=new Pool({...db.connectionParameters,password:db.connectionParameters.password,max:1,idleTimeoutMillis:0}),client=new PrismaClient({adapter:new TenantPgAdapter(pool,{tenantId})}),out={}
   try{
+    // A cutover may block new runtime logins while this authenticated read-only
+    // verifier is retained. Release the checkout so Prisma reuses that same
+    // sole backend; finally closes it before the data writer can proceed.
+    if(beforeRead){const c=await pool.connect();let pid;try{pid=(await c.query('SELECT pg_backend_pid() pid')).rows[0].pid}finally{c.release()}await beforeRead(pid)}
     for(const user of users.filter(u=>u.status==='ACTIVE')){
       out[user.id]={}
       try{await runWithDatabaseActor(user.id,()=>client.$transaction(async tx=>{
