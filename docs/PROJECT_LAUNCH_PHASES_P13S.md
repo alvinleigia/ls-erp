@@ -93,5 +93,16 @@ suite), `tmp/industry-release/ls-erp-sales-orders-5f61e2753a69.log` (final brows
 `tmp/project-launch-build.log` and
 `test-results/project-launch-phases-{desktop,mobile}.png`.
 
-No staging or production migration, configuration change or deployment is part
-of this increment. No live Ewissen fixtures or changes were made.
+The above local verification preceded staging deployment. Hosted staging is now
+verified on `d1f7752` / `dpl_39Np75c2vbPtVBzEp2xkk9L9rVbT` with 163 migrations,
+including the protected writer grant. One combined browser/API scenario passed
+phase creation/editing, scheduled admission, retained holds, allocation, payment
+recording, six-level source selection and assigned-staff access. Desktop/mobile
+screenshots were inspected. Expected 409/404/403 denials were logged; no unexpected
+server errors occurred on the corrected deployment. Aggregate pre-existing data
+preservation passed before the synthetic QA writes.
+
+Private receipts: `tmp/project-hierarchy-staging/{preservation,acl-preservation,
+acceptance,runtime-summary}.json`; screenshots are in the hierarchy acceptance
+folder under `test-results/staging-access/`. Production/main and live Ewissen
+data/settings remain unchanged.

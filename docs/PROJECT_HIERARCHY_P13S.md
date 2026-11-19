@@ -95,7 +95,24 @@ Evidence is retained locally in `tmp/project-hierarchy-*.log`,
 `tmp/industry-release/ls-erp-sales-orders-7336e98848a7.log` (office isolation), and
 `test-results/project-hierarchy-{desktop,mobile,tree}.png`.
 
-## Separate next increment
+## Hosted staging verification, 2026-11-19
+
+Source `d1f7752`, deployment `dpl_39Np75c2vbPtVBzEp2xkk9L9rVbT`, is READY with
+163 migrations. The first two migrations preserved all 179 original staging
+tables; the corrective grant preserved all 181 then-existing tables. Existing
+migration-history rows matched exactly. The actual Supabase owner remains
+non-superuser, while the application role retains SELECT-only ancestry access.
+
+Hosted acceptance passed six-level creation, breadcrumbs, inherited office,
+descendant enquiry/conversion, phase controls, reservations/allocation, payment
+recording and assigned-staff read with edit denial in a newly created QA tenant.
+Desktop/mobile screenshots were inspected without horizontal overflow or page
+errors. The production deployment and both production aliases remained unchanged;
+no live Ewissen records or configuration were edited. Private receipts and
+aggregate fingerprints are under `tmp/project-hierarchy-staging/`; final browser
+report is `tmp/r9-staging/test-results.json`.
+
+## Launch-phase increment
 
 Launch phases remain separate from structural child projects. The subsequent
 local increment adds explicit unit phase assignment and prospective reservation

@@ -1,3 +1,25 @@
+## P13S hierarchy and launch phases — staging verified (2026-11-19)
+
+Application source `d1f7752` is READY on staging deployment
+`dpl_39Np75c2vbPtVBzEp2xkk9L9rVbT`; staging and local demo have 163 migrations.
+The first two migrations preserved all 179 pre-existing staging tables exactly.
+Hosted acceptance exposed a missing INSERT grant for Supabase's non-superuser
+security-definer owner. Migration 163 restores only the protected writer's grant;
+all 181 then-existing tables and previous history were preserved. Runtime ancestry
+writes remain denied. The test harness now reproduces the non-superuser case and
+passed 61 selected native checks plus rollback/preservation rehearsals.
+
+Public-API and browser acceptance passed in a new synthetic staging tenant:
+six levels, root-inherited company/office, descendant sales selection/conversion,
+phase creation/editing/scheduling, blocked new holds, retained idempotent holds,
+allocation, payment recording and assigned-staff access with edit denial.
+Desktop/mobile screenshots were inspected without overflow or page errors.
+No unexpected server errors occurred on the corrected deployment. QA writes were
+confined to synthetic staging tenants. Production aliases still use
+`dpl_6apr35DzyupqvYnN4PGavipXnMck`; main, production data and Ewissen settings
+were not changed. Evidence: `PROJECT_HIERARCHY_P13S.md` and
+`PROJECT_LAUNCH_PHASES_P13S.md`.
+
 ## P13S project launch phases — local implementation (2026-11-19)
 
 Structural hierarchy and launch phases are separate. Root-owned phases have
