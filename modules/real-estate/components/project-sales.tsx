@@ -19,9 +19,9 @@ import type { Project } from "@/types/real-estate"
 export function ProjectSales({ project }: { project: Project }) {
   const term = useTerminology()
   const { can, enabled } = useBusinessModules()
-  const projectId = project.parentId || project.id, subprojectId = project.parentId ? project.id : undefined
+  const projectId = project.rootId || project.id, subprojectId = project.parentId ? project.id : undefined
   const query = new URLSearchParams({ projectId, ...(subprojectId ? { subprojectId } : {}) }).toString()
-  const active = !project.archived && !project.parent?.archived
+  const active = !project.archived && !project.breadcrumbs?.some(node => node.archived)
   if (!enabled("realEstate")) return null
   return <>
     <Section title="Sales work" description={term("realEstate.project.singular", "Only records you can access are shown. Project membership does not grant access to other salespeople's", "Only records you can access are shown. {label} membership does not grant access to other salespeople's") + " " + term("crm.enquiry.plural", "leads", "{label}") + " " + term("crm.opportunity.plural", "or deals.", "or {label}.")}>
@@ -35,7 +35,7 @@ export function ProjectSales({ project }: { project: Project }) {
 export function ProjectActivities({ project }: { project: Project }) {
   const term = useTerminology()
   const { enabled, can } = useBusinessModules()
-  const query = new URLSearchParams({ projectId: project.parentId || project.id, ...(project.parentId ? { subprojectId: project.id } : {}) }).toString()
+  const query = new URLSearchParams({ projectId: project.rootId || project.id, ...(project.parentId ? { subprojectId: project.id } : {}) }).toString()
   if (!enabled("realEstate") || !can("activities.read")) return null
   return <WorkList key={query} extensionQuery={query} allowCreate={false} initialScope="visible" initialState="all" guidance={<>{term("crm.enquiry.singular", "Schedule site visits as meetings and follow-ups as calls from a linked enquiry", "Schedule site visits as meetings and follow-ups as calls from a linked {label}") + " " + term("crm.opportunity.singular", "or opportunity.", "or {label}.")}</>} />
 }

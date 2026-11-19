@@ -103,7 +103,7 @@ export const resourceRegistry = {
   followUpRules: { policy: "shared", ownership: { kind: "shared", roots: ["CrmFollowUpRule"] } },
   teams: { policy: "teams", ownership: { kind: "shared", roots: ["BusinessTeam"] } },
   customFields: { policy: "shared", ownership: { kind: "shared", roots: ["CustomFieldDefinition"], children: ["CustomFieldOption"] } },
-  projects: { policy: "projects", record: "RealEstateProject", ownership: { kind: "office", roots: ["RealEstateProject"], children: ["RealEstateProjectMember", "RealEstateProjectCategory", "RealEstateUnit", "RealEstateProjectFieldValue"] }, sharing: "projects" },
+  projects: { policy: "projects", record: "RealEstateProject", ownership: { kind: "office", roots: ["RealEstateProject"], children: ["RealEstateProjectMember", "RealEstateProjectCategory", "RealEstateUnit", "RealEstateProjectFieldValue", "RealEstateLaunchPhase"] }, sharing: "projects" },
   projectSettings: { policy: "shared", ownership: { kind: "shared", roots: ["RealEstateProjectStatus", "RealEstatePropertyCategory", "RealEstateBuyingTimeframe"] } },
   quotations: { policy: "sales", record: "CrmQuotation", ownership: { kind: "source", roots: ["CrmQuotation"], children: ["CrmQuotationRevision", "QuotationTaxInputReview", "QuotationTaxInputLine", "QuotationTaxPricingApproval"], sources: ["opportunities"] }, sharing: "quotations" },
   quotationTemplates: { policy: "shared", ownership: { kind: "shared", roots: ["CrmQuotationTemplate"] } },
@@ -122,6 +122,7 @@ export const infrastructureModels = {
   TenantModule: "tenantSecurity", Tenant: "tenantBoundary", TenantDomain: "tenantBoundary",
   Organization: "controlPlane", OrganizationMembership: "controlPlane",
   Account: "authentication", Session: "authentication", VerificationToken: "authentication", PasswordResetToken: "authentication",
+  RealEstateProjectAncestor: "sourceSecurity",
   RecordSharingPolicy: "sourceSecurity", RecordSharingGrant: "sourceSecurity",
 } as const satisfies Record<InfrastructureModel, "tenantSecurity" | "tenantBoundary" | "controlPlane" | "authentication" | "sourceSecurity" | "numbering">
 

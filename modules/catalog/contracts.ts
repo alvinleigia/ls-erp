@@ -8,4 +8,5 @@ export type CatalogExtension = {
   read: (tx: Prisma.TransactionClient, actor: BusinessActor, itemId: string) => Promise<unknown>
   save: (tx: Prisma.TransactionClient, actor: BusinessActor, itemId: string, input: unknown) => Promise<void>
   documentEvidence?: (tx: Prisma.TransactionClient, actor: BusinessActor, itemId: string) => Promise<Prisma.InputJsonValue>
+  reservationBlocks?: (tx: Prisma.TransactionClient, actor: BusinessActor, itemIds: string[]) => Promise<Map<string, string>>
 }

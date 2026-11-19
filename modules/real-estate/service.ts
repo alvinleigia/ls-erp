@@ -1,3 +1,4 @@
+import { activeProjectBranch, projectBreadcrumbs, projectBranch, withProjectPaths } from "./hierarchy"
 import { officeBoundaryError } from "@/platform/companies/record-office"
 import { recordOfficeLabel } from "@/platform/companies/record-office-label"
 import { authorizeBusinessOperation } from "@/platform/access/operation"
@@ -5,6 +6,7 @@ import { recordActionAccess } from "@/platform/access/record-actions"
 
 import { termText } from "@/platform/terminology/message"
 import { projectScope } from "./access"
+import { createLaunchPhaseService } from "./launch-phases"
 import { recordLimits } from "@/platform/access/rules"
 export { projectScope } from "./access"
 import { readTermReplacements } from "@/platform/terminology/read"
@@ -68,9 +70,9 @@ export function createRealEstateService(db: PrismaClient, identity: Pick<Busines
     await validatePropertyCategories(tx, actor.tenantId, categories, before?.categories)
     if (before && (data.parentId || null) !== before.parentId) throw new BusinessError(400, ["A ", termText("realEstate.project.singular", "project"), "'s parent cannot be changed. Create a ", termText("realEstate.subproject.singular", "subproject"), " under the correct ", termText("realEstate.project.singular", "project"), "."])
     if (data.parentId) {
-      const parent = await tx.realEstateProject.findFirst({ where: { AND: [projectScope(actor), { id: data.parentId, parentId: null }] } })
-      if (!parent) throw new BusinessError(400, termText("realEstate.project.singular", "Choose a top-level project in this business.", "Choose a top-level {label} in this business."))
-      if (parent.archived && (!before || !data.archived)) throw new BusinessError(409, ["Restore the parent ", termText("realEstate.project.singular", "project"), " before creating or restoring a ", termText("realEstate.subproject.singular", "subproject"), "."])
+      const parent = await tx.realEstateProject.findFirst({ where: { AND: [projectScope(actor), { id: data.parentId }] } })
+      if (!parent) throw new BusinessError(400, termText("realEstate.project.singular", "Choose a parent project in this business.", "Choose a parent {label} in this business."))
+      if ((!await tx.realEstateProject.findFirst({ where: { tenantId: actor.tenantId, id: parent.id, ...activeProjectBranch }, select: { id: true } })) && (!before || !data.archived)) throw new BusinessError(409, ["Restore the parent ", termText("realEstate.project.singular", "project"), " before creating or restoring a ", termText("realEstate.subproject.singular", "subproject"), "."])
     }
     if (data.developerAccountId && data.developerAccountId !== before?.developerAccountId && !await tx.crmAccount.findFirst({ where: { tenantId: actor.tenantId, id: data.developerAccountId, archived: false } })) throw new BusinessError(400, termText("crm.account.singular", "Choose an active developer business account.", "Choose an active developer {label}."))
     const priceMin = data.priceMin ? new Prisma.Decimal(data.priceMin) : null
@@ -88,20 +90,22 @@ export function createRealEstateService(db: PrismaClient, identity: Pick<Busines
     return { ...data, teamId, lifecycle, categories: [...new Set(categories)], parentId: data.parentId || null, developerAccountId: data.developerAccountId || null, priceMin, priceMax, currency: data.currency || null }
   }
   return {
+    ...createLaunchPhaseService(run),
     ...createPropertyChoiceService(run),
     listProjects(input: unknown, exporting = false) {
       const query = projectListSchema.parse(input)
       return run(exporting ? ["projects.read", "projects.export"] : "projects.read", async (tx, actor) => {
-        if (query.parentId) await find(tx, actor, query.parentId)
+        if (query.parentId || query.descendantOf) await find(tx, actor, query.parentId || query.descendantOf)
         const where: Prisma.RealEstateProjectWhereInput = { AND: [projectScope(actor), {
           ...await customFieldFilter(tx, actor, projectFields, query),
-          parentId: query.parentId || null, archived: query.archived === "true", ...(query.lifecycle ? { lifecycle: query.lifecycle } : {}),
+          ...(query.selectable === "true" ? activeProjectBranch : {}),
+          ...(query.descendantOf ? { AND: [projectBranch(query.descendantOf), { id: { not: query.descendantOf } }] } : query.allLevels === "true" ? {} : { parentId: query.parentId || null }), archived: query.archived === "true", ...(query.lifecycle ? { lifecycle: query.lifecycle } : {}),
           ...(query.q ? { OR: ["name", "code", "location"].map(field => ({ [field]: { contains: query.q, mode: "insensitive" } })) } : {}),
         }] }
         const [items, total] = await Promise.all([tx.realEstateProject.findMany({ where, orderBy: [{ name: "asc" }, { id: "asc" }], skip: exporting ? 0 : (query.page - 1) * query.pageSize, take: exporting ? CRM_EXPORT_LIMIT : query.pageSize,
           select: { id: true, parentId: true, name: true, code: true, location: true, lifecycle: true, lifecycleName: true, categoryNames: true, archived: true, version: true, categories: true, priceMin: true, priceMax: true, currency: true } }), tx.realEstateProject.count({ where })])
         if (exporting) checkExportLimit(total)
-        return { ...pageResult(items, total, query.page, query.pageSize), canManage: permits(actor, "projects.edit"), exportTerms: exporting ? await readTermReplacements(tx, actor.tenantId, realEstateTerms) : undefined, customFieldExport: exporting ? await customFieldExport(tx, actor, projectFields, items.map(item => item.id)) : undefined }
+        return { ...pageResult(await withProjectPaths(tx, actor.tenantId, items), total, query.page, query.pageSize), canManage: permits(actor, "projects.edit"), exportTerms: exporting ? await readTermReplacements(tx, actor.tenantId, realEstateTerms) : undefined, customFieldExport: exporting ? await customFieldExport(tx, actor, projectFields, items.map(item => item.id)) : undefined }
       })
     },
     getProject(id: string) {
@@ -113,7 +117,8 @@ export function createRealEstateService(db: PrismaClient, identity: Pick<Busines
         const recordAccess = await recordActionAccess(actor, "projects", id, tx, action => tx.realEstateProject.findFirst({ where: { AND: [projectScope(actor, action), { id }] }, select: { id: true } }))
         const membersAccess = await recordActionAccess(actor, "projectMembers", id, tx, action => tx.realEstateProject.findFirst({ where: { AND: [projectScope(actor, "read"), projectScope(actor, action, "projectMembers"), { id }] }, select: { id: true } }))
         Object.assign(recordAccess.permissions, membersAccess.permissions)
-        return { ...record, office: await recordOfficeLabel(tx, actor.tenantId, record.officeId), team, recordAccess, customFields: await readCustomFields(tx, actor, projectFields, record), developerAccountId: developerAccount?.id || null, developerAccount, developerRestricted: !!record.developerAccountId && !developerAccount, parent, canManage: !!recordAccess.permissions["projects.edit"] }
+        const breadcrumbs = await projectBreadcrumbs(tx, actor.tenantId, id)
+        return { ...record, breadcrumbs, rootProject: breadcrumbs[0], pathName: breadcrumbs.map(node => node.name).join(" / "), office: await recordOfficeLabel(tx, actor.tenantId, record.officeId), team, recordAccess, customFields: await readCustomFields(tx, actor, projectFields, record), developerAccountId: developerAccount?.id || null, developerAccount, developerRestricted: !!record.developerAccountId && !developerAccount, parent, canManage: !!recordAccess.permissions["projects.edit"] }
       })
     },
     createProject(input: unknown) {
@@ -148,7 +153,7 @@ export function createRealEstateService(db: PrismaClient, identity: Pick<Busines
       const query = projectListSchema.parse(input)
       return run("projectMembers.read", async (tx, actor) => {
         const project = await find(tx, actor, id)
-        const where = { tenantId: actor.tenantId, projectId: project.parentId || project.id }
+        const where = { tenantId: actor.tenantId, projectId: project.rootId }
         const [rows, total] = await Promise.all([tx.realEstateProjectMember.findMany({ where, include: { user: { select: { id: true, name: true, status: true, role: true } } }, orderBy: { userId: "asc" }, skip: (query.page - 1) * query.pageSize, take: query.pageSize }), tx.realEstateProjectMember.count({ where })])
         return { ...pageResult(rows.map(row => row.user), total, query.page, query.pageSize), version: project.version }
       })

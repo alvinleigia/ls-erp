@@ -10,7 +10,7 @@ export const recordSharingSchema = z.object({ version: z.number().int().nonnegat
   if (new Set(value.grants.map(g => `${g.kind}:${g.id}`)).size !== value.grants.length) ctx.addIssue({ code: "custom", path: ["grants"], message: "Choose each person or team only once." })
 })
 type Identity = Pick<BusinessActor, "tenantId" | "userId" | "requestId">
-type Row = { id: string; sharingPolicyId: string | null; parentId?: string | null; [key: string]: unknown }
+type Row = { id: string; sharingPolicyId: string | null; parentId?: string | null; rootId?: string; [key: string]: unknown }
 type Delegate = { findFirst(args: { where: { tenantId: string; id: string } }): Promise<Row | null>; updateMany(args: { where: { tenantId: string; id: string }; data: { sharingPolicyId: string } }): Promise<{ count: number }> }
 const json = (value: unknown): Prisma.InputJsonValue => JSON.parse(JSON.stringify(value))
 
@@ -27,7 +27,7 @@ export function createRecordSharingService(db: PrismaClient, identity: Identity)
       let row = await delegate.findFirst({ where: { tenantId: actor.tenantId, id } })
       if (!row) throw new BusinessError(404, "Record not found.")
       const inherited = key === "projects" && !!row.parentId
-      if (inherited) row = await delegate.findFirst({ where: { tenantId: actor.tenantId, id: row.parentId as string } })
+      if (inherited) row = await delegate.findFirst({ where: { tenantId: actor.tenantId, id: row.rootId as string } })
       if (!row) throw new BusinessError(404, "Parent record not found.")
       if (write) await tx.$queryRaw(Prisma.sql`SELECT id FROM ${Prisma.raw(`"${definition.table}"`)} WHERE "tenantId"=${actor.tenantId} AND id=${row.id} FOR UPDATE`)
       return operation(tx, actor, key, row, inherited)

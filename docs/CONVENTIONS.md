@@ -1,5 +1,28 @@
 # Base Conventions
 
+## Project launch phases (P13S)
+
+- Keep prospective release phases separate from project structure. Phases belong
+  to the canonical root; units opt in explicitly. Unphased units retain their
+  existing availability. Never infer a phase from names or move existing sales.
+- Keep addon admission rules behind the shared catalog `reservationBlocks` hook.
+  Batch checks over already authorized IDs; native admission/assignment guards
+  remain mandatory. Gate new holds only; preserve existing commitments, financial
+  flows and issued document facts. See `PROJECT_LAUNCH_PHASES_P13S.md`.
+
+## Multi-level project hierarchy (P13S)
+
+- Keep parent links canonical and immutable in ordinary writes. Native triggers
+  derive root and read-only ancestry indexes; never write hierarchy indexes
+  from application code. Preserve existing root assignments, office and sharing.
+- Use `modules/real-estate/hierarchy.ts` for descendant/ancestor queries. Selectors,
+  counts and pages must keep native record scopes; do not enumerate a tenant's IDs
+  or fetch the entire tree. Resolve names through ordinary directory RLS.
+- Sales branch filters retain native source/privacy bounds without requiring a
+  project-directory action. New property snapshots freeze their paths;
+  issued files and historical facts are not reconstructed or rewritten. See
+  `PROJECT_HIERARCHY_P13S.md`.
+
 ## Company ownership presentation and reassignment (P13S)
 
 - Display saved company/office through the shared office-label adapter only after

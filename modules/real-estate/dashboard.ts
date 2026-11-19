@@ -1,3 +1,4 @@
+import { activeProjectBranch } from "./hierarchy"
 import type { Prisma } from "@prisma/client"
 import { moduleEnabled, type ModuleFlag } from "@/platform/modules"
 import { permits } from "@/platform/access/policy"
@@ -14,7 +15,7 @@ export async function projectDashboard(tx: Prisma.TransactionClient, actor: Busi
   const where = { AND: [projectScope(actor)], archived: false, parentId: null }
   const [active, subprojects, items] = await Promise.all([
     tx.realEstateProject.count({ where }),
-    tx.realEstateProject.count({ where: { AND: [projectScope(actor)], archived: false, parentId: { not: null }, parent: { archived: false } } }),
+    tx.realEstateProject.count({ where: { AND: [projectScope(actor)], archived: false, parentId: { not: null }, ...activeProjectBranch } }),
     tx.realEstateProject.findMany({ where, select: { id: true, name: true, _count: sales.enquiries || sales.opportunities ? { select: {
       ...(sales.enquiries ? { enquiryContexts: { where: { enquiry: sales.enquiries } } } : {}),
       ...(sales.opportunities ? { opportunityContexts: { where: { opportunity: sales.opportunities } } } : {}),

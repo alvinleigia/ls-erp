@@ -13,7 +13,7 @@ import { TablePagination } from "@/components/erp/pagination"
 import { formatDecimalCurrency } from "@/lib/formatting"
 import type { AppSettingsPayload } from "@/types/scheduling"
 import { catalogKindLabels, catalogAvailabilityLabels } from "../labels"
-export type CatalogRow = { id: string; code: string; name: string; kind: string; price: string; currency: string; availability: string; reservationState?: string | null; archived: boolean; version: number }
+export type CatalogRow = { id: string; code: string; name: string; kind: string; price: string; currency: string; availability: string; reservationState?: string | null; reservationBlockedReason?: string | null; archived: boolean; version: number }
 export function CatalogList({ extensionKey, contextId, newHref = "/catalog/new", embedded = false }: { extensionKey?: string; contextId?: string; newHref?: string; embedded?: boolean }) {
   const [query, setQuery] = useListState("catalog-list", "query", { q: "", archived: "false", availability: "", page: 1, pageSize: 20 })
   const [data, setData] = React.useState<{ items: CatalogRow[]; total: number; canCreate: boolean }>({ items: [], total: 0, canCreate: false })
@@ -30,7 +30,7 @@ export function CatalogList({ extensionKey, contextId, newHref = "/catalog/new",
     { accessorKey: "code", header: "Code", cell: ({ row }) => <Link className="underline" href={`/catalog/${row.original.id}`}>{row.original.code}</Link> },
     { accessorKey: "name", header: "Name" }, { accessorKey: "kind", header: "Kind", cell: ({ row }) => catalogKindLabels[row.original.kind] || row.original.kind },
     { accessorKey: "price", header: "Price", cell: ({ row }) => formatDecimalCurrency(row.original.price, row.original.currency, display) },
-    { accessorKey: "availability", header: "Availability", cell: ({ row }) => catalogAvailabilityLabels[row.original.reservationState || row.original.availability] || row.original.availability },
+    { accessorKey: "availability", header: "Availability", cell: ({ row }) => <><span>{catalogAvailabilityLabels[row.original.reservationState || row.original.availability] || row.original.availability}</span>{!row.original.reservationState && row.original.reservationBlockedReason && <p className="text-xs text-muted-foreground">Launch not open</p>}</> },
   ], [display])
   const table = useReactTable({ data: data.items, columns, getCoreRowModel: getCoreRowModel(), manualPagination: true, rowCount: data.total,
     state: { pagination: { pageIndex: query.page - 1, pageSize: query.pageSize } },

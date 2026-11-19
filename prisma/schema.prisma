@@ -2343,6 +2343,7 @@ model InventoryStockMovement {
   @@index([occurredAt])
 }
 model RealEstateProject {
+  launchPhases RealEstateLaunchPhase[]
   officeId String @default(dbgenerated("app.creation_office_id()"))
   office BusinessOffice @relation(fields: [tenantId, officeId], references: [tenantId, id], onDelete: NoAction)
   @@index([tenantId, officeId])
@@ -2361,6 +2362,11 @@ model RealEstateProject {
   id String @id @default(cuid())
   tenantId String
   parentId String?
+  rootId String @default(dbgenerated("''::text"))
+  rootProject RealEstateProject @relation("ProjectRoot", fields: [tenantId, rootId], references: [tenantId, id], onDelete: Restrict)
+  descendants RealEstateProject[] @relation("ProjectRoot")
+  lineage RealEstateProjectAncestor[] @relation("ProjectDescendant")
+  descendantLinks RealEstateProjectAncestor[] @relation("ProjectAncestor")
   name String
   code String
   developerAccountId String?
@@ -2388,6 +2394,8 @@ model RealEstateProject {
   @@unique([tenantId, id])
   @@unique([tenantId, code])
   @@unique([tenantId, parentId, id])
+  @@unique([tenantId, rootId, id])
+  @@index([tenantId, rootId])
   @@index([tenantId, parentId, archived, name])
   @@index([tenantId, developerAccountId])
 }
@@ -2422,7 +2430,7 @@ model RealEstateEnquiryContext {
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   enquiry CrmEnquiry @relation(fields: [tenantId, enquiryId], references: [tenantId, id], onDelete: Restrict)
   project RealEstateProject? @relation("EnquiryProject", fields: [tenantId, projectId], references: [tenantId, id], onDelete: Restrict)
-  subproject RealEstateProject? @relation("EnquirySubproject", fields: [tenantId, projectId, subprojectId], references: [tenantId, parentId, id], onDelete: Restrict)
+  subproject RealEstateProject? @relation("EnquirySubproject", fields: [tenantId, projectId, subprojectId], references: [tenantId, rootId, id], onDelete: Restrict)
   @@id([tenantId, enquiryId])
   @@index([tenantId, projectId, subprojectId])
 }
@@ -2445,7 +2453,7 @@ model RealEstateOpportunityContext {
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   opportunity CrmOpportunity @relation(fields: [tenantId, opportunityId], references: [tenantId, id], onDelete: Restrict)
   project RealEstateProject? @relation("OpportunityProject", fields: [tenantId, projectId], references: [tenantId, id], onDelete: Restrict)
-  subproject RealEstateProject? @relation("OpportunitySubproject", fields: [tenantId, projectId, subprojectId], references: [tenantId, parentId, id], onDelete: Restrict)
+  subproject RealEstateProject? @relation("OpportunitySubproject", fields: [tenantId, projectId, subprojectId], references: [tenantId, rootId, id], onDelete: Restrict)
   @@id([tenantId, opportunityId])
   @@index([tenantId, projectId, subprojectId])
 }
@@ -3314,6 +3322,8 @@ model RealEstateUnit {
   tenantId String
   itemId String
   projectId String
+  launchPhaseId String?
+  launchPhase RealEstateLaunchPhase? @relation(fields: [tenantId, launchPhaseId], references: [tenantId, id], onDelete: Restrict)
   categoryId String
   bedrooms Int?
   area Decimal? @db.Decimal(18, 4)
@@ -3324,7 +3334,26 @@ model RealEstateUnit {
   category RealEstatePropertyCategory @relation(fields: [tenantId, categoryId], references: [tenantId, id], onDelete: Restrict)
   @@id([tenantId, itemId])
   @@index([tenantId, projectId, itemId])
+  @@index([tenantId, launchPhaseId])
   @@index([tenantId, categoryId])
+}
+
+model RealEstateLaunchPhase {
+  tenantId String
+  id String @default(cuid())
+  projectId String
+  name String
+  code String
+  status String @default("PLANNED")
+  opensAt DateTime?
+  version Int @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  project RealEstateProject @relation(fields: [tenantId, projectId], references: [tenantId, id], onDelete: Restrict)
+  units RealEstateUnit[]
+  @@id([tenantId, id])
+  @@unique([tenantId, projectId, code])
+  @@index([tenantId, projectId, name, id])
 }
 
 model RecordSharingPolicy {
@@ -3942,4 +3971,16 @@ model PartyAddress {
   contact CrmContact? @relation(fields: [tenantId, contactId], references: [tenantId, id], onDelete: Restrict)
   account CrmAccount? @relation(fields: [tenantId, accountId], references: [tenantId, id], onDelete: Restrict)
   @@unique([tenantId, id])
+}
+
+// Maintained by native project triggers; application users cannot edit lineage.
+model RealEstateProjectAncestor {
+  tenantId String
+  ancestorId String
+  descendantId String
+  distance Int
+  ancestor RealEstateProject @relation("ProjectAncestor", fields: [tenantId, ancestorId], references: [tenantId, id], onDelete: Cascade)
+  descendant RealEstateProject @relation("ProjectDescendant", fields: [tenantId, descendantId], references: [tenantId, id], onDelete: Cascade)
+  @@id([tenantId, ancestorId, descendantId])
+  @@index([tenantId, descendantId, distance])
 }

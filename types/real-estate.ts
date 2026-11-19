@@ -5,6 +5,7 @@ export type Project = {
   recordAccess?: import("@/platform/access/record-actions").RecordAccess;
   teamId?: string | null; team?: { id: string; name: string } | null;
   customFields?: FieldView[];
+  pathName?: string; rootId?: string; breadcrumbs?: { id: string; name: string; code: string; archived: boolean }[];
   id: string; name: string; code: string; parentId: string | null; developerAccountId: string | null;
   location: string; description: string; categories: string[]; lifecycle: string; lifecycleName?: string; categoryNames?: Record<string, string>;
   priceMin: string | null; priceMax: string | null; currency: string | null; archived: boolean; version: number;

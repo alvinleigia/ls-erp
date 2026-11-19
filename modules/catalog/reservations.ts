@@ -14,6 +14,7 @@ import type { CatalogExtension } from "./contracts"
 import type { ReservationOrderSource } from "./reservation-contracts"
 import { reservationClock, reservedUnits } from "./reservation-availability"
 import { reservationEvent } from "./reservation-events"
+import { reservationBlocks } from "./reservation-blocks"
 import { lockTenantOperations } from "@/platform/transactions/tenant-lock"
 import { readOrderVerificationCheckpoint, verificationCheckpointError } from "@/platform/verification/checkpoints"
 type Tx = Prisma.TransactionClient
@@ -52,12 +53,13 @@ export function createReservationService(db: PrismaClient, identity: Pick<Busine
       return run("unitReservations.read", async (tx, actor) => {
         const selected = await order(tx, actor, orderId), refs = source.units(selected)
         const recordAccess = await recordActionAccess(actor, "unitReservations", orderId, tx, action => source.find(tx, { ...actor, operation: { resource: "unitReservations", action } }, orderId))
-        const visible = await tx.catalogItem.findMany({ where: { AND: [await catalogScope(tx, actor, extensions), { id: { in: refs.map(ref => ref.itemId) } }] }, select: { id: true, archived: true, availability: true, kind: true } })
+        const visible = await tx.catalogItem.findMany({ where: { AND: [await catalogScope(tx, actor, extensions), { id: { in: refs.map(ref => ref.itemId) } }] }, select: { id: true, archived: true, availability: true, kind: true, extensionKey: true } })
+        const blocked = await reservationBlocks(tx, actor, extensions, visible)
         const now = await reservationClock(tx), occupied = await reservedUnits(tx, actor.tenantId, visible.map(v => v.id), now)
         // One order has a bounded quotation; history is paged separately below.
         return {
           verificationReview: await readOrderVerificationCheckpoint(tx, actor, orderId, "UNIT_ALLOCATION"),
-          units: refs.filter(ref => visible.some(v => v.id === ref.itemId)).map(ref => { const current = visible.find(v => v.id === ref.itemId)!; return { ...ref, available: !current.archived && current.kind === "UNIT" && current.availability === "AVAILABLE" && !occupied.has(ref.itemId) } }),
+          units: refs.filter(ref => visible.some(v => v.id === ref.itemId)).map(ref => { const current = visible.find(v => v.id === ref.itemId)!; return { ...ref, reservationBlockedReason: blocked.get(ref.itemId) || null, available: !current.archived && current.kind === "UNIT" && current.availability === "AVAILABLE" && !occupied.has(ref.itemId) && !blocked.has(ref.itemId) } }),
           recordAccess,
           canCreate: selected.status !== "CANCELLED" && !!recordAccess.permissions["unitReservations.create"],
           canAllocate: selected.status === "CONFIRMED" && !!recordAccess.permissions["unitReservations.confirm"],
@@ -93,6 +95,8 @@ export function createReservationService(db: PrismaClient, identity: Pick<Busine
           if (existing.orderId === orderId) return existing
           throw new BusinessError(409, "This unit is already reserved or allocated.")
         }
+        const blocked = await reservationBlocks(tx, actor, extensions, [current])
+        if (blocked.has(data.itemId)) throw new BusinessError(409, blocked.get(data.itemId)!)
         const row = await tx.unitReservation.create({ data: { tenantId: actor.tenantId, orderId, itemId: data.itemId, itemCode: ref.code, itemName: ref.name, expiresAt } })
         await reservationEvent(tx, actor, row)
         return row

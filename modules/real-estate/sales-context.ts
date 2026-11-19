@@ -1,3 +1,4 @@
+import { activeProjectBranch, projectBranch, withProjectPaths } from "./hierarchy"
 import { opportunityScope } from "@/modules/crm/policy"
 import { termText } from "@/platform/terminology/message"
 import { projectScope } from "./access"
@@ -25,14 +26,14 @@ export async function projectFilterChoices(tx: Tx, actor: BusinessActor, input: 
     { enquiryContexts: { some: { enquiry: enquiryScope(actor) } } }, { subEnquiryContexts: { some: { enquiry: enquiryScope(actor) } } },
     { opportunityContexts: { some: { opportunity: opportunityScope(actor, "read") } } }, { subOpportunityContexts: { some: { opportunity: opportunityScope(actor, "read") } } },
   ] }
-  const where: Prisma.RealEstateProjectWhereInput = { tenantId: actor.tenantId, parentId: query.parentId || null, name: { contains: query.q, mode: "insensitive" }, OR: [projectScope(actor), linked] }
+  const where: Prisma.RealEstateProjectWhereInput = { tenantId: actor.tenantId, ...(query.descendantOf ? { AND: [projectBranch(query.descendantOf), { id: { not: query.descendantOf } }] } : { parentId: query.parentId || null }), name: { contains: query.q, mode: "insensitive" }, OR: [projectScope(actor), linked] }
   const [items, total] = await Promise.all([tx.realEstateProject.findMany({ where, select: brief, orderBy: [{ name: "asc" }, { id: "asc" }], skip: (query.page - 1) * query.pageSize, take: query.pageSize }), tx.realEstateProject.count({ where })])
-  return { items, total, page: query.page, pageSize: query.pageSize, totalPages: Math.max(1, Math.ceil(total / query.pageSize)) }
+  return { items: await withProjectPaths(tx, actor.tenantId, items), total, page: query.page, pageSize: query.pageSize, totalPages: Math.max(1, Math.ceil(total / query.pageSize)) }
 }
 export async function requirePropertyFilter(tx: Tx, actor: BusinessActor, query: { projectId?: string; subprojectId?: string }) {
   if ((query.projectId || query.subprojectId) && !await realEstateEnabled(tx, actor.tenantId)) throw new BusinessError(403, termText("realEstate.project.singular", "Enable Real Estate to filter by project.", "Enable Real Estate to filter by {label}."))
   if (query.subprojectId && !query.projectId) throw new BusinessError(400, ["Select a ", termText("realEstate.project.singular", "project"), " before a ", termText("realEstate.subproject.singular", "subproject"), "."])
-  return query.projectId ? { projectId: query.projectId, ...(query.subprojectId ? { subprojectId: query.subprojectId } : {}) } : undefined
+  return query.projectId ? { projectId: query.projectId, ...(query.subprojectId ? { subproject: projectBranch(query.subprojectId) } : {}) } : undefined
 }
 
 // Only call after the containing CRM records have passed their own access scope.
@@ -62,7 +63,7 @@ export async function savePropertyContext(tx: Tx, actor: BusinessActor, kind: Ki
     requirePermission(actor, "projects.read")
     const project = await tx.realEstateProject.findFirst({ where: { AND: [projectScope(actor), { id: projectId, parentId: null, archived: false }] } })
     if (!project) throw new BusinessError(400, termText("realEstate.project.singular", "Choose an active project you can access.", "Choose an active {label} you can access."))
-    if (subprojectId && !await tx.realEstateProject.findFirst({ where: { tenantId: actor.tenantId, id: subprojectId, parentId: projectId, archived: false } })) throw new BusinessError(400, ["Choose an active ", termText("realEstate.subproject.singular", "subproject"), " belonging to this ", termText("realEstate.project.singular", "project"), "."])
+    if (subprojectId && !await tx.realEstateProject.findFirst({ where: { tenantId: actor.tenantId, id: subprojectId, rootId: projectId, parentId: { not: null }, ...activeProjectBranch } })) throw new BusinessError(400, ["Choose an active ", termText("realEstate.subproject.singular", "subproject"), " belonging to this ", termText("realEstate.project.singular", "project"), "."])
   }
   const budgetMin = input?.budgetMin ? new Prisma.Decimal(input.budgetMin) : null
   const budgetMax = input?.budgetMax ? new Prisma.Decimal(input.budgetMax) : null

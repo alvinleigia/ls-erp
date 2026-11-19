@@ -32,6 +32,7 @@ import { ProjectSales, ProjectActivities } from "./project-sales"
 import { EditPanel, ReadOnlyFields, RecordMenu } from "@/components/erp/record-detail"
 import { AccessRecordTabs } from "@/platform/access/record-tabs"
 import { CatalogList } from "@/modules/catalog/components/item-list"
+import { LaunchPhases } from "./launch-phases"
 
 const empty: Project = { id: "", name: "", code: "", parentId: null, developerAccountId: null, location: "", description: "", categories: [], lifecycle: "", priceMin: "", priceMax: "", currency: "", archived: false, version: 1 }
 export const ProjectEditor = withRecordView(ProjectEditorBody)
@@ -77,7 +78,7 @@ function ProjectEditorBody({ id, parentId = "" }: { id?: string; parentId?: stri
           if (parentId) {
             const parentResponse = await fetch(`/api/real-estate/projects/${parentId}`, { signal: controller.signal, cache: "no-store" })
             const parent = await parentResponse.json()
-            if (!parentResponse.ok || parent.parentId || parent.archived) throw new Error(readTerm("realEstate.project.singular", "Choose an active top-level project.", "Choose an active top-level {label}."))
+            if (!parentResponse.ok || parent.archived || parent.breadcrumbs?.some((node: { archived: boolean }) => node.archived)) throw new Error(readTerm("realEstate.project.singular", "Choose an active parent project.", "Choose an active parent {label}."))
             setRecord({ ...initial, parentId, parent })
           }
         }
@@ -146,6 +147,7 @@ function ProjectEditorBody({ id, parentId = "" }: { id?: string; parentId?: stri
     {custom.readOnlySection(editAction("custom", "Edit additional information"))}
   </>
   return <div className={pageClass}>
+    {id && current.breadcrumbs && <nav aria-label="Project hierarchy" className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">{current.breadcrumbs.map((node, index) => <React.Fragment key={node.id}>{index > 0 && <span aria-hidden="true">/</span>}{node.id === id ? <span aria-current="page">{node.name}</span> : <Link className="underline" href={`/crm/projects/${node.id}`}>{node.name}</Link>}</React.Fragment>)}</nav>}
     <AccessPageHeader title={id ? current.name : term(recordKey + ".singular", record.parentId ? "New subproject" : "New project", "New {label}")} description={current.parent ? <>Part of <Link className="underline" href={`/crm/projects/${current.parent.id}`}>{current.parent.name}</Link>{current.parent.archived && " (archived)"}</> : id ? [current.code, current.location].filter(Boolean).join(" / ") : "Start with the basics. Add pricing and other details after saving."} backHref={cancelHref} badge={id ? <span className="rounded bg-muted px-2 py-1 text-xs">{current.archived ? "Archived" : current.lifecycleName || "Active"}</span> : undefined} actions={id ? <>
       {canManage && <Button onClick={() => begin("details")}>{term(recordKey + ".singular", "Edit project", "Edit {label}")}</Button>}
       <RecordMenu actions={[{ label: "Refresh", onSelect: () => setRevision(value => value + 1) }, ...(canManage && can("projects.archive") ? [{ label: current.archived ? term(recordKey + ".singular", "Restore project", "Restore {label}") : term(recordKey + ".singular", "Archive project", "Archive {label}"), onSelect: () => { setError(""); setConfirm(true) } }] : [])]} />
@@ -159,11 +161,12 @@ function ProjectEditorBody({ id, parentId = "" }: { id?: string; parentId?: stri
     </fieldset></form> : <>
       <AccessRecordTabs value={tab} onChange={setTab} tabs={[
         { value: "overview", label: "Overview", content: overview },
-        ...(!record.parentId ? [{ value: "subprojects", permission: "projects.read" as const, label: term("realEstate.subproject.plural", "Subprojects"), content: <ProjectList parentId={id} canManage={canManage} parentArchived={record.archived} /> }] : []),
+        { value: "launch-phases", permission: "projects.read" as const, label: "Launch phases", content: <LaunchPhases projectId={id} /> },
+        ...([{ value: "subprojects", permission: "projects.read" as const, label: term("realEstate.subproject.plural", "Subprojects"), content: <ProjectList parentId={id} canManage={canManage} parentArchived={record.archived || !!record.breadcrumbs?.some(node => node.archived)} /> }]),
         { value: "sales", label: "Sales", content: <ProjectSales project={{ ...record, canManage }} /> },
         ...(enabled("catalog") && can("catalogItems.read") ? [{ value: "units", label: "Units", permission: "catalogItems.read" as const, content: <CatalogList embedded extensionKey="realEstate" contextId={id} newHref={`/catalog/new?projectId=${encodeURIComponent(id)}`} /> }] : []),
         { value: "activities", permission: "activities.read" as const, label: term("crm.activity.plural", "Activities"), content: <ProjectActivities project={record} /> },
-        { value: "team", permission: "projectMembers.read" as const, label: "Team", content: record.parentId ? <Section title="Staff access"><p className="text-sm text-muted-foreground">{term("realEstate.project.singular", "Staff access is inherited from the parent project.", "Staff access is inherited from the parent {label}.")}</p><Button variant="outline" asChild><Link href={`/crm/projects/${record.parentId}`}>{term("realEstate.project.singular", "Manage parent project", "Manage parent {label}")}</Link></Button></Section> : <ProjectMembers id={id} version={record.version} archived={record.archived} onVersion={version => { change("version", version); setSaved(previous => previous ? { ...previous, version } : previous) }} /> },
+        { value: "team", permission: "projectMembers.read" as const, label: "Team", content: record.parentId ? <Section title="Staff access"><p className="text-sm text-muted-foreground">{term("realEstate.project.singular", "Staff access is inherited from the top-level project.", "Staff access is inherited from the top-level {label}.")}</p><Button variant="outline" asChild><Link href={`/crm/projects/${record.rootId}`}>{term("realEstate.project.singular", "Manage top-level project", "Manage top-level {label}")}</Link></Button></Section> : <ProjectMembers id={id} version={record.version} archived={record.archived} onVersion={version => { change("version", version); setSaved(previous => previous ? { ...previous, version } : previous) }} /> },
       ]} />
       <EditPanel open={!!editing} title={editing === "pricing" ? "Edit property and pricing" : editing === "custom" ? "Edit additional information" : term(recordKey + ".singular", "Edit project details", "Edit {label} details")} description={term("realEstate.project.singular", "Changes apply to this project only.", "Changes apply to this {label} only.")} onClose={cancelEdit} onSubmit={() => void save()} saving={saving} disabled={custom.blocked} error={error} dirty={JSON.stringify(record) !== JSON.stringify(saved) || Object.keys(custom.payload.customFields).length > 0}>
         {editing === "details" && <RecordOfficeFields office={current.office} />}

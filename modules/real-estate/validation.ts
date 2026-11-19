@@ -18,5 +18,6 @@ export const projectListSchema = z.object({
   ...customFilterShape,
   page: z.coerce.number().int().min(1).default(1), pageSize: z.coerce.number().int().min(1).max(100).default(20),
   q: text(160), archived: z.enum(["false", "true"]).default("false"), parentId: text(100),
-  lifecycle: text(100),
+  allLevels: z.enum(["false", "true"]).default("false"),
+  lifecycle: text(100), descendantOf: text(100), selectable: z.enum(["false", "true"]).default("false"),
 })

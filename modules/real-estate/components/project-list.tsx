@@ -1,4 +1,5 @@
 "use client"
+import { ProjectTree } from "./project-tree"
 import { useListState } from "@/components/erp/list-navigation"
 import { useTerminology, useTerminologyReader } from "@/platform/terminology/provider"
 import { CustomFieldFilter, emptyCustomFilter } from "@/modules/crm/components/custom-fields"
@@ -22,16 +23,17 @@ export function ProjectList({ parentId, canManage: manager = false, parentArchiv
   const readTerm = useTerminologyReader()
   const term = useTerminology()
   const recordKey = parentId ? "realEstate.subproject" : "realEstate.project"
+  const [layout, setLayout] = useListState("project-list", "layout", "list")
   const [customFilter, setCustomFilter] = useListState("project-list", "customFilter", emptyCustomFilter, { resetPages: true })
-  const [query, setQuery] = useListState("project-list", "query", { q: "", archived: "false", lifecycle: "", page: 1, pageSize: 20 })
+  const [query, setQuery] = useListState("project-list", "query", { q: "", archived: "false", lifecycle: "", allLevels: "false", page: 1, pageSize: 20 })
   const [data, setData] = React.useState<{ items: Project[]; total: number; canManage: boolean }>({ items: [], total: 0, canManage: manager })
   const [loading, setLoading] = React.useState(true), [error, setError] = React.useState(""), [revision, setRevision] = React.useState(0)
   const columns = React.useMemo<ColumnDef<Project>[]>(() => [
-    { accessorKey: "name", header: term(`${recordKey}.singular`, "Project"), meta: { label: term(`${recordKey}.singular`, "Project") }, cell: ({ row }) => <Link className="font-medium underline underline-offset-4" href={`/crm/projects/${row.original.id}`}>{row.original.name}</Link> },
+    { accessorKey: "name", header: term(`${recordKey}.singular`, "Project"), meta: { label: term(`${recordKey}.singular`, "Project") }, cell: ({ row }) => <div className="space-y-1"><Link className="font-medium underline underline-offset-4" href={`/crm/projects/${row.original.id}`}>{row.original.name}</Link>{query.allLevels === "true" && row.original.parentId && <p className="text-xs text-muted-foreground">{row.original.pathName}</p>}</div> },
     { accessorKey: "code", header: "Code", meta: { label: "Code" } },
     { accessorKey: "location", header: "Location", meta: { label: "Location" }, cell: ({ row }) => row.original.location || "—" },
     { accessorKey: "lifecycle", header: "Sales lifecycle", meta: { label: "Sales lifecycle" }, cell: ({ row }) => row.original.lifecycleName || choiceLabel(row.original.lifecycle) },
-  ], [term, recordKey])
+  ], [term, recordKey, query.allLevels])
   const table = useReactTable({ data: data.items, columns, getCoreRowModel: getCoreRowModel(), manualPagination: true, rowCount: data.total,
     state: { pagination: { pageIndex: query.page - 1, pageSize: query.pageSize } },
     onPaginationChange: updater => setQuery(previous => {
@@ -39,7 +41,7 @@ export function ProjectList({ parentId, canManage: manager = false, parentArchiv
       return { ...previous, page: next.pageSize !== previous.pageSize ? 1 : next.pageIndex + 1, pageSize: next.pageSize }
     }),
   })
-  const queryString = new URLSearchParams({ ...query, ...(customFilter.customFieldId && customFilter.customFieldValue !== "" ? customFilter : {}), page: String(query.page), pageSize: String(query.pageSize), parentId: parentId || "" }).toString()
+  const queryString = new URLSearchParams({ ...query, ...(customFilter.customFieldId && customFilter.customFieldValue !== "" ? customFilter : {}), page: String(query.page), pageSize: String(query.pageSize), parentId: parentId || "", ...(parentId ? { allLevels: "false" } : {}) }).toString()
   React.useEffect(() => {
     const controller = new AbortController()
     const timer = setTimeout(async () => {
@@ -56,12 +58,13 @@ export function ProjectList({ parentId, canManage: manager = false, parentArchiv
   }, [readTerm, queryString, revision])
   const action = data.canManage && !parentArchived && <Button asChild><Link href={`/crm/projects/new${parentId ? `?parentId=${encodeURIComponent(parentId)}` : ""}`}>{term(`${recordKey}.singular`, parentId ? "New subproject" : "New project", "New {label}")}</Link></Button>
   const content = <>
-    <div className="flex flex-wrap gap-2"><Input className="min-w-0 flex-1 basis-48" aria-label={term(`${recordKey}.plural`, "Search projects", "Search {label}")} placeholder="Search name, code or location…" value={query.q} onChange={event => setQuery({ ...query, q: event.target.value, page: 1 })} />
+    <div className="flex flex-wrap gap-2">{!parentId && <Select aria-label="Project levels" value={query.allLevels || "false"} onValueChange={allLevels => setQuery({ ...query, allLevels, page: 1 })}><option value="false">Top-level projects</option><option value="true">All levels</option></Select>}<Input className="min-w-0 flex-1 basis-48" aria-label={term(`${recordKey}.plural`, "Search projects", "Search {label}")} placeholder="Search name, code or location…" value={query.q} onChange={event => setQuery({ ...query, q: event.target.value, page: 1 })} />
       <Select aria-label={term(`${recordKey}.singular`, "Project status", "{label} status")} value={query.archived} onValueChange={archived => setQuery({ ...query, archived, page: 1 })}><option value="false">Active</option><option value="true">Archived</option></Select>
       <Filters activeCount={Number(!!query.lifecycle) + Number(!!customFilter.customFieldId)} onReset={() => { setCustomFilter(emptyCustomFilter); setQuery({ ...query, lifecycle: "", page: 1 }) }}><label className="space-y-2 text-sm">Sales lifecycle<ChoiceSelect kind="project-statuses" id="lifecycle-filter" value={query.lifecycle} includeArchived clearable placeholder="All statuses" onChange={lifecycle => setQuery({ ...query, lifecycle, page: 1 })} /></label><CustomFieldFilter resource="project" value={customFilter} onChange={next => { setCustomFilter(next); setQuery({ ...query, page: 1 }) }} /></Filters>
       <ExportButton requirement="projects.export" href={`/api/real-estate/projects/export?${queryString}`} filename="projects.csv" disabled={loading || !!error || !data.total} /><Button variant="outline" onClick={() => setRevision(value => value + 1)}>Refresh</Button></div>
     {error && <p role="alert" className="text-destructive">{error}</p>}
-    <DataTable table={table} loading={loading} emptyMessage={term(`${recordKey}.plural`, "No projects match this selection.", "No {label} match this selection.")} />
+    <div className="flex gap-2"><Button size="sm" variant={layout === "list" ? "secondary" : "ghost"} aria-pressed={layout === "list"} onClick={() => setLayout("list")}>List</Button><Button size="sm" variant={layout === "tree" ? "secondary" : "ghost"} disabled={query.allLevels === "true" || query.archived === "true"} aria-pressed={layout === "tree" && query.allLevels !== "true" && query.archived !== "true"} onClick={() => setLayout("tree")}>Hierarchy</Button></div>
+    {layout === "tree" && query.archived === "false" && query.allLevels !== "true" ? <ProjectTree key={queryString + revision} items={data.items} /> : <DataTable table={table} loading={loading} emptyMessage={term(`${recordKey}.plural`, "No projects match this selection.", "No {label} match this selection.")} />}
     <TablePagination table={table} totalRows={data.total} loading={loading} />
   </>
   return parentId ? <Section title={term("realEstate.subproject.plural", "Subprojects")} description={term("realEstate.project.singular", "Organize sales by phase, building or group. Staff access comes from this project.", "Organize sales by phase, building or group. Staff access comes from this {label}.")} actions={action}>{content}</Section> : <div className={pageClass}><AccessPageHeader title={term("realEstate.project.plural", "Projects")} description="Manage property sales information and staff access." actions={action} /><Surface>{content}</Surface></div>

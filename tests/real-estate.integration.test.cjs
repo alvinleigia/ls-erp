@@ -236,7 +236,7 @@ test("validates hierarchy, codes, prices and tenant-safe developer/staff relatio
   assert.equal(parent.code, "CODE-ONE")
   const child = await service.createProject(input("CODE-TWO", { parentId: parent.id }))
   await assert.rejects(service.createProject(input("code-one")), status(409))
-  await assert.rejects(service.createProject(input("DEPTH", { parentId: child.id })), status(400))
+  assert.equal((await service.createProject(input("DEPTH", { parentId: child.id }))).rootId, parent.id)
   await assert.rejects(service.updateProject(child.id, update(child, { parentId: "" })), status(400))
   await assert.rejects(second.createProject(input("BAD-PARENT", { parentId: parent.id })), status(400))
   await assert.rejects(second.createProject(input("BAD-DEVELOPER", { developerAccountId: developer.id })), status(400))

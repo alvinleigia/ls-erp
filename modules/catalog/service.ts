@@ -11,6 +11,7 @@ import type { CatalogExtension } from "./contracts"
 import { serializationConflict } from "@/platform/database-errors"
 import { activeReservation, reservationClock, reservedUnits } from "./reservation-availability"
 import { lockTenantOperations } from "@/platform/transactions/tenant-lock"
+import { reservationBlocks } from "./reservation-blocks"
 type Tx = Prisma.TransactionClient
 const json = (value: unknown): Prisma.InputJsonValue => JSON.parse(JSON.stringify(value))
 
@@ -54,7 +55,8 @@ export function createCatalogService(db: PrismaClient, identity: Pick<BusinessAc
         const where: Prisma.CatalogItemWhereInput = { AND: [await catalogScope(tx, actor, extensions, q), availability, { archived: q.archived === "true", ...(q.currency ? {currency:q.currency} : {}), ...(q.q ? { OR: [{ code: { contains: q.q, mode: "insensitive" } }, { name: { contains: q.q, mode: "insensitive" } }] } : {}) }] }
         const [items, total] = await Promise.all([tx.catalogItem.findMany({ where, select: { id: true, code: true, name: true, kind: true, unit: true, price: true, currency: true, availability: true, archived: true, version: true, extensionKey: true }, orderBy: [{ name: "asc" }, { id: "asc" }], skip: (q.page - 1) * q.pageSize, take: q.pageSize }), tx.catalogItem.count({ where })])
         const occupied = await reservedUnits(tx, actor.tenantId, items.map(i => i.id), now)
-        return { items: items.map(row => ({ ...row, reservationState: occupied.get(row.id) || null })), total, page: q.page, pageSize: q.pageSize, totalPages: Math.max(1, Math.ceil(total / q.pageSize)), canCreate: permits(actor, "catalogItems.create") }
+        const blocked = await reservationBlocks(tx, actor, extensions, items)
+        return { items: items.map(row => ({ ...row, reservationState: occupied.get(row.id) || null, reservationBlockedReason: blocked.get(row.id) || null })), total, page: q.page, pageSize: q.pageSize, totalPages: Math.max(1, Math.ceil(total / q.pageSize)), canCreate: permits(actor, "catalogItems.create") }
       })
     },
     get(id: string) {
@@ -62,7 +64,7 @@ export function createCatalogService(db: PrismaClient, identity: Pick<BusinessAc
         const row = await find(tx, actor, id)
         const extension = extensions.find(e => e.key === row.extensionKey)
         const reservationState = (await reservedUnits(tx, actor.tenantId, [id], await reservationClock(tx))).get(id) || null
-        return { ...row, reservationState, extension: extension ? await extension.read(tx, actor, id) : null, canManage: !reservationState && permits(actor, "catalogItems.edit") }
+        return { ...row, reservationState, reservationBlockedReason: (await reservationBlocks(tx, actor, extensions, [row])).get(id) || null, extension: extension ? await extension.read(tx, actor, id) : null, canManage: !reservationState && permits(actor, "catalogItems.edit") }
       })
     },
     save(input: unknown, id?: string) {

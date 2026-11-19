@@ -1,3 +1,35 @@
+## P13S project launch phases — local implementation (2026-11-19)
+
+Structural hierarchy and launch phases are separate. Root-owned phases have
+Planned/Open/Paused/Closed booking states and optional opening times. Units opt in
+at any hierarchy depth; unphased units retain existing behaviour. A batched catalog
+addon hook and native admission guard gate new holds only. Existing holds,
+allocations, payment flows, source ownership and issued facts remain unchanged.
+Migration 162 adds empty phase configuration and nullable unit assignment.
+
+All 63 native phase/catalog/reservation/order/receivable/ownership checks passed,
+including audit rollback and concurrent phase edits. Migration rollback and exact
+preservation of the preceding 180 tables passed, as did build/TypeScript and
+targeted lint. The real browser flow passed creation, editing, UTC scheduling and
+unit assignment; desktop/mobile screenshots were inspected without overflow or
+page errors. Local demo has 162 migrations. No staging/production changes or deployment. See
+`PROJECT_LAUNCH_PHASES_P13S.md`.
+
+## P13S multi-level project hierarchy — local implementation (2026-11-19)
+
+Projects support successive child levels with root-inherited company/access,
+breadcrumbs, lazy tree navigation and descendant selectors/filters. Migration 161
+derives read-only ancestry indexes and preserves existing record identities,
+assignments and accepted snapshots. Launch phases remain a separate increment.
+Verification and release details: `PROJECT_HIERARCHY_P13S.md`. This increment is not
+deployed to staging or production.
+
+Local verification passed: 61 hierarchy/CRM checks, 83 commercial-flow checks,
+27 native office checks and two real browser flows. Desktop/mobile/tree captures
+were inspected. Migration rollback and preservation of all 179 preceding tables
+passed, as did build/TypeScript/lint. The local demo has 161 applied migrations;
+no live Ewissen data or production configuration was changed.
+
 ## P13S project/company ownership - production released (2026-11-18)
 
 Main/staging application source is `cbb6c64`. Production

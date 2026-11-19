@@ -19,3 +19,13 @@ and buying timeframes under CRM Configuration. Typed catalogs, defaults, archive
 selection preservation and label snapshots are implemented; see
 `docs/CRM_ODOO_PHASE_2.md` for the migration and verification. Additional fields
 remain planned.
+
+Multi-level structure is implemented by the P13S hierarchy foundation. Each node
+can have children; company, team, membership and sharing inherit from the root.
+Use `hierarchy.ts` rather than assuming `parentId` is the root. Launch phases are
+separate from structural nodes. See `docs/PROJECT_HIERARCHY_P13S.md`.
+
+`launch-phases.ts` manages root-owned launch phases and supplies the catalog's
+batched reservation admission hook. Unit assignment is explicit; only new holds
+are gated. Existing allocations, payments and commercial snapshots are retained.
+See `docs/PROJECT_LAUNCH_PHASES_P13S.md` for configuration and migration details.

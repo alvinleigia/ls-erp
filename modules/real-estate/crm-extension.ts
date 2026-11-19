@@ -1,3 +1,4 @@
+import { activeProjectBranch } from "./hierarchy"
 import { opportunityScope } from "@/modules/crm/policy"
 import { termText } from "@/platform/terminology/message"
 import { projectScope } from "./access"
@@ -29,14 +30,14 @@ export const realEstateCrmExtension: CrmExtensions<Omit<Fields, "id">, Metadata>
   async importFields(tx, actor) {
     if (!await realEstateEnabled(tx, actor.tenantId)) return []
     const canReadProjects = permits(actor, "projects.read")
-    const projects = canReadProjects ? await tx.realEstateProject.findMany({ where: { AND: [projectScope(actor), { archived: false }] }, select: { id: true, name: true, code: true, parentId: true }, orderBy: { name: "asc" }, take: 5000 }) : []
+    const projects = canReadProjects ? await tx.realEstateProject.findMany({ where: { AND: [projectScope(actor), { archived: false, ...activeProjectBranch }] }, select: { id: true, name: true, code: true, parentId: true, rootId: true }, orderBy: { name: "asc" }, take: 5000 }) : []
     const [categories, timeframes] = await Promise.all([
       tx.realEstatePropertyCategory.findMany({ where: { tenantId: actor.tenantId, archived: false }, select: { id: true, name: true }, orderBy: { name: "asc" }, take: 5000 }),
       tx.realEstateBuyingTimeframe.findMany({ where: { tenantId: actor.tenantId, archived: false }, select: { id: true, name: true }, orderBy: { name: "asc" }, take: 5000 }),
     ])
     return ([
       { key: "projectId", label: "Project", terminologyKey: "realEstate.project.singular", type: "choice", allowDefault: true, choices: projects.filter(p => !p.parentId).map(p => ({ ...p, aliases: [p.code] })) },
-      { key: "subprojectId", label: "Subproject", terminologyKey: "realEstate.subproject.singular", type: "choice", allowDefault: true, dependsOn: "projectId", choices: projects.filter(p => p.parentId).map(p => ({ ...p, aliases: [p.code] })) },
+      { key: "subprojectId", label: "Subproject", terminologyKey: "realEstate.subproject.singular", type: "choice", allowDefault: true, dependsOn: "projectId", choices: projects.filter(p => p.parentId).map(p => ({ ...p, parentId: p.rootId, aliases: [p.code] })) },
       { key: "budgetMin", label: "Minimum budget", type: "number" }, { key: "budgetMax", label: "Maximum budget", type: "number" },
       { key: "budgetCurrency", label: "Budget currency" },
       { key: "propertyCategory", label: "Preferred property category", aliases: ["Property category"], type: "choice", choices: categories },
@@ -99,7 +100,7 @@ export const realEstateCrmExtension: CrmExtensions<Omit<Fields, "id">, Metadata>
       enquiryJoins: Prisma.sql`LEFT JOIN "RealEstateEnquiryContext" x ON x."enquiryId" = r.id AND x."tenantId" = r."tenantId" ${projectJoins}`,
       opportunityJoins: Prisma.sql`LEFT JOIN "RealEstateOpportunityContext" x ON x."opportunityId" = r.id AND x."tenantId" = r."tenantId" ${projectJoins}`,
       filter: Prisma.sql`${filters.projectId ? Prisma.sql`AND x."projectId" = ${filters.projectId}` : Prisma.empty}
-        ${filters.subprojectId ? Prisma.sql`AND x."subprojectId" = ${filters.subprojectId}` : Prisma.empty}`,
+        ${filters.subprojectId ? Prisma.sql`AND EXISTS (SELECT 1 FROM "RealEstateProjectAncestor" path WHERE path."tenantId"=r."tenantId" AND path."ancestorId"=${filters.subprojectId} AND path."descendantId"=x."subprojectId")` : Prisma.empty}`,
     }
   },
   async choices(tx, actor, key, input) {

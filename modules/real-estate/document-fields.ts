@@ -17,7 +17,7 @@ export const propertyUnitsSection = {
 
 type SavedUnit = {
   ref: { code: string; name: string }
-  property: { project: { name: string; location: string; parent: { name: string; location: string } | null }; area: string | null; areaUnit: "SQ_M" | "SQ_FT" }
+  property: { project: { name: string; location: string; parent: { name: string; location: string } | null; path?: { name: string; location: string }[] }; area: string | null; areaUnit: "SQ_M" | "SQ_FT" }
 }
 
 // The caller supplies already authorised, accepted evidence. Never pick the first
@@ -26,7 +26,7 @@ export function propertyDocumentValues(units: SavedUnit[]): Record<string, strin
   if (units.length !== 1) return {}
   const { ref, property: p } = units[0]
   return {
-    "property.project-name": [p.project.parent?.name, p.project.name].filter(Boolean).join(" / "),
+    "property.project-name": (p.project.path?.map(node => node.name) || [p.project.parent?.name, p.project.name]).filter(Boolean).join(" / "),
     "property.unit-code": ref.code,
     "property.unit-name": ref.name,
     "property.area": p.area ?? "Not supplied",
