@@ -72,6 +72,7 @@
     "db:reset": "prisma migrate reset",
     "bootstrap:admin": "node scripts/bootstrap-admin.mjs",
     "test:crm:quotations": "node --require ./tests/register.cjs --test tests/quotation-calculation.test.cjs",
+    "test:catalog-import": "node scripts/test-sales-orders.cjs --catalog-import",
     "test:catalog": "node scripts/test-catalog.cjs",
     "test:catalog:browser": "node scripts/test-catalog.cjs --browser",
     "test:sales-orders": "node scripts/test-sales-orders.cjs",

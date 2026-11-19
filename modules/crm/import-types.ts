@@ -7,11 +7,9 @@ export type ImportField = {
   allowDefault?: boolean; dependsOn?: string
 }
 export type ImportConfig = { mapping: Record<string, number>; defaults: Record<string, string> }
-export type ImportIssue = { field: string; message: string }
+export type { ImportIssue } from "@/platform/imports/types"
 export type ImportProgress = { id: string; status: string; counts: Record<string, number> }
-export const IMPORT_MAX_ROWS = 1000
-export const IMPORT_MAX_BYTES = 3 * 1024 * 1024
-export const importReportColumns = ["Import row", "Import status", "Import errors"]
+export { IMPORT_MAX_ROWS, IMPORT_MAX_BYTES, importReportColumns } from "@/platform/imports/types"
 // Both preview and the form use the same code-owned dependency metadata.
 export function importChoices(field: ImportField, values: Record<string, unknown>) {
   return (field.choices || []).filter(choice => !field.dependsOn || (!!values[field.dependsOn] && choice.parentId === values[field.dependsOn]))

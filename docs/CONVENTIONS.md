@@ -1,5 +1,18 @@
 # Base Conventions
 
+## Standard catalog import (P13S)
+
+- Keep code-owned, fixed template columns and no mapping screen. Catalog owns
+  common fields/progress/duplicates; addons own their column profiles and canonical
+  reference validation. Shared file parsing/CSV escaping stays in platform/imports.
+- Validate without creating inventory. Bind resolved source identities at review;
+  reauthorize/revalidate every bounded batch and use the same catalog write/audit
+  as interactive creation. Skip duplicate codes without updates or invented sales.
+- Keep original rows and completed markers immutable, creator-private and tenant
+  scoped. Item, addon, audit and row result commit atomically; unexpected database
+  failures roll back, never become correction rows. See CATALOG_IMPORT_P13S.md.
+
+
 ## Project launch phases (P13S)
 
 - Keep prospective release phases separate from project structure. Phases belong

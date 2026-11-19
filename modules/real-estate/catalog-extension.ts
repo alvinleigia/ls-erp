@@ -29,19 +29,25 @@ export const propertyCatalogExtension: CatalogExtension = {
     const row = await tx.realEstateUnit.findUnique({ where: { tenantId_itemId: { tenantId: actor.tenantId, itemId } }, include: { launchPhase: { select: { id: true, name: true, status: true, opensAt: true } }, project: { select: { id: true, name: true, parentId: true, rootId: true, rootProject: { select: { id: true, name: true } }, parent: { select: { id: true, name: true } } } }, category: { select: { id: true, name: true } } } })
     return row ? { ...row, project: { ...row.project, pathName: (await projectBreadcrumbs(tx, actor.tenantId, row.projectId)).map(node => node.name).join(" / ") } } : null
   },
+  async validateCreate(tx, actor, input) { await propertyUnitValues(tx, actor, input) },
   async save(tx, actor, itemId, input) {
-    requirePermission(actor, "projects.edit")
-    const data = unitDetailsSchema.parse(input)
-    const previous = await tx.realEstateUnit.findUnique({ where: { tenantId_itemId: { tenantId: actor.tenantId, itemId } } })
-    const project = await tx.realEstateProject.findFirst({ where: { AND: [projectScope(actor, "edit"), { id: data.projectId }] }, select: { archived: true, parent: { select: { archived: true } } } })
-    if (!project || (!await tx.realEstateProject.findFirst({ where: { tenantId: actor.tenantId, id: data.projectId, ...activeProjectBranch }, select: { id: true } }) && previous?.projectId !== data.projectId)) throw new BusinessError(400, "Choose an active, accessible project or subproject.")
-    await resolvePropertyChoice(tx, actor.tenantId, "property-categories", data.categoryId, previous?.categoryId)
-    const launchPhaseId = data.launchPhaseId === undefined ? previous?.launchPhaseId ?? null : data.launchPhaseId
-    if (launchPhaseId) {
-      const owner = await tx.realEstateProject.findFirst({ where: { tenantId: actor.tenantId, id: data.projectId }, select: { rootId: true } })
-      if (!owner || !await tx.realEstateLaunchPhase.findFirst({ where: { tenantId: actor.tenantId, id: launchPhaseId, projectId: owner.rootId } })) throw new BusinessError(400, "Choose a launch phase belonging to this project.")
-    }
-    const values = { ...data, launchPhaseId, area: data.area ? new Prisma.Decimal(data.area) : null }
+    const values = await propertyUnitValues(tx, actor, input, itemId)
     await tx.realEstateUnit.upsert({ where: { tenantId_itemId: { tenantId: actor.tenantId, itemId } }, create: { tenantId: actor.tenantId, itemId, ...values }, update: values })
   },
+}
+
+async function propertyUnitValues(tx: Prisma.TransactionClient, actor: import("@/platform/policy").BusinessActor, input: unknown, itemId?: string) {
+  requirePermission(actor, "projects.edit")
+  const data = unitDetailsSchema.parse(input)
+  const previous = itemId ? await tx.realEstateUnit.findUnique({ where: { tenantId_itemId: { tenantId: actor.tenantId, itemId } } }) : null
+  const project = await tx.realEstateProject.findFirst({ where: { AND: [projectScope(actor, "edit"), { id: data.projectId }] }, select: { archived: true, parent: { select: { archived: true } } } })
+  if (!project || (!await tx.realEstateProject.findFirst({ where: { tenantId: actor.tenantId, id: data.projectId, ...activeProjectBranch }, select: { id: true } }) && previous?.projectId !== data.projectId)) throw new BusinessError(400, "Choose an active, accessible project or subproject.")
+  await resolvePropertyChoice(tx, actor.tenantId, "property-categories", data.categoryId, previous?.categoryId)
+  const launchPhaseId = data.launchPhaseId === undefined ? previous?.launchPhaseId ?? null : data.launchPhaseId
+  if (launchPhaseId) {
+    const owner = await tx.realEstateProject.findFirst({ where: { tenantId: actor.tenantId, id: data.projectId }, select: { rootId: true } })
+    if (!owner || !await tx.realEstateLaunchPhase.findFirst({ where: { tenantId: actor.tenantId, id: launchPhaseId, projectId: owner.rootId } })) throw new BusinessError(400, "Choose a launch phase belonging to this project.")
+  }
+  const values = { ...data, launchPhaseId, area: data.area ? new Prisma.Decimal(data.area) : null }
+  return values
 }

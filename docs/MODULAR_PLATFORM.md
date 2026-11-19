@@ -1,3 +1,24 @@
+## P13S standard catalog import - local implementation verified (2026-11-19)
+
+Fixed Excel templates support general products/identified units and an optional
+Real Estate profile. There is no field mapping. Shared bounded CSV/XLSX parsing
+and safe CSV output now live in platform/imports, reused by enquiry import.
+Catalog owns creator-private staging, validation, correction sheets and resumable
+25-row batches; addons resolve existing source codes and retain canonical checks.
+Existing items are never updated; reservations, bookings and payments are not
+invented. Interactive and imported writes use the same catalog mutation/audit.
+
+The additive migration passed forced rollback and exact preservation of all 181
+previous tables. Local demo now has 164 applied migrations. Twelve new import/
+ownership checks and 43 existing catalog/enquiry-import/phase/reservation checks
+passed, including a 1,000-row exactly-once run, duplicate/error reupload, tenant/
+creator isolation, changed-code binding and failed-audit rollback. Two real local
+browser flows passed template download, validation, correction download, reload,
+confirmed import and existing quotation selection. Desktop/mobile screenshots were
+inspected; build, TypeScript and targeted lint passed. Synthetic test records were
+confined to disposable local databases. Nothing was pushed or deployed; production
+and live Ewissen inventory remain unchanged. See CATALOG_IMPORT_P13S.md.
+
 ## P13S hierarchy and launch phases — staging verified (2026-11-19)
 
 Application source `d1f7752` is READY on staging deployment

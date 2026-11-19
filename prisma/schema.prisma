@@ -3258,6 +3258,7 @@ model TenantUserAccess {
 }
 
 model CatalogItem {
+  importRows CatalogImportRow[]
   reservationAvailability CatalogReservationAvailability?
   tenantId String
   id String @default(cuid())
@@ -3983,4 +3984,37 @@ model RealEstateProjectAncestor {
   descendant RealEstateProject @relation("ProjectDescendant", fields: [tenantId, descendantId], references: [tenantId, id], onDelete: Cascade)
   @@id([tenantId, ancestorId, descendantId])
   @@index([tenantId, descendantId, distance])
+}
+
+// Creator-private staged catalog imports; final writes use normal catalog services.
+model CatalogImport {
+  id String @id @default(cuid())
+  tenantId String
+  createdByUserId String
+  profile String
+  templateVersion Int @default(1)
+  fileName String
+  status String @default("VALIDATING")
+  headers Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  rows CatalogImportRow[]
+  @@unique([tenantId, id])
+  @@index([tenantId, createdByUserId, createdAt, id])
+}
+model CatalogImportRow {
+  tenantId String
+  importId String
+  rowNumber Int
+  values Json
+  status String @default("PENDING")
+  errors Json @default("[]")
+  itemCode String?
+  input Json?
+  itemId String?
+  batch CatalogImport @relation(fields: [tenantId, importId], references: [tenantId, id], onDelete: Restrict)
+  item CatalogItem? @relation(fields: [tenantId, itemId], references: [tenantId, id], onDelete: Restrict)
+  @@id([tenantId, importId, rowNumber])
+  @@index([tenantId, importId, status, rowNumber])
+  @@index([tenantId, importId, itemCode, rowNumber])
 }

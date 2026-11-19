@@ -1,0 +1,52 @@
+import { test, expect } from "@playwright/test"
+import { seed, login, json } from "./fixtures"
+import ExcelJS from "exceljs"
+test.use({ actionTimeout: 15_000 })
+test("standard unit import supports template download, validation, corrections, reload and confirmed import", async ({ browser }, testInfo) => {
+  test.setTimeout(300_000)
+  const fixture = await seed(), session = await login(browser, fixture.origin, fixture.users.admin.email)
+  const { page, context } = session, errors: string[] = []
+  page.on("pageerror", error => errors.push(error.message))
+  try {
+    const root = await json(context, "/api/real-estate/projects", 201, "POST", { name: "Import estate", code: "IMP" })
+    const leaf = await json(context, "/api/real-estate/projects", 201, "POST", { name: "Block A", code: "IMP-A", parentId: root.id })
+    await json(context, `/api/real-estate/projects/${root.id}/launch-phases`, 201, "POST", { name: "Launch 1", code: "PH1", status: "PLANNED" })
+    const categories = await json(context, "/api/real-estate/choices/property-categories")
+    await page.goto("/catalog")
+    await page.getByRole("link", { name: "Import items", exact: true }).click()
+    await expect(page.getByRole("heading", { name: "Import products and units" })).toBeVisible()
+    await page.getByRole("button", { name: "Import template", exact: true }).click()
+    await page.getByRole("menuitemradio", { name: "Property units", exact: true }).click()
+    const [download] = await Promise.all([page.waitForEvent("download"), page.getByRole("link", { name: "Download Excel template", exact: true }).click()])
+    expect(download.suggestedFilename()).toBe("realEstate-import-template.xlsx")
+    const book = new ExcelJS.Workbook(); await book.xlsx.readFile((await download.path())!)
+    const sheet = book.worksheets[0], fields = (sheet.getRow(1).values as string[]).slice(1)
+    expect(fields).toContain("project_code"); expect(sheet.getCell("A2").text).toBe("")
+    const good: Record<string, string> = { item_code: "IMPORT-101", item_name: "Imported plot 101", kind: "UNIT", sales_unit: "plot", unit_price: "2500000", currency: "INR", availability: "AVAILABLE", description: "Synthetic test only", project_code: leaf.code, property_category: categories.items[0].name, launch_phase_code: "PH1", area: "250", area_unit: "SQ_M", bedrooms: "" }
+    const rows = [good, { ...good, item_name: "Duplicate plot" }, { ...good, item_code: "IMPORT-BAD", area: "oops" }]
+    rows.forEach((row, index) => fields.forEach((field, column) => { sheet.getCell(index + 2, column + 1).value = row[field] || "" }))
+    await page.getByLabel("Completed template", { exact: true }).setInputFiles({ name: "units.xlsx", mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", buffer: Buffer.from(await book.xlsx.writeBuffer()) })
+    await page.getByRole("button", { name: "Validate file", exact: true }).click()
+    await expect(page.getByRole("status")).toHaveText("Ready for review", { timeout: 60_000 })
+    await expect(page.getByRole("button", { name: "Import valid rows", exact: true })).toBeEnabled()
+    await expect(page.getByRole("cell", { name: "area: Enter a positive area with up to four decimal places.", exact: true })).toBeVisible()
+    expect((await json(context, "/api/catalog/items?q=IMPORT-101")).total).toBe(0)
+    const [correction] = await Promise.all([page.waitForEvent("download"), page.getByRole("link", { name: "Download corrections (2)", exact: true }).click()])
+    expect(correction.suggestedFilename()).toBe("catalog-corrections.csv")
+    await page.screenshot({ path: testInfo.outputPath("unit-import-desktop.png"), fullPage: true })
+    await page.reload()
+    await expect(page.getByRole("status")).toHaveText("Ready for review")
+    await page.getByRole("button", { name: "Import valid rows", exact: true }).click()
+    await page.getByRole("button", { name: "Confirm import", exact: true }).click()
+    await expect(page.getByRole("status")).toHaveText("Complete", { timeout: 60_000 })
+    const saved = await json(context, "/api/catalog/items?q=IMPORT-101"); expect(saved.total).toBe(1)
+    const detail = await json(context, `/api/catalog/items/${saved.items[0].id}`)
+    expect(detail.extension.projectId).toBe(leaf.id); expect(detail.reservationBlockedReason).toMatch(/not open/)
+    await page.setViewportSize({ width: 390, height: 844 })
+    expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false)
+    await page.screenshot({ path: testInfo.outputPath("unit-import-mobile.png"), fullPage: true })
+    await page.getByRole("tab", { name: "Saved imports", exact: true }).click()
+    await expect(page.getByRole("cell", { name: "units.xlsx", exact: true })).toBeVisible()
+    expect(errors).toEqual([])
+  } finally { await context.close(); await fixture.db.end() }
+})

@@ -50,6 +50,7 @@ export const resourceRegistry = {
   unitReservations: { policy: "sales", ownership: { kind: "source", roots: ["UnitReservation"], children: ["UnitReservationEvent"], sources: ["salesOrders", "catalogItems"] }, sharing: "salesOrders" },
   salesOrders: { policy: "sales", record: "SalesOrder", ownership: { kind: "source", roots: ["SalesOrder"], children: ["SalesOrderEvent", "SalesOrderTaxAcceptance", "OrderVerificationAcceptance"], sources: ["quotations"] }, sharing: "salesOrders" },
   catalogItems: { policy: "projects", ownership: { kind: "split", description: "General catalog items are shared. Industry units inherit their project; reservation availability never grants access to private orders.", parts: {
+    imports: { kind: "personal", roots: ["CatalogImport"], children: ["CatalogImportRow"] },
     catalog: { kind: "shared", roots: ["CatalogItem"] }, units: { kind: "source", roots: ["RealEstateUnit"], sources: ["projects"] },
     availability: { kind: "source", roots: ["CatalogReservationAvailability"], sources: ["catalogItems"] },
   } } },

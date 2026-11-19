@@ -40,6 +40,7 @@ export const applicationRouteAccess = createRouteAccess({
   exactRequirements: {
     "/settings/verification": { any: ["verificationPolicies.read", "verificationCheckpoints.read", "verificationRetention.read"] },
     "/sales-orders/receivables": ["salesOrders.read", "receivables.read"],
+    "/catalog/import": "catalogItems.create",
     "/crm/enquiries/import": ["enquiries.create", "contacts.create"],
     "/settings": "businessSettings.read",
     "/reports/coupon-usage": ["appointmentCoupons.read", "appointments.read"],
