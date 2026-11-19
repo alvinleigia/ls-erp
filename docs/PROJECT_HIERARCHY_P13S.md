@@ -50,6 +50,17 @@ Metadata uses forced tenant/office/sharing RLS. Names are resolved separately th
 ordinary project RLS. Root action/record policies remain the outer access boundary;
 sales, financial and document records retain their independent authority.
 
+Migration `20261119000300_project_hierarchy_derivation_grant` retains INSERT for
+the protected security-definer writer's owner. Supabase's owner bypasses RLS but
+is not a superuser, so revoking that owner's DML masked a creation failure in the
+earlier superuser-only rehearsal. Runtime metadata writes remain denied. The
+rehearsal now reproduces this failure with a separate non-superuser, RLS-bypassing
+function owner, verifies the corrective migration and rollback, then runs normal
+application creation under that owner. No application access override is added.
+The corrected rehearsal passed all 61 selected hierarchy/CRM/catalog/sharing
+checks (two historical-only cases were not selected), plus migration rollback and
+exact preservation of all 181 preceding tables. Local demo now has 163 migrations.
+
 ## Verification and release
 
 `npm.cmd run test:project-hierarchy` uses a disposable local database and includes

@@ -15,6 +15,10 @@
 - Keep parent links canonical and immutable in ordinary writes. Native triggers
   derive root and read-only ancestry indexes; never write hierarchy indexes
   from application code. Preserve existing root assignments, office and sharing.
+- Keep the security-definer owner's required DML grants when restricting runtime
+  index writes. A hosted owner can bypass RLS without being a superuser; native
+  rehearsals must exercise that distinction. Migration 163 restores the protected
+  hierarchy writer's INSERT grant without granting application writes.
 - Use `modules/real-estate/hierarchy.ts` for descendant/ancestor queries. Selectors,
   counts and pages must keep native record scopes; do not enumerate a tenant's IDs
   or fetch the entire tree. Resolve names through ordinary directory RLS.

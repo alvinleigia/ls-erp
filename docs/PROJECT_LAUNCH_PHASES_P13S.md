@@ -68,6 +68,8 @@ unchanged. No KYC or document issuance gate is added by this increment.
   checks for phase creation/editing, scheduling, unit assignment and responsive UI.
 
 Apply the hierarchy and launch-phase migrations before deploying this code.
+Include migration 163's protected hierarchy-writer grant for non-superuser
+hosted owners; application ancestry-index writes stay denied.
 Staging uses the existing guarded migration workflow; production requires the
 controlled release and a fresh verified backup. Never run synthetic fixture tests
 against a hosted client database. Client phase configuration is separate from
