@@ -8,8 +8,15 @@ test("standard unit import supports template download, validation, corrections, 
   const { page, context } = session, errors: string[] = []
   page.on("pageerror", error => errors.push(error.message))
   try {
-    const root = await json(context, "/api/real-estate/projects", 201, "POST", { name: "Import estate", code: "IMP" })
-    const leaf = await json(context, "/api/real-estate/projects", 201, "POST", { name: "Block A", code: "IMP-A", parentId: root.id })
+    async function createProject(data: Record<string, string>) {
+      const office = await json(context, "/api/workspace/office")
+      expect(office.creationOffice).toBeTruthy()
+      const response = await context.request.post("/api/real-estate/projects", { headers: { "x-office-id": office.creationOffice.id, "x-office-version": String(office.version) }, data })
+      expect(response.status(), await response.text()).toBe(201)
+      return response.json()
+    }
+    const root = await createProject({ name: "Import estate", code: "IMP" })
+    const leaf = await createProject({ name: "Block A", code: "IMP-A", parentId: root.id })
     await json(context, `/api/real-estate/projects/${root.id}/launch-phases`, 201, "POST", { name: "Launch 1", code: "PH1", status: "PLANNED" })
     const categories = await json(context, "/api/real-estate/choices/property-categories")
     await page.goto("/catalog")
