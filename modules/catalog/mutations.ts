@@ -1,4 +1,5 @@
 import { Prisma } from "@prisma/client"
+import { randomUUID } from "node:crypto"
 import { requireWriteFields } from "@/platform/access/policy"
 import { BusinessError, type BusinessActor } from "@/platform/policy"
 import { recordDomainAuditEvent } from "@/lib/domain-audit"
@@ -6,6 +7,7 @@ import { catalogItemSchema } from "./validation"
 import type { CatalogExtension } from "./contracts"
 import { reservedUnits, reservationClock } from "./reservation-availability"
 import { catalogScope } from "./scope"
+import { catalogDefaultCurrency } from "./defaults"
 const json = (value: unknown): Prisma.InputJsonValue => JSON.parse(JSON.stringify(value))
 export async function findCatalogItem(tx: Prisma.TransactionClient, actor: BusinessActor, extensions: readonly CatalogExtension[], id: string) {
   const row = await tx.catalogItem.findFirst({ where: { AND: [await catalogScope(tx, actor, extensions), { id }] } })
@@ -21,6 +23,7 @@ export async function saveCatalogItem(tx: Prisma.TransactionClient, actor: Busin
     if ((await reservedUnits(tx, actor.tenantId, [id], await reservationClock(tx))).has(id)) throw new BusinessError(409, "Release the unit reservation before changing this catalog item.")
   }
   const before = id ? await findCatalogItem(tx, actor, extensions, id) : null
+  data.currency ||= before?.currency || await catalogDefaultCurrency(tx, actor.tenantId)
   requireWriteFields(actor, "catalogItems", before ?? undefined, data)
   if (before && (data.version !== before.version || data.kind !== before.kind || data.extensionKey !== before.extensionKey)) throw new BusinessError(409, "Refresh this item. Its kind and extension cannot be changed after creation.")
   const extension = data.extensionKey ? extensions.find(e => e.key === data.extensionKey) : undefined
@@ -36,7 +39,10 @@ export async function saveCatalogItem(tx: Prisma.TransactionClient, actor: Busin
   }
   const { version: _version, extension: _extension, ...fields } = data
   void _version; void _extension
-  const values = { ...fields, price: new Prisma.Decimal(data.price) }
+  const name = data.name || (extension?.defaultName ? await extension.defaultName(tx, actor, data.extension) : "")
+  if (!name) throw new BusinessError(400, "Enter an item name.")
+  const code = data.code || before?.code || `ITM-${randomUUID().toUpperCase()}`
+  const values = { ...fields, code, name, ...(data.charges ? { charges: json(data.charges) } : {}), price: data.price === null ? null : new Prisma.Decimal(data.price) }
   if (id) {
     const changed = await tx.catalogItem.updateMany({ where: { tenantId: actor.tenantId, id, version: data.version }, data: { ...values, version: { increment: 1 } } })
     if (!changed.count) throw new BusinessError(409, "This item changed. Refresh before saving.")

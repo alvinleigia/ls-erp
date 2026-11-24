@@ -101,7 +101,7 @@ export async function buildQuotationPdf(record: { id: string; revision: number; 
     section("Charges and payment conditions")
     table(["Charge", "Amount / calculation", "Due / conditions"], calc.charges.map(charge => [
       `${charge.label}\n${charge.included ? "Included in consideration" : "Extra charge"}`,
-      `${charge.amount === null ? "To be confirmed" : money(charge.amount)}${charge.kind === "PERCENT" ? `\n${charge.value}% of ${charge.basis === "BASE" ? "base price" : "consideration"}` : ""}`, charge.due || "Not specified",
+      `${charge.amount === null ? "To be confirmed" : money(charge.amount)}${charge.kind === "PERCENT" ? `\n${charge.value}% of ${charge.basis === "LINE" ? "this item line price" : charge.basis === "BASE" ? "base price" : "consideration"}` : ""}`, charge.due || "Not specified",
     ]), [165, 150, 196])
     for (const group of calc.groups) paragraph(`${group.label} subtotal (${group.included ? "included" : "extra"}${group.hasPending ? ", known amounts" : ""}): ${money(group.amount)}`, 10)
     paragraph(`Extra charges (known): ${money(calc.extras)}`)

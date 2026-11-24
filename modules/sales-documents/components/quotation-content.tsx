@@ -14,6 +14,7 @@ import Image from "next/image"
 import { formatDecimalCurrency } from "@/lib/formatting"
 import { formatDateForDisplay } from "@/lib/date"
 import type { AppSettingsPayload } from "@/types/scheduling"
+import { ItemChargeFields } from "@/platform/pricing/item-charge-fields"
 
 export function QuotationContentFields({ value: v, onChange, disabled, template = false, paymentPlansEnabled = false, onError, settings, errors = {} }: { value: QuotationContent; onChange: (next: QuotationContent) => void; disabled?: boolean; template?: boolean; paymentPlansEnabled?: boolean; onError: (message: string) => void; settings?: Pick<AppSettingsPayload, "numberFormat" | "currencySymbolPlacement" | "dateFormat">; errors?: Record<string, string> }) {
   const term = useTerminology()
@@ -53,6 +54,7 @@ export function QuotationContentFields({ value: v, onChange, disabled, template 
         {field(`line-quantity-${i}`, "Quantity / area", item.quantity, quantity => set("lines", v.lines.map((r, n) => n === i ? { ...r, quantity } : r)))}
         {field(`line-unit-${i}`, "Unit", item.unit, unit => set("lines", v.lines.map((r, n) => n === i ? { ...r, unit } : r)), "text", 40)}
         {field(`line-rate-${i}`, "Rate per unit", item.rate, rate => set("lines", v.lines.map((r, n) => n === i ? { ...r, rate } : r)))}
+        <details className="min-w-0 space-y-3 sm:col-span-2 lg:col-span-4" open={item.charges?.length ? true : undefined}><summary className="cursor-pointer font-medium">Item charges{item.charges?.length ? ` (${item.charges.length})` : ""}</summary><ItemChargeFields id={`line-charges-${i}`} value={item.charges || []} disabled={disabled} onChange={charges => set("lines", v.lines.map((r, n) => n === i ? { ...r, charges } : r))} /></details>
         {v.lines.length > 1 && <Button type="button" variant="ghost" onClick={() => set("lines", v.lines.filter((_, n) => n !== i))}>Remove item</Button>}
       </div>)}
       <Button type="button" variant="outline" disabled={v.lines.length >= 30} onClick={() => set("lines", [...v.lines, { description: "", quantity: "1", unit: "", rate: "0" }])}>Add priced item</Button>

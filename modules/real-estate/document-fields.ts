@@ -3,7 +3,10 @@ import type { TemplateField } from "@/platform/documents/layout"
 const help = "Individual property fields require exactly one saved property unit. Use the Property units section for multiple units."
 export const propertyDocumentFields: TemplateField[] = [
   { key: "property.project-name", label: "Project / phase name" },
-  { key: "property.unit-code", label: "Unit code" },
+  { key: "property.unit-code", label: "Unit reference" },
+  { key: "property.unit-number", label: "Plot / apartment number" },
+  { key: "property.company-code", label: "Unit code" },
+  { key: "property.floor", label: "Floor" },
   { key: "property.unit-name", label: "Unit name" },
   { key: "property.area", label: "Area" },
   { key: "property.area-unit", label: "Area unit" },
@@ -17,7 +20,7 @@ export const propertyUnitsSection = {
 
 type SavedUnit = {
   ref: { code: string; name: string }
-  property: { project: { name: string; location: string; parent: { name: string; location: string } | null; path?: { name: string; location: string }[] }; area: string | null; areaUnit: "SQ_M" | "SQ_FT" }
+  property: { unitNumber?: string | null; companyCode?: string | null; floor?: string | null; project: { name: string; location: string; parent: { name: string; location: string } | null; path?: { name: string; location: string }[] }; area: string | null; areaUnit: "SQ_M" | "SQ_FT" }
 }
 
 // The caller supplies already authorised, accepted evidence. Never pick the first
@@ -27,7 +30,10 @@ export function propertyDocumentValues(units: SavedUnit[]): Record<string, strin
   const { ref, property: p } = units[0]
   return {
     "property.project-name": (p.project.path?.map(node => node.name) || [p.project.parent?.name, p.project.name]).filter(Boolean).join(" / "),
-    "property.unit-code": ref.code,
+    "property.unit-code": p.companyCode || p.unitNumber || ref.code,
+    "property.unit-number": p.unitNumber || "",
+    "property.company-code": p.companyCode || "",
+    "property.floor": p.floor || "",
     "property.unit-name": ref.name,
     "property.area": p.area ?? "Not supplied",
     "property.area-unit": p.area === null ? "" : p.areaUnit === "SQ_M" ? "sq m" : "sq ft",

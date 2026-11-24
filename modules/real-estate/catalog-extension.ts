@@ -9,7 +9,9 @@ import { projectScope } from "./service"
 import { resolvePropertyChoice } from "./choice-service"
 import { readPropertyDocumentEvidence } from "./document-evidence"
 import { launchReservationBlocks } from "./launch-phases"
+import { propertyPresentation, unitNomenclatureShape } from "./unit-nomenclature"
 export const unitDetailsSchema = z.object({
+  ...unitNomenclatureShape,
   projectId: z.string().min(1).max(100), categoryId: z.string().min(1).max(100),
   launchPhaseId: z.string().min(1).max(100).nullable().optional(),
   bedrooms: z.number().int().min(0).max(100).nullable().default(null),
@@ -18,6 +20,14 @@ export const unitDetailsSchema = z.object({
 }).strict()
 export const propertyCatalogExtension: CatalogExtension = {
   key: "realEstate",
+  presentation: propertyPresentation,
+  search: query => ({ propertyUnit: { is: { OR: [{ unitNumber: { contains: query, mode: "insensitive" } }, { companyCode: { contains: query, mode: "insensitive" } }, { project: { name: { contains: query, mode: "insensitive" } } }, { project: { lineage: { some: { ancestor: { name: { contains: query, mode: "insensitive" } } } } } }] } } }),
+  async defaultName(tx, actor, input) {
+    const data = await propertyUnitValues(tx, actor, input)
+    if (!data.unitNumber) throw new BusinessError(400, "Enter a unit number or an item name.")
+    const category = await tx.realEstatePropertyCategory.findUniqueOrThrow({ where: { tenantId_id: { tenantId: actor.tenantId, id: data.categoryId } }, select: { name: true } })
+    return `${category.name} ${data.unitNumber}`
+  },
   reservationBlocks: launchReservationBlocks,
   documentEvidence: readPropertyDocumentEvidence,
   async scope(tx, actor, contextId) {
@@ -48,6 +58,12 @@ async function propertyUnitValues(tx: Prisma.TransactionClient, actor: import("@
     const owner = await tx.realEstateProject.findFirst({ where: { tenantId: actor.tenantId, id: data.projectId }, select: { rootId: true } })
     if (!owner || !await tx.realEstateLaunchPhase.findFirst({ where: { tenantId: actor.tenantId, id: launchPhaseId, projectId: owner.rootId } })) throw new BusinessError(400, "Choose a launch phase belonging to this project.")
   }
-  const values = { ...data, launchPhaseId, area: data.area ? new Prisma.Decimal(data.area) : null }
+  const raw = input as Record<string, unknown>
+  const nomenclature = {
+    unitNumber: raw.unitNumber === undefined ? previous?.unitNumber ?? null : data.unitNumber,
+    companyCode: raw.companyCode === undefined ? previous?.companyCode ?? null : data.companyCode,
+    floor: raw.floor === undefined ? previous?.floor ?? null : data.floor,
+  }
+  const values = { ...data, ...nomenclature, launchPhaseId, area: data.area ? new Prisma.Decimal(data.area) : null }
   return values
 }

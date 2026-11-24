@@ -1,3 +1,119 @@
+## P13S Bliss Aqua section/phase setup - production verified (2026-11-24)
+
+User-authorized tenant configuration added Bliss Aqua Triangle/BAT as a child
+of Bliss Aqua/BAQ. The existing Bliss Aqua Square/BAS and every prior project
+record were verified unchanged through the authenticated APIs. Triangle inherits
+the root's office/company boundary. Four root-owned phases were created through
+the normal audited API: Square - Phase 1/PH01, Square - Phase 2/PH02,
+Square - Phase 3/PH03 and Triangle - Phase 4/PH04. All are PLANNED with no opening
+date; the client's booking release decisions remain pending. Creating them did
+not assign units, create inventory, change access grants or rewrite sales.
+
+The client-review v3 workbook now uses project_code BAS for 132 PH01-PH03 plots
+and BAT for 57 PH04 plots. Original plot numbers, optional BAQ-prefixed unit codes,
+areas (49,296 sq m), phase membership and open-area exclusions remain intact.
+The real import file reader verified exact v3 headings, 189 plain-value rows and
+leading zeros. The source workbook remains unchanged. BAQ-01 availability still
+needs client confirmation; prices and PLC remain blank. No inventory was imported
+and no application release/migration was performed. Private setup and screenshot
+evidence: tmp/ewissen-phase-setup; workbook verification: tmp/inventory-v3.
+Use the updated output in outputs/ewissen-inventory-20261124-v3-sections; the older
+v3 copy remains untouched because it was open in another application.
+
+The user subsequently confirmed all 189 units are currently available. A further
+review copy in outputs/ewissen-inventory-20261124-v3-available sets every row to
+AVAILABLE, resolving BAQ-01's placeholder without changing the original workbook.
+The ERP parser verified all required fields and both section counts. This remains
+a file-only availability update; no inventory was created and phase booking status
+is still Planned pending an explicit booking-release decision.
+
+The user then authorized opening only Phase 2. The normal version-checked,
+audited production API changed PH02 (Square - Phase 2) from Planned to Open,
+with no opening-date delay. PH01/PH03/PH04 and the parent project were verified
+unchanged. Live UI shows one Open phase and three Planned phases. This makes
+the 46 PH02 plots eligible for new holds after inventory import, subject to the
+ordinary availability/access checks. No inventory or sales were created.
+Updated workbook: outputs/ewissen-inventory-20261124-v3-phase2-open.
+Evidence: tmp/ewissen-phase-setup/phase2-open.json and live-phase2-open.png.
+
+## P13S Ewissen code configuration - production verified (2026-11-24)
+
+User-approved codes are live: companies BBT/EWI/EGD/EIL and main projects
+ALT/DWH/DMH/LTV/SAR/BAB/BAQ/BFM. The existing child Bliss Aqua Square/BAS,
+office codes, units and phases were retained. Ten audited code-only updates
+preserved all other data across 184 public tables and all security metadata;
+encrypted recovery and exact rollback were verified. Authenticated APIs and
+company/project screenshots verified the live result. This was configuration
+only: production stays on 164 migrations; no app deployment or schema change.
+See UNIT_NOMENCLATURE_P13S.md and private evidence in tmp/ewissen-code-update.
+
+## P13S optional catalog pricing - locally verified (2026-11-21)
+
+Both import profiles accept undecided prices and blank currencies. Prices remain
+null and display **Price not set**, distinct from explicit zero. New interactive
+items default currency from tenant Settings; omitted currency on existing items
+retains the saved currency. Uploads capture the tenant default once in immutable
+import metadata; explicit overrides remain supported, and source cells stay intact.
+Earlier uploads without a captured currency cannot silently adopt a new default.
+
+Selecting unpriced stock leaves quotation rate empty. Existing numeric validation
+requires an explicit negotiated rate before saving; order confirmation and saved
+commercial evidence retain that agreed amount despite subsequent catalog changes.
+
+Migration `20261121000200_catalog_optional_pricing` passed forced rollback and
+preservation of all 183 prior tables. The guarded local demo has 168 migrations;
+its 183 business tables were verified unchanged. Final 27 native/unit checks,
+including the 1,000-row import, and three production-build Chrome flows passed.
+Desktop/mobile screenshots inspected; build, TypeScript, lint and whitespace
+checks passed. Evidence: `tmp/catalog-optional-pricing-native.log`,
+`tmp/catalog-optional-pricing-build.log`, `tmp/catalog-optional-pricing-local-migrate.log`.
+No hosted data, settings, deployment or client workbook changed.
+
+## P13S unit nomenclature - local implementation (2026-11-21)
+
+Property unit numbers, optional unit codes and generated internal catalog
+references are separate. Physical project/building nodes define duplicate scope;
+launch phases never create duplicate stock namespaces. Unit codes preserve
+case/punctuation. Existing project codes, ownership, access, catalog references
+and frozen commercial evidence are retained. Full-context catalog/search/selection
+labels feed new quotation references; copied descriptions respect the existing
+300-character limit. Generic products keep their established code/name workflow.
+
+Property import v3 uses required unit_number and optional unit_code/floor;
+older v1/v2 jobs remain read-only history. The additive migration passed forced
+rollback and preservation of all 183 prior tables, including staged import
+history and archived snapshots. Local demo has 167 migrations. The selected 148
+native/unit checks passed, plus two long-description/Unicode checks; a final
+focused rerun passed all 13 catalog/presentation tests. Three production-build
+browser flows passed. Desktop/mobile screenshots and a generated property PDF
+were inspected; final build, TypeScript, lint and whitespace checks passed.
+All business writes used isolated synthetic tenants; only the guarded schema
+migration touched the persistent local demo. No hosted data or deployment changed.
+See UNIT_NOMENCLATURE_P13S.md. Evidence: tmp/unit-nomenclature-native-browser.log,
+tmp/unit-nomenclature-focused-final.log, tmp/unit-nomenclature-build-final.log,
+and tmp/industry-release/ls-erp-sales-orders-c882ebb78a1a.log for migration rehearsal.
+The first native attempt exposed one obsolete test lookup and an older-unit PDF
+code fallback; both were corrected before the passing rerun.
+
+## P13S item charges - local implementation verified (2026-11-19)
+
+Generic catalog defaults and reviewed quotation-line charges support per-item
+percentages/fixed amounts, including PLC, without Real Estate-specific pricing.
+Included/extra totals flow through frozen quotations, standard/custom PDFs,
+orders, receivables and item-wise commercial billing. Explicit refresh copies
+current defaults; existing snapshots and access grants are preserved. Import
+template v2 adds optional charge columns to both profiles; v1 history is read-only.
+
+Both additive migrations passed forced rollback and preservation of all 183
+pre-existing tables. The local demo now has 166 migrations. All 87 selected native/
+unit checks and three production-build browser flows passed, including 1,000-row
+catalog import, tax approval guards, previous invoice/rounding flows and reviewed
+charge overrides/removal/refresh. Desktop/mobile screenshots and the generated PDF
+were inspected; the 8% example reconciles INR 1,000 + INR 80 = INR 1,080. Build,
+TypeScript, targeted lint and whitespace checks passed. Writes were confined to
+disposable synthetic test databases and the guarded local demo migration. Nothing
+was pushed or deployed for this change. See ITEM_CHARGES_P13S.md.
+
 ## P13S standard catalog import - local implementation verified (2026-11-19)
 
 Fixed Excel templates support general products/identified units and an optional

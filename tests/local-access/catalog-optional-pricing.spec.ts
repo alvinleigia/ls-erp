@@ -1,0 +1,53 @@
+import { test, expect } from "@playwright/test"
+import { seed, login, json } from "./fixtures"
+
+test("unpriced inventory keeps an empty rate until staff enter a quotation price", async ({ browser }, testInfo) => {
+  const fixture = await seed(), { db, slug } = fixture
+  const { page, context } = await login(browser, fixture.origin, fixture.users.admin.email)
+  try {
+    await db.query('INSERT INTO "TenantModule" ("tenantId",key,allowed,enabled,"updatedAt") VALUES ($1,\'catalog\',true,true,now())', [slug])
+    await page.goto("/catalog/new")
+    await page.getByLabel("Name", { exact: true }).fill("Undecided stock price")
+    await expect(page.getByLabel("Price", { exact: true })).toHaveValue("")
+    await expect(page.getByRole("combobox", { name: "Currency", exact: true })).toContainText("INR")
+    await page.getByRole("button", { name: "Save item", exact: true }).click()
+    await expect(page).toHaveURL(/\/catalog\/(?!new)[^/]+$/)
+    const itemId = page.url().split("/").pop()!
+    expect((await json(context, `/api/catalog/items/${itemId}`)).price).toBeNull()
+    await expect(page.getByText("Price not set", { exact: true })).toBeVisible()
+    await page.screenshot({ path: testInfo.outputPath("unpriced-item.png"), fullPage: true })
+    await page.getByRole("button", { name: "Edit item details", exact: true }).click()
+    await expect(page.getByLabel("Price", { exact: true })).toHaveValue("")
+    await page.getByLabel("Price", { exact: true }).fill("0")
+    await page.getByRole("button", { name: "Save item", exact: true }).click()
+    await expect(page.getByRole("dialog")).toHaveCount(0)
+    expect((await json(context, `/api/catalog/items/${itemId}`)).price).toBe("0")
+    await page.getByRole("button", { name: "Edit item details", exact: true }).click()
+    await page.getByLabel("Price", { exact: true }).fill("")
+    await page.getByRole("button", { name: "Save item", exact: true }).click()
+    await expect(page.getByRole("dialog")).toHaveCount(0)
+    await page.goto("/catalog")
+    await page.getByRole("textbox", { name: "Search catalog", exact: true }).fill("Undecided stock price")
+    await expect(page.getByRole("cell", { name: "Price not set", exact: true })).toBeVisible()
+    const contact = await json(context, "/api/crm/contacts", 201, "POST", { name: "Synthetic negotiated sale" })
+    const pipeline = `${slug}-pipeline`, stage = `${slug}-stage`
+    await db.query('INSERT INTO "CrmPipeline" (id,"tenantId",name,"updatedAt") VALUES ($1,$2,\'Test sales\',now())', [pipeline, slug])
+    await db.query('INSERT INTO "CrmStage" (id,"tenantId","pipelineId",name,position,probability,color) VALUES ($1,$2,$3,\'Qualified\',0,10,\'#123456\')', [stage, slug, pipeline])
+    const deal = await json(context, "/api/crm/opportunities", 201, "POST", { title: "Negotiated quotation", contactId: contact.id, assignedUserId: fixture.users.admin.id, pipelineId: pipeline, stageId: stage, amount: "0", currency: "INR", expectedCloseOn: "2027-12-31" })
+    await page.goto(`/crm/quotations/new?opportunityId=${deal.id}`)
+    await page.locator("summary").filter({ hasText: "Price and discount" }).click()
+    await page.getByRole("combobox", { name: "Catalog item (optional)", exact: true }).click()
+    await page.getByRole("option", { name: /Undecided stock price/ }).click()
+    await expect(page.getByLabel("Rate per unit", { exact: true })).toHaveValue("")
+    await expect(page.getByText("Price not set. Enter the agreed rate per unit before saving the quotation.", { exact: true })).toBeVisible()
+    await page.screenshot({ path: testInfo.outputPath("unpriced-quotation.png"), fullPage: true })
+    await page.getByRole("button", { name: "Save document", exact: true }).click()
+    await expect(page).toHaveURL(/\/crm\/quotations\/new/)
+    await page.getByLabel("Rate per unit", { exact: true }).fill("125000")
+    await page.getByRole("button", { name: "Save document", exact: true }).click()
+    await expect(page).toHaveURL(/\/crm\/quotations\/(?!new)[^/]+$/)
+    const quote = await json(context, `/api/crm/quotations/${page.url().split("/").pop()}`)
+    expect(quote.snapshot.calculation.consideration).toBe("125000.00")
+    expect((await json(context, `/api/catalog/items/${itemId}`)).price).toBeNull()
+  } finally { await context.close(); await db.end() }
+})

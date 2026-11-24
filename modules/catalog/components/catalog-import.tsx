@@ -11,7 +11,7 @@ import { useListState } from "@/components/erp/list-navigation"
 import { AccessPageHeader } from "@/platform/access/record-page"
 import { IMPORT_MAX_BYTES } from "@/platform/imports/types"
 type Progress = { id: string; status: string; counts: Record<string, number> }
-type Result = Progress & { fileName: string; profile: string; total: number; items: { rowNumber: number; values: string[]; status: string; errors: { field: string; message: string }[] }[] }
+type Result = Progress & { canProcess: boolean; defaultCurrency: string | null; templateVersion: number; fileName: string; profile: string; total: number; items: { rowNumber: number; values: string[]; status: string; errors: { field: string; message: string }[] }[] }
 type History = { items: { id: string; fileName: string; profile: string; status: string }[]; total: number }
 const labels: Record<string, string> = { PENDING: "To validate", READY: "Ready", INVALID: "Needs correction", DUPLICATE: "Duplicate", IMPORTED: "Imported", VALIDATING: "Validating", REVIEW: "Ready for review", IMPORTING: "Importing", COMPLETE: "Complete" }
 async function api<T>(url: string, init?: RequestInit): Promise<T> {
@@ -90,11 +90,12 @@ export function CatalogImport() {
       </Surface> },
       { value: "review", label: "2. Review and import", content: !result || !current ? <Surface><p>Upload a template or open a saved import.</p></Surface> : <Surface>
         <div className="flex flex-wrap items-center justify-between gap-3"><div className="flex min-w-0 items-center gap-2"><h2 className="min-w-0 break-all font-semibold">{result.fileName}</h2><InfoHelp title="Import rules">New inventory only. Existing item codes are skipped. Setup, permissions and references are checked again during import. Correct downloaded error rows, keep their headings, and upload them as a new file.</InfoHelp></div><span role="status">{labels[current.status]}</span></div>
+        {result.defaultCurrency && <p className="text-sm">Currency for blank cells: {result.defaultCurrency}</p>}
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">{["PENDING", "READY", "INVALID", "DUPLICATE", "IMPORTED"].map(status => <div key={status} className="rounded-lg border p-3"><span className="text-sm text-muted-foreground">{labels[status]}</span><strong className="block text-xl">{current.counts[status] || 0}</strong></div>)}</div>
         {busy && <div className="space-y-2"><progress aria-label="Import progress" max={Math.max(1, total)} value={done} className="w-full" /><p className="text-sm">{current.status === "VALIDATING" ? "Validating" : "Processing"} rows. Progress is saved after each batch.</p></div>}
         <div className="flex flex-wrap items-center gap-2">
-          {current.status === "VALIDATING" && <Button disabled={busy} onClick={() => work(() => process(result.id, "validate"))}>Resume validation</Button>}
-          {["REVIEW", "IMPORTING"].includes(current.status) && <Button disabled={busy || !(current.counts.READY > 0)} onClick={() => setConfirm(true)}>{current.status === "IMPORTING" ? "Resume import" : "Import valid rows"}</Button>}
+          {!result.canProcess && <p role="status">This earlier import is read-only. Download the current template and re-upload any remaining rows.</p>}{current.status === "VALIDATING" && <Button disabled={busy || !result.canProcess} onClick={() => work(() => process(result.id, "validate"))}>Resume validation</Button>}
+          {["REVIEW", "IMPORTING"].includes(current.status) && <Button disabled={busy || !result.canProcess || !(current.counts.READY > 0)} onClick={() => setConfirm(true)}>{current.status === "IMPORTING" ? "Resume import" : "Import valid rows"}</Button>}
           {busy && <Button variant="outline" onClick={() => { stopped.current = true }}>Pause after this batch</Button>}
           {!!correctionCount && <Button variant="outline" asChild><a href={`/api/catalog/imports/${result.id}/errors`}>Download corrections ({correctionCount})</a></Button>}
           <Button variant="outline" disabled={busy} onClick={() => work(() => refresh())}>Refresh</Button>

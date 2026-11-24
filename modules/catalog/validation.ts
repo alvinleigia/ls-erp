@@ -1,17 +1,21 @@
 import { z } from "zod"
+import { itemChargesSchema } from "@/platform/pricing/item-charges"
 const text = (max: number) => z.string().trim().max(max)
+export const catalogCurrencySchema = z.string().regex(/^[A-Z]{3}$/).refine(v => Intl.supportedValuesOf("currency").includes(v), "Choose a currency.")
 export const catalogItemSchema = z.object({
-  code: text(60).min(1).regex(/^[A-Za-z0-9][A-Za-z0-9._/-]*$/, "Use letters, numbers, dots, slashes or hyphens.").transform(s => s.toUpperCase()),
-  name: text(200).min(1), description: text(5000).default(""),
+  code: text(60).regex(/^(?:[A-Za-z0-9][A-Za-z0-9._/-]*)?$/, "Use letters, numbers, dots, slashes or hyphens.").transform(s => s.toUpperCase()).default(""),
+  name: text(200).default(""), description: text(5000).default(""),
   kind: z.enum(["PRODUCT", "UNIT"]), unit: text(40).min(1).default("unit"),
-  price: z.string().regex(/^\d{1,12}(\.\d{1,4})?$/, "Enter a non-negative price with up to four decimal places."),
-  currency: z.string().regex(/^[A-Z]{3}$/).refine(v => Intl.supportedValuesOf("currency").includes(v), "Choose a currency."),
+  price: z.union([z.literal(""), z.string().regex(/^\d{1,12}(\.\d{1,4})?$/, "Enter a non-negative price with up to four decimal places.")]).nullish().transform(value => value === "" || value == null ? null : value),
+  charges: itemChargesSchema.optional(),
+  currency: z.union([z.literal(""), catalogCurrencySchema]).default(""),
   availability: z.enum(["AVAILABLE", "UNAVAILABLE", "SOLD"]).default("AVAILABLE"),
   archived: z.boolean().default(false), version: z.number().int().positive().optional(),
   extensionKey: z.string().min(1).max(50).nullable().default(null), extension: z.unknown().optional(),
 }).strict().superRefine((v, ctx) => {
   if (v.kind === "PRODUCT" && v.availability === "SOLD") ctx.addIssue({ code: "custom", path: ["availability"], message: "Sold applies to individually identified units." })
   if (!v.extensionKey && v.extension != null) ctx.addIssue({ code: "custom", path: ["extension"], message: "Choose an item extension." })
+  if (!v.extensionKey && !v.name) ctx.addIssue({ code: "custom", path: ["name"], message: "Enter an item name." })
 })
 export const catalogListSchema = z.object({
   page: z.coerce.number().int().min(1).max(100000).default(1), pageSize: z.coerce.number().int().min(1).max(100).default(20),

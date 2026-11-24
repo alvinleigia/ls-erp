@@ -69,11 +69,11 @@ export function createReservationService(db: PrismaClient, identity: Pick<Busine
     },
     history(orderId: string, page = 1) {
       return run("unitReservations.read", async (tx, actor) => {
-        await order(tx, actor, orderId)
+        const refs = source.units(await order(tx, actor, orderId))
         const where: Prisma.UnitReservationWhereInput = { tenantId: actor.tenantId, orderId, item: await catalogScope(tx, actor, extensions) }
         const now = await reservationClock(tx), pageSize = 10
         const [items, total] = await Promise.all([tx.unitReservation.findMany({ where, include: { events: { orderBy: { version: "asc" } } }, orderBy: [{ createdAt: "desc" }, { id: "asc" }], skip: (page - 1) * pageSize, take: pageSize }), tx.unitReservation.count({ where })])
-        return { items: items.map(row => ({ ...row, status: row.status === "HELD" && row.expiresAt <= now ? "EXPIRED" : row.status })), total, page, pageSize, totalPages: Math.max(1, Math.ceil(total / pageSize)) }
+        return { items: items.map(row => { const ref = refs.find(ref => ref.itemId === row.itemId); return { ...row, displayLabel: ref?.displayName ? [ref.displayCode, ref.displayName].filter(Boolean).join(" · ") : `${row.itemCode} · ${row.itemName}`, status: row.status === "HELD" && row.expiresAt <= now ? "EXPIRED" : row.status } }), total, page, pageSize, totalPages: Math.max(1, Math.ceil(total / pageSize)) }
       })
     },
     create(orderId: string, input: unknown) {

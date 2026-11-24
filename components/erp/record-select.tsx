@@ -5,7 +5,7 @@ import type { ListResponse } from "@/types/api"
 
 type Option = { value: string; label: string }
 export function RecordSelect({ endpoint, value, selected, onChange, id, disabled = false, labelField = "name", placeholder = "Search and select…", preferSelectedOption = false, showCode = false }: {
-  endpoint: string; value: string; selected?: Option; onChange: (value: string, option?: Option) => void; id: string; disabled?: boolean; labelField?: "name" | "title" | "pathName"; placeholder?: string; preferSelectedOption?: boolean; showCode?: boolean;
+  endpoint: string; value: string; selected?: Option; onChange: (value: string, option?: Option) => void; id: string; disabled?: boolean; labelField?: "name" | "title" | "pathName" | "selectionLabel"; placeholder?: string; preferSelectedOption?: boolean; showCode?: boolean;
 }) {
   const [q, setQ] = React.useState("")
   const [options, setOptions] = React.useState<Option[]>([])
@@ -17,7 +17,7 @@ export function RecordSelect({ endpoint, value, selected, onChange, id, disabled
       try {
         const response = await fetch(`${endpoint}${endpoint.includes("?") ? "&" : "?"}pageSize=20&q=${encodeURIComponent(q)}`, { signal: controller.signal, cache: "no-store" })
         if (!response.ok) throw new Error("Unable to load choices.")
-        const data: ListResponse<{ id: string; name?: string | null; title?: string; pathName?: string; code?: string }> = await response.json()
+        const data: ListResponse<{ id: string; name?: string | null; title?: string; pathName?: string; selectionLabel?: string; code?: string }> = await response.json()
         if (controller.signal.aborted) return
         setOptions(data.items.map(row => ({ value: row.id, label: `${showCode && row.code ? row.code + " · " : ""}${row[labelField] || "Unnamed record"}` })))
         setMessage(data.total > 20 ? "Refine your search to find more choices." : "No matching records.")

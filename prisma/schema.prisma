@@ -3258,6 +3258,7 @@ model TenantUserAccess {
 }
 
 model CatalogItem {
+  charges Json @default("[]")
   importRows CatalogImportRow[]
   reservationAvailability CatalogReservationAvailability?
   tenantId String
@@ -3267,7 +3268,7 @@ model CatalogItem {
   description String @default("")
   kind String
   unit String @default("unit")
-  price Decimal @db.Decimal(18, 4)
+  price Decimal? @db.Decimal(18, 4)
   currency String
   availability String @default("AVAILABLE")
   archived Boolean @default(false)
@@ -3323,6 +3324,9 @@ model RealEstateUnit {
   tenantId String
   itemId String
   projectId String
+  unitNumber String?
+  companyCode String?
+  floor String?
   launchPhaseId String?
   launchPhase RealEstateLaunchPhase? @relation(fields: [tenantId, launchPhaseId], references: [tenantId, id], onDelete: Restrict)
   categoryId String
@@ -3988,11 +3992,12 @@ model RealEstateProjectAncestor {
 
 // Creator-private staged catalog imports; final writes use normal catalog services.
 model CatalogImport {
+  defaultCurrency String?
   id String @id @default(cuid())
   tenantId String
   createdByUserId String
   profile String
-  templateVersion Int @default(1)
+  templateVersion Int @default(3)
   fileName String
   status String @default("VALIDATING")
   headers Json
@@ -4009,12 +4014,12 @@ model CatalogImportRow {
   values Json
   status String @default("PENDING")
   errors Json @default("[]")
-  itemCode String?
+  matchKeys String[] @default([])
   input Json?
   itemId String?
   batch CatalogImport @relation(fields: [tenantId, importId], references: [tenantId, id], onDelete: Restrict)
   item CatalogItem? @relation(fields: [tenantId, itemId], references: [tenantId, id], onDelete: Restrict)
   @@id([tenantId, importId, rowNumber])
   @@index([tenantId, importId, status, rowNumber])
-  @@index([tenantId, importId, itemCode, rowNumber])
+  @@index([matchKeys], type: Gin)
 }

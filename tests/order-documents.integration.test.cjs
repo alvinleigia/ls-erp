@@ -257,7 +257,8 @@ test('provider scalar fields use authorised accepted property facts, reject mult
   const single=await propertyFixture(1);await holdAll(single)
   const prepared=await docs().prepare(single.order.id,{providerKey:BI}),rows=prepared.payload.body.filter(n=>n.type==='paragraph'&&n.runs[0]?.bold)
   assert.equal(rows.length,propertyDocumentFields.length)
-  assert.equal(rows.find(n=>n.runs[0].text==='Unit code: ').runs[1].text,single.items[0].code)
+  const referenceLabel=propertyDocumentFields.find(field=>field.key==='property.unit-code').label+': '
+  assert.equal(rows.find(n=>n.runs[0].text===referenceLabel).runs[1].text,single.items[0].code)
   assert.equal(rows.find(n=>n.runs[0].text==='Project / phase name: ').runs[1].text,project.name)
   assert.equal(rows.find(n=>n.runs[0].text==='Area: ').runs[1].text,'1200')
   assert.equal(prepared.payload.body.some(n=>n.type==='section'&&n.blocks.some(b=>b.key==='property-units')),false)
@@ -291,4 +292,30 @@ test('letterhead copies use frozen issued bytes with no extra upload and preserv
   await assert.rejects(docs(outsider).download(f.order.id,row.id,ACK,'letterhead'),status(404));await assert.rejects(docs(foreign,{},foreignDb).download(f.order.id,row.id,ACK,'letterhead'),status(403))
   assert.equal(await root.salesOrderDocument.count({where:{tenantId:tenant,orderId:f.order.id}}),1)
  }finally{await root.businessCompany.update({where:{id:company.id},data:{documentSettings:previous.documentSettings,version:{increment:1}}})}
+})
+
+test('new unit numbers and company codes flow through frozen orders, reservations and property PDFs',async()=>{
+ await publish(BI)
+ const item=await catalog.save({kind:'UNIT',price:'100',currency:'INR',unit:'apartment',extensionKey:'realEstate',extension:{projectId:project.id,categoryId:category.id,unitNumber:'0101',companyCode:'Ewissen/Altura_0101',floor:'1'}})
+ const f=await fixture([item]);await holdAll(f)
+ const saved=f.order.snapshot.items[0];assert.equal(saved.code,item.code);assert.equal(saved.documentEvidence.value.unitNumber,'0101');assert.equal(saved.documentEvidence.value.companyCode,'Ewissen/Altura_0101')
+ const history=await reservations.history(f.order.id);assert.match(history.items[0].displayLabel,/Ewissen\/Altura_0101/);assert.ok(!history.items[0].displayLabel.includes(item.code))
+ const s=docs(admin,{render:renderBusinessDocument}),prepared=await s.prepare(f.order.id,{providerKey:BI}),table=prepared.payload.blocks.find(b=>b.key==='property-units').table
+ assert.match(table.rows[0][0],/0101/);assert.match(table.rows[0][0],/Ewissen\/Altura_0101/);assert.ok(!table.rows[0][0].includes(item.code));assert.match(table.rows[0][0],/Floor: 1/)
+ const issued=await s.issue(f.order.id,input(prepared)),bytes=Buffer.from(objects.get(issued.archive.path));fs.mkdirSync('tmp/pdfs',{recursive:true});fs.writeFileSync('tmp/pdfs/unit-nomenclature.pdf',bytes)
+ await root.realEstateUnit.update({where:{tenantId_itemId:{tenantId:tenant,itemId:item.id}},data:{unitNumber:'0102'}})
+ await assert.rejects(s.prepare(f.order.id,{providerKey:BI,supersedesId:issued.id,reason:'Changed physical number'}),status(409))
+ await s.download(f.order.id,issued.id,BI);assert.deepEqual(objects.get(issued.archive.path),bytes)
+ assert.deepEqual((await orders.get(f.order.id)).snapshot,f.order.snapshot)
+})
+
+test('pre-nomenclature accepted property snapshots remain usable without rewriting their evidence',async()=>{
+ const f=await propertyFixture(1);await holdAll(f)
+ const snapshot=structuredClone(f.order.snapshot),accepted=JSON.stringify(snapshot)
+ for(const ref of snapshot.items){delete ref.displayCode;delete ref.displayName;for(const key of ['unitNumber','companyCode','floor'])delete ref.documentEvidence.value[key]}
+ await root.realEstateUnit.update({where:{tenantId_itemId:{tenantId:tenant,itemId:f.items[0].id}},data:{companyCode:f.items[0].code}})
+ const {realEstateOrderDocuments}=require('../modules/real-estate/order-documents.ts'),{authorizeBusinessOperation}=require('../platform/access/operation.ts'),provider=realEstateOrderDocuments(async()=>{throw Error('No finance read expected')}).find(p=>p.key===BI)
+ const result=await db.$transaction(async tx=>{const actor=await authorizeBusinessOperation(tx,identity(admin),'orderDocuments.create',['salesOrders','realEstate','catalog']);return provider.blocks(tx,actor,{order:f.order,snapshot,date:'2026-01-01',office:await tx.businessOffice.findFirstOrThrow({where:{tenantId:tenant,id:f.order.officeId}}),company:await tx.businessCompany.findFirstOrThrow({where:{tenantId:tenant,id:company.id}})})})
+ assert.match(result.blocks.find(b=>b.key==='property-units').table.rows[0][0],new RegExp(f.items[0].code))
+ assert.equal(JSON.stringify(f.order.snapshot),accepted);assert.equal(snapshot.items[0].documentEvidence.value.companyCode,undefined)
 })

@@ -14,9 +14,10 @@ import { catalogItemSchema, type CatalogInput } from "../validation"
 import { catalogKindLabels, catalogAvailabilityLabels } from "../labels"
 import { formatDecimalCurrency } from "@/lib/formatting"
 import type { AppSettingsPayload } from "@/types/scheduling"
-export type CatalogFieldsProps = { value: unknown; onChange: (value: unknown) => void; disabled: boolean }
+import { ItemChargeFields } from "@/platform/pricing/item-charge-fields"
+export type CatalogFieldsProps = { value: unknown; onChange: (value: unknown) => void; disabled: boolean; creating?: boolean }
 export type CatalogEditorExtension = { key: string; label: string; canEdit: boolean; serialize: (value: unknown) => unknown; Fields: React.ComponentType<CatalogFieldsProps> }
-const initial: CatalogInput = { name: "", code: "", description: "", kind: "PRODUCT", unit: "unit", price: "0", currency: "", availability: "AVAILABLE", archived: false, extensionKey: null }
+const initial: CatalogInput = { name: "", code: "", description: "", kind: "PRODUCT", unit: "unit", price: null, charges: [], currency: "", availability: "AVAILABLE", archived: false, extensionKey: null }
 export const CatalogEditor = withRecordView(function CatalogEditor({ id, extension, defaults }: { id?: string; extension?: CatalogEditorExtension; defaults?: Pick<CatalogInput, "extensionKey" | "extension"> }) {
   const [value, setValue] = React.useState({ ...initial, ...(defaults ? { ...defaults, kind: "UNIT" as const } : {}) }), [loading, setLoading] = React.useState(true), [error, setError] = React.useState(""), [failed, setFailed] = React.useState(false), [saving, setSaving] = React.useState(false), [canManage, setCanManage] = React.useState(false)
   const router = useRouter(), view = useRecordView()!, modules = useBusinessModules()
@@ -29,7 +30,7 @@ export const CatalogEditor = withRecordView(function CatalogEditor({ id, extensi
       const response = await fetch(id ? `/api/catalog/items/${id}` : "/api/catalog/items?pageSize=1", { signal: controller.signal, cache: "no-store" })
       const row = await response.json(); if (!response.ok) throw Error(row.error || "Unable to load item.")
       if (controller.signal.aborted) return
-      if (id) { setValue({ ...initial, ...row, price: String(row.price) }); setReservationState(row.reservationState) }
+      if (id) { setValue({ ...initial, ...row, price: row.price == null ? null : String(row.price) }); setReservationState(row.reservationState) }
       const displayResponse = await fetch("/api/settings/display", { signal: controller.signal, cache: "no-store" })
       if (displayResponse.ok) {
         const settings = await displayResponse.json()
@@ -60,26 +61,27 @@ export const CatalogEditor = withRecordView(function CatalogEditor({ id, extensi
       else {
         setValue(v => ({ ...v, version: row.version }))
         const refresh = await fetch(`/api/catalog/items/${id}`, { cache: "no-store" })
-        if (refresh.ok) { const current = await refresh.json(); setValue({ ...initial, ...current, price: String(current.price) }) }
+        if (refresh.ok) { const current = await refresh.json(); setValue({ ...initial, ...current, price: current.price == null ? null : String(current.price) }) }
         view.done()
       }
     } catch (e) { setError((e as Error).message) } finally { setSaving(false) }
   }
   if (loading) return <p>Loading item...</p>
   return <div className={pageClass}><AccessPageHeader title={id ? value.name : "New catalog item"} backHref="/catalog" actions={<AccessFormActions form="catalog-form" cancelHref="/catalog" saving={saving} disabled={!editable} canSave={canManage} saveLabel="Save item" />} />
-    <AccessRecordForm id="catalog-form" onSubmit={save} initialSection="Item details" saving={saving} disabled={!editable} error={error} fingerprint={value} saveLabel="Save item" overview={<><AccessSummarySection title="Item details" canEdit={editable} fields={[{ label: "Code", value: value.code }, { label: "Name", value: value.name }, { label: "Kind", value: catalogKindLabels[value.kind] }, { label: "Price", value: value.currency ? formatDecimalCurrency(value.price, value.currency, display) : value.price }, { label: "Unit", value: value.unit }, { label: "Availability", value: catalogAvailabilityLabels[reservationState || value.availability] }, { label: "Status", value: value.archived ? "Archived" : "Active" }, { label: "Description", value: value.description }]} /></>} tabs={value.extensionKey && extension ? [{value:"industry",label:extension.label,content:<>{value.extensionKey && extension && <AccessSummarySection title={extension.label} canEdit={editable} fields={[]}><extension.Fields value={value.extension} onChange={() => {}} disabled /></AccessSummarySection>}</>}] : []}>
+    <AccessRecordForm id="catalog-form" onSubmit={save} initialSection="Item details" saving={saving} disabled={!editable} error={error} fingerprint={value} saveLabel="Save item" overview={<><AccessSummarySection title="Item details" canEdit={editable} fields={[{ label: value.extensionKey ? "Internal reference" : "Code", value: value.code }, { label: "Name", value: value.name }, { label: "Kind", value: catalogKindLabels[value.kind] }, { label: "Price", value: value.price === null || value.price === "" ? "Price not set" : value.currency ? formatDecimalCurrency(value.price, value.currency, display) : value.price }, { label: "Unit", value: value.unit }, { label: "Availability", value: catalogAvailabilityLabels[reservationState || value.availability] }, { label: "Status", value: value.archived ? "Archived" : "Active" }, { label: "Description", value: value.description }]} /></>} tabs={[{value:"charges",label:"Item charges",content:<AccessSummarySection title="Item charges" canEdit={editable} fields={[]}><ItemChargeFields id="catalog-charge-summary" value={value.charges || []} onChange={() => {}} readOnly /></AccessSummarySection>},...(value.extensionKey && extension ? [{value:"industry",label:extension.label,content:<>{value.extensionKey && extension && <AccessSummarySection title={extension.label} canEdit={editable} fields={[]}><extension.Fields value={value.extension} onChange={() => {}} disabled /></AccessSummarySection>}</>}] : [])]}>
       <Section title="Item details"><fieldset disabled={!editable || saving} className="grid gap-5 sm:grid-cols-2">
-        <FormField id="item-code" label="Unique code"><Input id="item-code" value={value.code} required maxLength={60} onChange={e => set("code", e.target.value)} /></FormField>
-        <FormField id="item-name" label="Name"><Input id="item-name" value={value.name} required maxLength={200} onChange={e => set("name", e.target.value)} /></FormField>
+        {!value.extensionKey && <FormField id="item-code" label="Unique code" help="Your internal item reference. Leave blank to generate one automatically."><Input id="item-code" value={value.code} maxLength={60} onChange={e => set("code", e.target.value)} /></FormField>}
+        <FormField id="item-name" label={value.extensionKey ? "Custom name (optional)" : "Name"} help={value.extensionKey ? "Leave blank to use the category and unit number. Selection lists also show the project context." : undefined}><Input id="item-name" value={value.name} required={!value.extensionKey} maxLength={200} onChange={e => set("name", e.target.value)} /></FormField>
         <FormField id="item-kind" label="Kind"><Select id="item-kind" value={value.kind} disabled={!!id || !!value.extensionKey} onValueChange={v => set("kind", v as CatalogInput["kind"])}><option value="PRODUCT">Product (repeatable)</option><option value="UNIT">Unit (unique item)</option></Select></FormField>
         {!id && extension?.canEdit && <FormField id="item-extension" label="Additional details"><Select id="item-extension" value={value.extensionKey || ""} onValueChange={key => setValue(v => ({ ...v, extensionKey: key || null, extension: undefined, kind: key ? "UNIT" : v.kind }))}><option value="">Standard item</option><option value={extension.key}>{extension.label}</option></Select></FormField>}
-        <FormField id="item-price" label="Price"><Input id="item-price" value={value.price} inputMode="decimal" required onChange={e => set("price", e.target.value)} /></FormField>
+        <FormField id="item-price" label="Price" help="Leave blank if undecided. Enter 0 only for an intentionally free item. A quotation needs an explicit selling price."><Input id="item-price" value={value.price ?? ""} placeholder="Price not set" inputMode="decimal" onChange={e => set("price", e.target.value)} /></FormField>
         <FormField id="item-currency" label="Currency"><SearchableSelect id="item-currency" placeholder="Choose currency" disabled={!editable || saving} value={value.currency} options={Intl.supportedValuesOf("currency").map(value => ({ value, label: value }))} onChange={v => set("currency", v)} /></FormField>
         <FormField id="item-unit" label="Price unit"><Input id="item-unit" value={value.unit} required maxLength={40} onChange={e => set("unit", e.target.value)} /></FormField>
         <FormField id="item-availability" label="Availability"><Select id="item-availability" value={value.availability} onValueChange={v => set("availability", v as CatalogInput["availability"])}><option value="AVAILABLE">Available</option><option value="UNAVAILABLE">Unavailable</option>{value.kind === "UNIT" && <option value="SOLD">Sold</option>}</Select></FormField>
         <FormField id="item-description" label="Description"><Textarea id="item-description" value={value.description} maxLength={5000} onChange={e => set("description", e.target.value)} /></FormField>
         <label className="flex items-center gap-2"><Checkbox checked={value.archived} disabled={!modules.can("catalogItems.archive")} onChange={e => set("archived", e.target.checked)} />Archived</label>
       </fieldset></Section>
-      {extension && value.extensionKey === extension.key && <Section title={extension.label}><extension.Fields value={value.extension} onChange={v => set("extension", v)} disabled={!editable || saving} /></Section>}
+      <Section title="Item charges" help="Defaults copied into newly selected quotation lines for review. Percentages apply to that line only; fixed amounts apply once per line. Changing defaults never reprices saved quotations or orders."><ItemChargeFields id="catalog-charges" value={value.charges || []} onChange={v => set("charges", v)} disabled={!editable || saving} /></Section>
+      {extension && value.extensionKey === extension.key && <Section title={extension.label}><extension.Fields value={value.extension} onChange={v => set("extension", v)} disabled={!editable || saving} creating={!id} /></Section>}
     </AccessRecordForm></div>
 })

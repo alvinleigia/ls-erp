@@ -4,7 +4,7 @@ import { BusinessError, type BusinessActor } from "@/platform/policy"
 import { projectScope } from "./service"
 const id=z.string().min(1).max(100),text=z.string().max(2000)
 const project=z.object({id,name:text,code:text,location:text,version:z.number().int().positive()}).strict()
-export const propertyDocumentEvidenceSchema=z.object({format:z.literal(1),tenantId:id,itemId:id,project:project.extend({parent:project.nullable(),path:z.array(project).optional()}).strict(),category:text,area:z.string().nullable(),areaUnit:z.enum(["SQ_FT","SQ_M"])}).strict()
+export const propertyDocumentEvidenceSchema=z.object({format:z.literal(1),tenantId:id,itemId:id,project:project.extend({parent:project.nullable(),path:z.array(project).optional()}).strict(),unitNumber:text.nullable().optional(),companyCode:text.nullable().optional(),floor:text.nullable().optional(),category:text,area:z.string().nullable(),areaUnit:z.enum(["SQ_FT","SQ_M"])}).strict()
 export async function readPropertyDocumentEvidence(tx:Prisma.TransactionClient,actor:BusinessActor,itemId:string) {
   const [row]=await readPropertyDocumentEvidenceSet(tx,actor,[itemId])
   if(!row)throw new BusinessError(404,"Property document source not found.")
@@ -13,5 +13,5 @@ export async function readPropertyDocumentEvidence(tx:Prisma.TransactionClient,a
 export async function readPropertyDocumentEvidenceSet(tx:Prisma.TransactionClient,actor:BusinessActor,itemIds:string[]) {
   const rows=await tx.realEstateUnit.findMany({where:{tenantId:actor.tenantId,itemId:{in:itemIds},project:projectScope(actor,"read")},include:{category:{select:{name:true}},project:{select:{id:true,name:true,code:true,location:true,version:true,parent:{select:{id:true,name:true,code:true,location:true,version:true}}}}},orderBy:{itemId:"asc"}})
   const paths=await tx.realEstateProjectAncestor.findMany({where:{tenantId:actor.tenantId,descendantId:{in:rows.map(row=>row.projectId)}},orderBy:{distance:"desc"},select:{descendantId:true,ancestor:{select:{id:true,name:true,code:true,location:true,version:true}}}})
-  return rows.map(row=>propertyDocumentEvidenceSchema.parse({format:1,tenantId:actor.tenantId,itemId:row.itemId,project:{...row.project,path:paths.filter(path=>path.descendantId===row.projectId).map(path=>path.ancestor)},category:row.category.name,area:row.area?.toString()??null,areaUnit:row.areaUnit}))
+  return rows.map(row=>propertyDocumentEvidenceSchema.parse({format:1,tenantId:actor.tenantId,itemId:row.itemId,project:{...row.project,path:paths.filter(path=>path.descendantId===row.projectId).map(path=>path.ancestor)},unitNumber:row.unitNumber,companyCode:row.companyCode,floor:row.floor,category:row.category.name,area:row.area?.toString()??null,areaUnit:row.areaUnit}))
 }

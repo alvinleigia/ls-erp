@@ -11,6 +11,7 @@ import { serializationConflict } from "@/platform/database-errors"
 import { activeReservation, reservationClock, reservedUnits } from "./reservation-availability"
 import { lockTenantOperations } from "@/platform/transactions/tenant-lock"
 import { reservationBlocks } from "./reservation-blocks"
+import { catalogPresentation } from "./presentation"
 type Tx = Prisma.TransactionClient
 
 
@@ -31,7 +32,7 @@ export function createCatalogService(db: PrismaClient, identity: Pick<BusinessAc
       } catch (e) {
         if (serializationConflict(e) && attempt < 2) continue
         if (serializationConflict(e)) throw new BusinessError(409, "This item changed. Refresh before saving.")
-        if ((e as { code?: string }).code === "P2002") throw new BusinessError(409, "This item code is already used in this business.")
+        if ((e as { code?: string }).code === "P2002") throw new BusinessError(409, "This item reference, unit number or unit code is already used in the same context.")
         throw e
       }
     }
@@ -43,11 +44,12 @@ export function createCatalogService(db: PrismaClient, identity: Pick<BusinessAc
       return run("catalogItems.read", async (tx, actor) => {
         const now = await reservationClock(tx), active = activeReservation(now)
         const availability: Prisma.CatalogItemWhereInput = q.availability === "RESERVED" ? { reservationAvailability: { is: { status: "HELD", expiresAt: { gt: now } } } } : q.availability === "ALLOCATED" ? { reservationAvailability: { is: { status: "ALLOCATED" } } } : q.availability ? { availability: q.availability, reservationAvailability: { isNot: active } } : {}
-        const where: Prisma.CatalogItemWhereInput = { AND: [await catalogScope(tx, actor, extensions, q), availability, { archived: q.archived === "true", ...(q.currency ? {currency:q.currency} : {}), ...(q.q ? { OR: [{ code: { contains: q.q, mode: "insensitive" } }, { name: { contains: q.q, mode: "insensitive" } }] } : {}) }] }
+        const where: Prisma.CatalogItemWhereInput = { AND: [await catalogScope(tx, actor, extensions, q), availability, { archived: q.archived === "true", ...(q.currency ? {currency:q.currency} : {}), ...(q.q ? { OR: [{ code: { contains: q.q, mode: "insensitive" } }, { name: { contains: q.q, mode: "insensitive" } }, ...extensions.flatMap(extension => extension.search ? [extension.search(q.q)] : [])] } : {}) }] }
         const [items, total] = await Promise.all([tx.catalogItem.findMany({ where, select: { id: true, code: true, name: true, kind: true, unit: true, price: true, currency: true, availability: true, archived: true, version: true, extensionKey: true }, orderBy: [{ name: "asc" }, { id: "asc" }], skip: (q.page - 1) * q.pageSize, take: q.pageSize }), tx.catalogItem.count({ where })])
         const occupied = await reservedUnits(tx, actor.tenantId, items.map(i => i.id), now)
         const blocked = await reservationBlocks(tx, actor, extensions, items)
-        return { items: items.map(row => ({ ...row, reservationState: occupied.get(row.id) || null, reservationBlockedReason: blocked.get(row.id) || null })), total, page: q.page, pageSize: q.pageSize, totalPages: Math.max(1, Math.ceil(total / q.pageSize)), canCreate: permits(actor, "catalogItems.create") }
+        const display = await catalogPresentation(tx, actor, extensions, items)
+        return { items: items.map(row => ({ ...row, ...display.get(row.id), reservationState: occupied.get(row.id) || null, reservationBlockedReason: blocked.get(row.id) || null })), total, page: q.page, pageSize: q.pageSize, totalPages: Math.max(1, Math.ceil(total / q.pageSize)), canCreate: permits(actor, "catalogItems.create") }
       })
     },
     get(id: string) {
@@ -55,7 +57,7 @@ export function createCatalogService(db: PrismaClient, identity: Pick<BusinessAc
         const row = await findCatalogItem(tx, actor, extensions, id)
         const extension = extensions.find(e => e.key === row.extensionKey)
         const reservationState = (await reservedUnits(tx, actor.tenantId, [id], await reservationClock(tx))).get(id) || null
-        return { ...row, reservationState, reservationBlockedReason: (await reservationBlocks(tx, actor, extensions, [row])).get(id) || null, extension: extension ? await extension.read(tx, actor, id) : null, canManage: !reservationState && permits(actor, "catalogItems.edit") }
+        return { ...row, ...(await catalogPresentation(tx, actor, extensions, [row])).get(id), reservationState, reservationBlockedReason: (await reservationBlocks(tx, actor, extensions, [row])).get(id) || null, extension: extension ? await extension.read(tx, actor, id) : null, canManage: !reservationState && permits(actor, "catalogItems.edit") }
       })
     },
     save(input: unknown, id?: string) {

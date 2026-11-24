@@ -21,6 +21,7 @@ export function QuotationSummary({ value, snapshot, section, canEdit, name, arch
   const documentLabels = snapshot?.labels ?? quotationDocumentLabels()
   const money = (amount: string) => formatDecimalCurrency(amount, value.currency, snapshot)
   const calculation = snapshot?.calculation
+  const chargeRows: { label: string; group: string; kind: string; value: string; basis: string; included: boolean; due: string; amount?: string | null }[] = calculation?.charges ?? [...value.charges, ...value.lines.flatMap(line => (line.charges || []).map(charge => ({ ...charge, label: `${line.description}: ${charge.label}`, basis: "LINE" })))]
   const overview = new Set(overviewSections ?? ["document", "customers", "context", "additional", "totals"])
   if (section === "overview") return <>
     {name !== undefined && <AccessSummarySection title="Template configuration" canEdit={canEdit} fields={[{ label: "Template name", value: name }, { label: "Status", value: archived ? "Archived" : "Active" }]} />}
@@ -49,7 +50,7 @@ export function QuotationSummary({ value, snapshot, section, canEdit, name, arch
       <DetailTable headings={["Description", "Quantity", "Unit", "Rate", ...(calculation ? ["Amount"] : [])]} rows={value.lines.map((line, index) => [line.description, line.quantity, line.unit, money(line.rate), ...(calculation ? [money(calculation.lines[index].amount)] : [])])} />
     </AccessSummarySection>
     <AccessSummarySection title="Charges" canEdit={canEdit} fields={[]}>
-      <DetailTable headings={["Charge", "Group", "Basis", "Value", "Treatment", "Payment condition", ...(calculation ? ["Amount"] : [])]} rows={value.charges.map((charge, index) => [charge.label, charge.group, charge.kind === "PERCENT" ? charge.basis === "BASE" ? "Base price" : "Consideration" : charge.kind === "FIXED" ? "Fixed" : "Pending", charge.kind === "TBD" ? "Pending" : charge.kind === "PERCENT" ? `${charge.value}%` : money(charge.value), charge.included ? "Included" : "Extra", charge.due, ...(calculation ? [calculation.charges[index].amount === null ? "Pending" : money(calculation.charges[index].amount!)] : [])])} />
+      <DetailTable headings={["Charge", "Group", "Basis", "Value", "Treatment", "Payment condition", ...(calculation ? ["Amount"] : [])]} rows={chargeRows.map(charge => [charge.label, charge.group, charge.kind === "PERCENT" ? charge.basis === "LINE" ? "This item line price" : charge.basis === "BASE" ? "Base price" : "Consideration" : charge.kind === "FIXED" ? "Fixed" : "Pending", charge.kind === "TBD" ? "Pending" : charge.kind === "PERCENT" ? `${charge.value}%` : money(charge.value), charge.included ? "Included" : "Extra", charge.due, ...(calculation ? [charge.amount == null ? "Pending" : money(charge.amount)] : [])])} />
     </AccessSummarySection>
   </>
   if (section === "payments") return <AccessSummarySection sectionKey="Instalment schedule" title={snapshot ? documentLabels.paymentSchedule : term("paymentPlans.paymentPlan.singular", "Instalment schedule")} canEdit={canEdit} fields={[]} help={<div><p className="font-medium">Payment schedule</p>Percentages apply to total consideration. Extra charges follow their own payment conditions.</div>}>

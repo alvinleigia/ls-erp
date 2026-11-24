@@ -28,13 +28,14 @@ test("standard unit import supports template download, validation, corrections, 
     expect(download.suggestedFilename()).toBe("realEstate-import-template.xlsx")
     const book = new ExcelJS.Workbook(); await book.xlsx.readFile((await download.path())!)
     const sheet = book.worksheets[0], fields = (sheet.getRow(1).values as string[]).slice(1)
-    expect(fields).toContain("project_code"); expect(sheet.getCell("A2").text).toBe("")
-    const good: Record<string, string> = { item_code: "IMPORT-101", item_name: "Imported plot 101", kind: "UNIT", sales_unit: "plot", unit_price: "2500000", currency: "INR", availability: "AVAILABLE", description: "Synthetic test only", project_code: leaf.code, property_category: categories.items[0].name, launch_phase_code: "PH1", area: "250", area_unit: "SQ_M", bedrooms: "" }
-    const rows = [good, { ...good, item_name: "Duplicate plot" }, { ...good, item_code: "IMPORT-BAD", area: "oops" }]
+    expect(fields).toContain("project_code"); expect(fields).toContain("unit_number"); expect(fields[0]).toBe("unit_code"); expect(sheet.getCell("A2").text).toBe("")
+    const good: Record<string, string> = { unit_number: "01", unit_code: "IMPORT-101", item_name: "Imported plot 01", kind: "UNIT", sales_unit: "plot", unit_price: "", currency: "", availability: "AVAILABLE", description: "Synthetic test only", project_code: leaf.code, property_category: categories.items[0].name, launch_phase_code: "PH1", area: "250", area_unit: "SQ_M", bedrooms: "", charge_name: "PLC", charge_calculation: "PERCENT", charge_value: "8", charge_treatment: "INCLUDED" }
+    const rows = [good, { ...good, item_name: "Duplicate plot" }, { ...good, unit_code: "IMPORT-BAD", area: "oops" }]
     rows.forEach((row, index) => fields.forEach((field, column) => { sheet.getCell(index + 2, column + 1).value = row[field] || "" }))
     await page.getByLabel("Completed template", { exact: true }).setInputFiles({ name: "units.xlsx", mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", buffer: Buffer.from(await book.xlsx.writeBuffer()) })
     await page.getByRole("button", { name: "Validate file", exact: true }).click()
     await expect(page.getByRole("status")).toHaveText("Ready for review", { timeout: 60_000 })
+    await expect(page.getByText("Currency for blank cells: INR", { exact: true })).toBeVisible()
     await expect(page.getByRole("button", { name: "Import valid rows", exact: true })).toBeEnabled()
     await expect(page.getByRole("cell", { name: "area: Enter a positive area with up to four decimal places.", exact: true })).toBeVisible()
     expect((await json(context, "/api/catalog/items?q=IMPORT-101")).total).toBe(0)
@@ -48,6 +49,9 @@ test("standard unit import supports template download, validation, corrections, 
     await expect(page.getByRole("status")).toHaveText("Complete", { timeout: 60_000 })
     const saved = await json(context, "/api/catalog/items?q=IMPORT-101"); expect(saved.total).toBe(1)
     const detail = await json(context, `/api/catalog/items/${saved.items[0].id}`)
+    expect(detail.price).toBeNull(); expect(detail.currency).toBe("INR")
+    expect(detail.extension.unitNumber).toBe("01"); expect(detail.extension.companyCode).toBe("IMPORT-101")
+    expect(detail.charges[0]).toMatchObject({ label: "PLC", kind: "PERCENT", value: "8", included: true })
     expect(detail.extension.projectId).toBe(leaf.id); expect(detail.reservationBlockedReason).toMatch(/not open/)
     await page.setViewportSize({ width: 390, height: 844 })
     expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false)

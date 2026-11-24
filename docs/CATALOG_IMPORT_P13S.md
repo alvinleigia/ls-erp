@@ -19,25 +19,40 @@ An uncertain network response is recoverable by reopening and resuming. Item
 creation, strict catalog audit and the imported-row marker commit together.
 Concurrent/repeated processing cannot import the same row twice.
 
-## Template v1
+## Template v3
 
-Common required fields: `item_code`, `item_name`, `kind`, `sales_unit`,
-`unit_price`, `currency`, `availability`. `description` is optional.
+Common required fields: `kind`, `sales_unit`, `availability`.
+`unit_price`, `currency` and `description` are optional. The general catalog additionally
+requires `item_code` and `item_name`. For property units, `unit_code` is an optional
+unit code (case/punctuation preserved) and `item_name` an optional custom name.
+The internal reference is generated automatically.
 
-- Code is unique across this business, normalized to uppercase. Use a meaningful
-  unique code such as AQUA-A-106; it need not match another client's numbering.
+- General catalog codes are unique within this business and normalized to
+  uppercase. Property unit codes retain their case/punctuation and are unique
+  within the selected physical project/building; other buildings can repeat them.
 - PRODUCT is repeatable stock; UNIT identifies one particular unit.
 - Price is the amount for one sales unit, not an area-based rate. Numbers use
   decimal points, without grouping separators/currency signs, up to four decimals.
-  Missing prices are errors. Explicit zero is allowed for intentionally free stock.
+  Blank prices mean **Price not set** and remain null in storage. Explicit zero is
+  reserved for intentionally free stock. Blank currencies use the business currency
+  in Settings, captured once as immutable import metadata when the file is uploaded.
+  Explicit currency overrides remain supported. Later setting changes never reprice
+  items or change a reviewed import. Missing business settings require setup before
+  uploading a file with blank currencies.
 - Availability must be explicit: AVAILABLE, UNAVAILABLE, SOLD (UNIT only). Existing
   booking/hold status without a migrated agreement should be UNAVAILABLE. Import
   does not create reservations, customers, orders, ownership or payments.
-- PLC and other separate commercial charges continue through quotation charge
-  controls; this inventory template does not invent or calculate them.
+- Five optional charge columns follow the profile fields: `charge_name`,
+  `charge_calculation`, `charge_value`, `charge_treatment`, `charge_due`.
+  For PLC use PLC / PERCENT / 8 / INCLUDED (8 means 8%). Defaults are copied
+  into quotation lines for review. See ITEM_CHARGES_P13S.md for pricing rules.
+  Earlier version 1 and 2 imports remain read-only history; use a fresh template for
+  remaining rows.
 
-Property units also require `project_code` and `property_category`. Optional
-fields: `launch_phase_code`, `area`, `area_unit`, `bedrooms`. Category uses its exact
+Property units require `project_code`, `property_category` and `unit_number`.
+Optional fields: `floor`, `launch_phase_code`, `area`, `area_unit`, `bedrooms`.
+Unit number and optional unit code are unique within the physical project or
+building, independent of launch phase. Different buildings may repeat a number. Category uses its exact
 active name. Project and phase use existing codes; names are not guessed and
 setup records are not automatically created. Area needs SQ_M or SQ_FT when set.
 The project may be at any hierarchy depth. Its root determines company/office and
@@ -48,6 +63,16 @@ Only our template is accepted. Preserve headings and order. Up to 1,000 data row
 3 MiB, CSV UTF-8 or XLSX first worksheet. Formulas and Excel errors require
 correction; ZIP expansion and cell/text/column limits apply. Templates contain no
 sample inventory rows. Excel dropdowns are guidance; server validation is decisive.
+
+Selecting an item with no catalog price leaves the quotation rate blank. Staff
+must enter the agreed rate before saving. Updating catalog prices later never
+reprices saved quotations or orders. Existing zero prices remain explicit zero.
+
+Optional-pricing migration and final local verification (2026-11-21): 183 preceding
+tables preserved, forced rollback verified, 27 native/unit checks and three Chrome
+flows passed. Local demo migrated to 168 without business data changes. Evidence:
+`tmp/catalog-optional-pricing-native.log`, `tmp/catalog-optional-pricing-build.log`,
+`tmp/catalog-optional-pricing-local-migrate.log`. Hosted environments unchanged.
 
 ## Ownership and implementation
 

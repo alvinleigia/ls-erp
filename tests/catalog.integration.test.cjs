@@ -133,3 +133,93 @@ test('quotation references remain immutable and available with catalog disabled;
     await assert.rejects(crm.saveQuotation(deal.id,{content:original}),status(403))
   } finally {await toggle('catalog',true)}
 })
+
+test('undecided prices differ from free items, inherit currency and require a negotiated quotation rate',async()=>{
+ await root.appSetting.upsert({where:{tenantId:tenant},create:{tenantId:tenant,currency:'INR'},update:{currency:'INR'}})
+ const payload=product({price:'',currency:''}),item=await service.save(payload)
+ assert.equal(item.price,null);assert.equal(item.currency,'INR');assert.equal((await service.get(item.id)).price,null)
+ const free=await service.save(product({price:'0',currency:''}));assert.equal(String(free.price),'0')
+ await root.appSetting.update({where:{tenantId:tenant},data:{currency:'USD'}})
+ const updated=await service.save({...payload,version:item.version},item.id);assert.equal(updated.currency,'INR');assert.equal(updated.price,null)
+ await assert.rejects(service.save(product({price:'-1'})))
+ await assert.rejects(root.catalogItem.update({where:{tenantId_id:{tenantId:tenant,id:item.id}},data:{price:-1}}))
+ const draft={...content(updated),lines:[{...content(updated).lines[0],rate:''}]}
+ await assert.rejects(async()=>crm.saveQuotation(deal.id,{content:draft}));await assert.rejects(async()=>crm.saveQuotation(deal.id,{content:{...draft,lines:draft.lines.map(line=>({...line,rate:null}))}}))
+ const quote=await crm.saveQuotation(deal.id,{content:{...draft,lines:draft.lines.map(line=>({...line,rate:'125'}))}})
+ await service.save({...payload,price:'999',currency:'INR',version:updated.version},item.id)
+ assert.equal((await crm.getQuotation(quote.id)).snapshot.calculation.consideration,'125.00')
+ const {applicationSalesOrders}=require('../application/sales-orders/service.ts');await root.tenantModule.createMany({data:[{tenantId:tenant,key:'salesOrders',allowed:true,enabled:true}],skipDuplicates:true})
+ const orders=applicationSalesOrders(db,identity(admin)),order=await orders.create({quotationId:quote.id,revision:1,orderedOn:'2026-01-01'});await orders.transition(order.id,{action:'confirm',version:1});assert.equal((await orders.get(order.id)).snapshot.calculation.consideration,'125.00')
+})
+
+const itemCharge=(value='8',extra={})=>({label:'PLC',kind:'PERCENT',value,included:true,group:'Property',due:'',...extra})
+test('item charge defaults obey catalog authority, versioning, native validation and audit',async()=>{
+ const payload=product({charges:[itemCharge()]}),item=await service.save(payload)
+ assert.deepEqual((await service.get(item.id)).charges,payload.charges)
+ await assert.rejects(staffService.save({...payload,charges:[],version:item.version},item.id),status(403))
+ await assert.rejects(foreign.get(item.id),status(404))
+ await assert.rejects(root.catalogItem.update({where:{tenantId_id:{tenantId:tenant,id:item.id}},data:{charges:[itemCharge('101')]}}))
+ const {charges,...omitted}=payload;void charges
+ await service.save({...omitted,version:item.version,name:'Retain unsubmitted charge defaults'},item.id)
+ assert.deepEqual((await service.get(item.id)).charges,payload.charges)
+ const event=await root.auditLog.findFirstOrThrow({where:{tenantId:tenant,entityId:item.id,event:'catalog.item.created'}})
+ assert.deepEqual(event.after.charges,payload.charges)
+})
+test('reviewed line charges stay frozen through later catalog edits and explicit refresh',async()=>{
+ const payload=unit({price:'100',charges:[itemCharge()]}),item=await service.save(payload)
+ const draft=content(item);draft.lines[0].charges=structuredClone(item.charges)
+ const q=await crm.saveQuotation(deal.id,{content:draft}),first=(await crm.getQuotation(q.id)).snapshot
+ assert.equal(first.calculation.consideration,'108.00')
+ await service.save({...payload,charges:[itemCharge('10')],version:1},item.id)
+ await crm.saveQuotation(deal.id,{content:{...draft,terms:'Wording only'},version:1},q.id)
+ assert.equal((await crm.getQuotation(q.id)).snapshot.calculation.consideration,'108.00')
+ const current=await service.get(item.id),refreshed=content(current);refreshed.lines[0].charges=current.charges;refreshed.lines[0].refreshCatalogItem=true
+ await crm.saveQuotation(deal.id,{content:refreshed,version:2},q.id)
+ assert.equal((await crm.getQuotation(q.id)).snapshot.calculation.consideration,'110.00')
+ assert.deepEqual((await crm.getQuotation(q.id,1)).snapshot,first)
+ await toggle('catalog',false)
+ try{await crm.saveQuotation(deal.id,{content:{...refreshed,lines:refreshed.lines.map(({refreshCatalogItem,...line})=>{void refreshCatalogItem;return line}),terms:'Saved reference retained'},version:3},q.id)}finally{await toggle('catalog',true)}
+ assert.equal((await crm.getQuotation(q.id)).snapshot.calculation.consideration,'110.00')
+})
+test('item charges survive order acceptance, receivables and item-wise partial billing without redistribution',async()=>{
+ const {applicationSalesOrders}=require('../application/sales-orders/service.ts'),{applicationReceivables}=require('../application/receivables/service.ts'),{applicationCustomerInvoices}=require('../application/customer-invoices/service.ts')
+ await root.tenantModule.createMany({data:['salesOrders','receivables','invoicing'].map(key=>({tenantId:tenant,key,allowed:true,enabled:true})),skipDuplicates:true})
+ const a=await service.save(product({kind:'UNIT',price:'100',charges:[itemCharge()]})),b=await service.save(product({kind:'UNIT',price:'200',charges:[itemCharge('10'),itemCharge('5',{label:'Handling',kind:'FIXED',included:false})]}))
+ const draft=content(a);draft.lines=[a,b].map(item=>({...content(item).lines[0],charges:item.charges}))
+ const q=await crm.saveQuotation(deal.id,{content:draft}),snapshot=(await crm.getQuotation(q.id)).snapshot
+ assert.equal(snapshot.calculation.consideration,'328.00');assert.equal(snapshot.calculation.totalKnown,'333.00')
+ const orders=applicationSalesOrders(db,identity(admin)),order=await orders.create({quotationId:q.id,revision:1,orderedOn:'2026-01-01'})
+ await orders.transition(order.id,{action:'confirm',version:1})
+ const finance=applicationReceivables(db,identity(admin));await finance.open(order.id,{dueDates:[null,null]})
+ assert.equal(String((await finance.get(order.id)).account.total),'333')
+ const invoices=applicationCustomerInvoices(db,identity(admin)),base={invoiceDate:'2026-01-01',dueOn:null,note:''}
+ const first=await invoices.create(order.id,{...base,requestKey:randomUUID(),billing:{mode:'LINES',lines:[{lineIndex:0,quantity:'1'}]}})
+ const second=await invoices.create(order.id,{...base,requestKey:randomUUID(),billing:{mode:'LINES',lines:[{lineIndex:1,quantity:'1'}]}})
+ assert.equal(first.billing.amount,'108.00');assert.equal(second.billing.amount,'225.00')
+ assert.deepEqual((await orders.get(order.id)).snapshot,snapshot)
+})
+
+test('actual unit numbers and company nomenclature are scoped to physical sections, never launch phases',async()=>{
+ const {createRealEstateService}=require('../modules/real-estate/service.ts'),projects=createRealEstateService(db,identity(admin))
+ const towerA=await projects.createProject({name:'Tower A',code:'BBT_ALT_A',parentId:project.id}),towerB=await projects.createProject({name:'Tower B',code:'BBT_ALT_B',parentId:project.id})
+ const p1=await projects.saveLaunchPhase(project.id,{name:'First',code:'NOM1',status:'OPEN'}),p2=await projects.saveLaunchPhase(project.id,{name:'Later',code:'NOM2',status:'PLANNED'})
+ const payload=(projectId,patch={})=>({kind:'UNIT',price:'100',currency:'INR',unit:'apartment',extensionKey:'realEstate',extension:{projectId,categoryId:category.id,unitNumber:'01',companyCode:'Altura_A/01',floor:'Ground',...patch}})
+ const a=await service.save(payload(towerA.id,{launchPhaseId:p1.id})),b=await service.save(payload(towerB.id))
+ assert.notEqual(a.code,b.code);assert.match(a.code,/^ITM-/);assert.equal(a.name,'Apartment 01')
+ const shown=await service.get(a.id);assert.equal(shown.displayCode,'Altura_A/01');assert.match(shown.selectionLabel,/Apartment 01.*Test apartments \/ Tower A/);assert.equal(shown.extension.floor,'Ground')
+ assert.equal((await service.list({q:'Altura_A/01'})).total,2);assert.equal((await service.list({q:'Tower A'})).items.some(r=>r.id===a.id),true)
+ await assert.rejects(service.save(payload(towerA.id,{companyCode:'different',launchPhaseId:p2.id})),status(409))
+ await assert.rejects(service.save(payload(towerA.id,{unitNumber:'02',companyCode:'altura_a/01'})),status(409))
+ await assert.rejects(root.realEstateUnit.update({where:{tenantId_itemId:{tenantId:tenant,itemId:b.id}},data:{projectId:towerA.id}}))
+ const raced=await Promise.allSettled([1,2].map(()=>service.save(payload(towerA.id,{unitNumber:'101',companyCode:null}))))
+ assert.equal(raced.filter(r=>r.status==='fulfilled').length,1);assert.equal(raced.find(r=>r.status==='rejected').reason.status,409)
+ await assert.rejects(service.save(payload(towerA.id,{unitNumber:'bad\nnumber',companyCode:null})))
+ await assert.rejects(foreign.get(a.id),status(404))
+ const q=await crm.saveQuotation(deal.id,{content:{...content(a),lines:[{...content(a).lines[0],description:shown.documentDescription}]}}),snapshot=(await crm.getQuotation(q.id)).snapshot
+ assert.equal(snapshot.items[0].code,a.code);assert.equal(snapshot.items[0].displayCode,'Altura_A/01');assert.equal(snapshot.items[0].documentEvidence.value.unitNumber,'01')
+ await service.save({...payload(towerA.id,{unitNumber:'01',companyCode:'Changed-01'}),version:1},a.id)
+ assert.deepEqual((await crm.getQuotation(q.id)).snapshot,snapshot)
+ const older=await service.save(unit({code:'OLD-REF'})),oldPayload=unit({code:older.code,version:1})
+ await service.save({...oldPayload,description:'Old API still works'},older.id)
+ assert.equal((await service.get(older.id)).code,'OLD-REF');assert.equal((await service.get(older.id)).extension.unitNumber,null)
+})

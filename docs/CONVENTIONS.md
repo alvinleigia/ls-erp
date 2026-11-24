@@ -1,5 +1,40 @@
 # Base Conventions
 
+## Optional catalog pricing (P13S)
+
+- Store an undecided catalog price as null, distinct from an explicit zero. Show
+  **Price not set** in inventory; selecting it in a quotation leaves the rate empty
+  until staff enter an explicit negotiated price. Keep existing quotation numeric
+  validation and accepted sales snapshots unchanged.
+- Default a new item's blank currency from tenant Settings. Retain an existing
+  item's saved currency when an update omits it. Imports capture the default once
+  at upload in immutable source metadata; validation/import never look up a newer
+  setting for those rows. Explicit per-item currencies remain supported.
+
+## Unit nomenclature (P13S)
+
+- Keep actual unit number and optional unit code separate from the catalog
+  internal reference and database ID. Preserve company-entered case/punctuation
+  and existing references. Never infer a physical number from a legacy code.
+- Physical hierarchy nodes define number/code uniqueness, independent of launch
+  phase. Addon-owned presentation/search/import identity hooks keep the generic
+  catalog free of property assumptions. Freeze display labels in new quotations;
+  never rewrite saved agreements or issued PDFs. See UNIT_NOMENCLATURE_P13S.md.
+- Property import v3 uses `unit_number`, optional `unit_code`/`floor` and an
+  automatically generated internal reference. Older jobs remain read-only.
+
+## Item charges (P13S)
+
+- Reuse `platform/pricing/item-charges` for catalog defaults and reviewed quotation
+  lines. Percentages use only their own rounded line base; fixed amounts apply
+  once per line. Copy defaults only on selection or explicit refresh. Never
+  reconstruct or reprice saved agreement evidence from the current catalog.
+- Carry item charges through saved calculations, documents and native partial
+  billing. Preserve old snapshot shapes and allocations. Keep tax classification
+  explicit; commercial charges must not silently become tax inputs.
+- Template v2 appends optional charge columns to both import profiles. Earlier
+  saved jobs remain read-only, preserving source/history. See ITEM_CHARGES_P13S.md.
+
 ## Standard catalog import (P13S)
 
 - Keep code-owned, fixed template columns and no mapping screen. Catalog owns

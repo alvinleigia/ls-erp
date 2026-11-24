@@ -11,8 +11,8 @@ export function withinTaxDates(date:string,source:{effectiveFrom:Date;effectiveT
 
 // An illustration from immutable source values and reviewed profile snapshots.
 // This does not approve a taxable value, jurisdiction, price amendment or invoice.
-export function taxInputIllustration(source:{currency:string;consideration:string;discount:string;charges:unknown[];lines:{amount:string}[]},saved:{lineIndex:number;variant:string;profileSnapshot:unknown}[]){
- if(source.charges.length||!/^0+(?:\.0+)?$/.test(source.discount))return {calculation:null,difference:null,reason:'Commercial discounts or charges need explicit tax/pricing review. They were not reclassified or included in this illustration.'}
+export function taxInputIllustration(source:{currency:string;consideration:string;discount:string;charges:unknown[];lines:{amount:string;charges?:unknown[]}[]},saved:{lineIndex:number;variant:string;profileSnapshot:unknown}[]){
+ if(source.charges.length||source.lines.some(line=>line.charges?.length)||!/^0+(?:\.0+)?$/.test(source.discount))return {calculation:null,difference:null,reason:'Commercial discounts or charges need explicit tax/pricing review. They were not reclassified or included in this illustration.'}
  const minorDigits=new Intl.NumberFormat('en',{style:'currency',currency:source.currency}).resolvedOptions().maximumFractionDigits??2
  if(saved.length!==source.lines.length)throw new RangeError('Every source line requires reviewed tax inputs.')
  const lines=source.lines.map((l,index)=>{const entry=saved.find(v=>v.lineIndex===index);if(!entry)throw new RangeError('A source line is missing.');const p=previewProfileSnapshotSchema.parse(entry.profileSnapshot),variant=p.variants.find(v=>v.key===entry.variant);if(p.variants.length?!variant:entry.variant!=='NONE')throw new RangeError('This variant is not in the reviewed profile.');return {key:String(index),amountMinor:moneyMinor(l.amount,minorDigits),discountMinor:0,priceBasis:p.priceBasis,components:variant?.components.map(c=>({code:c.code,percent:c.percent}))||[]}})

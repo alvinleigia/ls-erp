@@ -4,13 +4,13 @@ import { calculateTaxAgreement,moneyMinor,moneyText,type TaxAgreement } from './
 import { previewProfileSnapshotSchema } from './agreement-preview'
 
 export const taxPricingApprovalSchema=z.object({revision:z.number().int().positive(),reviewId:z.string().min(1).max(200),expectedGross:z.string().regex(/^\d+\.\d{2}$/),basisReference:z.string().trim().min(10).max(1000),reviewed:z.literal(true)}).strict()
-type Source={currency:string;consideration:string;discount:string;charges:unknown[];lines:{amount:string}[]}
+type Source={currency:string;consideration:string;discount:string;charges:unknown[];lines:{amount:string;charges?:unknown[]}[]}
 type Saved={lineIndex:number;variant:string;profileSnapshot:unknown}
 // Quoted prices stay fixed. Reconcile, never infer a second tax charge or amend
 // the source. Discount shares use source-line order for deterministic ties.
 export function sourceTaxPricing(source:Source,saved:Saved[]):{agreement:TaxAgreement|null;reason:string;gross:string|null}{
  if(source.currency!=='INR')return {agreement:null,gross:null,reason:'India GST pricing approval currently requires INR. Foreign-currency tax conversion needs its own reviewed contract.'}
- if(source.charges.length)return {agreement:null,gross:null,reason:'Commercial charges require explicit tax classification in a replacement quotation. Charge labels are never treated as tax components.'}
+ if(source.charges.length||source.lines.some(line=>line.charges?.length))return {agreement:null,gross:null,reason:'Commercial charges require explicit tax classification in a replacement quotation. Charge labels are never treated as tax components.'}
  const amounts=source.lines.map(l=>moneyMinor(l.amount,2)),discount=moneyMinor(source.discount,2)
  if(discount>amounts.reduce((a,b)=>a+b,0))throw new RangeError('Discount exceeds the saved line amounts.')
  const shares=allocateMinor(discount,amounts)
