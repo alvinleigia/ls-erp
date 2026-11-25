@@ -235,3 +235,26 @@ test('template-specific letterhead and footer choices work independently and iss
   await json(context,'/api/document-templates',400,'PUT',{companyId:company.id,providerKey:'gst-tax-invoice',version:0,reviewed:true,content:{title:'GST Tax Invoice',opening:'',terms:'',address:'',contact:'',signatory:'Authorised signatory',useTenantLogo:false,enabled:false,letterhead:{enabled:true,topMm:60,bottomMm:30}}})
  }finally{await context.close();await f.db.end()}
 })
+
+test('issuer and signature block moves, previews once and persists its position without changing company details',async({browser})=>{
+ test.setTimeout(180000)
+ const f=await seed(),{page,context}=await login(browser,f.origin,f.users.admin.email)
+ try{
+  await modules(f,['salesOrders'])
+  await page.goto('/settings/documents');await page.getByRole('tab',{name:'Content',exact:true}).click()
+  const editor=page.getByRole('textbox',{name:'Document layout',exact:true}),block=editor.getByText('Issuer and signature',{exact:true})
+  await expect(block).toHaveCount(1);await expect(page.getByRole('button',{name:'Insert section: Issuer and signature',exact:true})).toBeDisabled()
+  await block.click();await expect(page.getByRole('button',{name:'Move down',exact:true})).toBeDisabled()
+  await page.getByRole('button',{name:'Move up',exact:true}).click();await expect(page.getByRole('button',{name:'Move down',exact:true})).toBeEnabled()
+  await page.getByRole('button',{name:'Move down',exact:true}).click();await page.getByRole('button',{name:'Move up',exact:true}).click()
+  const preview=page.waitForRequest(r=>r.url().endsWith('/api/document-templates/preview')),download=page.waitForEvent('download')
+  await page.getByRole('button',{name:'Download sample preview',exact:true}).click();await(await download).saveAs(test.info().outputPath('issuer-preview.pdf'))
+  const draft=(await preview).postDataJSON(),nodes=draft.content.layout.content;expect(nodes[nodes.length-2].attrs.key).toBe('issuer-signature');expect(nodes.filter((n:{attrs?:{key?:string}})=>n.attrs?.key==='issuer-signature')).toHaveLength(1)
+  const company=await json(context,`/api/companies/${draft.companyId}`)
+  await page.getByLabel('Enable new issuance with this version').check();await page.getByLabel('I have reviewed the wording').check();await page.getByRole('button',{name:'Publish template version',exact:true}).click();await expect(page.getByRole('heading',{name:/version 1$/})).toBeVisible()
+  await page.reload();await expect(block).toHaveCount(1)
+  const saved=await json(context,`/api/document-templates?${new URLSearchParams({companyId:draft.companyId,providerKey:draft.providerKey})}`);expect(saved.content.layout).toEqual(draft.content.layout);expect(await json(context,`/api/companies/${draft.companyId}`)).toEqual(company)
+  await block.click();await block.scrollIntoViewIfNeeded();await page.screenshot({path:test.info().outputPath('issuer-editor-desktop.png'),fullPage:true,animations:'disabled'})
+  await page.setViewportSize({width:390,height:844});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await block.scrollIntoViewIfNeeded();await page.screenshot({path:test.info().outputPath('issuer-editor-mobile.png'),fullPage:true,animations:'disabled'})
+ }finally{await context.close();await f.db.end()}
+})

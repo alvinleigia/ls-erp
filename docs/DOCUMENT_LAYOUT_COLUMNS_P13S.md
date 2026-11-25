@@ -58,3 +58,20 @@ multi-page independent columns, all shared providers, numeric alignment, title
 ascent and letterhead body preservation. The isolated browser suite exercises
 field insertion, changing counts, preview without publication, reviewed publish,
 reload and mobile layout. See the P13S milestone for final results and evidence.
+
+## Issuer and signature
+
+Company document templates expose the generated sign-off as an **Issuer and
+signature** block. Select it to use Move up/Move down, or drag/cut and paste it
+within the layout. Paragraphs around the block control surrounding space; PDF
+style retains signing-space and emphasis controls. Company settings still supply
+the issuer identity and contact details. This applies to orders, receipts,
+commercial invoices and Real Estate letters through the shared renderer.
+
+The reserved section resolves to the prepared payload's issuer, never editable
+identity data in layout JSON. It is unique even inside columns, honours disabled
+signatory controls, and keeps its contact/signature above protected page footers.
+Existing layouts without the section retain their original automatic sign-off.
+Opening them adds only an unsaved editor projection; publishing persists the
+block's position. Existing issued archives and company settings are untouched.
+No database migration or new editor dependency is required.

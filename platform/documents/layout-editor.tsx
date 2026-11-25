@@ -9,9 +9,9 @@ import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/erp/controls"
 import { Input } from "@/components/ui/input"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
-import { AlignCenter, AlignLeft, AlignRight, Bold, Italic, Link, List, ListOrdered, Minus, PilcrowLeft, Redo2, RotateCcw, SeparatorHorizontal, Subscript as SubscriptIcon, Superscript as SuperscriptIcon, Underline, Undo2, Eraser, type LucideIcon } from "lucide-react"
+import { AlignCenter, AlignLeft, AlignRight, Bold, Italic, Link, List, ListOrdered, Minus, PilcrowLeft, Redo2, RotateCcw, ArrowUp, ArrowDown, SeparatorHorizontal, Subscript as SubscriptIcon, Superscript as SuperscriptIcon, Underline, Undo2, Eraser, type LucideIcon } from "lucide-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
-import { documentLinkSchema, documentValueKey, inlineDocumentWording, editableDocumentLayout, starterDocumentLayout, type DocumentLayout, type TemplateCatalog } from "./layout"
+import { documentLinkSchema, issuerSignatureSection, documentValueKey, inlineDocumentWording, editableDocumentLayout, documentLayoutBlocks, starterDocumentLayout, type DocumentLayout, type TemplateCatalog } from "./layout"
 import { type DocumentAppearance } from "./appearance"
 import { headingLevels } from "./typography"
 import { DocumentSpacing, DocumentLink, Superscript, Subscript } from "./editor-formatting"
@@ -23,6 +23,8 @@ function FormatButton({ label, icon: Icon, disabled, pressed, onClick }: { label
   </TooltipTrigger><TooltipContent side="top" sideOffset={6}>{label}</TooltipContent></Tooltip>
 }
 
+function documentLayoutHasIssuer(layout: DocumentLayout) { return documentLayoutBlocks(layout.content).some(node => node.type === "documentSection" && node.attrs.key === issuerSignatureSection.key) }
+
 const DocumentTitleContext = createContext<string | undefined>(undefined)
 
 function TokenView({ node, selected, extension }: NodeViewProps) {
@@ -30,9 +32,10 @@ function TokenView({ node, selected, extension }: NodeViewProps) {
   const catalog = extension.options.catalog as TemplateCatalog
   const isTitle = node.type.name === "documentField" && node.attrs.documentTitle === true
   const section = node.type.name === "documentSection"
+  const issuer = section && node.attrs.key === issuerSignatureSection.key
   const label = (section ? catalog.sections : catalog.fields).find(row => row.key === node.attrs.key)?.label ?? "Unavailable field"
   return <NodeViewWrapper as={section ? "div" : "span"} aria-label={isTitle ? "Document title field" : undefined} contentEditable={false} className={`${section ? "my-3 rounded-md border p-3" : isTitle ? "inline-block rounded bg-muted/40 px-1" : "mx-0.5 inline-block rounded bg-muted px-1.5 text-sm"} ${selected ? "ring-2 ring-ring" : ""}`}>
-    <span>{section ? `Section: ${label}` : isTitle ? documentTitle || label : label}</span>{section && <span className="ml-2 text-xs text-muted-foreground">Saved records populate this section</span>}
+    <span>{section ? issuer ? label : `Section: ${label}` : isTitle ? documentTitle || label : label}</span>{section && <span className="ml-2 text-xs text-muted-foreground">{issuer ? "Company details and signing space" : "Saved records populate this section"}</span>}
   </NodeViewWrapper>
 }
 const Field = Node.create({
@@ -55,7 +58,8 @@ const PageBreak = Node.create({
   renderHTML: () => ["hr", { "data-document-page-break": "", "aria-label": "Page break", class: "my-6 border-dashed border-t-2" }],
 })
 
-export function DocumentLayoutEditor({ value, catalog, disabled, onChange, starterWording, appearance, documentTitle }: { documentTitle?: string; appearance?: DocumentAppearance; value: DocumentLayout; catalog: TemplateCatalog; disabled: boolean; onChange: (value: DocumentLayout) => void; starterWording?: { opening: string; terms: string } }) {
+export function DocumentLayoutEditor({ value, catalog: sourceCatalog, includeIssuer = false, disabled, onChange, starterWording, appearance, documentTitle }: { includeIssuer?: boolean; documentTitle?: string; appearance?: DocumentAppearance; value: DocumentLayout; catalog: TemplateCatalog; disabled: boolean; onChange: (value: DocumentLayout) => void; starterWording?: { opening: string; terms: string } }) {
+  const catalog: TemplateCatalog = includeIssuer ? { ...sourceCatalog, sections: [...sourceCatalog.sections, issuerSignatureSection] } : sourceCatalog
   const [search, setSearch] = useState(""), [reset, setReset] = useState(false)
   const [linkOpen, setLinkOpen] = useState(false), [linkUrl, setLinkUrl] = useState(""), [linkError, setLinkError] = useState("")
   const editor = useEditor({
@@ -65,7 +69,7 @@ export function DocumentLayoutEditor({ value, catalog, disabled, onChange, start
     editorProps: { attributes: { role: "textbox", "aria-label": "Document layout", "aria-multiline": "true", class: "min-h-80 whitespace-pre-wrap p-4 outline-none [&_h1]:text-2xl [&_h1]:font-semibold [&_h2]:text-xl [&_h2]:font-semibold [&_h3]:text-lg [&_h3]:font-semibold [&_h4]:text-base [&_h4]:font-semibold [&_h5]:text-sm [&_h5]:font-semibold [&_h6]:text-xs [&_h6]:font-semibold [&_hr]:my-4 [&_hr]:border-t [&_ul]:list-disc [&_ol]:list-decimal [&_ul]:pl-6 [&_ol]:pl-6 [&_sup]:text-[0.7em] [&_sub]:text-[0.7em]" }, handleClick: (_view, _pos, event) => { if ((event.target as HTMLElement).closest("a")) { event.preventDefault(); return true } return false } },
     onUpdate: ({ editor }) => onChange(editor.getJSON() as DocumentLayout),
   })
-  const active = useEditorState({ editor, selector: ({ editor }) => ({ bold: editor?.isActive("bold") ?? false, italic: editor?.isActive("italic") ?? false, underline: editor?.isActive("underline") ?? false, superscript: editor?.isActive("superscript") ?? false, subscript: editor?.isActive("subscript") ?? false, headingLevel: editor?.isActive("heading") ? editor.getAttributes("heading").level : 0, link: editor?.isActive("link") ?? false, left: editor?.isActive({ textAlign: "left" }) ?? false, center: editor?.isActive({ textAlign: "center" }) ?? false, right: editor?.isActive({ textAlign: "right" }) ?? false, bulletList: editor?.isActive("bulletList") ?? false, orderedList: editor?.isActive("orderedList") ?? false, undo: editor?.can().undo() ?? false, redo: editor?.can().redo() ?? false, section: editor?.isActive("documentSection") ?? false, compact: editor?.getAttributes("documentSection").compact === true, hideTitle: editor?.getAttributes("documentSection").hideTitle === true, boldLabels: editor?.getAttributes("documentSection").boldLabels === true, boldHeader: editor?.getAttributes("documentSection").boldHeader === true, alignEnd: editor?.getAttributes("documentSection").alignEnd ?? 0, columns: editor ? selectedColumnRow(editor)?.node.childCount ?? 1 : 1 }) })
+  const active = useEditorState({ editor, selector: ({ editor }) => ({ bold: editor?.isActive("bold") ?? false, italic: editor?.isActive("italic") ?? false, underline: editor?.isActive("underline") ?? false, superscript: editor?.isActive("superscript") ?? false, subscript: editor?.isActive("subscript") ?? false, headingLevel: editor?.isActive("heading") ? editor.getAttributes("heading").level : 0, link: editor?.isActive("link") ?? false, left: editor?.isActive({ textAlign: "left" }) ?? false, center: editor?.isActive({ textAlign: "center" }) ?? false, right: editor?.isActive({ textAlign: "right" }) ?? false, bulletList: editor?.isActive("bulletList") ?? false, orderedList: editor?.isActive("orderedList") ?? false, undo: editor?.can().undo() ?? false, redo: editor?.can().redo() ?? false, section: editor?.isActive("documentSection") ?? false, issuer: editor?.getAttributes("documentSection").key === issuerSignatureSection.key, issuerPresent: !!editor && documentLayoutHasIssuer(editor.getJSON() as DocumentLayout), canMoveUp: !!editor && editor.state.selection.$from.index() > 0, canMoveDown: !!editor && editor.state.selection.$from.index() < editor.state.selection.$from.parent.childCount - 1, compact: editor?.getAttributes("documentSection").compact === true, hideTitle: editor?.getAttributes("documentSection").hideTitle === true, boldLabels: editor?.getAttributes("documentSection").boldLabels === true, boldHeader: editor?.getAttributes("documentSection").boldHeader === true, alignEnd: editor?.getAttributes("documentSection").alignEnd ?? 0, columns: editor ? selectedColumnRow(editor)?.node.childCount ?? 1 : 1 }) })
   useEffect(() => { editor?.setEditable(!disabled, false) }, [editor, disabled])
   useEffect(() => { if (editor && documentValueKey(editor.getJSON()) !== documentValueKey(value)) editor.commands.setContent(value, { emitUpdate: false }) }, [editor, value])
   const busy = disabled || !editor
@@ -80,6 +84,16 @@ export function DocumentLayoutEditor({ value, catalog, disabled, onChange, start
     } else editor.chain().focus().insertContent(node).run()
     editor.view.focus()
   }
+  function moveIssuer(direction: -1 | 1) {
+    if (!editor || disabled) return
+    const selection = editor.state.selection
+    if (!isNodeSelection(selection) || selection.node.type.name !== "documentSection" || selection.node.attrs.key !== issuerSignatureSection.key) return
+    const parent = selection.$from.parent, index = selection.$from.index(), siblingIndex = index + direction
+    if (siblingIndex < 0 || siblingIndex >= parent.childCount) return
+    const sibling = parent.child(siblingIndex), from = direction < 0 ? selection.from - sibling.nodeSize : selection.from, to = direction < 0 ? selection.to : selection.to + sibling.nodeSize
+    const content = direction < 0 ? [selection.node.toJSON(), sibling.toJSON()] : [sibling.toJSON(), selection.node.toJSON()]
+    editor.chain().focus().insertContentAt({ from, to }, content).setNodeSelection(direction < 0 ? from : from + sibling.nodeSize).run()
+  }
   const query = search.trim().toLowerCase()
   const groupNames: Record<string, string> = { document: "Document", company: "Company", customer: "Customer", order: "Booking and order", bank: "Bank details", template: "Wording", payment: "Payment", invoice: "Invoice", credit: "Credit note", quote: "Quotation", supplier: "Supplier", balance: "Balance summary" }
   const groups: Record<string, TemplateCatalog["fields"]> = {}
@@ -89,7 +103,8 @@ export function DocumentLayoutEditor({ value, catalog, disabled, onChange, start
     if (!`${field.label} ${group}`.toLowerCase().includes(query)) continue
     ;(groups[group] ??= []).push(field)
   }
-  const sections = catalog.sections.filter(section => `${section.label} repeating sections`.toLowerCase().includes(query))
+  const issuerMatches = includeIssuer && "issuer and signature company signing".includes(query)
+  const sections = catalog.sections.filter(section => section.key !== issuerSignatureSection.key && `${section.label} repeating sections`.toLowerCase().includes(query))
   return <div className="space-y-3">
 
     <div className="grid min-w-0 items-start gap-4 xl:grid-cols-[minmax(0,1fr)_18rem]">
@@ -138,11 +153,16 @@ export function DocumentLayoutEditor({ value, catalog, disabled, onChange, start
 
           <div style={{"--document-line-height":appearance?.lineHeight,"--document-space-after":appearance?.spaceAfter===undefined?undefined:`${appearance.spaceAfter}pt`} as CSSProperties} className={`${appearance?.lineHeight===undefined?"":"[&_p]:!leading-[var(--document-line-height)] [&_h1]:!leading-[var(--document-line-height)] [&_h2]:!leading-[var(--document-line-height)] [&_h3]:!leading-[var(--document-line-height)] [&_h4]:!leading-[var(--document-line-height)] [&_h5]:!leading-[var(--document-line-height)] [&_h6]:!leading-[var(--document-line-height)]"} ${appearance?.spaceAfter===undefined?"[&_p]:my-2":"[&_p]:!mt-0 [&_p]:!mb-[var(--document-space-after)] [&_h1]:!mb-[var(--document-space-after)] [&_h2]:!mb-[var(--document-space-after)] [&_h3]:!mb-[var(--document-space-after)] [&_h4]:!mb-[var(--document-space-after)] [&_h5]:!mb-[var(--document-space-after)] [&_h6]:!mb-[var(--document-space-after)]"}`}><DocumentTitleContext.Provider value={documentTitle}><EditorContent editor={editor} /></DocumentTitleContext.Provider></div>
         </div>
-        {active?.section && <div aria-label="Section display" className="flex flex-wrap items-center gap-3 rounded-lg border p-3 text-sm">
+        {active?.section && !active.issuer && <div aria-label="Section display" className="flex flex-wrap items-center gap-3 rounded-lg border p-3 text-sm">
           <label className="flex items-center gap-2"><Checkbox checked={active.compact} disabled={busy} onChange={event => editor?.chain().focus().updateAttributes("documentSection", { compact: event.target.checked }).run()} />Compact labelled details</label>
           <label className="flex items-center gap-2"><Checkbox checked={active.hideTitle} disabled={busy} onChange={event => editor?.chain().focus().updateAttributes("documentSection", { hideTitle: event.target.checked || null }).run()} />Hide table section heading</label>
           {!active.compact && <label className="flex items-center gap-2"><Checkbox checked={active.boldHeader} disabled={busy} onChange={event => editor?.chain().focus().updateAttributes("documentSection", { boldHeader: event.target.checked || null }).run()} />Emphasise table headings</label>}
           {active.compact ? <label className="flex items-center gap-2"><Checkbox checked={active.boldLabels} disabled={busy} onChange={event => editor?.chain().focus().updateAttributes("documentSection", { boldLabels: event.target.checked || null }).run()} />Bold labels</label> : <label className="flex items-center gap-2">Right-align last columns<input aria-label="Right-align last columns" type="number" min={0} max={12} className="w-14 rounded border px-2 py-1" disabled={busy} value={active.alignEnd} onChange={event => { const count=Number(event.target.value);if(Number.isInteger(count)&&count>=0&&count<=12)editor?.chain().focus().updateAttributes("documentSection",{alignEnd:count||null}).run() }} /></label>}
+        </div>}
+        {active?.issuer && <div aria-label="Issuer and signature controls" className="flex flex-wrap items-center gap-2 rounded-lg border p-3 text-sm">
+          <Button type="button" variant="outline" size="sm" disabled={busy || !active.canMoveUp} onMouseDown={event=>event.preventDefault()} onClick={()=>moveIssuer(-1)}><ArrowUp className="size-4"/>Move up</Button>
+          <Button type="button" variant="outline" size="sm" disabled={busy || !active.canMoveDown} onMouseDown={event=>event.preventDefault()} onClick={()=>moveIssuer(1)}><ArrowDown className="size-4"/>Move down</Button>
+          <InfoHelp title="Issuer and signature">Company name, signatory and contact details come from the template&apos;s company settings. Move this block or add paragraphs around it for spacing. Signing space and emphasis remain under PDF style. The preview shows the saved details.</InfoHelp>
         </div>}
       </div>
       <aside aria-label="Insert dynamic content" className="order-first min-w-0 rounded-lg border bg-muted/20 p-3 xl:order-none xl:sticky xl:top-4">
@@ -157,13 +177,14 @@ export function DocumentLayoutEditor({ value, catalog, disabled, onChange, start
             <Button type="button" variant="ghost" size="sm" className="h-auto w-full justify-start whitespace-normal text-left" aria-label={`Insert section: ${section.label}`} disabled={busy} onMouseDown={event => event.preventDefault()} onClick={() => insertDynamic(section.key, true)}>{section.label}{section.required ? " (required)" : ""}</Button>
             {section.alternativeFields?.length ? <p className="px-3 text-xs text-muted-foreground">Or insert all individual fields: {section.alternativeFields.map(key => catalog.fields.find(field => field.key === key)?.label ?? key).join(", ")}.</p> : null}
           </div>)}</div></details>}
-          {!Object.keys(groups).length && !sections.length && <p className="text-sm text-muted-foreground" role="status">No matching fields or sections.</p>}
+          {issuerMatches && <div><p className="text-sm font-medium">Company and signature</p><Button type="button" variant="ghost" size="sm" className="h-auto w-full justify-start whitespace-normal text-left" aria-label="Insert section: Issuer and signature" disabled={busy || active?.issuerPresent} onMouseDown={event=>event.preventDefault()} onClick={()=>insertDynamic(issuerSignatureSection.key,true)}>Issuer and signature</Button></div>}
+          {!issuerMatches && !Object.keys(groups).length && !sections.length && <p className="text-sm text-muted-foreground" role="status">No matching fields or sections.</p>}
         </div>
       </aside>
     </div>
 
     <Dialog open={linkOpen} onOpenChange={setLinkOpen}><DialogContent><DialogHeader><DialogTitle>Link selected text</DialogTitle><DialogDescription>Use a website or email address. The link opens from the PDF, not while editing.</DialogDescription></DialogHeader><label className="space-y-2">Link address<Input aria-label="Link address" placeholder="https://example.com or mailto:name@example.com" disabled={busy} value={linkUrl} onChange={event => { setLinkUrl(event.target.value); setLinkError("") }} /></label>{linkError && <p role="alert" className="text-sm text-destructive">{linkError}</p>}<DialogFooter><Button type="button" variant="outline" disabled={busy} onClick={() => { editor?.chain().focus().extendMarkRange("link").unsetMark("link").run(); setLinkOpen(false) }}>Remove link</Button><Button type="button" variant="outline" onClick={() => setLinkOpen(false)}>Cancel</Button><Button type="button" disabled={busy} onClick={() => { const parsed = documentLinkSchema.safeParse(linkUrl); if (!parsed.success) { setLinkError(parsed.error.issues[0].message); return } editor?.chain().focus().extendMarkRange("link").setMark("link", { href: parsed.data }).run(); setLinkOpen(false) }}>Apply link</Button></DialogFooter></DialogContent></Dialog>
 
-    <Dialog open={reset} onOpenChange={setReset}><DialogContent><DialogHeader><DialogTitle>Use the starter layout?</DialogTitle><DialogDescription>{starterWording?"This replaces the document body, including edited wording and formatting, with the starter content. The document title, company details and PDF style are retained.":"This replaces the unsaved layout. Company details and approved wording are retained."} Published versions and issued PDFs stay unchanged.</DialogDescription></DialogHeader><DialogFooter><Button type="button" variant="outline" onClick={() => setReset(false)}>Cancel</Button><Button type="button" onClick={() => { const layout=editableDocumentLayout(starterDocumentLayout(catalog),catalog,appearance?.titleAlign);onChange(starterWording?inlineDocumentWording(layout,starterWording):layout);setReset(false) }}>Replace layout</Button></DialogFooter></DialogContent></Dialog>
+    <Dialog open={reset} onOpenChange={setReset}><DialogContent><DialogHeader><DialogTitle>Use the starter layout?</DialogTitle><DialogDescription>{starterWording?"This replaces the document body, including edited wording and formatting, with the starter content. The document title, company details and PDF style are retained.":"This replaces the unsaved layout. Company details and approved wording are retained."} Published versions and issued PDFs stay unchanged.</DialogDescription></DialogHeader><DialogFooter><Button type="button" variant="outline" onClick={() => setReset(false)}>Cancel</Button><Button type="button" onClick={() => { const layout=editableDocumentLayout(starterDocumentLayout(catalog),catalog,appearance?.titleAlign,includeIssuer);onChange(starterWording?inlineDocumentWording(layout,starterWording):layout);setReset(false) }}>Replace layout</Button></DialogFooter></DialogContent></Dialog>
   </div>
 }

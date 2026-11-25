@@ -1,5 +1,14 @@
 # Base Conventions
 
+## Shared issuer and signature block (P13S)
+
+- Use the shared `issuer-signature` section for company document sign-offs. It
+  resolves company identity from the prepared payload, supports normal layout
+  placement and columns, and remains unique alongside required source sections.
+- Old layouts retain their original sign-off geometry. Company template editing
+  exposes it as an unsaved block; only publishing saves its position. Keep issued
+  archives fixed and honour disabled signatory and letterhead controls.
+
 ## Shared document layout columns (P13S)
 
 - Use bounded one-to-three-column rows containing ordinary editor blocks and

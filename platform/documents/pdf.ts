@@ -209,6 +209,16 @@ export async function renderBusinessDocument(document: PrintableDocument, previe
     if(compact && style.spaceAfter===undefined)y-=after-2
     if(block.qrCode){if(block.qrCode.length>1000||!/^https?:\/\//.test(block.qrCode))throw new BusinessError(400,"Invalid document registration link.");ensure(90);const image=await pdf.embedPng(await QRCode.toBuffer(block.qrCode,{width:240,margin:2,errorCorrectionLevel:'M'}));page.drawImage(image,{x:contentX,y:y-80,width:80,height:80});y-=92}
   }}
+  function drawIssuer() {
+    if(document.showSignatory!==false){
+      const signatoryFont=style.boldSignatory?variants.Bold:font,signatoryInk=style.boldSignatory?emphasisInk:ink
+      const contactHeight=document.issuer.contact?wrap(document.issuer.contact,width,9).length*textLeading(9)+blockAfter()+(style.signatoryBlankLines?Math.max(0,16-textLeading(9)):0):0
+      const signatureGap=style.signatoryBlankLines ? style.signatoryBlankLines*(textLeading(style.fontSize)+blockAfter()) : 12
+      const height=6+textLeading(9)+blockAfter(3)+(wrap(document.company.name,width,style.fontSize,signatoryFont).length+wrap(document.issuer.signatory,width,style.fontSize,signatoryFont).length)*textLeading(style.fontSize)+blockAfter()*2+signatureGap+contactHeight
+      ensure(height);y-=6;paragraph("Issued by",9,muted,"left",3);paragraph(document.company.name,style.fontSize,signatoryInk,"left",after,signatoryFont);y-=signatureGap;paragraph(document.issuer.signatory,style.fontSize,signatoryInk,"left",after,signatoryFont)
+    }
+    if (document.issuer.contact) branding(()=>paragraph(document.issuer.contact,9,muted))
+  }
   async function drawFlow(nodes:DocumentFlow) {
     for(const node of nodes) {
       if(node.type==="columns") {
@@ -223,7 +233,8 @@ export async function renderBusinessDocument(document: PrintableDocument, previe
           if(pageIndex>endPage || pageIndex===endPage&&y<endY){endPage=pageIndex;endY=y}
         }
         contentX=savedX;width=savedWidth;pageIndex=endPage;page=pages[pageIndex];y=endY-blockAfter()
-      }else if(node.type==="section")await drawBlocks(node.blocks,node.compact,node)
+      }else if(node.type==="issuer")drawIssuer()
+      else if(node.type==="section")await drawBlocks(node.blocks,node.compact,node)
       else if(node.type==="pageBreak")nextPage()
       else if(node.type==="rule"){ensure(20);y-=6;page.drawLine({start:{x:contentX,y},end:{x:contentX+width,y},thickness:.6,color:muted});y-=14}
       else formatted(node)
@@ -231,14 +242,7 @@ export async function renderBusinessDocument(document: PrintableDocument, previe
   }
   if(document.body)await drawFlow(leadingTitle&&"runs" in leadingTitle&&leadingTitle.documentTitle?document.body.slice(1):document.body)
   else{paragraph(document.opening);await drawBlocks(document.blocks);if (document.terms) { section("Terms and notes");paragraph(document.terms) }}
-  if(document.showSignatory!==false){
-    const signatoryFont=style.boldSignatory?variants.Bold:font,signatoryInk=style.boldSignatory?emphasisInk:ink
-    const contactHeight=document.issuer.contact?wrap(document.issuer.contact,width,9).length*textLeading(9)+blockAfter()+(style.signatoryBlankLines?Math.max(0,16-textLeading(9)):0):0
-    const signatureGap=style.signatoryBlankLines ? style.signatoryBlankLines*(textLeading(style.fontSize)+blockAfter()) : 12
-    const height=6+textLeading(9)+blockAfter(3)+(wrap(document.company.name,width,style.fontSize,signatoryFont).length+wrap(document.issuer.signatory,width,style.fontSize,signatoryFont).length)*textLeading(style.fontSize)+blockAfter()*2+signatureGap+contactHeight
-    ensure(height);y-=6;paragraph("Issued by",9,muted,"left",3);paragraph(document.company.name,style.fontSize,signatoryInk,"left",after,signatoryFont);y-=signatureGap;paragraph(document.issuer.signatory,style.fontSize,signatoryInk,"left",after,signatoryFont)
-  }
-  if (document.issuer.contact) branding(()=>paragraph(document.issuer.contact,9,muted))
+  if(!documentFlowNodes(document.body??[]).some(node=>node.type==="issuer"))drawIssuer()
   if(document.notice)paragraph(document.notice,9,muted)
   pages.forEach((p,i)=>{
     if(footerLines.length){if(profile)beginBranding(p);const ruleY=50+footerLines.length*10+4;p.drawLine({start:{x:margin,y:ruleY},end:{x:margin+width,y:ruleY},thickness:.4,color:muted});footerLines.forEach((line,index)=>p.drawText(line,{x:margin+(width-font.widthOfTextAtSize(line,8))/2,y:50+(footerLines.length-1-index)*10,size:8,font,color:muted}));if(profile)endBranding(p)}

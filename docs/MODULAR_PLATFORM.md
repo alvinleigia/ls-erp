@@ -1,3 +1,22 @@
+## P13S shared issuer and signature block (2026-11-25)
+
+Company document editing exposes the issuer/signatory/contact sign-off as a
+shared dynamic block with Move up/Move down and drag/cut-paste placement. The
+prepared payload supplies its identity; PDF style retains signing-space and
+emphasis controls. The renderer handles it within normal flow and columns,
+retaining protected page footers and letterhead behaviour without duplication.
+Old stored layouts keep the same automatic sign-off; opening an editor adds
+only an unsaved projection until a reviewed version is published. Quotations
+and statutory signature controls retain their existing behaviour. No migration,
+permission change, new dependency or issued-archive rewrite is required.
+
+The production build and 111 automated document/receipt checks passed. Regression
+coverage includes old-versus-explicit sign-off geometry, dynamic issuer identity,
+required sections, duplicate rejection, columns/pagination and letterhead copies.
+The browser regression exercises movement, preview, publication, reload and
+mobile layout. Private evidence: tmp/receipt-release/issuer-full-suite.log;
+tmp/industry-release/ls-erp-sales-orders-df0a72da946e.log; tmp/issuer-release.
+
 ## P13S configurable document columns - locally verified (2026-11-25)
 
 The existing shared editor now supports one-to-three-column rows containing normal

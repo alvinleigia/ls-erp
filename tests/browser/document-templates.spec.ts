@@ -262,7 +262,7 @@ test("digital and letterhead sample actions use the same draft without publishin
 
 test("publishing confirms the saved version in place and cannot republish unchanged content", async ({ page }) => {
   const { state, unexpected } = await fixture(page, { rejectRefreshAfterPublish: true })
-  const layout = inlineDocumentWording(editableDocumentLayout(state.templates[booking].content.layout!, catalog), state.templates[booking].content)
+  const layout = inlineDocumentWording(editableDocumentLayout(state.templates[booking].content.layout!, catalog, "left", true), state.templates[booking].content)
   await expect(page.getByRole("button", { name: "Published version 2", exact: true })).toBeDisabled()
   await expect(review(page)).toHaveCount(0)
   await page.getByRole("tab", { name: "Company", exact: true }).click()

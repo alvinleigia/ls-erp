@@ -146,3 +146,44 @@ test('booking intimation has a concise starter while customer/property identity 
   assert(sample.blocks.find(block=>block.key==='participants').paragraphs.some(p=>p.includes('Example address')))
   assert(sample.blocks.find(block=>block.key==='property-units').table.rows.some(row=>row.includes('SAMPLE-PLOT-106')))
 })
+
+test('issuer block is an unsaved editor projection, stays unique inside columns and retains required source sections',()=>{
+ const {issuerSignatureSection,documentLayoutBlocks}=require('../platform/documents/layout.ts'),catalog=orderTemplateCatalog,stored=starterDocumentLayout(catalog),before=JSON.stringify(stored)
+ const editable=editableDocumentLayout(stored,catalog,'left',true)
+ assert.equal(JSON.stringify(stored),before);assert.equal(documentLayoutBlocks(editable.content).filter(n=>n.attrs?.key===issuerSignatureSection.key).length,1)
+ const node=editable.content.pop();editable.content.unshift({type:'documentColumns',content:[{type:'documentColumn',content:[node]},{type:'documentColumn',content:[{type:'paragraph'}]}]})
+ assert.equal(documentLayoutBlocks(editableDocumentLayout(editable,catalog,'left',true).content).filter(n=>n.attrs?.key===issuerSignatureSection.key).length,1)
+ assert.throws(()=>resolveDocumentLayout({...editable,content:[...editable.content,node]},catalog,{},[]),/only once/)
+ assert.throws(()=>resolveDocumentLayout({type:'doc',content:[node]},catalog,{},[]),/Restore required sections/)
+})
+
+test('explicit issuer blocks keep old text geometry and letterhead copies unchanged at the original position',async t=>{
+ const calls=capture(t),common={...base(),blocks:[],issuer:{address:'',contact:'office@example.test',signatory:'Authorised Signatory'},appearance:appearance('letter',{boldSignatory:true,softEmphasis:true,signatoryBlankLines:2,letterhead:{topMm:40,bottomMm:25}})},body=[{type:'paragraph',align:'left',runs:[{text:'APPROVED BODY'}]}]
+ for(const variant of ['digital','letterhead']){
+  const first=calls.length;await renderBusinessDocument({...common,body},true,variant);const middle=calls.length;await renderBusinessDocument({...common,body:[...body,{type:'issuer'}]},true,variant)
+  const geometry=rows=>rows.map(({text,x,y,size,font,color})=>({text,x,y,size,font:font.name,color}));assert.deepEqual(geometry(calls.slice(first,middle)),geometry(calls.slice(middle)))
+ }
+})
+
+test('moving issuer before following text renders dynamic details once and keeps the signature gap',async t=>{
+ const calls=capture(t),row=text=>({type:'paragraph',align:'left',runs:[{text}]}),document={...base(),blocks:[],issuer:{address:'',contact:'office@example.test',signatory:'Dynamic Signatory'},appearance:appearance('letter',{signatoryBlankLines:2}),body:[row('BEFORE'),{type:'issuer'},row('AFTER')]}
+ const before=JSON.stringify(document);await renderBusinessDocument(document,true);assert.equal(JSON.stringify(document),before)
+ for(const text of ['Issued by',document.company.name,'Dynamic Signatory','office@example.test'])assert.equal(calls.filter(r=>r.text===text).length,1,text)
+ const idx=text=>calls.findIndex(r=>r.text===text);assert(idx('BEFORE')<idx('Issued by'));assert(idx('office@example.test')<idx('AFTER'))
+ const name=calls[idx(document.company.name)],sign=calls[idx('Dynamic Signatory')];assert.equal(name.page,sign.page);assert(name.y-sign.y>=36)
+})
+
+test('issuer blocks paginate safely in columns and respect disabled signatory controls',async t=>{
+ const calls=capture(t),common={...base(),blocks:[],appearance:appearance('letter',{signatoryBlankLines:2}),issuer:{address:'',contact:'office@example.test',signatory:'Dynamic Signatory'}}
+ const bytes=await renderBusinessDocument({...common,body:[{type:'paragraph',align:'left',runs:[{text:Array.from({length:43},(_,i)=>`LONG_${i}`).join('\n')}]},{type:'columns',columns:[[{type:'issuer'}],[{type:'paragraph',align:'left',runs:[{text:'OTHER COLUMN'}]}]]}]},true)
+ assert((await PDFDocument.load(bytes)).getPageCount()>=2)
+ const name=calls.find(r=>r.text===common.company.name),sign=calls.find(r=>r.text==='Dynamic Signatory'),contact=calls.find(r=>r.text==='office@example.test');assert.equal(name.page,sign.page);assert.equal(sign.page,contact.page);assert(contact.y>70)
+ const start=calls.length;await renderBusinessDocument({...common,showSignatory:false,body:[{type:'issuer'}]},true);assert(!calls.slice(start).some(r=>r.text==='Issued by'||r.text==='Dynamic Signatory'))
+})
+
+test('shared issuer sections render through orders, receipts, invoices and real estate providers without provider rewrites',async()=>{
+ for(const provider of [orderAcknowledgement,paymentReceiptProvider,...invoiceDocumentProviders,...realEstateOrderDocuments(()=>{throw Error('Samples do not read a ledger')})]){
+  const layout=editableDocumentLayout(starterDocumentLayout(provider.templateCatalog),provider.templateCatalog,'left',true),content={...provider.defaults,layout},snapshot=JSON.stringify(content),payload=provider.sample(content,provider.templateCatalog,{id:'example',name:'Issuer Example'})
+  assert.equal(require('../platform/documents/layout.ts').documentFlowNodes(payload.body).filter(n=>n.type==='issuer').length,1);assert.equal(Buffer.from(await renderBusinessDocument(payload,true)).subarray(0,5).toString(),'%PDF-');assert.equal(JSON.stringify(content),snapshot)
+ }
+})

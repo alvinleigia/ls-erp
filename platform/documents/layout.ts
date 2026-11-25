@@ -48,8 +48,9 @@ export const documentLayoutSchema = z.object({ type: z.literal("doc"), content: 
 export type DocumentLayout = z.infer<typeof documentLayoutSchema>
 export type TemplateField = { key: string; label: string; group?: string; help?: string }
 export type TemplateCatalog = { fields: TemplateField[]; sections: { key: string; label: string; required: boolean; alternativeFields?: string[] }[]; starter?: DocumentLayout }
+export const issuerSignatureSection = { key: "issuer-signature", label: "Issuer and signature", required: false }
 export type DocumentRun = { text: string; bold?: boolean; italic?: boolean; underline?: boolean; script?: "super" | "sub"; href?: string }
-export type DocumentFlow = ({ type: "paragraph" | "heading"; level?: number; align: "left" | "center" | "right"; runs: DocumentRun[]; documentTitle?: true; paragraphSpacing?: ParagraphSpacing; lineSpacing?: LineSpacing; indent?: number; marker?: string } | { type: "section"; blocks: DocumentBlock[]; compact?: boolean; hideTitle?: boolean; boldLabels?: boolean; boldHeader?: boolean; alignEnd?: number } | { type: "columns"; columns: DocumentFlow[] } | { type: "pageBreak" } | { type: "rule" })[]
+export type DocumentFlow = ({ type: "paragraph" | "heading"; level?: number; align: "left" | "center" | "right"; runs: DocumentRun[]; documentTitle?: true; paragraphSpacing?: ParagraphSpacing; lineSpacing?: LineSpacing; indent?: number; marker?: string } | { type: "section"; blocks: DocumentBlock[]; compact?: boolean; hideTitle?: boolean; boldLabels?: boolean; boldHeader?: boolean; alignEnd?: number } | { type: "columns"; columns: DocumentFlow[] } | { type: "issuer" } | { type: "pageBreak" } | { type: "rule" })[]
 
 export function documentLayoutBlocks(nodes: DocumentLayout["content"]): z.infer<typeof block>[] {
   return nodes.flatMap(node => node.type === "documentColumns" ? node.content.flatMap(column => column.content) : [node])
@@ -85,7 +86,7 @@ export function inlineDocumentWording(layout: DocumentLayout, wording: { opening
 
 // Add the title to an unsaved editing view only. Stored layouts and issued files
 // are never rewritten. Once present, its position and ordinary heading attributes win.
-export function editableDocumentLayout(layout: DocumentLayout, catalog: TemplateCatalog, alignment: "left" | "center" = "left"): DocumentLayout {
+export function editableDocumentLayout(layout: DocumentLayout, catalog: TemplateCatalog, alignment: "left" | "center" = "left", includeIssuer = false): DocumentLayout {
   const titleKey = catalog.fields.find(field => ["document.title", "quote.title"].includes(field.key))?.key
   const copy = structuredClone(layout)
   if (titleKey) {
@@ -93,6 +94,8 @@ export function editableDocumentLayout(layout: DocumentLayout, catalog: Template
     if (existing?.type === "documentField") existing.attrs.documentTitle = true
     else copy.content.unshift({ type: "heading", attrs: { level: 1, textAlign: alignment, paragraphSpacing: null, lineSpacing: null }, content: [{ type: "documentField", attrs: { key: titleKey, documentTitle: true } }] })
   }
+  // An editing view only: old stored templates and archived PDFs remain fixed.
+  if (includeIssuer && !documentLayoutBlocks(copy.content).some(node => node.type === "documentSection" && node.attrs.key === issuerSignatureSection.key)) copy.content.push({ type: "documentSection", attrs: { key: issuerSignatureSection.key } })
   return copy
 }
 
@@ -100,6 +103,7 @@ export function editableDocumentLayout(layout: DocumentLayout, catalog: Template
 // never HTML, a property-path evaluator, a formula or an executable template.
 export function validateDocumentLayout(value: unknown, catalog: TemplateCatalog): DocumentLayout {
   const layout = documentLayoutSchema.parse(value), fields = new Set(catalog.fields.map(row => row.key)), sections = new Set(catalog.sections.map(row => row.key)), seen = new Set<string>(), usedFields = new Set<string>()
+  if (fields.has("document.title")) sections.add(issuerSignatureSection.key)
   for (const node of documentLayoutBlocks(layout.content)) {
     if (node.type === "documentSection") {
       if (!sections.has(node.attrs.key) || seen.has(node.attrs.key)) throw new BusinessError(400, "Choose each registered document section only once.")
@@ -135,7 +139,7 @@ export function resolveDocumentLayout(value: unknown, catalog: TemplateCatalog, 
     })
     if (node.type === "documentPageBreak") return [{ type: "pageBreak" }]
     if (node.type === "horizontalRule") return [{ type: "rule" }]
-    if (node.type === "documentSection") return [{ type: "section", blocks: blocks.filter(block => block.key === node.attrs.key), ...(node.attrs.compact ? { compact: true } : {}), ...(node.attrs.hideTitle ? { hideTitle: true } : {}), ...(node.attrs.boldLabels ? { boldLabels: true } : {}), ...(node.attrs.boldHeader ? { boldHeader: true } : {}), ...(node.attrs.alignEnd ? { alignEnd: node.attrs.alignEnd } : {}) }]
+    if (node.type === "documentSection") return node.attrs.key === issuerSignatureSection.key ? [{ type: "issuer" }] : [{ type: "section", blocks: blocks.filter(block => block.key === node.attrs.key), ...(node.attrs.compact ? { compact: true } : {}), ...(node.attrs.hideTitle ? { hideTitle: true } : {}), ...(node.attrs.boldLabels ? { boldLabels: true } : {}), ...(node.attrs.boldHeader ? { boldHeader: true } : {}), ...(node.attrs.alignEnd ? { alignEnd: node.attrs.alignEnd } : {}) }]
     return [{ type: node.type, ...(node.content?.some(item => item.type === "documentField" && item.attrs.documentTitle && ["document.title", "quote.title"].includes(item.attrs.key)) ? { documentTitle: true as const } : {}), ...(node.type === "heading" ? { level: node.attrs.level } : {}), ...(depth ? { indent: depth } : {}), ...(node.attrs?.paragraphSpacing != null ? { paragraphSpacing: node.attrs.paragraphSpacing } : {}), ...(node.attrs?.lineSpacing != null ? { lineSpacing: node.attrs.lineSpacing } : {}), align: node.attrs?.textAlign ?? "left", runs: (node.content ?? []).map(item => {
       if (item.type === "hardBreak") return { text: "\n" }
       const script = item.marks?.some(mark => mark.type === "superscript") ? "super" as const : item.marks?.some(mark => mark.type === "subscript") ? "sub" as const : undefined
