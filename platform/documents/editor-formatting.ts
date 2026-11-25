@@ -1,8 +1,8 @@
-import { Extension, Mark } from "@tiptap/core"
+import { Extension, Mark, type Editor } from "@tiptap/core"
 import { Fragment, Slice, type Node as EditorNode } from "@tiptap/pm/model"
 import { Plugin } from "@tiptap/pm/state"
 import { documentLinkSchema } from "./layout"
-import { paragraphSpacingSchema, lineSpacingSchema, paragraphSpaceAfter, lineHeight } from "./typography"
+import { paragraphSpacingSchema, lineSpacingSchema, paragraphSpaceAfter, lineHeight, textFontSizeSchema } from "./typography"
 
 function spacingAttribute(element: HTMLElement, key: "paragraphSpacing" | "lineSpacing") {
   const raw = element.dataset[key]
@@ -12,7 +12,7 @@ function spacingAttribute(element: HTMLElement, key: "paragraphSpacing" | "lineS
 }
 
 // Only these bounded styles survive paste and enter the stored document model.
-// Font families, sizes, colours, images, scripts and arbitrary CSS are not nodes.
+// Font families, colours, images, scripts and arbitrary CSS are not nodes.
 export const DocumentSpacing = Extension.create({
   name: "documentSpacing",
   addGlobalAttributes: () => [{ types: ["paragraph", "heading"], attributes: {
@@ -44,6 +44,30 @@ export const DocumentSpacing = Extension.create({
     },
   })],
 })
+
+function pastedFontSize(value: string) {
+  const match = /^(\d+(?:\.\d+)?)(pt|px)$/.exec(value.trim())
+  if (!match) return null
+  const size = Number(match[1]) * (match[2] === "px" ? .75 : 1), parsed = textFontSizeSchema.safeParse(size)
+  return parsed.success ? parsed.data : null
+}
+
+export const DocumentFontSize = Mark.create({
+  name: "fontSize",
+  addAttributes: () => ({ size: { default: null, parseHTML: element => pastedFontSize(element.style.fontSize) } }),
+  parseHTML: () => [{ style: "font-size", getAttrs: value => { const size = pastedFontSize(value); return size === null ? false : { size } } }],
+  renderHTML: ({ HTMLAttributes }) => ["span", { style: `font-size:${textFontSizeSchema.parse(HTMLAttributes.size)}pt` }, 0],
+})
+
+// Mixed selections must not suggest that every selected run has the first size.
+export function selectedFontSize(editor: Editor): string {
+  const sizeOf = (marks: readonly { type: { name: string }; attrs: Record<string, unknown> }[]) => String(marks.find(mark => mark.type.name === "fontSize")?.attrs.size ?? "")
+  const { from, to, empty, $from } = editor.state.selection
+  if (empty) return sizeOf(editor.state.storedMarks ?? $from.marks())
+  const sizes = new Set<string>()
+  editor.state.doc.nodesBetween(from, to, node => { if (node.isText || node.type.name === "documentField") sizes.add(sizeOf(node.marks)) })
+  return sizes.size > 1 ? "mixed" : [...sizes][0] ?? ""
+}
 
 export const DocumentLink = Mark.create({
   name: "link", inclusive: false,

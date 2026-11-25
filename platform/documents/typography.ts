@@ -2,6 +2,8 @@ import { z } from "zod"
 
 export const headingLevels = [1, 2, 3, 4, 5, 6] as const
 export const headingLevelSchema = z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4), z.literal(5), z.literal(6)])
+export const textFontSizeSchema = z.number().int().min(8).max(36)
+export const textFontSizes = [8, 9, 10, 11, 12, 14, 16, 18, 20, 24, 28, 32, 36]
 export const paragraphSpacingSchema = z.union([z.enum(["compact", "normal", "relaxed"]), z.number().min(0).max(48)]).nullable().optional()
 export const lineSpacingSchema = z.union([z.enum(["single", "one-and-half", "double"]), z.number().min(1).max(3)]).nullable().optional()
 export type ParagraphSpacing = z.infer<typeof paragraphSpacingSchema>

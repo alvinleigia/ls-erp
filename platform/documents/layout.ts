@@ -1,7 +1,7 @@
 import { z } from "zod"
 import { BusinessError } from "../policy"
 import type { DocumentBlock } from "./contracts"
-import { headingLevelSchema, paragraphSpacingSchema, lineSpacingSchema, type ParagraphSpacing, type LineSpacing } from "./typography"
+import { headingLevelSchema, paragraphSpacingSchema, lineSpacingSchema, textFontSizeSchema, type ParagraphSpacing, type LineSpacing } from "./typography"
 
 const key = z.string().regex(/^[a-z][a-z0-9.-]{0,70}$/)
 export const documentLinkSchema = z.string().trim().max(1000).refine(value => {
@@ -11,7 +11,8 @@ export const documentLinkSchema = z.string().trim().max(1000).refine(value => {
 const marks = z.array(z.union([
   z.object({ type: z.enum(["bold", "italic", "underline", "superscript", "subscript"]) }).strict(),
   z.object({ type: z.literal("link"), attrs: z.object({ href: documentLinkSchema }).strict() }).strict(),
-])).max(5).superRefine((value, ctx) => {
+  z.object({ type: z.literal("fontSize"), attrs: z.object({ size: textFontSizeSchema }).strict() }).strict(),
+])).max(6).superRefine((value, ctx) => {
   if (new Set(value.map(mark => mark.type)).size !== value.length || value.some(mark => mark.type === "superscript") && value.some(mark => mark.type === "subscript")) ctx.addIssue({ code: "custom", message: "Use each format once and choose superscript or subscript." })
 })
 const inline = z.discriminatedUnion("type", [
@@ -49,7 +50,7 @@ export type DocumentLayout = z.infer<typeof documentLayoutSchema>
 export type TemplateField = { key: string; label: string; group?: string; help?: string }
 export type TemplateCatalog = { fields: TemplateField[]; sections: { key: string; label: string; required: boolean; alternativeFields?: string[] }[]; starter?: DocumentLayout }
 export const issuerSignatureSection = { key: "issuer-signature", label: "Issuer and signature", required: false }
-export type DocumentRun = { text: string; bold?: boolean; italic?: boolean; underline?: boolean; script?: "super" | "sub"; href?: string }
+export type DocumentRun = { text: string; bold?: boolean; italic?: boolean; underline?: boolean; script?: "super" | "sub"; href?: string; fontSize?: number }
 export type DocumentFlow = ({ type: "paragraph" | "heading"; level?: number; align: "left" | "center" | "right"; runs: DocumentRun[]; documentTitle?: true; paragraphSpacing?: ParagraphSpacing; lineSpacing?: LineSpacing; indent?: number; marker?: string } | { type: "section"; blocks: DocumentBlock[]; compact?: boolean; hideTitle?: boolean; boldLabels?: boolean; boldHeader?: boolean; alignEnd?: number } | { type: "columns"; columns: DocumentFlow[] } | { type: "issuer" } | { type: "pageBreak" } | { type: "rule" })[]
 
 export function documentLayoutBlocks(nodes: DocumentLayout["content"]): z.infer<typeof block>[] {
@@ -144,7 +145,8 @@ export function resolveDocumentLayout(value: unknown, catalog: TemplateCatalog, 
       if (item.type === "hardBreak") return { text: "\n" }
       const script = item.marks?.some(mark => mark.type === "superscript") ? "super" as const : item.marks?.some(mark => mark.type === "subscript") ? "sub" as const : undefined
       const link = item.marks?.find(mark => mark.type === "link")
-      const extra = { ...(script ? { script } : {}), ...(link?.type === "link" ? { href: link.attrs.href } : {}) }
+      const fontSize = item.marks?.find(mark => mark.type === "fontSize")
+      const extra = { ...(script ? { script } : {}), ...(link?.type === "link" ? { href: link.attrs.href } : {}), ...(fontSize?.type === "fontSize" ? { fontSize: fontSize.attrs.size } : {}) }
       if (item.type === "documentField") {
         if (!Object.hasOwn(values, item.attrs.key)) {
           const field = catalog.fields.find(field => field.key === item.attrs.key)!

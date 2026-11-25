@@ -22,6 +22,24 @@ const appearance=(style='standard',patch={})=>({...defaultDocumentAppearance,...
 const base=()=>({format:1,title:'BOOKING INTIMATION LETTER',reference:'SAMPLE/BOOKING/001',date:'05 Nov 2026',sourceReference:'SAMPLE-ORDER',company:{id:'example',name:'Example Property Company'},issuer:{address:'Example Office, Goa, India',contact:'',signatory:'Authorised signatory'},opening:'Dear Customer,\nWe welcome you and confirm the saved booking described below.',terms:'Example terms for layout review only.',branding:null,blocks:[{title:'Sample Customer',paragraphs:['Primary applicant','Example address, Goa, India','customer@example.test']},{title:'Sample Additional Customer',paragraphs:['Co-applicant','Example correspondence address']},{title:'Unit details',table:{headings:['Detail','Saved value'],widths:[1,2],rows:[['Project','Example Gardens'],['Unit','PLOT-106'],['Area','277 sq m'],['Booking date','05 Nov 2026']]}}]})
 function capture(t){const calls=[],draw=PDFPage.prototype.drawText;t.mock.method(PDFPage.prototype,'drawText',function(text,options){calls.push({page:this,text,...options});return draw.call(this,text,options)});return calls}
 
+test('selected font size shrinks numbered terms and markers without changing headings or normal body text',async t=>{
+ const calls=capture(t),layout={type:'doc',content:[{type:'heading',attrs:{level:2},content:[{type:'text',text:'Terms heading'}]},{type:'paragraph',content:[{type:'text',text:'Normal body'}]},{type:'orderedList',content:['First condition','Second condition'].map(text=>({type:'listItem',content:[{type:'paragraph',content:[{type:'text',text,marks:[{type:'fontSize',attrs:{size:8}},{type:'bold'}]}]}]}))}]}
+ await renderBusinessDocument({...base(),appearance:appearance('letter',{fontSize:9,lineHeight:1.2,spaceAfter:3}),body:resolveDocumentLayout(layout,{fields:[],sections:[]},{},[]),showSignatory:false},true)
+ assert.equal(calls.find(r=>r.text==='Normal').size,9);assert(calls.find(r=>r.text==='Terms').size>9)
+ for(const text of ['1.','2.','First','Second'])assert.equal(calls.find(r=>r.text===text).size,8)
+ assert(calls.find(r=>r.text==='First').font.name.includes('Bold'));assert(calls.find(r=>r.text==='Normal').y>calls.find(r=>r.text==='First').y)
+})
+
+test('mixed inline sizes wrap and paginate safely in columns, preserving link, underline and script formatting',async t=>{
+ const calls=capture(t),paragraph=(runs)=>({type:'paragraph',align:'left',runs}),large=paragraph([{text:'Large words '.repeat(80),fontSize:36,bold:true}]),small=paragraph([{text:'Small terms '.repeat(50),fontSize:8}]),mixed=paragraph([{text:'Normal '},{text:'Underlined link',fontSize:20,underline:true,href:'https://example.test'},{text:'2',fontSize:20,script:'super'},{text:' end'}])
+ const document={...base(),appearance:appearance('letter',{fontSize:9,lineHeight:1.2,spaceAfter:3}),showSignatory:false,body:[{type:'columns',columns:[[large,small],[mixed,large]]},paragraph([{text:'AFTER_COLUMNS'}])]}
+ const bytes=await renderBusinessDocument(document,true),pdf=await PDFDocument.load(bytes)
+ assert(pdf.getPageCount()>1);assert(calls.some(r=>r.size===36));assert(calls.some(r=>r.size===8));assert.equal(calls.find(r=>r.text==='Underlined').size,20);assert.equal(calls.find(r=>r.text==='2').size,14)
+ for(const row of calls){assert(row.y>=33);assert(row.x>=31);assert(row.x+row.font.widthOfTextAtSize(row.text,row.size)<=564.01,'Text crosses right margin')}
+ const lines=calls.filter(r=>r.text==='Large');for(let i=1;i<lines.length;i++)if(lines[i].page===lines[i-1].page&&lines[i].x===lines[i-1].x)assert(lines[i-1].y-lines[i].y>=43.19,'Large text lines overlap')
+ assert(pdf.getPages().some(p=>p.node.Annots()?.size()>0));fs.mkdirSync('tmp/pdfs',{recursive:true});fs.writeFileSync('tmp/pdfs/font-size-columns.pdf',bytes)
+})
+
 test('two signing lines reserve writing space and keep the sign-off contact on the same page',async t=>{
  const calls=capture(t),document={...base(),appearance:appearance('letter',{lineHeight:1.1,spaceAfter:1,signatoryBlankLines:2,boldSignatory:true}),issuer:{address:'',contact:'office@example.test',signatory:'Authorised Signatory'},body:[{type:'paragraph',align:'left',runs:[{text:Array.from({length:43},(_,i)=>`BODY_${i}`).join('\n')}]}]}
  await renderBusinessDocument(document,true)

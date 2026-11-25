@@ -1,3 +1,28 @@
+## P13S selected-text font size control (2026-11-26)
+
+The shared document editor provides a Font size selector for selected text and
+dynamic fields, including numbered terms. Default size removes the override;
+mixed selections are identified explicitly. Sizes are bounded integer points
+(8–36), persisted in the existing layout JSON and resolved by the shared PDF
+renderer with measured wrapping, line heights and list markers. Bold, italic,
+underline, safe links, scripts and heading semantics remain independent. Pasted
+sizes are accepted only within the same bounds. No dependency or migration is
+required; existing templates and issued archives are unchanged.
+
+Local verification covers schema bounds, dynamic field resolution, numbered
+terms, mixed-size columns/pagination and quotation snapshots. The browser checks
+exercise selection, paste, undo/redo, Default size, preview, publication, reload
+and mobile containment against isolated API fixtures. An Ewissen receipt preview
+with only its terms changed to 8 pt was rendered and visually inspected as one
+page; this did not publish or update production configuration.
+
+53 model/PDF/quotation checks passed. The broader editor run passed 36 cases and
+exposed a starter-reset sign-off ordering issue; that was corrected and all three
+targeted font/reset browser checks passed on rerun. Reset now uses the source
+catalog so its signature block matches the normal editing projection. Evidence:
+`tmp/font-size-tests.log`, `tmp/font-size-browser-all.log`, `tmp/font-size-browser-reset.log`,
+`tmp/font-size-build.log`, `tmp/issuer-release/font-size-preview-1.png`.
+
 ## P13S shared issuer and signature block (2026-11-25)
 
 Company document editing exposes the issuer/signatory/contact sign-off as a

@@ -1,5 +1,15 @@
 # Base Conventions
 
+## Selected-text document font sizes (P13S)
+
+- Store selected font sizes as bounded `fontSize` inline marks (integer points,
+  8–36), including dynamic fields and list text. An absent mark inherits the
+  normal body/heading style. Keep arbitrary CSS and font files outside templates.
+- Resolve sizes through the shared document model and PDF renderer. Measure
+  wrapping and line heights from the actual runs, retain other formatting and
+  size list markers from their first text run. Opening an existing template does
+  not add marks or publish changes; issued PDF archives remain fixed.
+
 ## Shared issuer and signature block (P13S)
 
 - Use the shared `issuer-signature` section for company document sign-offs. It

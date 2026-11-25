@@ -8,6 +8,17 @@ const {orderAcknowledgement}=require('../modules/sales-orders/document-provider.
 const catalog=orderTemplateCatalog,content={...orderAcknowledgement.defaults,title:'QA Editable Booking',opening:'Accepted opening.',terms:'Approved sample terms.'}
 const field=key=>({type:'documentField',attrs:{key}}),paragraph=(...content)=>({type:'paragraph',content})
 
+test('bounded inline font sizes preserve literal text, dynamic fields and other marks without changing source values',()=>{
+ const layout=starterDocumentLayout(catalog),size={type:'fontSize',attrs:{size:8}},marks=[{type:'bold'},{type:'italic'},{type:'underline'},{type:'superscript'},{type:'link',attrs:{href:'https://example.test'}},size]
+ layout.content.unshift(paragraph({type:'text',text:'Small terms',marks},{...field('customer.name'),marks:[size]}))
+ const before=JSON.stringify(layout),body=resolveDocumentLayout(layout,catalog,{'customer.name':'Sample Customer','template.opening':'','template.terms':''},[])
+ assert.deepEqual(body[0].runs,[{text:'Small terms',bold:true,italic:true,underline:true,script:'super',href:'https://example.test',fontSize:8},{text:'Sample Customer',bold:false,italic:false,fontSize:8}]);assert.equal(JSON.stringify(layout),before)
+ for(const invalid of [7,37,8.5,'8',NaN,Infinity])assert.equal(documentLayoutSchema.safeParse({type:'doc',content:[paragraph({type:'text',text:'Invalid',marks:[{type:'fontSize',attrs:{size:invalid}}]})]}).success,false)
+ for(const attrs of [{size:8,css:'position:fixed'},{size:8,colour:'white'}])assert.equal(documentLayoutSchema.safeParse({type:'doc',content:[paragraph({type:'text',text:'Invalid',marks:[{type:'fontSize',attrs}]})]}).success,false)
+ for(const value of [8,13,36])assert(documentLayoutSchema.safeParse({type:'doc',content:[paragraph({type:'text',text:'Valid',marks:[{type:'fontSize',attrs:{size:value}}]})]}).success)
+ assert.equal(documentLayoutSchema.safeParse({type:'doc',content:[paragraph({type:'text',text:'Duplicate',marks:[size,size]})]}).success,false)
+})
+
 test('inline wording expands literal text without changing source values, marks, alignment or repeated records',()=>{
  const {inlineDocumentWording,documentValueKey}=require('../platform/documents/layout.ts')
  const layout=starterDocumentLayout(catalog),before=JSON.stringify(layout),words={opening:'Dear Sample,\n\nWelcome <b>literally</b>.',terms:'Terms\nLine 2'}

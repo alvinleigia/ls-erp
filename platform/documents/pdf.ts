@@ -12,7 +12,7 @@ import { documentLinkSchema, documentFlowNodes } from "./layout"
 import { defaultDocumentAppearance, documentAppearanceSchema } from "./appearance"
 import type { DocumentVariant } from "./letterhead"
 import { brandingLayer, letterheadPdf, markLetterheadPdf } from "./letterhead-pdf"
-import { headingFontSize, lineHeight, paragraphSpaceAfter } from "./typography"
+import { headingFontSize, lineHeight, paragraphSpaceAfter, textFontSizeSchema } from "./typography"
 
 // A fixed, bounded font set is shared by warm requests; PDF font objects remain per document.
 const fontFiles = new Map<string, Promise<Buffer>>()
@@ -106,20 +106,29 @@ export async function renderBusinessDocument(document: PrintableDocument, previe
   function paragraph(value: string, size = style.fontSize, color = ink, align: "left" | "center" | "right" = "left", trailing = after, face = font) { if (!value) return; for (const line of wrap(value,width,size,face)) { if(!line){const blank=style.lineHeight!==undefined||style.spaceAfter!==undefined?textLeading(size):blockAfter();ensure(blank);y-=blank;continue}ensure(Math.max(size+7,textLeading(size))); const used=face.widthOfTextAtSize(line,size),x=contentX+(align==="center"?(width-used)/2:align==="right"?width-used:0);page.drawText(line,{x,y,size,font:face,color}); y-=textLeading(size) }; y-=blockAfter(trailing) }
   function formatted(node:Extract<DocumentFlow[number],{runs:unknown}>) {
     const size=node.type==="heading"?headingFontSize(style.fontSize,node.level??2):style.fontSize
+    const customSize=node.runs.some(run=>run.fontSize!==undefined),runSizes=node.runs.map(run=>run.fontSize===undefined?size:textFontSizeSchema.parse(run.fontSize))
+    const markerSize=customSize?node.runs.find(run=>run.text.trim())?.fontSize??size:size
     // A large summary value needs ascent above its baseline after a small label.
     // Keep existing full-width document geometry unchanged.
-    if(width<fullWidth&&node.type==="heading")y-=Math.max(0,size-style.fontSize)
-    const indent = (node.indent ?? 0) * 24 + (node.marker ? Math.max(0,font.widthOfTextAtSize(node.marker,size)+6-24) : 0), available = width - indent
+    if(!customSize&&width<fullWidth&&node.type==="heading")y-=Math.max(0,size-style.fontSize)
+    const indent = (node.indent ?? 0) * 24 + (node.marker ? Math.max(0,font.widthOfTextAtSize(node.marker,markerSize)+6-24) : 0), available = width - indent
+    if(available<=0)throw new BusinessError(400,"Reduce the font size or list indentation for this column.")
     const multiplier = style.lineHeight ?? lineHeight(node.lineSpacing)
-    const leading = multiplier !== undefined ? size * multiplier : size + gap
+    const lineLeading = (size:number) => multiplier !== undefined ? size * multiplier : size + gap
+    const leading = lineLeading(size)
     const trailing = style.spaceAfter ?? paragraphSpaceAfter(node.paragraphSpacing) ?? blockAfter()
     // Keep a template heading with the first line of the following content.
-    if(node.type==="heading")ensure(Math.min(240,wrap(node.runs.map(run=>run.text).join(""),available,size).length*leading+35))
-    type Piece={text:string;font:PDFFont;width:number;underline:boolean;size:number;shift:number;href?:string}
-    let line:Piece[]=[],used=0,marker=node.marker
+    const headingSize=customSize&&runSizes.length?Math.max(...runSizes):size
+    if(node.type==="heading")ensure(Math.min(240,wrap(node.runs.map(run=>run.text).join(""),available,headingSize).length*lineLeading(headingSize)+35))
+    type Piece={text:string;font:PDFFont;width:number;underline:boolean;size:number;baseSize:number;shift:number;href?:string}
+    let line:Piece[]=[],used=0,marker=node.marker,previousSize=customSize?style.fontSize:size
     function flush(){
-      ensure(Math.max(size+7,leading));let x=contentX+indent+(node.align==="center"?(available-used)/2:node.align==="right"?available-used:0)
-      if(marker){page.drawText(marker,{x:contentX+indent-6-font.widthOfTextAtSize(marker,size),y,size,font,color:ink});marker=undefined}
+      const lineSize=customSize&&line.length?Math.max(...line.map(piece=>Math.max(piece.baseSize,piece.size+piece.shift)),...(marker?[markerSize]:[])):size,advance=customSize?lineLeading(lineSize):leading
+      let ascent=customSize?Math.max(0,lineSize-previousSize):0
+      const currentPage=pageIndex;ensure(Math.max(lineSize+7,advance)+ascent)
+      if(customSize&&pageIndex!==currentPage)ascent=Math.max(0,lineSize-style.fontSize)
+      y-=ascent;let x=contentX+indent+(node.align==="center"?(available-used)/2:node.align==="right"?available-used:0)
+      if(marker){page.drawText(marker,{x:contentX+indent-6-font.widthOfTextAtSize(marker,markerSize),y,size:markerSize,font,color:ink});marker=undefined}
       let link: { href:string; x:number; end:number; low:number; high:number } | undefined
       function finishLink(){if(!link)return;const annotation=pdf.context.obj({Type:"Annot",Subtype:"Link",Rect:[link.x,link.low,link.end,link.high],Border:[0,0,0],A:{Type:"Action",S:"URI",URI:PDFString.of(link.href)}});const ref=pdf.context.register(annotation);const annotations=page.node.Annots();if(annotations)annotations.push(ref);else page.node.set(PDFName.of("Annots"),pdf.context.obj([ref]));link=undefined}
       for(const piece of line){
@@ -130,12 +139,12 @@ export async function renderBusinessDocument(document: PrintableDocument, previe
         if(piece.href){if(link?.href!==piece.href)finishLink();if(!link)link={href:piece.href,x,end:x,low:baseline-3,high:baseline+piece.size};link.end=x+piece.width;link.low=Math.min(link.low,baseline-3);link.high=Math.max(link.high,baseline+piece.size)}else finishLink()
         x+=piece.width
       }
-      finishLink();y-=leading;line=[];used=0
+      finishLink();y-=advance;previousSize=lineSize;line=[];used=0
     }
-    function add(text:string,f:PDFFont,underline:boolean,runSize:number,shift:number,href?:string){const w=f.widthOfTextAtSize(text,runSize);line.push({text,font:f,width:w,underline,size:runSize,shift,href});used+=w}
+    function add(text:string,f:PDFFont,underline:boolean,runSize:number,baseSize:number,shift:number,href?:string){const w=f.widthOfTextAtSize(text,runSize);line.push({text,font:f,width:w,underline,size:runSize,baseSize,shift,href});used+=w}
     for(const run of node.runs){
       const f=run.bold||node.type==="heading"?run.italic?variants.BoldItalic:variants.Bold:run.italic?variants.Italic:font
-      const runSize=run.script?size*.7:size,shift=run.script==="super"?size*.35:run.script==="sub"?-size*.2:0
+      const baseSize=run.fontSize??size,runSize=run.script?baseSize*.7:baseSize,shift=run.script==="super"?baseSize*.35:run.script==="sub"?-baseSize*.2:0
       const href=run.href?new URL(documentLinkSchema.parse(run.href)).href:undefined
       const clean=run.text.replace(/\r/g,"").replace(/\t/g," ").replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g,"")
       if([...clean].some(c=>c!=="\n"&&!supported.has(c.codePointAt(0)!)))throw new BusinessError(400,"The PDF font cannot render some characters. Ask your administrator about language support.")
@@ -144,11 +153,11 @@ export async function renderBusinessDocument(document: PrintableDocument, previe
         const w=f.widthOfTextAtSize(word,runSize)
         if(used+w>available&&line.length)flush()
         if(!line.length&&/^\s+$/.test(word))continue
-        if(w<=available){add(word,f,!!run.underline||!!href,runSize,shift,href);continue}
-        for(const char of word){if(used+f.widthOfTextAtSize(char,runSize)>available&&line.length)flush();add(char,f,!!run.underline||!!href,runSize,shift,href)}
+        if(w<=available){add(word,f,!!run.underline||!!href,runSize,baseSize,shift,href);continue}
+        for(const char of word){const charWidth=f.widthOfTextAtSize(char,runSize);if(charWidth>available)throw new BusinessError(400,"Reduce the font size or list indentation for this column.");if(used+charWidth>available&&line.length)flush();add(char,f,!!run.underline||!!href,runSize,baseSize,shift,href)}
       }
     }
-    if(line.length)flush();else if(marker){ensure(size+7);page.drawText(marker,{x:contentX+indent-6-font.widthOfTextAtSize(marker,size),y,size,font,color:ink});y-=leading}else if(style.lineHeight!==undefined||style.spaceAfter!==undefined){ensure(leading);y-=leading}y-=trailing
+    if(line.length)flush();else if(marker){ensure(markerSize+7);page.drawText(marker,{x:contentX+indent-6-font.widthOfTextAtSize(marker,markerSize),y,size:markerSize,font,color:ink});y-=customSize?lineLeading(markerSize):leading}else if(style.lineHeight!==undefined||style.spaceAfter!==undefined){ensure(leading);y-=leading}y-=trailing
   }
   function section(title: string, following=49) { const before=style.spaceAfter!==undefined?0:style.spacing==="compact"?6:10;ensure(before+wrap(title,width,style.fontSize+1).length*textLeading(style.fontSize+1)+blockAfter(3)+following);y-=before;paragraph(title,style.fontSize+1,ink,"left",3); }
   function table(headings: string[], rows: string[][], weights: number[], alignEnd = 0, boldHeader = false) {
