@@ -12,7 +12,7 @@ export function DocumentAppearanceControls({ value, disabled, footerReadOnly = f
   function change<K extends keyof DocumentAppearance>(key: K, next: DocumentAppearance[K]) { onChange({ ...style, [key]: next }) }
   function spacing(key: "lineHeight" | "spaceAfter", next: number | null) { const value={...style};if(next===null)delete value[key];else value[key]=next;onChange(value) }
   function choice<K extends keyof DocumentAppearance>(key: K, label: string, options: [string, string][], numeric = false) {
-    return <FormField id={`pdf-style-${key}`} label={label}><Select id={`pdf-style-${key}`} value={String(style[key])} onValueChange={next => change(key, (numeric ? Number(next) : next) as DocumentAppearance[K])}>{options.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</Select></FormField>
+    return <FormField id={`pdf-style-${key}`} label={label}><Select id={`pdf-style-${key}`} value={String(style[key] ?? 0)} onValueChange={next => change(key, (numeric ? Number(next) : next) as DocumentAppearance[K])}>{options.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</Select></FormField>
   }
   return <div className="min-w-0 space-y-5">
     <div className="flex flex-wrap items-center gap-2 rounded-lg bg-muted/30 px-4 py-3"><label className="flex items-center gap-2 text-sm font-medium"><Checkbox disabled={disabled} checked={!!value} onChange={event => onChange(event.target.checked ? { ...defaultDocumentAppearance } : undefined)} />Customise document styling</label><InfoHelp title="Custom document styling">Enable to adjust text, branding, tables and footer for this template. Leaving this off uses the default PDF appearance. Print-copy availability is configured separately.</InfoHelp></div>
@@ -25,6 +25,7 @@ export function DocumentAppearanceControls({ value, disabled, footerReadOnly = f
         </div></div>
         {choice("margins", "Page margins", [["standard", "Standard"], ["narrow", "Narrow"], ["wide", "Wide"]])}
         {choice("colour", "Document colours", [["navy", "Navy"], ["black", "Black"], ["teal", "Teal"]])}
+        <label className="flex items-center gap-2"><Checkbox checked={!!style.softEmphasis} onChange={event=>change("softEmphasis",event.target.checked)}/>Use softer charcoal for bold text and headings</label>
         {choice("referenceLayout", "Reference and date layout", [["line", "Together"], ["split", "Reference left, date right"]])}
       </fieldset> }, { value: "letterhead", label: "Branding", content: <fieldset disabled={disabled} className="space-y-4"><div className="flex items-center gap-2"><h3 className="text-sm font-medium">Digital PDF branding</h3><InfoHelp title="Digital PDF branding">These settings control the company branding shown in the digital PDF. The print-on-letterhead copy omits automatic company branding and retains the document content.</InfoHelp></div><div className="grid min-w-0 gap-4 sm:grid-cols-2">
         {choice("logoAlign", "Logo alignment", [["left", "Left"], ["center", "Centre"], ["right", "Right"]])}
@@ -33,6 +34,8 @@ export function DocumentAppearanceControls({ value, disabled, footerReadOnly = f
       <div className="grid gap-3 sm:grid-cols-2">{([['companyHeading', 'Show company name above the title'], ['repeatLogo', 'Repeat logo on later pages'], ['watermark', 'Use the selected document logo as a watermark']] as const).map(([key, label]) => <label key={key} className="flex items-start gap-2"><Checkbox checked={style[key]} onChange={event => change(key, event.target.checked)} />{label}</label>)}</div>
       </fieldset> }, { value: "footer", label: "Tables and footer", content: <fieldset disabled={disabled} className="space-y-4">
         {choice("tableStyle", "Table style", [["shaded", "Shaded header"], ["grid", "Bordered grid"], ["minimal", "Minimal lines"]])}
+        <label className="flex items-center gap-2"><Checkbox checked={!!style.boldSignatory} onChange={event=>change("boldSignatory",event.target.checked)}/>Bold company name and signatory in the sign-off</label>
+        {choice("signatoryBlankLines", "Signing space above signatory", [0,1,2,3,4,5,6].map(count=>[String(count),count===0?"Default spacing":`${count} blank ${count===1?"line":"lines"}`]), true)}
         {onCompanyFooterChange&&<label className="flex items-center gap-2"><Checkbox checked={footerReadOnly} onChange={event=>onCompanyFooterChange(event.target.checked)}/>Use company footer</label>}
         <FormField id="pdf-style-footer" label="Repeating footer" error={footerError} help="Up to 300 characters across three text lines. Page numbers and the document reference remain visible. Logo options use the selected document logo; no additional upload is needed."><Textarea id="pdf-style-footer" disabled={footerReadOnly} rows={3} maxLength={300} value={footerReadOnly&&companyFooter!==undefined?companyFooter:style.footer} onChange={event => change("footer", event.target.value)} /></FormField>
       </fieldset> }]} />

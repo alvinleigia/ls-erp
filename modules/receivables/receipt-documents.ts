@@ -2,7 +2,7 @@ import { archivedLetterheadAvailable, type DocumentVariant } from "@/platform/do
 import { resolveCompanyDocumentContent } from "@/platform/companies/document-settings"
 import type { OrderReceipt,Prisma,PrismaClient } from '@prisma/client'
 import { createDocumentService,validateDocumentSize,type DocumentOwner } from '@/platform/documents/service'
-import type { DocumentIdentity,DocumentStorage,DocumentPayload } from '@/platform/documents/contracts'
+import type { DocumentIdentity,DocumentStorage,DocumentPayload,DocumentProvider } from '@/platform/documents/contracts'
 import type { ArchivedPdf } from '@/platform/storage/documents'
 import { salesOrderRecordScope } from '@/platform/access/record-scope'
 import { authorizeBusinessOperation } from '@/platform/access/operation'
@@ -17,12 +17,13 @@ import { businessDate } from '@/lib/business-time'
 import type { OrderDocumentContext } from '@/modules/sales-orders/documents'
 import { paymentReceiptProvider,receiptTemplateValues } from './receipt-template'
 
-export type ReceiptDocumentContext=OrderDocumentContext & {payment:OrderReceipt;allocations:{label:string;amount:string}[]}
+export type ReceiptDocumentContext=OrderDocumentContext & {payment:OrderReceipt;allocations:{lineId:string;label:string;amount:string}[]}
+export type ReceiptFinancialContext=Omit<ReceiptDocumentContext,'allocations'> & {financial:{version:number;total:string;received:string;outstanding:string};allocations:{lineId:string;label:string;amount:string;scheduled:string;paid:string;outstanding:string}[]}
 const json=(value:unknown)=>JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue
 const KEY='payment-receipt'
-export function createReceiptDocumentService(db:PrismaClient,identity:DocumentIdentity,storage:DocumentStorage,render?:Parameters<typeof createDocumentService<ReceiptDocumentContext>>[4]){
+export function createReceiptDocumentService(db:PrismaClient,identity:DocumentIdentity,storage:DocumentStorage,render?:Parameters<typeof createDocumentService<ReceiptDocumentContext>>[4],provider:DocumentProvider<ReceiptDocumentContext>=paymentReceiptProvider){
  const owner:DocumentOwner<ReceiptDocumentContext>={
-  resource:'paymentDocuments',requirements:['salesOrders.read','receivables.read','orderPayments.read'],modules:['salesOrders','receivables'],providers:[paymentReceiptProvider],
+  resource:'paymentDocuments',requirements:['salesOrders.read','receivables.read','orderPayments.read'],modules:['salesOrders','receivables'],providers:[provider],
   async context(tx,actor,id){
    const payment=await tx.orderReceipt.findFirst({where:{tenantId:actor.tenantId,id,account:{order:salesOrderRecordScope(actor,'paymentDocuments')}}})
    if(!payment)throw new BusinessError(404,'Payment not found.')
@@ -31,7 +32,7 @@ export function createReceiptDocumentService(db:PrismaClient,identity:DocumentId
    if(!issuer)throw new BusinessError(404,'The saved issuing office is unavailable.')
    const setting=await tx.appSetting.findFirst({where:{tenantId:actor.tenantId},select:{timeZone:true}}),[{now}]=await tx.$queryRaw<{now:Date}[]>`SELECT clock_timestamp() AS now`
    const rows=await tx.orderReceiptAllocation.findMany({where:{tenantId:actor.tenantId,orderId:order.id,paymentId:id},include:{line:{select:{label:true,position:true}}},orderBy:{line:{position:'asc'}}})
-   return {payment,order,snapshot:order.snapshot as unknown as OrderDocumentContext['snapshot'],...issuer,date:businessDate(now,setting?.timeZone||'UTC'),allocations:rows.map(row=>({label:row.line.label,amount:row.amount.toString()}))}
+   return {payment,order,snapshot:order.snapshot as unknown as OrderDocumentContext['snapshot'],...issuer,date:businessDate(now,setting?.timeZone||'UTC'),allocations:rows.map(row=>({lineId:row.lineId,label:row.line.label,amount:row.amount.toString()}))}
   },
   async lock(tx,tenantId,id){const p=await tx.orderReceipt.findFirstOrThrow({where:{tenantId,id},select:{orderId:true}});await tx.$queryRaw`SELECT id FROM "SalesOrder" WHERE "tenantId"=${tenantId} AND id=${p.orderId} FOR UPDATE`},
   async prepare(tx,actor,c,provider,input){
@@ -61,7 +62,7 @@ export function createReceiptDocumentService(db:PrismaClient,identity:DocumentId
  const service=createDocumentService(db,identity,owner,storage,render)
  return {...service,
   download(id:string,documentId:string,providerKey:string,acknowledgeReversal=false,variant:DocumentVariant="digital"){
-   const guarded={...paymentReceiptProvider,async authorizeDownload(_tx:Prisma.TransactionClient,_actor:Parameters<DocumentOwner<ReceiptDocumentContext>['context']>[1],c:ReceiptDocumentContext){if(c.payment.status==='REVERSED'&&!acknowledgeReversal)throw new BusinessError(409,'This payment was reversed. Explicitly acknowledge that you are downloading an original historical receipt.')}}
+   const guarded={...provider,async authorizeDownload(_tx:Prisma.TransactionClient,_actor:Parameters<DocumentOwner<ReceiptDocumentContext>['context']>[1],c:ReceiptDocumentContext){if(c.payment.status==='REVERSED'&&!acknowledgeReversal)throw new BusinessError(409,'This payment was reversed. Explicitly acknowledge that you are downloading an original historical receipt.')}}
    return createDocumentService(db,identity,{...owner,providers:[guarded]},storage,render).download(id,documentId,providerKey,variant)
   },
   async list(id:string,page=1){return db.$transaction(async tx=>{

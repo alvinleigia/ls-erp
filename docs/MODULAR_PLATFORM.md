@@ -1,3 +1,66 @@
+## P13S configurable document columns - locally verified (2026-11-25)
+
+The existing shared editor now supports one-to-three-column rows containing normal
+wording, headings, dynamic fields and repeating sections. Reducing the count
+preserves all cell content; Single column unwraps in reading order. Section display
+controls provide bold compact labels, optional table headings and right-aligned
+trailing columns. Applicant names remain visible. Required fields/sections are
+validated inside containers; ambiguous property values still fail closed.
+
+The shared PDF renderer continues each column independently on the same pages,
+resumes full-width content below the longest cell and retains repeated table
+headers, full-page branding and protected footers. No new editor library, HTML
+engine, industry-specific renderer or database migration was introduced for
+columns. Existing stored layouts and issued archives are unchanged. The separate
+pending receipt-details migration/application release is still required for its
+new financial facts.
+
+Validation: production build/TypeScript and targeted ESLint passed. The isolated
+receipt/document run passed 102 automated checks plus seven browser flows. A
+further 18 column/quotation checks passed, overlapping seven column tests from
+the full run (113 distinct automated checks in total). Native migration rollback
+and preservation checks passed, including all 183 prior business tables. Desktop
+and mobile editor captures, independent continuation/letterhead pages and the real
+browser receipt PDF were inspected. The private Ewissen draft retains all 11
+saved terms in a one-page sample. No production configuration or business data
+was written; no commit, push or deployment was performed.
+
+Evidence: tmp/industry-release/ls-erp-sales-orders-204c76ac16b5.log;
+tmp/ewissen-receipt-template/columns-quotation-tests.log; test-results/local-access;
+output/pdf/ewissen-payment-receipt-columns-preview.pdf. See
+DOCUMENT_LAYOUT_COLUMNS_P13S.md and RECEIPT_PAYMENT_DETAILS_P13S.md.
+
+## P13S payment allocation and receipt details - locally verified (2026-11-25)
+
+The shared payment flow supports explicit allocations to existing instalment or
+extra-charge lines alongside the existing automatic due-date allocation. Optional
+payer bank and transfer/instrument details are immutable payment facts. Receipts
+capture scheduled amounts, this payment, line balances and the separate total
+order outstanding as of issuance. A later payment/refund invalidates a prepared
+review without rewriting an issued PDF. Real Estate contributes accepted property
+facts through application composition; the receivable module imports no industry
+code and does not query current catalogue values to rebuild accepted facts.
+
+Migration 20261125000100_receipt_payment_details passed forced rollback and exact
+preservation checks for all 183 preceding business tables and existing policies.
+It adds two empty optional payment columns and a native exact-balance evidence
+guard; existing payment/permission/template/document rows remain unchanged.
+The migration and matching application need a coordinated release for new
+receipt issuance. No hosted migration, template publication, commit or push was
+performed in this implementation step.
+
+Validation: production build/TypeScript, targeted ESLint and whitespace checks
+passed. The final isolated run passed 78 document/receivable/access tests and
+six real browser flows, including selected-line allocation, bank details,
+partial receipt issuance, historical/refund downloads, template editor and
+letterhead regressions. Desktop/mobile captures and the real generated receipt
+PDF were inspected. The prepared Ewissen sample retains all 11 saved terms and
+fits one page with compact 9 pt styling; longer records can paginate normally.
+Production remains unchanged. See RECEIPT_PAYMENT_DETAILS_P13S.md. Private
+evidence: tmp/industry-release/ls-erp-sales-orders-94429a472ee5.log and
+tmp/ewissen-receipt-template. Draft output:
+output/pdf/ewissen-payment-receipt-updated-preview.pdf.
+
 ## P13S Bliss Aqua section/phase setup - production verified (2026-11-24)
 
 User-authorized tenant configuration added Bliss Aqua Triangle/BAT as a child

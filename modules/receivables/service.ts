@@ -123,9 +123,11 @@ export function createReceivableService(db: PrismaClient, identity: Pick<Busines
       const data = orderPaymentSchema.parse(input)
       return run(["orderPayments.read", "orderPayments.create"], true, async (tx, actor) => {
         const order = await find(tx, actor, id, true), tenantId = actor.tenantId, amount = new D(data.amount)
+        if(data.allocations && new Set(data.allocations.map(row=>row.lineId)).size!==data.allocations.length)throw new BusinessError(400,"Choose each instalment or charge only once.")
         const existing = await tx.orderReceipt.findUnique({ where: { tenantId_requestKey: { tenantId, requestKey: data.requestKey } } })
         if (existing) {
-          if (existing.orderId !== id || !existing.amount.eq(amount) || iso(existing.receivedOn) !== data.receivedOn || existing.method !== data.method || existing.reference !== data.reference || existing.note !== data.note) throw new BusinessError(409, "This request was already used for a different payment.")
+          if (existing.orderId !== id || !existing.amount.eq(amount) || iso(existing.receivedOn) !== data.receivedOn || existing.method !== data.method || existing.reference !== data.reference || existing.note !== data.note || existing.bankName!==data.bankName || existing.transferType!==data.transferType) throw new BusinessError(409, "This request was already used for a different payment.")
+          if(data.allocations){const saved=await tx.orderReceiptAllocation.findMany({where:{tenantId,paymentId:existing.id}});if(saved.length!==data.allocations.length||data.allocations.some(row=>!saved.some(s=>s.lineId===row.lineId&&s.amount.eq(row.amount))))throw new BusinessError(409,"This request was already used for different payment allocations.")}
           return existing
         }
         const account = await accountForWrite(tx, tenantId, id, order.status, data.version)
@@ -136,14 +138,19 @@ export function createReceivableService(db: PrismaClient, identity: Pick<Busines
         if (referenceKey && await tx.orderReceipt.count({ where: { tenantId, method: data.method, referenceKey, status: "POSTED" } })) throw new BusinessError(409, "This payment reference has already been recorded.")
         const lines = (await balances(tx, tenantId, id)).sort((a, b) => (iso(a.dueOn) || "9999").localeCompare(iso(b.dueOn) || "9999") || a.position - b.position)
         if (amount.gt(lines.reduce((n, l) => n.plus(l.outstanding), new D(0)))) throw new BusinessError(409, "Payment exceeds the outstanding balance.")
-        const row = await tx.orderReceipt.create({ data: { tenantId, orderId: id, requestKey: data.requestKey, amount, receivedOn: date(data.receivedOn), method: data.method, reference: data.reference, referenceKey, note: data.note, createdBy: actor.userId, actorName: await actorName(tx, actor) } })
+        if(data.allocations){
+          let allocated=new D(0)
+          for(const entry of data.allocations){const line=lines.find(row=>row.id===entry.lineId),value=new D(entry.amount);if(!line)throw new BusinessError(400,"Choose an outstanding line from this order.");if(!value.gt(0)||value.decimalPlaces()>digits||value.gt(line.outstanding))throw new BusinessError(400,"Each allocation must be positive and within its outstanding balance and currency precision.");allocated=allocated.plus(value)}
+          if(!allocated.eq(amount))throw new BusinessError(400,"Allocated amounts must equal the payment received.")
+        }
+        const row = await tx.orderReceipt.create({ data: { tenantId, orderId: id, requestKey: data.requestKey, amount, receivedOn: date(data.receivedOn), method: data.method, reference: data.reference, referenceKey, bankName:data.bankName,transferType:data.transferType,note: data.note, createdBy: actor.userId, actorName: await actorName(tx, actor) } })
         let remaining = amount
         for (const line of lines) {
-          const allocated = D.min(remaining, line.outstanding)
+          const allocated = data.allocations ? new D(data.allocations.find(entry=>entry.lineId===line.id)?.amount||0) : D.min(remaining, line.outstanding)
           if (allocated.gt(0)) { await tx.orderReceiptAllocation.create({ data: { tenantId, orderId: id, paymentId: row.id, lineId: line.id, amount: allocated } }); remaining = remaining.minus(allocated) }
         }
         await bump(tx, tenantId, id)
-        await audit(tx, actor, id, "payment.recorded", { paymentId: row.id, amount: amount.toString(), method: data.method, reference: data.reference, receivedOn: data.receivedOn })
+        await audit(tx, actor, id, "payment.recorded", { paymentId: row.id, amount: amount.toString(), method: data.method, reference: data.reference, receivedOn: data.receivedOn,bankName:data.bankName,transferType:data.transferType,allocationMode:data.allocations?'SPECIFIC':'AUTOMATIC',...(data.allocations?{allocations:data.allocations}:{}) })
         return row
       })
     },

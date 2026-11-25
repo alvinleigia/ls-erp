@@ -433,7 +433,7 @@ test("compact section presentation preserves required sections and publishes the
   await page.getByRole("tab", { name: "Content", exact: true }).click()
   const layout = page.getByRole("textbox", { name: "Document layout", exact: true })
   await layout.getByText("Section: Payment schedule", { exact: true }).click()
-  await page.getByLabel("Show table rows in this section as compact labelled details", { exact: true }).check()
+  await page.getByLabel("Compact labelled details", { exact: true }).check()
   await review(page).check(); await publish(page).click()
   const nodes = state.templates[booking].content.layout!.content
   expect(nodes.some(node => node.type === "documentSection" && node.attrs.key === "payment-schedule" && node.attrs.compact)).toBe(true)

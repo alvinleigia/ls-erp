@@ -1,5 +1,29 @@
 # Base Conventions
 
+## Shared document layout columns (P13S)
+
+- Use bounded one-to-three-column rows containing ordinary editor blocks and
+  registered repeating sections. Keep source validation recursive; layouts cannot
+  omit required facts by moving them into a container. Resizing retains content.
+- Keep rendering in the shared PDF service, including independent continuation
+  cursors, full-page branding, repeated table headings and protected footers. No
+  industry-specific renderer or HTML/CSS engine. Presentation never rewrites
+  accepted facts or issued archives. See `DOCUMENT_LAYOUT_COLUMNS_P13S.md`.
+
+## Payment allocation and receipt balances (P13S)
+
+- Reuse receivable schedule lines for payment purposes; do not introduce a
+  free-text payment purpose that bypasses the ledger. Specific allocations must
+  reconcile to the payment and each line's available balance; automatic allocation
+  remains supported. Preserve immutable payment/reversal history and request-key
+  identity, including optional payer bank/transfer details.
+- Freeze and natively validate receipt balances as of issuance, with the account
+  version and exact allocations. Later payment/refund writes invalidate a prepared
+  review but never rewrite an issued PDF. Real Estate supplies accepted property
+  facts through application composition; the shared receipt imports no industry
+  module. Do not fabricate interest or payment discounts. See
+  `RECEIPT_PAYMENT_DETAILS_P13S.md`.
+
 ## Optional catalog pricing (P13S)
 
 - Store an undecided catalog price as null, distinct from an explicit zero. Show

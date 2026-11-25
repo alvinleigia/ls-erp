@@ -22,6 +22,22 @@ const appearance=(style='standard',patch={})=>({...defaultDocumentAppearance,...
 const base=()=>({format:1,title:'BOOKING INTIMATION LETTER',reference:'SAMPLE/BOOKING/001',date:'05 Nov 2026',sourceReference:'SAMPLE-ORDER',company:{id:'example',name:'Example Property Company'},issuer:{address:'Example Office, Goa, India',contact:'',signatory:'Authorised signatory'},opening:'Dear Customer,\nWe welcome you and confirm the saved booking described below.',terms:'Example terms for layout review only.',branding:null,blocks:[{title:'Sample Customer',paragraphs:['Primary applicant','Example address, Goa, India','customer@example.test']},{title:'Sample Additional Customer',paragraphs:['Co-applicant','Example correspondence address']},{title:'Unit details',table:{headings:['Detail','Saved value'],widths:[1,2],rows:[['Project','Example Gardens'],['Unit','PLOT-106'],['Area','277 sq m'],['Booking date','05 Nov 2026']]}}]})
 function capture(t){const calls=[],draw=PDFPage.prototype.drawText;t.mock.method(PDFPage.prototype,'drawText',function(text,options){calls.push({page:this,text,...options});return draw.call(this,text,options)});return calls}
 
+test('two signing lines reserve writing space and keep the sign-off contact on the same page',async t=>{
+ const calls=capture(t),document={...base(),appearance:appearance('letter',{lineHeight:1.1,spaceAfter:1,signatoryBlankLines:2,boldSignatory:true}),issuer:{address:'',contact:'office@example.test',signatory:'Authorised Signatory'},body:[{type:'paragraph',align:'left',runs:[{text:Array.from({length:43},(_,i)=>`BODY_${i}`).join('\n')}]}]}
+ await renderBusinessDocument(document,true)
+ const name=calls.find(row=>row.text===document.company.name),signatory=calls.find(row=>row.text==='Authorised Signatory'),contact=calls.find(row=>row.text==='office@example.test')
+ assert.equal(name.page,signatory.page);assert.equal(signatory.page,contact.page);assert(Math.abs(name.y-signatory.y-36)<.01);assert(contact.y>70)
+ for(const count of [-1,1.5,7])assert.equal(documentAppearanceSchema.safeParse({...document.appearance,signatoryBlankLines:count}).success,false)
+})
+
+test('soft emphasis preserves bold fonts with charcoal ink and an opt-in bold company/signatory',async t=>{
+ const calls=capture(t),document={...base(),appearance:appearance('letter',{softEmphasis:true,boldSignatory:true}),body:[{type:'paragraph',align:'left',runs:[{text:'Label: ',bold:true},{text:'Regular value'}]}]}
+ const before=JSON.stringify(document);await renderBusinessDocument(document,true);assert.equal(JSON.stringify(document),before)
+ for(const text of ['Label:',document.company.name,document.issuer.signatory]){const row=calls.find(row=>row.text.trim()===text);assert(row,text);assert(row.font.name.includes('Bold'));assert.deepEqual(row.color,{type:'RGB',red:.3,green:.3,blue:.3})}
+ const value=calls.find(row=>row.text==='Regular');assert(!value.font.name.includes('Bold'));assert.deepEqual(value.color,{type:'RGB',red:.08,green:.08,blue:.08})
+ const name=calls.find(row=>row.text===document.company.name),signatory=calls.find(row=>row.text===document.issuer.signatory);assert.equal(name.page,signatory.page);assert(name.y>signatory.y);assert(signatory.y>70)
+})
+
 test('inline wording retains PDF geometry and underline/rules render above protected footers',async t=>{
  const {inlineDocumentWording}=require('../platform/documents/layout.ts'),layout=starterDocumentLayout(orderTemplateCatalog),content={...orderAcknowledgement.defaults,opening:'Welcome customer.\n\nA second paragraph.',terms:'Terms remain literal.'},calls=capture(t)
  const original=sampleDocument({...content,layout},orderTemplateCatalog,{id:'qa',name:'QA Company'})

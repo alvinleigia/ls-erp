@@ -8,7 +8,7 @@ import type { DocumentPayload } from "./contracts"
 import type { PrintableDocument } from "./contracts"
 import QRCode from "qrcode"
 import type { DocumentFlow } from "./layout"
-import { documentLinkSchema } from "./layout"
+import { documentLinkSchema, documentFlowNodes } from "./layout"
 import { defaultDocumentAppearance, documentAppearanceSchema } from "./appearance"
 import type { DocumentVariant } from "./letterhead"
 import { brandingLayer, letterheadPdf, markLetterheadPdf } from "./letterhead-pdf"
@@ -33,19 +33,25 @@ export async function renderBusinessDocument(document: PrintableDocument, previe
   const font = await pdf.embedFont(await fontBytes("Regular"), { subset: true })
   const variants: Record<string,PDFFont> = { regular:font }
   const requiredFonts = new Set<string>()
-  for (const node of document.body ?? []) if ("runs" in node) for (const run of node.runs) {
+  if(style.boldSignatory&&document.showSignatory!==false)requiredFonts.add("Bold")
+  for (const node of documentFlowNodes(document.body ?? [])) {
+    if (node.type === "section" && (node.boldLabels || node.boldHeader)) requiredFonts.add("Bold")
+    if ("runs" in node) for (const run of node.runs) {
     const bold = run.bold || node.type === "heading"
     if (bold || run.italic) requiredFonts.add(bold ? run.italic ? "BoldItalic" : "Bold" : "Italic")
   }
+  }
   for (const name of requiredFonts) variants[name] = await pdf.embedFont(await fontBytes(name), { subset: true })
   const supported = new Set(font.getCharacterSet()), ink = style.colour === "black" ? rgb(.08,.08,.08) : style.colour === "teal" ? rgb(.04,.28,.3) : rgb(.1,.15,.2), muted = style.colour === "black" ? rgb(.3,.3,.3) : rgb(.36,.4,.44), pale = style.colour === "black" ? rgb(.95,.95,.95) : rgb(.94,.96,.97)
-  const margin = { standard: 42, narrow: 32, wide: 54 }[style.margins], width = 595 - margin * 2, pageTop = 842 - margin - 5, top = profile ? Math.min(pageTop,842-profile.topMm*72/25.4) : pageTop
+  const emphasisInk = style.softEmphasis ? rgb(.3,.3,.3) : ink
+  const margin = { standard: 42, narrow: 32, wide: 54 }[style.margins], fullWidth = 595 - margin * 2, pageTop = 842 - margin - 5, top = profile ? Math.min(pageTop,842-profile.topMm*72/25.4) : pageTop
   const gap = style.spacing === "compact" ? 3 : 6, after = style.spacing === "compact" ? 6 : 9
   const textLeading = (size: number) => style.lineHeight !== undefined ? size * style.lineHeight : size + gap
   const blockAfter = (fallback = after) => style.spaceAfter ?? fallback
   const tableSize = style.fontSize - 1, tableLeading = style.lineHeight !== undefined ? tableSize * style.lineHeight : tableSize + (style.spacing === "compact" ? 3 : 5), padding = style.spacing === "compact" ? 8 : 12
+  let width = fullWidth, contentX = margin, pageIndex = 0
   let page = pdf.addPage([595,842]), y = pageTop, logo: PDFImage | undefined, brandingDepth = 0
-  const pages = [page]
+  const pages = [page], pageStarts = [pageTop]
   const beginBranding = (p: PDFPage) => p.pushOperators(PDFOperator.of(PDFOperatorNames.BeginMarkedContent,[brandingLayer]))
   const endBranding = (p: PDFPage) => p.pushOperators(PDFOperator.of(PDFOperatorNames.EndMarkedContent))
   function branding(operation: () => void) { if (!profile) return operation(); const first = brandingDepth++ === 0; if(first)beginBranding(page);try{operation()}finally{brandingDepth--;if(first)endBranding(page)} }
@@ -63,9 +69,21 @@ export async function renderBusinessDocument(document: PrintableDocument, previe
     const scaled = logo.scale(Math.min(300/logo.width,160/logo.height))
     branding(()=>page.drawImage(logo!,{x:(595-scaled.width)/2,y:(842-scaled.height)/2,width:scaled.width,height:scaled.height,opacity:.035}))
   }
-  function nextPage() { if (pages.length >= 100) throw new BusinessError(413, "This document exceeds 100 pages. Shorten the template or saved details.");if(profile&&brandingDepth)endBranding(page); page = pdf.addPage([595,842]); pages.push(page); y = pageTop;if(profile&&brandingDepth)beginBranding(page); watermark(); if(style.repeatLogo)drawLogo();if(profile){if(y<top)throw new BusinessError(400,"Increase the reserved header space to fit the company logo.");y=top} }
+  function nextPage() {
+    if(profile&&brandingDepth)endBranding(page)
+    pageIndex++
+    if (pages[pageIndex]) { page=pages[pageIndex]; y=pageStarts[pageIndex]; if(profile&&brandingDepth)beginBranding(page); return }
+    if (pages.length >= 100) throw new BusinessError(413, "This document exceeds 100 pages. Shorten the template or saved details.")
+    page = pdf.addPage([595,842]); pages.push(page); y = pageTop
+    if(profile&&brandingDepth)beginBranding(page)
+    // Page branding always uses the full page, including pages created in a column.
+    const savedWidth=width; width=fullWidth
+    try { watermark(); if(style.repeatLogo)drawLogo(); if(profile){if(y<top)throw new BusinessError(400,"Increase the reserved header space to fit the company logo.");y=top} }
+    finally { width=savedWidth }
+    pageStarts[pageIndex]=y
+  }
   function ensure(height: number) { if (y-height < bottom) nextPage() }
-  function wrap(value: string, maxWidth: number, size = style.fontSize) {
+  function wrap(value: string, maxWidth: number, size = style.fontSize, face = font) {
     const rows: string[] = []
     const clean = value.replace(/\r/g,"").replace(/\t/g," ").replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g,"")
     if ([...clean].some(c => c !== "\n" && !supported.has(c.codePointAt(0)!))) throw new BusinessError(400, "The PDF font cannot render some characters. Ask your administrator about language support.")
@@ -73,9 +91,9 @@ export async function renderBusinessDocument(document: PrintableDocument, previe
       let row = ""
       for (const word of paragraph.split(/\s+/)) {
         const candidate = row ? `${row} ${word}` : word
-        if (font.widthOfTextAtSize(candidate,size) <= maxWidth) { row = candidate; continue }
+        if (face.widthOfTextAtSize(candidate,size) <= maxWidth) { row = candidate; continue }
         if (row) rows.push(row); row = ""
-        for (const char of word) { if (row && font.widthOfTextAtSize(row+char,size)>maxWidth) { rows.push(row); row="" }; row+=char }
+        for (const char of word) { if (row && face.widthOfTextAtSize(row+char,size)>maxWidth) { rows.push(row); row="" }; row+=char }
       }
       rows.push(row)
     }
@@ -85,9 +103,12 @@ export async function renderBusinessDocument(document: PrintableDocument, previe
   if (footerLines.length > 6) throw new BusinessError(400,"The footer is too long for these margins. Shorten it before previewing.")
   const pageLabelY = profile ? Math.max(profile.bottomMm*72/25.4+4, footerLines.length ? footerLines.length*10+64 : 34) : 34
   const bottom = Math.max(margin+23, footerLines.length ? footerLines.length*10+64 : 0, profile ? pageLabelY+16 : 0)
-  function paragraph(value: string, size = style.fontSize, color = ink, align: "left" | "center" | "right" = "left", trailing = after) { if (!value) return; for (const line of wrap(value,width,size)) { if(!line){const blank=style.lineHeight!==undefined||style.spaceAfter!==undefined?textLeading(size):blockAfter();ensure(blank);y-=blank;continue}ensure(Math.max(size+7,textLeading(size))); const used=font.widthOfTextAtSize(line,size),x=margin+(align==="center"?(width-used)/2:align==="right"?width-used:0);page.drawText(line,{x,y,size,font,color}); y-=textLeading(size) }; y-=blockAfter(trailing) }
+  function paragraph(value: string, size = style.fontSize, color = ink, align: "left" | "center" | "right" = "left", trailing = after, face = font) { if (!value) return; for (const line of wrap(value,width,size,face)) { if(!line){const blank=style.lineHeight!==undefined||style.spaceAfter!==undefined?textLeading(size):blockAfter();ensure(blank);y-=blank;continue}ensure(Math.max(size+7,textLeading(size))); const used=face.widthOfTextAtSize(line,size),x=contentX+(align==="center"?(width-used)/2:align==="right"?width-used:0);page.drawText(line,{x,y,size,font:face,color}); y-=textLeading(size) }; y-=blockAfter(trailing) }
   function formatted(node:Extract<DocumentFlow[number],{runs:unknown}>) {
     const size=node.type==="heading"?headingFontSize(style.fontSize,node.level??2):style.fontSize
+    // A large summary value needs ascent above its baseline after a small label.
+    // Keep existing full-width document geometry unchanged.
+    if(width<fullWidth&&node.type==="heading")y-=Math.max(0,size-style.fontSize)
     const indent = (node.indent ?? 0) * 24 + (node.marker ? Math.max(0,font.widthOfTextAtSize(node.marker,size)+6-24) : 0), available = width - indent
     const multiplier = style.lineHeight ?? lineHeight(node.lineSpacing)
     const leading = multiplier !== undefined ? size * multiplier : size + gap
@@ -97,14 +118,15 @@ export async function renderBusinessDocument(document: PrintableDocument, previe
     type Piece={text:string;font:PDFFont;width:number;underline:boolean;size:number;shift:number;href?:string}
     let line:Piece[]=[],used=0,marker=node.marker
     function flush(){
-      ensure(Math.max(size+7,leading));let x=margin+indent+(node.align==="center"?(available-used)/2:node.align==="right"?available-used:0)
-      if(marker){page.drawText(marker,{x:margin+indent-6-font.widthOfTextAtSize(marker,size),y,size,font,color:ink});marker=undefined}
+      ensure(Math.max(size+7,leading));let x=contentX+indent+(node.align==="center"?(available-used)/2:node.align==="right"?available-used:0)
+      if(marker){page.drawText(marker,{x:contentX+indent-6-font.widthOfTextAtSize(marker,size),y,size,font,color:ink});marker=undefined}
       let link: { href:string; x:number; end:number; low:number; high:number } | undefined
       function finishLink(){if(!link)return;const annotation=pdf.context.obj({Type:"Annot",Subtype:"Link",Rect:[link.x,link.low,link.end,link.high],Border:[0,0,0],A:{Type:"Action",S:"URI",URI:PDFString.of(link.href)}});const ref=pdf.context.register(annotation);const annotations=page.node.Annots();if(annotations)annotations.push(ref);else page.node.set(PDFName.of("Annots"),pdf.context.obj([ref]));link=undefined}
       for(const piece of line){
         const baseline=y+piece.shift
-        page.drawText(piece.text,{x,y:baseline,size:piece.size,font:piece.font,color:ink})
-        if(piece.underline&&piece.width)page.drawLine({start:{x,y:baseline-2},end:{x:x+piece.width,y:baseline-2},thickness:Math.max(.5,piece.size/18),color:ink})
+        const runInk=piece.font===variants.Bold||piece.font===variants.BoldItalic?emphasisInk:ink
+        page.drawText(piece.text,{x,y:baseline,size:piece.size,font:piece.font,color:runInk})
+        if(piece.underline&&piece.width)page.drawLine({start:{x,y:baseline-2},end:{x:x+piece.width,y:baseline-2},thickness:Math.max(.5,piece.size/18),color:runInk})
         if(piece.href){if(link?.href!==piece.href)finishLink();if(!link)link={href:piece.href,x,end:x,low:baseline-3,high:baseline+piece.size};link.end=x+piece.width;link.low=Math.min(link.low,baseline-3);link.high=Math.max(link.high,baseline+piece.size)}else finishLink()
         x+=piece.width
       }
@@ -126,20 +148,21 @@ export async function renderBusinessDocument(document: PrintableDocument, previe
         for(const char of word){if(used+f.widthOfTextAtSize(char,runSize)>available&&line.length)flush();add(char,f,!!run.underline||!!href,runSize,shift,href)}
       }
     }
-    if(line.length)flush();else if(marker){ensure(size+7);page.drawText(marker,{x:margin+indent-6-font.widthOfTextAtSize(marker,size),y,size,font,color:ink});y-=leading}else if(style.lineHeight!==undefined||style.spaceAfter!==undefined){ensure(leading);y-=leading}y-=trailing
+    if(line.length)flush();else if(marker){ensure(size+7);page.drawText(marker,{x:contentX+indent-6-font.widthOfTextAtSize(marker,size),y,size,font,color:ink});y-=leading}else if(style.lineHeight!==undefined||style.spaceAfter!==undefined){ensure(leading);y-=leading}y-=trailing
   }
   function section(title: string, following=49) { const before=style.spaceAfter!==undefined?0:style.spacing==="compact"?6:10;ensure(before+wrap(title,width,style.fontSize+1).length*textLeading(style.fontSize+1)+blockAfter(3)+following);y-=before;paragraph(title,style.fontSize+1,ink,"left",3); }
-  function table(headings: string[], rows: string[][], weights: number[]) {
+  function table(headings: string[], rows: string[][], weights: number[], alignEnd = 0, boldHeader = false) {
     if (!headings.length || headings.length !== weights.length || weights.some(value => value <= 0) || rows.some(row => row.length !== headings.length)) throw new Error("Invalid document table")
-    const total = weights.reduce((a,b)=>a+b,0), widths = weights.map(value=>width*value/total)
+    const total = weights.reduce((a,b)=>a+b,0), widths = weights.map(value=>width*value/total), headerFont = boldHeader ? variants.Bold : font
     function cells(lines: string[][], header: boolean) {
       const height = Math.max(...lines.map(value=>value.length),1)*tableLeading+padding
-      if (header && style.tableStyle === "shaded") page.drawRectangle({x:margin,y:y-height+8,width,height,color:pale})
-      let x=margin
-      lines.forEach((cell,index)=>{ cell.forEach((line,i)=>page.drawText(line,{x:x+6,y:y-i*tableLeading-4,size:tableSize,font,color:header?muted:ink})); if(style.tableStyle==="grid")page.drawRectangle({x,y:y-height+8,width:widths[index],height,borderColor:muted,borderWidth:.4});x+=widths[index] })
-      y-=height;if(style.tableStyle!=="grid")page.drawLine({start:{x:margin,y:y+7},end:{x:margin+width,y:y+7},color:rgb(.85,.88,.9),thickness:.4})
+      if (header && style.tableStyle === "shaded") page.drawRectangle({x:contentX,y:y-height+8,width,height,color:pale})
+      let x=contentX
+      const cellFont=header?headerFont:font
+      lines.forEach((cell,index)=>{ cell.forEach((line,i)=>page.drawText(line,{x:alignEnd && index>=lines.length-alignEnd ? x+widths[index]-6-cellFont.widthOfTextAtSize(line,tableSize) : x+6,y:y-i*tableLeading-4,size:tableSize,font:cellFont,color:header?(boldHeader?emphasisInk:muted):ink})); if(style.tableStyle==="grid")page.drawRectangle({x,y:y-height+8,width:widths[index],height,borderColor:muted,borderWidth:.4});x+=widths[index] })
+      y-=height;if(style.tableStyle!=="grid")page.drawLine({start:{x:contentX,y:y+7},end:{x:contentX+width,y:y+7},color:rgb(.85,.88,.9),thickness:.4})
     }
-    const headers = headings.map((value,i)=>wrap(value,widths[i]-12,tableSize)), headerHeight = Math.max(...headers.map(lines=>lines.length))*tableLeading+padding
+    const headers = headings.map((value,i)=>wrap(value,widths[i]-12,tableSize,headerFont)), headerHeight = Math.max(...headers.map(lines=>lines.length))*tableLeading+padding
     const freshTop = top - (style.repeatLogo && logo && !profile ? logoHeight+13 : 0)
     if(headerHeight+tableLeading+padding>freshTop-bottom)throw new BusinessError(413,"Table headings are too tall. Shorten them or use compact details.")
     const firstLines=rows[0]?.map((value,i)=>wrap(value,widths[i]-12,tableSize).length)??[1]
@@ -163,7 +186,7 @@ export async function renderBusinessDocument(document: PrintableDocument, previe
   watermark();drawLogo()
   if(style.companyHeading)branding(()=>paragraph(document.company.name,style.fontSize+7))
   if(profile){if(document.issuer.address)branding(()=>paragraph(document.issuer.address,9,muted));if(y<top)throw new BusinessError(400,"Increase the reserved header space or shorten the company's digital header before previewing.");y=top}
-  const inlineTitle = document.body?.some(node => "runs" in node && node.documentTitle)
+  const inlineTitle = documentFlowNodes(document.body ?? []).some(node => "runs" in node && node.documentTitle)
   const leadingTitle = document.body?.[0]
   if (inlineTitle && leadingTitle && "runs" in leadingTitle && leadingTitle.documentTitle) formatted(leadingTitle)
   else if (!inlineTitle) paragraph(document.title,style.titleSize,ink,style.titleAlign)
@@ -173,19 +196,48 @@ export async function renderBusinessDocument(document: PrintableDocument, previe
   }else paragraph(`${document.reference} | ${document.date}`,9,muted)
   if (preview) paragraph("DRAFT PREVIEW - NOT ISSUED",10,muted)
   if (document.issuer.address && !profile) paragraph(document.issuer.address,9,muted)
-  async function drawBlocks(blocks:DocumentPayload["blocks"],compact=false){for (const block of blocks) {
+  async function drawBlocks(blocks:DocumentPayload["blocks"],compact=false, options: {hideTitle?:boolean;boldLabels?:boolean;boldHeader?:boolean;alignEnd?:number}={}){for (const block of blocks) {
     let following=49
     if(block.table&&!block.paragraphs?.length&&!compact){const t=block.table,total=t.widths.reduce((a,b)=>a+b,0),count=(row:string[])=>Math.max(...row.map((value,i)=>wrap(value,width*t.widths[i]/total-12,tableSize).length),1);following=Math.min(240,(count(t.headings)+count(t.rows[0]??t.headings))*tableLeading+30)}
-    section(block.title,following);for (const text of block.paragraphs??[]) paragraph(text,style.fontSize,ink,"left",compact?2:after);if (block.table) {
-      if(compact){const t=block.table;for(const row of t.rows)paragraph(row.length===2?`${row[0]}: ${row[1]}`:row.map((cell,i)=>`${t.headings[i]}: ${cell}`).join(" | "),style.fontSize,ink,"left",2);if(!t.rows.length)paragraph(t.headings.join(" | "))}
-      else table(block.table.headings,block.table.rows,block.table.widths)
+    if(!options.hideTitle||!block.table)section(block.title,following);for (const text of block.paragraphs??[]) paragraph(text,style.fontSize,ink,"left",compact?2:after);if (block.table) {
+      if(compact){const t=block.table;for(const row of t.rows){
+        if(row.length===2&&options.boldLabels)formatted({type:"paragraph",align:"left",runs:[{text:`${row[0]}: `,bold:true},{text:row[1]}]})
+        else paragraph(row.length===2?`${row[0]}: ${row[1]}`:row.map((cell,i)=>`${t.headings[i]}: ${cell}`).join(" | "),style.fontSize,ink,"left",2)
+      };if(!t.rows.length)paragraph(t.headings.join(" | "))}
+      else table(block.table.headings,block.table.rows,block.table.widths,options.alignEnd,options.boldHeader)
     }
     if(compact && style.spaceAfter===undefined)y-=after-2
-    if(block.qrCode){if(block.qrCode.length>1000||!/^https?:\/\//.test(block.qrCode))throw new BusinessError(400,"Invalid document registration link.");ensure(90);const image=await pdf.embedPng(await QRCode.toBuffer(block.qrCode,{width:240,margin:2,errorCorrectionLevel:'M'}));page.drawImage(image,{x:margin,y:y-80,width:80,height:80});y-=92}
+    if(block.qrCode){if(block.qrCode.length>1000||!/^https?:\/\//.test(block.qrCode))throw new BusinessError(400,"Invalid document registration link.");ensure(90);const image=await pdf.embedPng(await QRCode.toBuffer(block.qrCode,{width:240,margin:2,errorCorrectionLevel:'M'}));page.drawImage(image,{x:contentX,y:y-80,width:80,height:80});y-=92}
   }}
-  if(document.body){for(const [index,node] of document.body.entries()){if(index===0&&"runs" in node&&node.documentTitle)continue;if(node.type==="section")await drawBlocks(node.blocks,node.compact);else if(node.type==="pageBreak")nextPage();else if(node.type==="rule"){ensure(20);y-=6;page.drawLine({start:{x:margin,y},end:{x:margin+width,y},thickness:.6,color:muted});y-=14}else formatted(node)}}
+  async function drawFlow(nodes:DocumentFlow) {
+    for(const node of nodes) {
+      if(node.type==="columns") {
+        if(node.columns.length<1||node.columns.length>3||node.columns.some(column=>column.some(child=>child.type==="columns")))throw new BusinessError(400,"Use one to three columns without nested rows.")
+        ensure(65)
+        const startPage=pageIndex,startY=y,savedX=contentX,savedWidth=width,columnGap=18
+        const columnWidth=(savedWidth-columnGap*(node.columns.length-1))/node.columns.length
+        let endPage=startPage,endY=startY
+        for(const [index,column] of node.columns.entries()) {
+          pageIndex=startPage;page=pages[pageIndex];y=startY;contentX=savedX+index*(columnWidth+columnGap);width=columnWidth
+          await drawFlow(column)
+          if(pageIndex>endPage || pageIndex===endPage&&y<endY){endPage=pageIndex;endY=y}
+        }
+        contentX=savedX;width=savedWidth;pageIndex=endPage;page=pages[pageIndex];y=endY-blockAfter()
+      }else if(node.type==="section")await drawBlocks(node.blocks,node.compact,node)
+      else if(node.type==="pageBreak")nextPage()
+      else if(node.type==="rule"){ensure(20);y-=6;page.drawLine({start:{x:contentX,y},end:{x:contentX+width,y},thickness:.6,color:muted});y-=14}
+      else formatted(node)
+    }
+  }
+  if(document.body)await drawFlow(leadingTitle&&"runs" in leadingTitle&&leadingTitle.documentTitle?document.body.slice(1):document.body)
   else{paragraph(document.opening);await drawBlocks(document.blocks);if (document.terms) { section("Terms and notes");paragraph(document.terms) }}
-  if(document.showSignatory!==false){const contactHeight=document.issuer.contact?wrap(document.issuer.contact,width,9).length*textLeading(9)+blockAfter():0;const height=6+textLeading(9)+blockAfter(3)+(wrap(document.company.name,width).length+wrap(document.issuer.signatory,width).length)*textLeading(style.fontSize)+blockAfter()*2+12+contactHeight;ensure(height);y-=6;paragraph("Issued by",9,muted,"left",3);paragraph(document.company.name);y-=12;paragraph(document.issuer.signatory)}
+  if(document.showSignatory!==false){
+    const signatoryFont=style.boldSignatory?variants.Bold:font,signatoryInk=style.boldSignatory?emphasisInk:ink
+    const contactHeight=document.issuer.contact?wrap(document.issuer.contact,width,9).length*textLeading(9)+blockAfter()+(style.signatoryBlankLines?Math.max(0,16-textLeading(9)):0):0
+    const signatureGap=style.signatoryBlankLines ? style.signatoryBlankLines*(textLeading(style.fontSize)+blockAfter()) : 12
+    const height=6+textLeading(9)+blockAfter(3)+(wrap(document.company.name,width,style.fontSize,signatoryFont).length+wrap(document.issuer.signatory,width,style.fontSize,signatoryFont).length)*textLeading(style.fontSize)+blockAfter()*2+signatureGap+contactHeight
+    ensure(height);y-=6;paragraph("Issued by",9,muted,"left",3);paragraph(document.company.name,style.fontSize,signatoryInk,"left",after,signatoryFont);y-=signatureGap;paragraph(document.issuer.signatory,style.fontSize,signatoryInk,"left",after,signatoryFont)
+  }
   if (document.issuer.contact) branding(()=>paragraph(document.issuer.contact,9,muted))
   if(document.notice)paragraph(document.notice,9,muted)
   pages.forEach((p,i)=>{

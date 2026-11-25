@@ -2875,6 +2875,8 @@ model OrderReceipt {
   method String
   reference String @default("")
   referenceKey String @default("")
+  bankName String @default("")
+  transferType String @default("")
   note String @default("")
   status String @default("POSTED")
   createdAt DateTime @default(now())

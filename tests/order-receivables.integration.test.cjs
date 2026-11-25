@@ -101,6 +101,26 @@ test('pending charges block opening; draft orders and malformed schedules are de
  const q=await quote(),draft=await orders.create({quotationId:q.id,revision:1});await assert.rejects(svc().open(draft.id,{dueDates:[null]}),status(409))
  const confirmed=await fresh();await assert.rejects(svc().open(confirmed,{dueDates:[null,null]}),status(400))
 })
+
+test('specific instalment and PLC allocations preserve totals, retries, refund and financial scope',async()=>{
+ const id=await opened({instalments:[{label:'Booking',percent:'50',days:0,note:''},{label:'Final',percent:'50',days:10,note:''}],charges:[{label:'PLC',kind:'FIXED',value:'20',basis:'BASE',included:false,due:'',group:''}]})
+ const state=await svc().get(id),plc=state.lines.find(l=>l.label==='PLC'),final=state.lines.find(l=>l.label==='Final'),input=pay({amount:'30',bankName:'Example Bank',transferType:'NEFT',allocations:[{lineId:plc.id,amount:'20'},{lineId:final.id,amount:'10'}]})
+ const saved=await svc().record(id,input);assert.equal(saved.bankName,'Example Bank');assert.equal(saved.transferType,'NEFT')
+ assert.equal((await svc().record(id,input)).id,saved.id)
+ const after=await svc().get(id);assert.deepEqual(after.lines.map(l=>String(l.paid)),['0','10','20']);assert.equal(String(after.outstanding),'290.38')
+ await assert.rejects(svc().record(id,{...input,allocations:[{lineId:final.id,amount:'30'}]}),status(409))
+ await assert.rejects(svc().record(id,{...input,bankName:'Changed Bank'}),status(409))
+ await assert.rejects(root.orderReceipt.update({where:{tenantId_id:{tenantId:tenant,id:saved.id}},data:{bankName:'Changed'}}),/immutable/)
+ await svc().reverse(id,saved.id,reverse({kind:'REFUND',reference:'QA-refund',version:2}))
+ assert.equal(String((await svc().get(id)).outstanding),'320.38')
+})
+
+test('selected allocation validation rejects wrong orders, duplicates, excess, zero, precision and mismatched totals atomically',async()=>{
+ const id=await opened(),otherId=await opened(),line=(await svc().get(id)).lines[0],otherLine=(await svc().get(otherId)).lines[0]
+ for(const allocations of [[{lineId:otherLine.id,amount:'10'}],[{lineId:line.id,amount:'10'},{lineId:line.id,amount:'10'}],[{lineId:line.id,amount:'0'}],[{lineId:line.id,amount:'1000'}],[{lineId:line.id,amount:'10.001'}],[{lineId:line.id,amount:'9'}]])await assert.rejects(svc().record(id,pay({amount:'10',allocations})),e=>[400,409].includes(e.status))
+ await assert.rejects(async()=>svc().record(id,pay({transferType:'NEFT',method:'CASH'})))
+ assert.equal((await svc().get(id)).total,0);assert.equal((await svc().get(id)).account.version,1)
+})
 test('duplicate requests are idempotent; altered payload, duplicate reference, precision and overpayment rejected',async()=>{
  const id=await opened(),input=pay(),rows=await Promise.all([svc().record(id,input),svc().record(id,input)])
  assert.equal(rows[0].id,rows[1].id);assert.equal(await root.orderReceipt.count({where:{tenantId:tenant,orderId:id}}),1)

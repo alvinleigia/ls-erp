@@ -1599,7 +1599,10 @@ export const orderPaymentSchema = z.object({
   amount: z.string().regex(/^\d{1,12}(\.\d{1,4})?$/, "Enter an amount with up to four decimal places."),
   receivedOn: z.iso.date(), method: z.enum(["BANK_TRANSFER", "UPI", "CARD", "CASH", "CHEQUE", "OTHER"]),
   reference: z.string().trim().max(120).default(""), note: z.string().trim().max(2000).default(""),
+  bankName: z.string().trim().max(200).default(""), transferType: z.enum(["", "NEFT", "RTGS", "IMPS", "WIRE", "DD"]).default(""),
+  allocations: z.array(z.object({lineId:z.string().trim().min(1).max(200),amount:z.string().regex(/^\d{1,12}(\.\d{1,4})?$/)}).strict()).min(1).max(60).optional(),
 }).strict().refine(data => data.method === "CASH" || !!data.reference, { path: ["reference"], message: "Enter the payment reference." })
+  .refine(data=>!data.transferType || (data.method==="BANK_TRANSFER" && data.transferType!=="DD") || (data.method==="CHEQUE" && data.transferType==="DD"),{path:["transferType"],message:"Choose a transfer type matching the payment method."})
 export const orderPaymentReversalSchema = z.object({
   requestKey: z.uuid(), version: z.number().int().positive(), kind: z.enum(["CORRECTION", "REFUND"]),
   reason: z.string().trim().min(1).max(2000), effectiveOn: z.iso.date(), reference: z.string().trim().max(120).default(""),

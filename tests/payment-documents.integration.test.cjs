@@ -38,7 +38,7 @@ after(async()=>{await Promise.all(clients.map(c=>c.$disconnect()));await Promise
 test('partial-payment source uses frozen customers, exact paid amount and allocations without changing ledger or consuming a number',async()=>{
  const f=await fixture(),s=docs(),before=await finance.get(f.order.id),count=await root.orderReceiptDocument.count({where:{tenantId:tenant}}),counter=await root.receiptDocumentSequence.findUnique({where:{tenantId:tenant}})
  const p=await s.prepare(f.payment.id,{providerKey:'payment-receipt'});assert.equal(p.evidence.amount,'30');assert.equal(p.evidence.currency,'INR');assert.deepEqual(p.evidence.allocations.map(r=>r.amount),['20','10']);assert.match(p.payload.body[0].runs.map(r=>r.text).join(''),/QA Accepted Customer/)
- assert(!JSON.stringify(p.payload).includes('Internal note'));assert(!JSON.stringify(p.payload).includes('outstanding'))
+ assert(!JSON.stringify(p.payload).includes('Internal note'));assert.equal(p.evidence.financial.outstanding,'70');assert.deepEqual(p.evidence.allocations.map(r=>r.outstanding),['0','70'])
  await s.preview(f.payment.id,{providerKey:'payment-receipt',previewHash:p.fingerprint});assert.equal(await root.orderReceiptDocument.count({where:{tenantId:tenant}}),count);assert.deepEqual(await root.receiptDocumentSequence.findUnique({where:{tenantId:tenant}}),counter)
  const after=await finance.get(f.order.id);assert.equal(after.paid.toString(),before.paid.toString());assert.equal(after.account.version,before.account.version)
  await assert.rejects(s.prepare(f.payment.id,{providerKey:'real-estate.unit-allotment'}),status(400));await assert.rejects(s.prepare('missing',{providerKey:'payment-receipt'}),status(404))
@@ -66,6 +66,25 @@ test('payment reversal during rendering invalidates the prepared facts and remov
  const f=await fixture(),base=docs(),p=await base.prepare(f.payment.id,{providerKey:'payment-receipt'}),before=calls.removed
  const s=docs(admin,{render:async()=>{const state=await finance.get(f.order.id);await finance.reverse(f.order.id,f.payment.id,{requestKey:randomUUID(),version:state.account.version,kind:'CORRECTION',reason:'QA correction',reference:'',effectiveOn:'2026-01-01'});return Buffer.from('%PDF-race')}})
  await assert.rejects(s.issue(f.payment.id,request(p)),status(409));assert.equal(await root.orderReceiptDocument.count({where:{tenantId:tenant,paymentId:f.payment.id}}),0);assert.equal(calls.removed,before+1)
+})
+
+test('receipt balances freeze at issuance; a later payment preserves the archived original and invalidates an older preview',async()=>{
+ const f=await fixture(),s=docs(),p=await s.prepare(f.payment.id,{providerKey:'payment-receipt'}),issued=await s.issue(f.payment.id,request(p)),original=Buffer.from(objects.get(issued.archive.path))
+ assert.equal(issued.snapshot.evidence.financial.outstanding,'70')
+ const state=await finance.get(f.order.id);await finance.record(f.order.id,{requestKey:randomUUID(),version:state.account.version,amount:'10',receivedOn:'2026-01-01',method:'BANK_TRANSFER',bankName:'Example Bank',transferType:'NEFT',reference:'QA-next-'+randomUUID()})
+ assert.equal((await finance.get(f.order.id)).outstanding.toString(),'60');assert.equal(issued.snapshot.evidence.financial.outstanding,'70');assert.deepEqual(objects.get(issued.archive.path),original)
+ const args={providerKey:'payment-receipt',supersedesId:issued.id,reason:'Current balance review'},fresh=await s.prepare(f.payment.id,args);assert.equal(fresh.evidence.financial.outstanding,'60')
+ const racing=docs(admin,{render:async()=>{const now=await finance.get(f.order.id);await finance.record(f.order.id,{requestKey:randomUUID(),version:now.account.version,amount:'5',receivedOn:'2026-01-01',method:'CASH'});return Buffer.from('%PDF-race')}})
+ const removed=calls.removed;await assert.rejects(racing.issue(f.payment.id,request(fresh,args)),status(409));assert.equal(calls.removed,removed+1)
+})
+
+test('native receipt evidence rejects forged balances and bank details without rewriting existing PDFs',async()=>{
+ const f=await fixture(),s=docs(),prepared=await s.prepare(f.payment.id,{providerKey:'payment-receipt'}),issued=await s.issue(f.payment.id,request(prepared))
+ const raw=await root.orderReceiptDocument.findUniqueOrThrow({where:{tenantId_id:{tenantId:tenant,id:issued.id}}})
+ for(const alter of [snapshot=>snapshot.evidence.financial.outstanding='0',snapshot=>snapshot.evidence.bankName='Invented Bank',snapshot=>snapshot.evidence.allocations[0].outstanding='999']){
+  const id=randomUUID(),snapshot=structuredClone(raw.snapshot),reference=raw.reference.replace('/V1','/V2');snapshot.payload.reference=reference;alter(snapshot)
+  await assert.rejects(root.orderReceiptDocument.create({data:{...raw,id,version:2,reference,supersedesId:raw.id,reason:'QA forged details',requestKey:randomUUID(),snapshot,archive:{...raw.archive,path:`${tenant}/receipts/${f.payment.id}/${id}/${randomUUID()}.pdf`}}}),/balance evidence|balance evidence|allocations must retain/)
+ }
 })
 test('tenant, owner, action, Read and export bounds plus current activation remain mandatory',async()=>{
  const f=await fixture(),s=docs();await docs(staff).prepare(f.payment.id,{providerKey:'payment-receipt'});await assert.rejects(docs(outsider).list(f.payment.id),status(404));await assert.rejects(docs(foreign,{},foreignDb).list(f.payment.id),status(404))

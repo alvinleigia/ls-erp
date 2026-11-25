@@ -49,7 +49,7 @@ test('property scalar values preserve accepted evidence and never select the fir
  const {propertyDocumentValues}=require('../modules/real-estate/document-fields.ts')
  const unit={ref:{code:'P-106',name:'Accepted unit'},property:{project:{name:'Phase A',location:'',parent:{name:'Accepted Gardens',location:'Accepted Goa'}},area:'250.25',areaUnit:'SQ_M'}}
  const before=JSON.stringify(unit),values=propertyDocumentValues([unit])
- assert.deepEqual(values,{'property.project-name':'Accepted Gardens / Phase A','property.unit-code':'P-106','property.unit-name':'Accepted unit','property.area':'250.25','property.area-unit':'sq m','property.location':'Accepted Goa'})
+ assert.deepEqual(values,{'property.project-name':'Accepted Gardens / Phase A','property.unit-code':'P-106','property.unit-number':'','property.company-code':'','property.floor':'','property.unit-name':'Accepted unit','property.area':'250.25','property.area-unit':'sq m','property.location':'Accepted Goa'})
  assert.equal(JSON.stringify(unit),before);assert.deepEqual(propertyDocumentValues([]),{});assert.deepEqual(propertyDocumentValues([unit,unit]),{})
  const {realEstateOrderDocuments}=require('../modules/real-estate/order-documents.ts'),catalog=realEstateOrderDocuments(async()=>({}))[0].templateCatalog,layout=starterDocumentLayout(catalog)
  layout.content.unshift(paragraph(field('property.project-name')))

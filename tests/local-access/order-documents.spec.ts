@@ -16,6 +16,36 @@ async function source(context:BrowserContext,userId:string,items:{id:string;vers
 }
 async function publish(context:BrowserContext,companyId:string,providerKey:string,patch:Record<string,unknown>={}){const current=await json(context,`/api/document-templates?${new URLSearchParams({companyId,providerKey})}`);await json(context,'/api/document-templates',200,'PUT',{companyId,providerKey,version:current.version,reviewed:true,content:{...current.content,enabled:true,address:'QA office, Pune',terms:'QA approved company terms',...patch}})}
 
+test('column editor preserves content when resized, inserts nested fields and publishes the same layout on mobile',async({browser})=>{
+ test.setTimeout(180000)
+ const f=await seed(),{page,context}=await login(browser,f.origin,f.users.admin.email)
+ try{
+  await modules(f,['salesOrders','catalog','realEstate'])
+  await page.goto('/settings/documents');await page.getByRole('tab',{name:'Content',exact:true}).click()
+  const editor=page.getByRole('textbox',{name:'Document layout',exact:true}),picker=page.getByLabel('Layout columns',{exact:true})
+  await expect(editor).toBeVisible();await editor.locator('p').first().click();await picker.selectOption('3')
+  const row=editor.locator('[data-document-columns]').first(),cells=row.locator('[data-document-column]')
+  await expect(cells).toHaveCount(3)
+  for(let i=0;i<3;i++){await cells.nth(i).locator('p').click();await page.keyboard.type(`QA column ${i+1}`)}
+  await page.getByRole('button',{name:'Insert Customer name',exact:true}).click();await expect(cells.nth(2).getByText('Customer name',{exact:true})).toBeVisible()
+  await picker.selectOption('2');await expect(cells).toHaveCount(2);await expect(cells.nth(1)).toContainText('QA column 2');await expect(cells.nth(1)).toContainText('QA column 3')
+  await picker.selectOption('1');await expect(editor.locator('[data-document-columns]')).toHaveCount(0)
+  for(let i=0;i<3;i++)await expect(editor).toContainText(`QA column ${i+1}`)
+  await picker.selectOption('2');await expect(cells).toHaveCount(2);await page.keyboard.type('Reusable summary')
+  await page.getByRole('button',{name:'Insert Customer name',exact:true}).click();await expect(cells.first().getByText('Customer name',{exact:true})).toBeVisible()
+  await editor.getByText('Section: Agreement summary',{exact:true}).click();await page.getByLabel('Compact labelled details',{exact:true}).check();await page.getByLabel('Bold labels',{exact:true}).check();await page.getByLabel('Hide table section heading',{exact:true}).check()
+  const preview=page.waitForRequest(r=>r.url().endsWith('/api/document-templates/preview')),download=page.waitForEvent('download')
+  await page.getByRole('button',{name:'Download sample preview',exact:true}).click();await(await download).saveAs(test.info().outputPath('columns-preview.pdf'))
+  const draft=(await preview).postDataJSON();expect(draft.content.layout.content.some((node:{type:string})=>node.type==='documentColumns')).toBe(true)
+  expect((await json(context,`/api/document-templates?${new URLSearchParams({companyId:draft.companyId,providerKey:draft.providerKey})}`)).version).toBe(0)
+  await page.getByLabel('Enable new issuance with this version').check();await page.getByLabel('I have reviewed the wording').check();await page.getByRole('button',{name:'Publish template version',exact:true}).click();await expect(page.getByRole('heading',{name:/version 1$/})).toBeVisible()
+  const saved=await json(context,`/api/document-templates?${new URLSearchParams({companyId:draft.companyId,providerKey:draft.providerKey})}`);expect(saved.content.layout).toEqual(draft.content.layout)
+  await page.reload();await expect(cells).toHaveCount(2);await expect(cells.first()).toContainText('Reusable summary')
+  await row.scrollIntoViewIfNeeded();await page.screenshot({path:test.info().outputPath('columns-editor-desktop.png'),fullPage:true,animations:'disabled'})
+  await page.setViewportSize({width:390,height:844});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await row.scrollIntoViewIfNeeded();await page.screenshot({path:test.info().outputPath('columns-editor-mobile.png'),fullPage:true,animations:'disabled'})
+ }finally{await context.close();await f.db.end()}
+})
+
 test('visual template editor inserts dynamic fields, previews without publication and persists a reviewed layout on mobile',async({browser})=>{
  test.setTimeout(180000)
  const f=await seed(),{page,context}=await login(browser,f.origin,f.users.admin.email)
