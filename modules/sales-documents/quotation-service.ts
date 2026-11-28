@@ -24,8 +24,11 @@ import { buildQuotationPdf } from "./quotation-pdf"
 import { uploadQuotationPdf, removeUnusedPdf, type ArchivedPdf } from "@/platform/storage/documents"
 import type { ParticipantSnapshot } from "@/platform/participants/validation"
 
+import { readQuotationCompanyDesign, requireQuotationDesignVersion, type QuotationCompanyDesign } from "./company-template"
+
 type Tx = Prisma.TransactionClient
 export type QuotationSnapshot = {
+  companyDesign?: QuotationCompanyDesign;
   participants?: ParticipantSnapshot;
   branding?: DocumentBranding | null;
   labels?: QuotationDocumentLabels;
@@ -69,12 +72,13 @@ export function createQuotationService({ run: checkedRun, audit, opportunityScop
       return buildQuotationPdf({id:"SAMPLE",revision:1,revisionCreatedAt:"2026-01-01",snapshot},true)
     },
     quotationDefaults(opportunityId: string) {
-      return run("quotations.create", async (tx, actor, paymentPlans) => {
+      return run({any:["quotations.create","quotations.edit"]}, async (tx, actor, paymentPlans) => {
         const row = await opportunity(tx, actor, opportunityId)
         const company = await officeDocumentDefaults(tx, actor.tenantId, row.officeId)
+        const companyDesign = await readQuotationCompanyDesign(tx, actor.tenantId, company)
         const term = createTermResolver(await readTerms?.(tx, actor) || {})
         const context = await documentContext?.(tx, actor, row.id, term) || []
-        return { paymentPlansEnabled: paymentPlans, opportunity: row.title, context, content: { ...emptyQuotationContent, title: term("salesDocuments.quotation.singular", emptyQuotationContent.title), supplierName: company.name, website: company.settings.website, bank: company.settings.bank, currency: row.currency, lines: [{ description: row.title, quantity: "1", unit: "", rate: row.amount.toString() }] } }
+        return { companyDesign, paymentPlansEnabled: paymentPlans, opportunity: row.title, context, content: { ...emptyQuotationContent, ...(companyDesign?{layout:companyDesign.content.layout,appearance:companyDesign.content.appearance}:{}), title: companyDesign?.content.title ?? term("salesDocuments.quotation.singular", emptyQuotationContent.title), supplierName: company.name, website: company.settings.website, bank: company.settings.bank, currency: row.currency, lines: [{ description: row.title, quantity: "1", unit: "", rate: row.amount.toString() }] } }
       })
     },
     listQuotationTemplates(input: unknown) {
@@ -140,7 +144,7 @@ export function createQuotationService({ run: checkedRun, audit, opportunityScop
       if (prepared.archivedPdf) return prepared.archivedPdf
       // Rendering and storage IO stay outside database transactions. A concurrent
       // issuer may upload a candidate too; only one archive is committed.
-      const candidate = await uploadQuotationPdf(prepared.tenantId, id, revision, await buildQuotationPdf(prepared))
+      const candidate = { ...await uploadQuotationPdf(prepared.tenantId, id, revision, await buildQuotationPdf(prepared)), ...(prepared.snapshot.content.layout && prepared.snapshot.content.appearance?.letterhead ? { letterhead: true } : {}) }
       let archived: ArchivedPdf
       try {
         archived = await run(requirement, async (tx, actor) => {
@@ -165,7 +169,8 @@ export function createQuotationService({ run: checkedRun, audit, opportunityScop
     },
     saveQuotation(opportunityId: string, input: unknown, id?: string) {
       const data = quotationSaveSchema.parse(input)
-      const acceptedContent={...data.content,lines:data.content.lines.map(line=>{const copy={...line};delete copy.refreshCatalogItem;return copy})},calculation=calculate(acceptedContent)
+      let acceptedContent={...data.content,lines:data.content.lines.map(line=>{const copy={...line};delete copy.refreshCatalogItem;return copy})}
+      const calculation=calculate(acceptedContent)
       return run(id ? "quotations.edit" : "quotations.create", async (tx, actor, paymentPlans) => {
         let recordId = id
         const row = await opportunity(tx, actor, opportunityId)
@@ -174,6 +179,15 @@ export function createQuotationService({ run: checkedRun, audit, opportunityScop
         if (before && before.opportunityId !== opportunityId) throw new BusinessError(404, termText("salesDocuments.quotation.singular", "Quotation not found.", "{label} not found."))
         if (before && data.version !== before.version) throw new BusinessError(409, termText("salesDocuments.quotation.singular", "This quotation changed. Refresh before saving.", "This {label} changed. Refresh before saving."))
         const prior = before ? await tx.crmQuotationRevision.findUniqueOrThrow({ where: { tenantId_quotationId_number: { tenantId: actor.tenantId, quotationId: before.id, number: before.version } } }) : null
+        let companyDesign = prior ? (prior.snapshot as unknown as QuotationSnapshot).companyDesign : undefined
+        if (data.companyDesignVersion === null) companyDesign = undefined
+        else if (!prior || data.companyDesignVersion !== undefined) {
+          const company = await officeDocumentDefaults(tx, actor.tenantId, row.officeId)
+          const current = await readQuotationCompanyDesign(tx, actor.tenantId, company)
+          requireQuotationDesignVersion(current, data.companyDesignVersion)
+          companyDesign = !prior && data.companyDesignVersion === undefined && acceptedContent.layout ? undefined : current ?? undefined
+          if (companyDesign && !acceptedContent.layout) acceptedContent = { ...acceptedContent, layout: companyDesign.content.layout, appearance: companyDesign.content.appearance }
+        }
         if (!resolveItems && data.content.lines.some(line => line.catalogItemId)) throw new BusinessError(400, "Catalog selection is not available.")
         const items = await resolveItems?.(tx, actor, data.content, prior ? (prior.snapshot as unknown as QuotationSnapshot).items || [] : []) || []
         assertScheduleWrite(paymentPlans, data.content, prior ? (prior.snapshot as unknown as QuotationSnapshot).content : undefined)
@@ -184,11 +198,12 @@ export function createQuotationService({ run: checkedRun, audit, opportunityScop
         const term = createTermResolver(await readTerms?.(tx, actor) || {})
         const context = await documentContext?.(tx, actor, row.id, term) || []
         const snapshot: QuotationSnapshot = { labels: quotationDocumentLabels(term), content: acceptedContent, calculation, context, customer: { name: row.contact.name, email: row.contact.email, phone: row.contact.phone }, opportunity: row.title, actor: author.name || "Staff", template, locale: settings?.locale || "en-US", dateFormat: settings?.dateFormat || "yyyy-MM-dd", numberFormat: settings?.numberFormat || "US_UK", currencySymbolPlacement: settings?.currencySymbolPlacement || "BEFORE" }
+        if(companyDesign)snapshot.companyDesign=companyDesign
         snapshot.items = items
         // Capture all customer facts from this one scoped source read. A second
         // lookup could mix two identities if the source is reassigned meanwhile.
         if (participants) snapshot.participants = await participants(tx, actor, opportunityId, { tenantId: actor.tenantId, person: row.contact, business: row.account, information: row.participantInformation })
-        snapshot.branding = prior ? (prior.snapshot as unknown as QuotationSnapshot).branding || null : await readDocumentBranding(tx, actor.tenantId)
+        snapshot.branding = prior && data.companyDesignVersion === undefined ? (prior.snapshot as unknown as QuotationSnapshot).branding || null : await readDocumentBranding(tx, actor.tenantId)
         const values = { title: data.content.title, currency: data.content.currency, consideration: calculation.consideration }
         if (before) await tx.crmQuotation.updateMany({ where: { tenantId: actor.tenantId, id, version: before.version }, data: { ...values, version: { increment: 1 } } })
         else recordId = (await tx.crmQuotation.create({ data: { ...values, tenantId: actor.tenantId, opportunityId } })).id

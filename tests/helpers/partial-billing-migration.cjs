@@ -6,6 +6,14 @@ async function historical(db,url){
  // This fixture predates the address-book migration. Do not invoke today's
  // directory-default resolver while constructing the historical accepted sale.
  const defaults=require('../../modules/crm/participant-defaults.ts'),currentDefaults=defaults.contactInformationDefaults
+ // This historical database also predates company document settings. Supply
+ // only its old issuer identity while constructing the pre-upgrade fixture;
+ // production code always uses today's native office/settings reader.
+ const companyDefaults=require('../../platform/companies/document-settings.ts'),currentCompanyDefaults=companyDefaults.officeDocumentDefaults
+ companyDefaults.officeDocumentDefaults=async(tx,tenantId,officeId)=>{
+  const [company]=await tx.$queryRaw`SELECT c.id,c.name FROM "BusinessCompany" c JOIN "BusinessOffice" o ON o."tenantId"=c."tenantId" AND o."companyId"=c.id WHERE o."tenantId"=${tenantId} AND o.id=${officeId}`
+  return {...company,settings:companyDefaults.companyDocumentSettingsSchema.parse({})}
+ }
  // This accepted-sale fixture also predates verification checkpoint tables.
  // Keep its historical setup independent of today's read-only checkpoint review.
  const checkpoints=require('../../platform/verification/checkpoints.ts'),currentCheckpoint=checkpoints.readOrderVerificationCheckpoint
@@ -32,7 +40,7 @@ async function historical(db,url){
    await db.query('COMMIT')
   }catch(e){await db.query('ROLLBACK');throw e}
   return {tenantId,orderId:order.id,id}
- }finally{checkpoints.readOrderVerificationCheckpoint=currentCheckpoint;defaults.contactInformationDefaults=currentDefaults;await root.$disconnect();await pool.end()}
+ }finally{companyDefaults.officeDocumentDefaults=currentCompanyDefaults;checkpoints.readOrderVerificationCheckpoint=currentCheckpoint;defaults.contactInformationDefaults=currentDefaults;await root.$disconnect();await pool.end()}
 }
 async function main(){
  assert.equal(process.env.R5_HISTORICAL_CONTAINER,'1');const url=new URL(process.env.CRM_TEST_DATABASE_URL);assert.equal(url.hostname,'127.0.0.1');assert.equal(url.pathname,'/ls_salon_crm_test');const db=new Client({connectionString:url.toString()});await db.connect()

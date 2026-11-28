@@ -3,8 +3,8 @@ import * as React from "react"
 import { Button } from "@/components/ui/button"
 import { ConfirmAction } from "@/components/erp/confirm-action"
 
-export function QuotationPdfActions({ id, revision, issued, canIssue, disabled, onIssued }: {
-  id: string; revision: number; issued: boolean; canIssue: boolean; disabled: boolean; onIssued: () => Promise<void>
+export function QuotationPdfActions({ id, revision, issued, letterheadAvailable = false, canIssue, disabled, onIssued }: {
+  id: string; revision: number; issued: boolean; letterheadAvailable?: boolean; canIssue: boolean; disabled: boolean; onIssued: () => Promise<void>
 }) {
   const [confirm, setConfirm] = React.useState(false), [busy, setBusy] = React.useState(false), [error, setError] = React.useState("")
   const url = `/api/crm/quotations/${id}/pdf?revision=${revision}`
@@ -21,6 +21,7 @@ export function QuotationPdfActions({ id, revision, issued, canIssue, disabled, 
   }
   return <>
     <Button asChild variant="outline"><a href={url} target="_blank" rel="noreferrer">{issued ? "Download issued PDF" : "Preview saved draft"}</a></Button>
+    {letterheadAvailable && <Button asChild variant="outline"><a href={`${url}&variant=letterhead`} target="_blank" rel="noreferrer">{issued?"Download for letterhead":"Preview for letterhead"}</a></Button>}
     {!issued && canIssue && <Button type="button" disabled={disabled || busy} loading={busy} loadingText="Issuing..." onClick={() => setConfirm(true)}>Issue &amp; Download</Button>}
     {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
     {confirm && <ConfirmAction title={`Issue version ${revision}?`} description="This saves the exact PDF for this version. Later downloads reuse it. Changes must be saved as a new version." label="Issue & Download" busy={busy} onCancel={() => setConfirm(false)} onConfirm={() => void issue()} />}

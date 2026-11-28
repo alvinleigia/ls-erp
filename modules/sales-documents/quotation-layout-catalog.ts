@@ -1,5 +1,5 @@
 import { participantAddressSections } from "@/platform/participants/document-blocks"
-import type { TemplateCatalog } from "@/platform/documents/layout"
+import { issuerSignatureSection, type TemplateCatalog } from "@/platform/documents/layout"
 
 const sections=[
   {key:"customer-details",label:"Customers and correspondence",required:true},
@@ -12,9 +12,10 @@ const sections=[
   {key:"bank-details",label:"Bank details",required:true},
   {key:"terms",label:"Terms and remarks",required:true},
   {key:"registration",label:"Registration",required:true},
+  issuerSignatureSection,
 ]
 export const quotationLayoutCatalog: TemplateCatalog={
-  fields:[{key:"customer.name",label:"Customer name"},{key:"customer.email",label:"Customer email"},{key:"customer.phone",label:"Customer phone"},
+  fields:[{key:"template.opening",label:"Opening wording"},{key:"template.terms",label:"Template terms"},{key:"company.address",label:"Issuing company address"},{key:"company.contact",label:"Office contact details"},{key:"customer.name",label:"Customer name"},{key:"customer.email",label:"Customer email"},{key:"customer.phone",label:"Customer phone"},
     {key:"document.reference",label:"Quotation reference"},{key:"document.date",label:"Version date"},{key:"quote.version",label:"Version number"},{key:"quote.title",label:"Document title"},
     {key:"quote.opportunity",label:"Opportunity"},{key:"quote.booking-date",label:"Booking date"},{key:"quote.valid-until",label:"Valid until"},{key:"quote.currency",label:"Currency"},
     {key:"quote.base",label:"Base price"},{key:"quote.discount",label:"Discount"},{key:"quote.consideration",label:"Consideration"},{key:"quote.extras",label:"Known extra charges"},{key:"quote.total",label:"Total known amount"},

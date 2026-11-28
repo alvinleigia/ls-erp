@@ -7,9 +7,10 @@ import { createDocumentTemplateService } from "@/platform/documents/template-ser
 import { applicationPaymentReceiptProvider } from "@/application/payment-documents/service"
 import { invoiceDocumentProviders } from "@/modules/customer-invoices/document-provider"
 import { statutoryTemplateTypes } from "@/platform/tax/localizations/india-statutory-pdf"
+import { quotationCompanyTemplate } from "@/modules/sales-documents/company-template"
 import { uploadOrderDocumentPdf,removeUnusedPdf,archivedPdfUrl,readArchivedDocumentPdf } from "@/platform/storage/documents"
 import type { DocumentIdentity,DocumentStorage } from "@/platform/documents/contracts"
 export const orderDocumentProviders=[orderAcknowledgement,...realEstateOrderDocuments(readReceivableDocumentEvidence)]
 const storage:DocumentStorage={upload:uploadOrderDocumentPdf,remove:removeUnusedPdf,url:archivedPdfUrl,read:readArchivedDocumentPdf}
 export const applicationOrderDocuments=(db:PrismaClient,identity:DocumentIdentity,options?:{storage?:DocumentStorage;render?:Parameters<typeof createOrderDocumentService>[4]})=>createOrderDocumentService(db,identity,orderDocumentProviders,options?.storage??storage,options?.render)
-export const applicationDocumentTemplates=(db:PrismaClient,identity:DocumentIdentity)=>createDocumentTemplateService(db,identity,[...orderDocumentProviders,applicationPaymentReceiptProvider,...invoiceDocumentProviders,...statutoryTemplateTypes])
+export const applicationDocumentTemplates=(db:PrismaClient,identity:DocumentIdentity)=>createDocumentTemplateService(db,identity,[...orderDocumentProviders,applicationPaymentReceiptProvider,...invoiceDocumentProviders,...statutoryTemplateTypes,quotationCompanyTemplate])

@@ -97,3 +97,22 @@ test('standard quotation PDF retains historical customer evidence and rejects ma
  s.participants={format:1,participants:[]}
  await assert.rejects(buildQuotationPdf(record(s),true),error=>error.status===409)
 })
+
+test('company quotation preview and letterhead copies share the frozen model, marks and repeating data',async()=>{
+ const {quotationCompanyTemplate}=require('../modules/sales-documents/company-template.ts')
+ const {renderBusinessDocument}=require('../platform/documents/pdf.ts')
+ const {letterheadPdf}=require('../platform/documents/letterhead-pdf.ts')
+ const {defaultDocumentAppearance}=require('../platform/documents/appearance.ts')
+ const layout=starterDocumentLayout(catalog)
+ layout.content.unshift({type:'heading',attrs:{level:2},content:[{type:'documentField',attrs:{key:'quote.title',documentTitle:true}}]})
+ layout.content.push({type:'paragraph',content:[{type:'text',text:'Company-specific wording',marks:[{type:'bold'},{type:'underline'},{type:'fontSize',attrs:{size:9}}]}]})
+ const content={...quotationCompanyTemplate.defaults,enabled:true,layout,appearance:{...defaultDocumentAppearance,colour:'black',letterhead:{topMm:35,bottomMm:20}}}
+ const before=JSON.stringify(content),payload=quotationCompanyTemplate.sample(content,catalog,{id:'sample-company',name:'Example Industries'})
+ assert.equal(payload.company.name,'Example Industries');assert.equal(JSON.stringify(content),before)
+ assert.match(JSON.stringify(payload.body),/Company-specific wording/)
+ const digital=await renderBusinessDocument(payload,true),print=await letterheadPdf(digital)
+ assert.equal((await PDFDocument.load(digital)).getPageCount(),(await PDFDocument.load(print)).getPageCount())
+ const s=quotationLayoutSample(layout);s.content.appearance=content.appearance;s.companyDesign={id:'sample',companyId:'sample-company',version:1,content}
+ assert.equal(Buffer.from(await buildQuotationPdf(record(s),true,'letterhead')).subarray(0,5).toString(),'%PDF-')
+ await assert.rejects(buildQuotationPdf(record(standardSample()),true,'letterhead'))
+})

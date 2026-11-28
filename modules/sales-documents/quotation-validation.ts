@@ -37,7 +37,7 @@ export const quotationContentSchema = z.object({
   })
 })
 export type QuotationContent = z.infer<typeof quotationContentSchema>
-export const quotationSaveSchema = z.object({ content: quotationContentSchema, version: z.number().int().positive().optional(), templateId: z.string().max(100).optional() }).strict()
+export const quotationSaveSchema = z.object({ content: quotationContentSchema, version: z.number().int().positive().optional(), templateId: z.string().max(100).optional(), companyDesignVersion: z.number().int().positive().nullable().optional() }).strict()
 export const quotationTemplateSchema = z.object({ name: text(150).min(1), content: quotationContentSchema, archived: z.boolean().default(false), version: z.number().int().positive().optional() }).strict()
 export const emptyQuotationContent: QuotationContent = {
   logoDataUrl: "",

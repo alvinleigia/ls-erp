@@ -1,5 +1,16 @@
 # Base Conventions
 
+## Company quotation designs (P13S)
+
+- Register Quotation in the shared company document-template registry. Resolve
+  the issuing company from the authorized opportunity's native office, and freeze
+  the chosen publication and resolved issuer facts in each new quotation revision.
+- Keep commercial-content templates separate from design selection. Loading a
+  company design preserves prices, charges, participants and instalments; ordinary
+  edits retain the saved design. Never re-resolve a live template while rendering
+  historical revisions or downloading issued PDFs. Letterhead copies derive from
+  archived branding layers. See `QUOTATION_COMPANY_TEMPLATES_P13S.md`.
+
 ## Unpriced extra collections (P13S)
 
 - Keep unknown charges distinct from zero. Open the accepted known schedule;

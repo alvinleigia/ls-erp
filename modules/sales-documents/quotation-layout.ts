@@ -11,7 +11,7 @@ import { quotationLayoutCatalog } from "./quotation-layout-catalog"
 // All values come from the selected immutable revision and its own metadata.
 // No company-directory, customer, catalogue or ledger reads occur while rendering.
 export function quotationLayoutDocument(record:{id:string;revision:number;revisionCreatedAt:Date|string;snapshot:QuotationSnapshot}):PrintableDocument {
-  const s=record.snapshot,c=s.content,calc=s.calculation,labels=s.labels??quotationDocumentLabels()
+  const s=record.snapshot,c=s.content,calc=s.calculation,labels=s.labels??quotationDocumentLabels(),design=s.companyDesign?.content
   if(!c.layout)throw new BusinessError(400,"Choose a saved custom quotation layout.")
   const money=(v:string)=>formatDecimalCurrency(v,c.currency,s),date=(v:string)=>v?formatDateForDisplay(v,s.dateFormat):"Not supplied"
   const reference=`${record.id}/V${record.revision}`,issuedOn=new Date(record.revisionCreatedAt).toISOString().slice(0,10)
@@ -27,7 +27,8 @@ export function quotationLayoutDocument(record:{id:string;revision:number;revisi
     ...(c.registration||c.registrationUrl?[{key:"registration",title:"Registration",paragraphs:[c.registration,c.registrationUrl].filter(Boolean),...(c.registrationUrl?{qrCode:c.registrationUrl}:{})}]:[]),
   ]
   const values:Record<string,string>={"document.reference":reference,"document.date":date(issuedOn),"quote.version":String(record.revision),"quote.title":c.title,"customer.name":s.customer.name,"customer.email":s.customer.email??"Not supplied","customer.phone":s.customer.phone??"Not supplied","quote.opportunity":s.opportunity,"quote.booking-date":date(c.bookingDate),"quote.valid-until":date(c.validUntil),"quote.currency":c.currency,"quote.base":money(calc.base),"quote.discount":money(calc.discount),"quote.consideration":money(calc.consideration),"quote.extras":money(calc.extras),"quote.total":money(calc.totalKnown),"supplier.name":c.supplierName,"supplier.website":c.website,"bank.name":c.bank.bankName,"bank.account-name":c.bank.accountName,"bank.account-number":c.bank.accountNumber,"bank.routing-code":c.bank.routingCode}
-  const document:PrintableDocument={format:1,title:c.title,reference,date:date(issuedOn),sourceReference:record.id,company:{name:c.supplierName},issuer:{address:"",contact:c.website,signatory:""},showSignatory:false,notice:labels.notice,opening:"",terms:"",...(c.appearance?{appearance:c.appearance}:{}),branding:s.branding??null,logoDataUrl:c.logoDataUrl,blocks,body:resolveDocumentLayout(c.layout,quotationLayoutCatalog,values,blocks)}
+  Object.assign(values,{"document.title":c.title,"company.address":design?.address??"","company.contact":design?.contact??"","template.opening":design?.opening??"","template.terms":design?.terms??""})
+  const document:PrintableDocument={format:1,title:c.title,reference,date:date(issuedOn),sourceReference:record.id,company:{name:c.supplierName},issuer:{address:design?.address??"",contact:design?.contact??c.website,signatory:design?.signatory??""},showSignatory:!!design,notice:labels.notice,opening:design?.opening??"",terms:design?.terms??"",...(c.appearance?{appearance:c.appearance}:{}),branding:design&&!design.useTenantLogo?null:s.branding??null,logoDataUrl:c.logoDataUrl,blocks,body:resolveDocumentLayout(c.layout,quotationLayoutCatalog,values,blocks)}
   if(Buffer.byteLength(JSON.stringify(document))>512*1024)throw new BusinessError(413,"This document contains too much text. Shorten the layout or saved details.")
   return document
 }

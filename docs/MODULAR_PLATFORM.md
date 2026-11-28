@@ -1,3 +1,15 @@
+## P13S company quotation designs (2026-11-28)
+
+Quotation uses the shared company document-template registry, editor, dynamic
+fields/sections, styling and printing controls. New quotations inherit their
+issuing company's enabled design; existing quotations can explicitly load it
+and save a new immutable revision without changing commercial fields. Historical
+revisions and issued archives retain their saved presentation. Letterhead copies
+are derived from archived branding layers. No migration or access-policy change
+is needed. Local verification passed 72 automated checks, nine browser flows,
+optimized build and lint; synthetic PDFs and screenshots were visually reviewed.
+See [QUOTATION_COMPANY_TEMPLATES_P13S.md](QUOTATION_COMPANY_TEMPLATES_P13S.md).
+
 ## P13S unpriced extra collections (2026-11-28)
 
 Known receivables can be opened while saved extra charges remain unpriced. Staff
