@@ -12,7 +12,7 @@ import { BusinessError, type BusinessActor } from "@/platform/policy"
 
 import { serializationConflict } from "@/platform/database-errors"
 import { recordDomainAuditEvent } from "@/lib/domain-audit"
-import { receivableOpenSchema, receivableListSchema, orderPaymentSchema, orderPaymentReversalSchema } from "@/lib/validation"
+import { receivableOpenSchema, receivableListSchema, receivableChargeConfirmSchema, orderPaymentSchema, orderPaymentReversalSchema } from "@/lib/validation"
 import type { ReceivableSource } from "./contracts"
 import { readReceivableOverview, receivableOverviewSet } from "./overview"
 type Tx = Prisma.TransactionClient
@@ -70,13 +70,13 @@ export function createReceivableService(db: PrismaClient, identity: Pick<Busines
   return {
     list(input: unknown) {
       const query = receivableListSchema.parse(input)
-      return run("receivables.read", false, async (tx, actor) => ({ ...await readReceivableOverview(tx, actor.tenantId, source.visibleOrderIds(actor, query), await today(tx, actor.tenantId), query), canFilterOrigin: permits(actor,"opportunities.read") }))
+      return run("receivables.read", false, async (tx, actor) => ({ ...await readReceivableOverview(tx, actor.tenantId, source.visibleOrderIds(actor, query), await today(tx, actor.tenantId), query, source.pendingOrderIds?.(actor)), canFilterOrigin: permits(actor,"opportunities.read") }))
     },
     attributionChoices(input: unknown) {
       const { choice, q: search, selectedId, recordQuery, ...filters } = (input && typeof input === "object" && !Array.isArray(input) ? input : {}) as Record<string, unknown>
       const selection = attributionChoiceSchema.parse({ choice, q: search, selectedId }), query = receivableListSchema.parse({ ...filters, q: recordQuery })
       return run(["receivables.read", "opportunities.read"], false, async (tx, actor) => {
-        const cte = receivableOverviewSet(actor.tenantId, source.visibleOrderIds(actor,query), await today(tx,actor.tenantId), query)
+        const cte = receivableOverviewSet(actor.tenantId, source.visibleOrderIds(actor,query), await today(tx,actor.tenantId), query, source.pendingOrderIds?.(actor))
         const orderIds = Prisma.sql`${cte} SELECT "orderId" FROM filtered`
         return readAttributionChoices(tx,actor.tenantId,source.attributionSources(actor,orderIds),selection,query.page,query.pageSize)
       })
@@ -96,7 +96,9 @@ export function createReceivableService(db: PrismaClient, identity: Pick<Busines
         const total = account && canReadPayments ? await tx.orderReceipt.count({ where }) : 0
         const paid = lines.reduce((n, l) => n.plus(l.paid), new D(0)), outstanding = active && account ? account.total.minus(paid) : new D(0)
         const overdue = active ? lines.filter(l => l.dueOn && iso(l.dueOn)! < currentDay).reduce((n, l) => n.plus(l.outstanding), new D(0)) : new D(0)
-        return { account, currency: order.currency, status: order.status, today: currentDay, plan, lines, paid, outstanding, overdue, items, total, page, pageSize, canReadPayments, recordAccess,
+        const chargeConfirmations = account && plan.pending?.length ? await tx.orderReceivableCharge.findMany({ where, orderBy: [{ createdAt: "asc" }, { id: "asc" }] }) : []
+        return { account, currency: order.currency, status: order.status, today: currentDay, plan, chargeConfirmations, lines, paid, outstanding, overdue, items, total, page, pageSize, canReadPayments, recordAccess,
+          canConfirmCharge: active && !!account && !!receivableAccess.permissions["receivables.create"],
           canOpen: active && !account && !plan.blocked && !!receivableAccess.permissions["receivables.create"],
           canRecord: active && !!account && outstanding.gt(0) && canReadPayments && !!paymentAccess.permissions["orderPayments.create"],
           canReverse: active && !!account && canReadPayments && !!paymentAccess.permissions["orderPayments.cancel"] }
@@ -110,12 +112,41 @@ export function createReceivableService(db: PrismaClient, identity: Pick<Busines
         if (data.dueDates.length !== plan.lines.length) throw new BusinessError(400, "Supply a due date or leave it blank for every schedule line.")
         const existing = await tx.orderReceivable.findUnique({ where: { tenantId_orderId: { tenantId, orderId: id } }, include: { lines: { orderBy: { position: "asc" } } } })
         if (existing) {
-          if (existing.lines.some((l, i) => iso(l.dueOn) !== data.dueDates[i])) throw new BusinessError(409, "Receivables have already been opened with different dates.")
+          if (plan.lines.some((_, i) => iso(existing.lines[i]?.dueOn ?? null) !== data.dueDates[i])) throw new BusinessError(409, "Receivables have already been opened with different dates.")
           return existing
         }
         const row = await tx.orderReceivable.create({ data: { tenantId, orderId: id, currency: order.currency, total: plan.total, createdBy: actor.userId, actorName: await actorName(tx, actor) } })
         for (const [position, line] of plan.lines.entries()) await tx.orderReceivableLine.create({ data: { tenantId, orderId: id, position, label: line.label, amount: line.amount, dueOn: data.dueDates[position] ? date(data.dueDates[position]!) : null } })
         await audit(tx, actor, id, "opened", { total: plan.total, currency: order.currency, dueDates: data.dueDates })
+        return row
+      })
+    },
+    confirmCharge(id: string, input: unknown) {
+      const data = receivableChargeConfirmSchema.parse(input)
+      return run("receivables.create", true, async (tx, actor) => {
+        const order = await find(tx, actor, id, true), tenantId = actor.tenantId, amount = new D(data.amount)
+        const existing = await tx.orderReceivableCharge.findUnique({ where: { tenantId_requestKey: { tenantId, requestKey: data.requestKey } } })
+        if (existing) {
+          if (existing.orderId !== id || existing.sourceKey !== data.sourceKey || !existing.amount.eq(amount) || iso(existing.dueOn) !== data.dueOn || existing.reason !== data.reason) throw new BusinessError(409, "This request was already used for a different charge confirmation.")
+          return existing
+        }
+        const account = await accountForWrite(tx, tenantId, id, order.status, data.version)
+        const charge = source.plan(order.snapshot).pending?.find(row => row.sourceKey === data.sourceKey)
+        if (!charge) throw new BusinessError(400, "Choose an unconfirmed extra from the accepted order.")
+        if (await tx.orderReceivableCharge.count({ where: { tenantId, orderId: id, sourceKey: data.sourceKey } })) throw new BusinessError(409, "This charge has already been confirmed. Refresh to see its saved amount.")
+        const digits = new Intl.NumberFormat("en", { style: "currency", currency: account.currency }).resolvedOptions().maximumFractionDigits ?? 2
+        if (amount.lt(0) || amount.decimalPlaces() > digits) throw new BusinessError(400, `Enter a non-negative amount with at most ${digits} decimal places. Use zero only when no charge is due.`)
+        let lineId: string | null = null
+        if (amount.gt(0)) {
+          const last = await tx.orderReceivableLine.aggregate({ where: { tenantId, orderId: id }, _max: { position: true } })
+          const position = (last._max.position ?? -1) + 1
+          if (position >= 60) throw new BusinessError(409, "The payment schedule has reached its line limit.")
+          const line = await tx.orderReceivableLine.create({ data: { tenantId, orderId: id, position, label: charge.label, amount, dueOn: data.dueOn ? date(data.dueOn) : null } })
+          lineId = line.id
+        }
+        const row = await tx.orderReceivableCharge.create({ data: { tenantId, orderId: id, sourceKey: charge.sourceKey, label: charge.label, amount, dueOn: data.dueOn ? date(data.dueOn) : null, lineId, reason: data.reason, requestKey: data.requestKey, accountVersion: account.version + 1, createdBy: actor.userId, actorName: await actorName(tx, actor) } })
+        await tx.orderReceivable.update({ where: { tenantId_orderId: { tenantId, orderId: id } }, data: { total: account.total.plus(amount), version: { increment: 1 } } })
+        await audit(tx, actor, id, "charge.confirmed", { confirmationId: row.id, sourceKey: charge.sourceKey, label: charge.label, amount: amount.toString(), dueOn: data.dueOn, reason: data.reason, previousTotal: account.total.toString(), total: account.total.plus(amount).toString() })
         return row
       })
     },

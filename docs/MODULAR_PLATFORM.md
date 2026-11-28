@@ -1,3 +1,11 @@
+## P13S unpriced extra collections (2026-11-28)
+
+Known receivables can be opened while saved extra charges remain unpriced. Staff
+with Receivables Create can confirm each extra once with a reason; the shared
+ledger appends a charge and updates the balance without repricing the agreement
+or its instalments. Current receipt notices disclose unpriced extras, and issued
+archives remain fixed. See [PENDING_CHARGES_P13S.md](PENDING_CHARGES_P13S.md).
+
 ## P13S selected-text font size control (2026-11-26)
 
 The shared document editor provides a Font size selector for selected text and

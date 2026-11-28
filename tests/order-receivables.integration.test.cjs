@@ -1,5 +1,5 @@
-const {materializeRules}=require('./helpers/resource-policy-data.cjs')
 /* eslint-disable @typescript-eslint/no-require-imports */
+const {materializeRules}=require('./helpers/resource-policy-data.cjs')
 const {fixtureUser,fixtureRole,fixtureProfile,resetFixtureRoles}=require("./helpers/access-fixtures.cjs")
 const {test,before,after}=require('node:test'),assert=require('node:assert/strict'),{randomUUID}=require('node:crypto'),{Pool}=require('pg'),{PrismaClient}=require('@prisma/client')
 const {TenantPgAdapter}=require('../lib/tenant-pg-adapter.ts'),{createApplicationCrmService}=require('../application/crm/service.ts'),{applicationSalesOrders}=require('../application/sales-orders/service.ts'),{emptyQuotationContent}=require('../modules/sales-documents/quotation-validation.ts')
@@ -95,9 +95,9 @@ test('frozen instalments and extra charges reconcile; partial payments allocate 
  assert.equal(row.status,'POSTED');assert.equal(state.account.version,2)
  await assert.rejects(svc().open(id,{dueDates:[null,null,null]}),status(409))
 })
-test('pending charges block opening; draft orders and malformed schedules are denied',async()=>{
+test('pending charges allow known collections; draft orders and malformed schedules are denied',async()=>{
  const id=await fresh({charges:[{label:'TBD',kind:'TBD',value:'0',basis:'BASE',included:false,due:'',group:''}]})
- assert((await svc().get(id)).plan.blocked);await assert.rejects(svc().open(id,{dueDates:[null]}),status(409))
+ assert.equal((await svc().get(id)).plan.blocked,null);await svc().open(id,{dueDates:[null]});assert.equal((await svc().get(id)).plan.pending[0].label,'TBD')
  const q=await quote(),draft=await orders.create({quotationId:q.id,revision:1});await assert.rejects(svc().open(draft.id,{dueDates:[null]}),status(409))
  const confirmed=await fresh();await assert.rejects(svc().open(confirmed,{dueDates:[null,null]}),status(400))
 })
@@ -249,4 +249,83 @@ test('overview counts, currency options and summaries enforce own/team scope and
  }finally{await resetFixtureRoles(root,{where:{tenantId:tenant,userId:manager.id}});await root.crmOpportunity.update({where:{tenantId_id:{tenantId:tenant,id:deal.id}},data:{salesTeamId:null}})}
  await root.tenantModule.update({where:{tenantId_key:{tenantId:tenant,key:'receivables'}},data:{enabled:false}})
  try{await assert.rejects(svc().list(search),status(403))}finally{await root.tenantModule.update({where:{tenantId_key:{tenantId:tenant,key:'receivables'}},data:{enabled:true}})}
+})
+
+const pendingCharge=(label='Unconfirmed maintenance')=>({label,kind:'TBD',value:'0',basis:'BASE',included:false,due:'Subject to customer agreement',group:''})
+const confirmation=(extra={})=>({requestKey:randomUUID(),version:1,sourceKey:'charge:0',amount:'25.50',dueOn:null,reason:'Customer agreed the final maintenance fee',...extra})
+test('known payments proceed while pending; confirmation appends only the extra and preserves snapshots, instalments and receipts',async()=>{
+ const id=await opened({charges:[pendingCharge()]}),before=await root.salesOrder.findUnique({where:{tenantId_id:{tenantId:tenant,id}}}),initial=await svc().get(id)
+ const payment=await svc().record(id,pay()),paid=await svc().get(id)
+ const input=confirmation({version:2,dueOn:'2026-02-01'}),saved=await svc().confirmCharge(id,input),after=await svc().get(id)
+ assert.equal(saved.label,'Unconfirmed maintenance');assert.equal(String(after.account.total),'325.88');assert.equal(String(after.paid),'50.12');assert.equal(String(after.outstanding),'275.76');assert.equal(after.account.version,3)
+ assert.deepEqual(after.lines.slice(0,initial.lines.length),paid.lines);assert.equal(after.lines.at(-1).id,saved.lineId)
+ assert.equal(after.chargeConfirmations.length,1);assert.equal(after.canConfirmCharge,true)
+ assert.deepEqual((await root.salesOrder.findUnique({where:{tenantId_id:{tenantId:tenant,id}}})).snapshot,before.snapshot)
+ assert.deepEqual(await root.orderReceipt.findUnique({where:{tenantId_id:{tenantId:tenant,id:payment.id}}}),payment)
+ assert.equal((await svc().confirmCharge(id,input)).id,saved.id)
+ await assert.rejects(svc().confirmCharge(id,{...input,reason:'Changed'}),status(409))
+ await assert.rejects(svc().confirmCharge(id,confirmation({version:3})),status(409))
+ await svc().open(id,{dueDates:[null]}) // initial open retry still works after an addition
+ const audit=await root.auditLog.findFirst({where:{tenantId:tenant,entityId:id,event:'receivable.charge.confirmed'}})
+ assert.equal(audit.after.amount,'25.5');assert.equal(audit.after.previousTotal,'300.38')
+ const remaining=await svc().record(id,pay({version:3,amount:'275.76'}));assert.equal(String((await svc().get(id)).outstanding),'0')
+ await svc().reverse(id,remaining.id,reverse({version:4}));assert.equal(String((await svc().get(id)).outstanding),'275.76')
+ await assert.rejects(root.orderReceivableCharge.update({where:{tenantId_id:{tenantId:tenant,id:saved.id}},data:{amount:'1'}}),/Financial records/)
+ await assert.rejects(root.orderReceivableCharge.delete({where:{tenantId_id:{tenantId:tenant,id:saved.id}}}),/Financial records/)
+})
+test('zero is explicit no-charge confirmation; duplicate labels retain separate source identities',async()=>{
+ const id=await opened({charges:[pendingCharge('Maintenance'),pendingCharge('Maintenance')]}),state=await svc().get(id)
+ const zero=await svc().confirmCharge(id,confirmation({amount:'0'}));assert.equal(zero.lineId,null)
+ let after=await svc().get(id);assert.equal(after.lines.length,state.lines.length);assert.equal(String(after.account.total),String(state.account.total));assert.equal(after.account.version,2)
+ await svc().confirmCharge(id,confirmation({version:2,sourceKey:'charge:1',amount:'10'}));after=await svc().get(id)
+ assert.equal(after.chargeConfirmations.length,2);assert.equal(after.lines.length,state.lines.length+1);assert.equal(String(after.account.total),'310.38')
+})
+test('concurrent confirmation retries and payment writes cannot double-charge or silently use a stale balance',async()=>{
+ const id=await opened({charges:[pendingCharge()]}),input=confirmation(),rows=await Promise.all([svc().confirmCharge(id,input),svc().confirmCharge(id,input)])
+ assert.equal(rows[0].id,rows[1].id);assert.equal((await svc().get(id)).chargeConfirmations.length,1)
+ const second=await opened({charges:[pendingCharge()]}),results=await Promise.allSettled([svc().confirmCharge(second,confirmation()),svc().record(second,pay())])
+ assert.equal(results.filter(r=>r.status==='fulfilled').length,1);assert.equal(results.filter(r=>r.status==='rejected'&&r.reason.status===409).length,1)
+})
+test('charge confirmation rejects unopened/cancelled, invalid sources, precision, foreign tenants, revoked actions and module activation',async()=>{
+ const unopened=await fresh({charges:[pendingCharge()]});await assert.rejects(svc().confirmCharge(unopened,confirmation()),status(409))
+ const id=await opened({charges:[pendingCharge()]})
+ for(const input of [confirmation({amount:'-1'}),confirmation({amount:'1.001'}),confirmation({reason:''}),confirmation({sourceKey:'charge:1'}),confirmation({version:99})])await assert.rejects(async()=>svc().confirmCharge(id,input))
+ await assert.rejects(applicationReceivables(dbB,identity(foreign)).confirmCharge(id,confirmation()),status(404))
+ await assert.rejects(applicationReceivables(db,identity(other)).confirmCharge(id,confirmation()),status(403))
+ assert.equal(await dbB.orderReceivableCharge.count({where:{tenantId:tenant,orderId:id}}),0)
+ assert.equal(await unscoped.orderReceivableCharge.count({where:{orderId:id}}),0)
+ const role=await fixtureProfile(root,{data:{tenantId:tenant,name:'Read balances',nameKey:randomUUID(),permissions:['salesOrders.read','receivables.read'],salesRecordScope:'ALL'}})
+ await fixtureRole(root,{data:{tenantId:tenant,userId:manager.id,roleId:role.id}})
+ try{assert.equal((await svc().get(id)).canConfirmCharge,false);await assert.rejects(svc().confirmCharge(id,confirmation()),status(403))}finally{await resetFixtureRoles(root,{where:{tenantId:tenant,userId:manager.id}})}
+ await root.tenantModule.update({where:{tenantId_key:{tenantId:tenant,key:'receivables'}},data:{enabled:false}})
+ try{await assert.rejects(svc().confirmCharge(id,confirmation()),status(403))}finally{await root.tenantModule.update({where:{tenantId_key:{tenantId:tenant,key:'receivables'}},data:{enabled:true}})}
+ assert.equal((await svc().get(id)).chargeConfirmations.length,0)
+ await orders.transition(id,{action:'cancel',version:2,reason:'No longer required'});await assert.rejects(svc().confirmCharge(id,confirmation()),status(409))
+})
+test('native charge guards reject arbitrary total changes, wrong source/line and unbalanced additions',async()=>{
+ const id=await opened({charges:[pendingCharge()]}),state=await svc().get(id)
+ await assert.rejects(root.orderReceivable.update({where:{tenantId_orderId:{tenantId:tenant,orderId:id}},data:{total:'400',version:{increment:1}}}),/immutable/)
+ const data={tenantId:tenant,orderId:id,sourceKey:'charge:0',label:'Unconfirmed maintenance',accountVersion:2,amount:'0',reason:'Native fixture',requestKey:randomUUID(),createdBy:manager.id,actorName:manager.name}
+ await assert.rejects(root.orderReceivableCharge.create({data:{...data,sourceKey:'charge:9'}}),/unpriced saved extra/)
+ await assert.rejects(root.orderReceivableCharge.create({data:{...data,label:'Forged label'}}),/unpriced saved extra/)
+ await assert.rejects(root.orderReceivableCharge.create({data}),/advance the balance version/)
+ await assert.rejects(root.orderReceivableCharge.create({data:{...data,amount:state.lines[0].amount,lineId:state.lines[0].id}}),/new schedule line/)
+ assert.equal((await svc().get(id)).chargeConfirmations.length,0)
+})
+
+test('unconfirmed extras remain in collection overview after known balance is paid and never appear settled prematurely',async()=>{
+ const id=await opened({charges:[pendingCharge()]}),initial=await svc().get(id)
+ await svc().record(id,pay({amount:initial.account.total.toString()}))
+ const current=await svc().list({q:id});assert.equal(current.total,1);assert.equal(current.items[0].outstanding,'0');assert.equal(current.items[0].pendingCharges,true)
+ assert.equal((await svc().list({q:id,status:'SETTLED'})).total,0);assert.equal((await svc().list({q:id,status:'PENDING'})).total,1)
+ assert.equal((await applicationReceivables(dbB,identity(foreign)).list({q:id,status:'PENDING'})).total,0)
+ await svc().confirmCharge(id,confirmation({version:2,amount:'0'}))
+ assert.equal((await svc().list({q:id})).total,0);assert.equal((await svc().list({q:id,status:'PENDING'})).total,0);assert.equal((await svc().list({q:id,status:'SETTLED'})).total,1)
+})
+
+test('charge confirmation rolls back the amount, line and version if its audit cannot be saved',async()=>{
+ const id=await opened({charges:[pendingCharge()]})
+ const broken=new Proxy(db,{get(target,key){if(key==='$transaction')return(fn,options)=>target.$transaction(tx=>fn(new Proxy(tx,{get(t,k){if(k==='auditLog')return new Proxy(t.auditLog,{get(a,m){return m==='createMany'?async()=>{throw Error('Audit unavailable')}:a[m]}});return t[k]}})),options);return target[key]}})
+ await assert.rejects(applicationReceivables(broken,identity(manager)).confirmCharge(id,confirmation()),/Audit unavailable/)
+ const state=await svc().get(id);assert.equal(state.chargeConfirmations.length,0);assert.equal(state.lines.length,1);assert.equal(state.account.version,1);assert.equal(String(state.account.total),'300.38')
 })

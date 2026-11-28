@@ -13,10 +13,10 @@ const storage={async read(archive){assert(objects.has(archive.path));return Buff
 let admin,staff,manager,outsider,foreign,crm,orders,finance,company,contact,pipeline,stage
 const docs=(user=admin,options={},connection=db)=>applicationPaymentDocuments(connection,identity(user),{storage,render:async()=>Buffer.from('%PDF-synthetic'),...options})
 const request=(p,extra={})=>({providerKey:'payment-receipt',supersedesId:p.supersedesId,reason:'',previewHash:p.fingerprint,requestKey:randomUUID(),...extra})
-async function fixture(amount='30',officeId){
+async function fixture(amount='30',officeId,extra={}){
  const create=data=>officeId?root.crmOpportunity.create({data:{...data,tenantId:tenant,officeId,probability:10,expectedCloseOn:new Date(data.expectedCloseOn)}}):crm.createOpportunity(data)
  const d=await create({title:'QA generic sale',contactId:contact.id,assignedUserId:staff.id,pipelineId:pipeline.id,stageId:stage.id,amount:'100',currency:'INR',expectedCloseOn:'2027-01-01'})
- const q=await crm.saveQuotation(d.id,{content:{...structuredClone(emptyQuotationContent),title:'QA service quotation',supplierName:'QA Industries',currency:'INR',lines:[{description:'Shared service',quantity:'1',unit:'each',rate:'100'}],instalments:[{label:'Initial',percent:'20',days:0,note:''},{label:'Balance',percent:'80',days:30,note:''}]}}),o=await orders.create({quotationId:q.id,revision:1,orderedOn:'2026-01-01'})
+ const q=await crm.saveQuotation(d.id,{content:{...structuredClone(emptyQuotationContent),title:'QA service quotation',supplierName:'QA Industries',currency:'INR',lines:[{description:'Shared service',quantity:'1',unit:'each',rate:'100'}],instalments:[{label:'Initial',percent:'20',days:0,note:''},{label:'Balance',percent:'80',days:30,note:''}],...extra}}),o=await orders.create({quotationId:q.id,revision:1,orderedOn:'2026-01-01'})
  await orders.transition(o.id,{action:'confirm',version:1});await finance.open(o.id,{dueDates:[null,null]})
  const payment=await finance.record(o.id,{requestKey:randomUUID(),version:1,amount,receivedOn:'2026-01-01',method:'BANK_TRANSFER',reference:'QA-'+randomUUID(),note:'Internal note not for customer PDF'})
  return {deal:d,order:await orders.get(o.id),payment}
@@ -127,4 +127,21 @@ test('receipt letterhead print retains reversal acknowledgements and frozen paym
   await assert.rejects(s.download(f.payment.id,row.id,'payment-receipt',false,'letterhead'),status(409));assert.deepEqual(await s.download(f.payment.id,row.id,'payment-receipt',true,'letterhead'),print)
   assert.equal(calls.uploads,uploads);assert.deepEqual(objects.get(row.archive.path),before)
  }finally{await root.businessCompany.update({where:{id:company.id},data:{documentSettings:previous.documentSettings,version:{increment:1}}})}
+})
+
+test('pending charge confirmation invalidates prepared receipts, discloses unpriced extras, and never rewrites issued archives',async()=>{
+ const f=await fixture('30',undefined,{charges:[{label:'Final maintenance',kind:'TBD',value:'0',basis:'BASE',included:false,due:'Customer agreement',group:''}]}),s=docs()
+ const first=await s.prepare(f.payment.id,{providerKey:'payment-receipt'})
+ assert.match(JSON.stringify(first.payload),/Unconfirmed extras excluded/)
+ const issued=await s.issue(f.payment.id,request(first)),bytes=Buffer.from(objects.get(issued.archive.path))
+ const args={providerKey:'payment-receipt',supersedesId:issued.id,reason:'Updated balance after fee agreement'},stale=await s.prepare(f.payment.id,args)
+ await finance.confirmCharge(f.order.id,{requestKey:randomUUID(),version:2,sourceKey:'charge:0',amount:'25.50',dueOn:null,reason:'Customer agreed final fee'})
+ await assert.rejects(s.issue(f.payment.id,request(stale,args)),status(409))
+ const fresh=await s.prepare(f.payment.id,args)
+ assert.equal(fresh.evidence.financial.total,'125.5');assert.match(JSON.stringify(fresh.payload),/separately confirmed extras/)
+ assert.notEqual(fresh.fingerprint,stale.fingerprint)
+ await s.issue(f.payment.id,request(fresh,args))
+ assert.deepEqual(objects.get(issued.archive.path),bytes);await s.download(f.payment.id,issued.id,'payment-receipt')
+ const old=await root.orderReceiptDocument.findUnique({where:{tenantId_id:{tenantId:tenant,id:issued.id}}})
+ assert.equal(old.snapshot.evidence.financial.total,'100');assert.equal((await finance.get(f.order.id)).account.version,3)
 })

@@ -1,5 +1,16 @@
 # Base Conventions
 
+## Unpriced extra collections (P13S)
+
+- Keep unknown charges distinct from zero. Open the accepted known schedule;
+  confirm a saved pending extra through the append-only receivable charge ledger,
+  with a reason, source/request identity and current balance version. Preserve
+  consideration, original instalments, payments and archived PDFs. No free-text
+  addition may bypass accepted-source, currency, access or native reconciliation.
+- Receipt notices disclose remaining unknown extras; changed balances invalidate
+  prepared documents. Confirmation grants no tax classification or invoice rights.
+  See `PENDING_CHARGES_P13S.md`. Migration 170 changes no existing business rows.
+
 ## Selected-text document font sizes (P13S)
 
 - Store selected font sizes as bounded `fontSize` inline marks (integer points,

@@ -163,8 +163,10 @@ test('pending charges remain explicit in letters and do not become a fabricated 
  const p=await docs().prepare(f.order.id,{providerKey:UA})
  assert.equal(p.evidence.financial.state,'UNOPENED');assert.equal(p.evidence.financial.total,null)
  assert(p.payload.blocks.some(b=>b.title==='Pending charges'));assert(p.payload.blocks.find(b=>b.title==='Additional charges').table.rows.some(row=>row[1]==='To be confirmed'))
- await assert.rejects(finance.open(f.order.id,{dueDates:[null,null]}),status(409))
- await docs().issue(f.order.id,input(p))
+ const plan=(await finance.get(f.order.id)).plan;await finance.open(f.order.id,{dueDates:plan.lines.map(()=>null)})
+ await assert.rejects(docs().issue(f.order.id,input(p)),status(409))
+ const current=await docs().prepare(f.order.id,{providerKey:UA});assert.equal(Number(current.evidence.financial.total),Number(plan.total))
+ assert(current.payload.blocks.some(b=>b.title==='Pending charges'));await docs().issue(f.order.id,input(current))
 })
 
 test('historical missing property evidence has no live fallback; explicit saved-item refresh is versioned and request-only',async()=>{

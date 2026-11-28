@@ -2833,6 +2833,7 @@ model SalesOrderDocument {
 }
 
 model OrderReceivable {
+  chargeConfirmations OrderReceivableCharge[]
   tenantId String
   orderId String
   currency String
@@ -2850,6 +2851,7 @@ model OrderReceivable {
 }
 
 model OrderReceivableLine {
+  chargeConfirmation OrderReceivableCharge?
   tenantId String
   id String @default(cuid())
   orderId String
@@ -2862,6 +2864,30 @@ model OrderReceivableLine {
   @@id([tenantId, id])
   @@unique([tenantId, orderId, id])
   @@unique([tenantId, orderId, position])
+}
+
+// Append-only pricing of an explicitly unpriced extra in the accepted source.
+model OrderReceivableCharge {
+  tenantId String
+  id String @default(cuid())
+  orderId String
+  sourceKey String
+  label String
+  amount Decimal @db.Decimal(18, 4)
+  dueOn DateTime? @db.Date
+  lineId String?
+  reason String
+  requestKey String
+  accountVersion Int
+  createdAt DateTime @default(now())
+  createdBy String
+  actorName String
+  account OrderReceivable @relation(fields: [tenantId, orderId], references: [tenantId, orderId], onDelete: Restrict)
+  line OrderReceivableLine? @relation(fields: [tenantId, orderId, lineId], references: [tenantId, orderId, id], onDelete: Restrict)
+  @@id([tenantId, id])
+  @@unique([tenantId, orderId, sourceKey])
+  @@unique([tenantId, orderId, lineId])
+  @@unique([tenantId, requestKey])
 }
 
 model OrderReceipt {

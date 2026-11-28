@@ -5,10 +5,15 @@ import { Prisma, type PrismaClient } from "@prisma/client"
 import type { BusinessActor } from "@/platform/policy"
 import { ownedRecordSql, sharingGrantSql, salesOrderRecordScope } from "@/platform/access/record-scope"
 import { recordLimits } from "@/platform/access/rules"
-import type { QuotationSnapshot } from "@/modules/sales-documents/quotation-service"
+import { quotationReceivablePlan } from "./plan"
 import { createReceivableService } from "@/modules/receivables/service"
 import type { ReceivableSource } from "@/modules/receivables/contracts"
 const source: ReceivableSource = {
+  pendingOrderIds(actor) {
+    return Prisma.sql`SELECT o.id FROM "SalesOrder" o WHERE o."tenantId"=${actor.tenantId} AND o.snapshot->'calculation'->>'hasPending'='true'
+      AND EXISTS(SELECT 1 FROM jsonb_array_elements(o.snapshot->'calculation'->'charges') WITH ORDINALITY c(value,position)
+        WHERE c.value->>'kind'='TBD' AND NOT EXISTS(SELECT 1 FROM "OrderReceivableCharge" x WHERE x."tenantId"=o."tenantId" AND x."orderId"=o.id AND x."sourceKey"='charge:'||(c.position-1)::text))`
+  },
   scope: actor => salesOrderRecordScope(actor, actor.operation?.resource === "orderPayments" ? "orderPayments" : "receivables"),
   visibleOrderIds(actor, filters = {}) {
     if (hasIntroductionFilter(filters)) requirePermission(actor, "opportunities.read")
@@ -29,13 +34,6 @@ const source: ReceivableSource = {
       JOIN "CrmOpportunity" p ON p."tenantId"=q."tenantId" AND p.id=q."opportunityId"
       WHERE o."tenantId"=${actor.tenantId} AND o.id IN (${orderIds}) AND ${ownedRecordSql(actor,"opportunities","p","read")}`
   },
-  plan(value) {
-    const { calculation: c } = value as unknown as QuotationSnapshot
-    const lines = c.instalments.length
-      ? c.instalments.map(line => ({ label: line.label, amount: line.amount, dueOn: line.dueDate || null }))
-      : [{ label: "Order consideration", amount: c.consideration, dueOn: null }]
-    for (const charge of c.charges) if (!charge.included && charge.amount) lines.push({ label: charge.label, amount: charge.amount, dueOn: null })
-    return { total: c.totalKnown, blocked: c.hasPending ? "Resolve pending charges in a replacement quotation and order before opening receivables." : null, lines: lines.filter(line => new Prisma.Decimal(line.amount).gt(0)) }
-  },
+  plan: quotationReceivablePlan,
 }
 export const applicationReceivables = (db: PrismaClient, identity: Pick<BusinessActor, "tenantId" | "userId" | "requestId">) => createReceivableService(db, identity, source)

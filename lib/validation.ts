@@ -1586,11 +1586,17 @@ export const unitReservationCreateSchema = z.object({
   itemId: z.string().min(1).max(100), expiresAt: z.string().datetime({ offset: true }),
 }).strict()
 export const receivableOpenSchema = z.object({ dueDates: z.array(z.iso.date().nullable()).min(1).max(60) }).strict()
+export const receivableChargeConfirmSchema = z.object({
+  requestKey: z.uuid(), version: z.number().int().positive(),
+  sourceKey: z.string().regex(/^charge:(0|[1-9]\d{0,2})$/),
+  amount: z.string().regex(/^\d{1,12}(\.\d{1,4})?$/, "Enter a non-negative amount with up to four decimal places."),
+  dueOn: z.iso.date().nullable(), reason: z.string().trim().min(1).max(2000),
+}).strict()
 export const receivableListSchema = z.object({
   ...attributionFilterShape,
   page: z.coerce.number().int().min(1).max(1000000).default(1), pageSize: z.coerce.number().int().min(1).max(100).default(20),
   q: z.string().trim().max(120).default(""), currency: z.string().trim().toUpperCase().regex(/^[A-Z]{3}$/).optional(),
-  status: z.enum(["ALL", "OPEN", "OVERDUE", "SETTLED"]).default("OPEN"),
+  status: z.enum(["ALL", "OPEN", "OVERDUE", "SETTLED", "PENDING"]).default("OPEN"),
   sort: z.enum(["overdue", "outstanding", "nextDue", "title"]).default("overdue"), order: z.enum(["asc", "desc"]).default("desc"),
 }).strict().superRefine(validateAttributionFilters)
 export type ReceivableListQuery = z.infer<typeof receivableListSchema>

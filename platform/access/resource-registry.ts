@@ -45,7 +45,7 @@ export const resourceRegistry = {
   orderDocuments: { policy: "sales", ownership: { kind: "source", roots: ["SalesOrderDocument"], sources: ["salesOrders"] }, sharing: "salesOrders" },
   paymentDocuments: { policy: "sales", ownership: { kind: "source", roots: ["OrderReceiptDocument"], sources: ["orderPayments"] }, sharing: "salesOrders" },
   documentTemplates: { policy: "shared", ownership: { kind: "shared", roots: ["BusinessDocumentTemplate"] } },
-  receivables: { policy: "sales", ownership: { kind: "source", roots: ["OrderReceivable"], children: ["OrderReceivableLine"], sources: ["salesOrders"] }, sharing: "salesOrders" },
+  receivables: { policy: "sales", ownership: { kind: "source", roots: ["OrderReceivable"], children: ["OrderReceivableLine", "OrderReceivableCharge"], sources: ["salesOrders"] }, sharing: "salesOrders" },
   orderPayments: { policy: "sales", ownership: { kind: "source", roots: ["OrderReceipt"], children: ["OrderReceiptAllocation", "OrderReceiptReversal"], sources: ["salesOrders"] }, sharing: "salesOrders" },
   unitReservations: { policy: "sales", ownership: { kind: "source", roots: ["UnitReservation"], children: ["UnitReservationEvent"], sources: ["salesOrders", "catalogItems"] }, sharing: "salesOrders" },
   salesOrders: { policy: "sales", record: "SalesOrder", ownership: { kind: "source", roots: ["SalesOrder"], children: ["SalesOrderEvent", "SalesOrderTaxAcceptance", "OrderVerificationAcceptance"], sources: ["quotations"] }, sharing: "salesOrders" },
